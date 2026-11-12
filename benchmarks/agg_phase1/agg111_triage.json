@@ -1,0 +1,5429 @@
+{
+ "schema": "agg111_triage.v1",
+ "cfg": {
+  "window_chars": 10000,
+  "k_per_doc": 6,
+  "hi": 0.6,
+  "lo": 0.2,
+  "n_predict": 256
+ },
+ "bm25_module_sha256": "3de7bc9f2ab51d7821ffc52a8b679bfb532c10f4667a740361b55ad18d1c8891",
+ "groups": {
+  "a": {
+   "title": "AGG-1.3 r3 changed-slot misses",
+   "dir": "/mnt/raid0/llm/tmp/agg13-reingest-cpu-20261111-r3/out",
+   "n_cells_in_run": 24,
+   "replay_validation": {
+    "units_checked": 224,
+    "l4_fact_window_not_in_top_k": [],
+    "gate_count_mismatch": [],
+    "ok": true
+   },
+   "reply_mapping": {
+    "ok": true,
+    "why": "validated",
+    "n_units": 22,
+    "n_tasks": 146,
+    "l4b_calls": 137,
+    "replies_cut_at_n_predict": 14,
+    "cut_rate": 0.102
+   },
+   "summary": {
+    "n": 10,
+    "by_class": {
+     "RETRIEVAL": 5,
+     "FORMAT": 5,
+     "EXTRACTION": 0,
+     "CANONICAL": 0,
+     "L3": 0,
+     "GOLD": 0,
+     "UNKNOWN": 0
+    },
+    "by_l4_class_ignoring_l3": {
+     "RETRIEVAL": 5,
+     "FORMAT": 5
+    },
+    "by_class_sub": {
+     "FORMAT:reply_cut_at_n_predict_256": 5,
+     "RETRIEVAL:gold_window_rank_9_outside_top_6": 2,
+     "RETRIEVAL:gold_window_rank_17_outside_top_6": 1,
+     "RETRIEVAL:gold_window_rank_15_outside_top_6": 1,
+     "RETRIEVAL:gold_window_rank_10_outside_top_6": 1
+    }
+   },
+   "recoverable": {
+    "RETRIEVAL": {
+     "n": 5,
+     "l3_cells_also_needing_it": 0,
+     "upper": 5,
+     "point": 4.5,
+     "gold_window_exists": 5,
+     "found_if_k": {
+      "8": 0,
+      "12": 3,
+      "16": 4,
+      "24": 5
+     },
+     "field_query_top6": 5,
+     "field_query_top3": 5,
+     "row_locator_window_present": 5,
+     "row_locator_top6": 5,
+     "fix": "field-specific query (+ union with the current top-k) and/or a table-aware row locator"
+    },
+    "FORMAT": {
+     "n": 5,
+     "l3_cells_also_needing_it": 0,
+     "upper": 5,
+     "point": 5.0,
+     "fix": "constrained/typed output (row cap + bounded quote length, AGG-1.6) or n_predict 512; the replies were cut at exactly 256 tokens"
+    },
+    "EXTRACTION": {
+     "n": 0,
+     "upper": 0,
+     "point": null,
+     "fix": "prompt or model change; the one cell is a unit label (L4d unit_override shipped in orchestrator 1a408ce4); not testable offline"
+    },
+    "L3": {
+     "n": 0,
+     "upper": 0,
+     "point": null,
+     "first_column_is_gold": 0,
+     "single_row_candidate": 0,
+     "multi_row_candidates": 0,
+     "fix": "L3 period/column attribution: a text row 'label v1 v2 v3' lists the filing's FY first; emit v1 with period = FY. Zero model calls. Needs a row-selection rule where several rows share the label"
+    },
+    "CANONICAL": {
+     "n": 0,
+     "upper": 0,
+     "point": null,
+     "fix": "canonicalisation guard rules"
+    }
+   }
+  },
+  "b": {
+   "title": "AGG-1.4 r3 misses",
+   "dir": "/mnt/raid0/llm/tmp/agg14-backfill-cpu-20261111-r3/out",
+   "n_cells_in_run": 25,
+   "replay_validation": {
+    "units_checked": 236,
+    "l4_fact_window_not_in_top_k": [],
+    "gate_count_mismatch": [],
+    "ok": true
+   },
+   "reply_mapping": {
+    "ok": true,
+    "why": "validated",
+    "n_units": 12,
+    "n_tasks": 72,
+    "l4b_calls": 72,
+    "replies_cut_at_n_predict": 3,
+    "cut_rate": 0.042
+   },
+   "summary": {
+    "n": 3,
+    "by_class": {
+     "RETRIEVAL": 2,
+     "FORMAT": 0,
+     "EXTRACTION": 0,
+     "CANONICAL": 0,
+     "L3": 1,
+     "GOLD": 0,
+     "UNKNOWN": 0
+    },
+    "by_l4_class_ignoring_l3": {
+     "RETRIEVAL": 2,
+     "FORMAT": 1
+    },
+    "by_class_sub": {
+     "L3:right_row_wrong_column": 1,
+     "RETRIEVAL:gold_window_rank_7_outside_top_6": 1,
+     "RETRIEVAL:gold_window_rank_17_outside_top_6": 1
+    }
+   },
+   "recoverable": {
+    "RETRIEVAL": {
+     "n": 2,
+     "l3_cells_also_needing_it": 0,
+     "upper": 2,
+     "point": 1.8,
+     "gold_window_exists": 2,
+     "found_if_k": {
+      "8": 1,
+      "12": 1,
+      "16": 1,
+      "24": 2
+     },
+     "field_query_top6": 2,
+     "field_query_top3": 1,
+     "row_locator_window_present": 2,
+     "row_locator_top6": 2,
+     "fix": "field-specific query (+ union with the current top-k) and/or a table-aware row locator"
+    },
+    "FORMAT": {
+     "n": 0,
+     "l3_cells_also_needing_it": 1,
+     "upper": 0,
+     "point": 0.0,
+     "fix": "constrained/typed output (row cap + bounded quote length, AGG-1.6) or n_predict 512; the replies were cut at exactly 256 tokens"
+    },
+    "EXTRACTION": {
+     "n": 0,
+     "upper": 0,
+     "point": null,
+     "fix": "prompt or model change; the one cell is a unit label (L4d unit_override shipped in orchestrator 1a408ce4); not testable offline"
+    },
+    "L3": {
+     "n": 1,
+     "upper": 1,
+     "point": null,
+     "first_column_is_gold": 1,
+     "single_row_candidate": 1,
+     "multi_row_candidates": 0,
+     "fix": "L3 period/column attribution: a text row 'label v1 v2 v3' lists the filing's FY first; emit v1 with period = FY. Zero model calls. Needs a row-selection rule where several rows share the label"
+    },
+    "CANONICAL": {
+     "n": 0,
+     "upper": 0,
+     "point": null,
+     "fix": "canonicalisation guard rules"
+    }
+   }
+  },
+  "c": {
+   "title": "AGG-1.9 never-extracted cells",
+   "dir": "/mnt/raid0/llm/tmp/agg1-ingest-cpu-20261111/out",
+   "n_cells_in_run": 26,
+   "replay_validation": {
+    "units_checked": 224,
+    "l4_fact_window_not_in_top_k": [],
+    "gate_count_mismatch": [],
+    "ok": true
+   },
+   "reply_mapping": {
+    "ok": true,
+    "why": "validated",
+    "n_units": 137,
+    "n_tasks": 876,
+    "l4b_calls": 820,
+    "replies_cut_at_n_predict": 83,
+    "cut_rate": 0.101
+   },
+   "summary": {
+    "n": 26,
+    "by_class": {
+     "RETRIEVAL": 6,
+     "FORMAT": 9,
+     "EXTRACTION": 1,
+     "CANONICAL": 0,
+     "L3": 10,
+     "GOLD": 0,
+     "UNKNOWN": 0
+    },
+    "by_l4_class_ignoring_l3": {
+     "RETRIEVAL": 10,
+     "FORMAT": 15,
+     "EXTRACTION": 1
+    },
+    "by_class_sub": {
+     "FORMAT:reply_cut_at_n_predict_256": 6,
+     "L3:gold_value_stored_without_fy_period": 8,
+     "EXTRACTION:value_right_unit_label_wrong": 1,
+     "RETRIEVAL:gold_window_rank_10_outside_top_6": 1,
+     "L3:right_row_wrong_column": 2,
+     "RETRIEVAL:gold_window_rank_9_outside_top_6": 1,
+     "RETRIEVAL:gold_window_rank_8_outside_top_6": 1,
+     "FORMAT:unparseable_reply_note": 3,
+     "RETRIEVAL:gold_window_rank_11_outside_top_6": 1,
+     "RETRIEVAL:gold_window_rank_12_outside_top_6": 1,
+     "RETRIEVAL:gold_window_rank_15_outside_top_6": 1
+    }
+   },
+   "recoverable": {
+    "RETRIEVAL": {
+     "n": 6,
+     "l3_cells_also_needing_it": 4,
+     "upper": 6,
+     "point": 5.4,
+     "gold_window_exists": 6,
+     "found_if_k": {
+      "8": 0,
+      "12": 4,
+      "16": 6,
+      "24": 6
+     },
+     "field_query_top6": 6,
+     "field_query_top3": 6,
+     "row_locator_window_present": 4,
+     "row_locator_top6": 4,
+     "fix": "field-specific query (+ union with the current top-k) and/or a table-aware row locator"
+    },
+    "FORMAT": {
+     "n": 9,
+     "l3_cells_also_needing_it": 6,
+     "upper": 9,
+     "point": 9.0,
+     "fix": "constrained/typed output (row cap + bounded quote length, AGG-1.6) or n_predict 512; the replies were cut at exactly 256 tokens"
+    },
+    "EXTRACTION": {
+     "n": 1,
+     "upper": 1,
+     "point": null,
+     "fix": "prompt or model change; the one cell is a unit label (L4d unit_override shipped in orchestrator 1a408ce4); not testable offline"
+    },
+    "L3": {
+     "n": 10,
+     "upper": 10,
+     "point": null,
+     "first_column_is_gold": 10,
+     "single_row_candidate": 5,
+     "multi_row_candidates": 5,
+     "fix": "L3 period/column attribution: a text row 'label v1 v2 v3' lists the filing's FY first; emit v1 with period = FY. Zero model calls. Needs a row-selection rule where several rows share the label"
+    },
+    "CANONICAL": {
+     "n": 0,
+     "upper": 0,
+     "point": null,
+     "fix": "canonicalisation guard rules"
+    }
+   }
+  },
+  "all": {
+   "title": "all misses (a + b + c)",
+   "summary": {
+    "n": 39,
+    "by_class": {
+     "RETRIEVAL": 13,
+     "FORMAT": 14,
+     "EXTRACTION": 1,
+     "CANONICAL": 0,
+     "L3": 11,
+     "GOLD": 0,
+     "UNKNOWN": 0
+    },
+    "by_l4_class_ignoring_l3": {
+     "RETRIEVAL": 17,
+     "FORMAT": 21,
+     "EXTRACTION": 1
+    },
+    "by_class_sub": {
+     "FORMAT:reply_cut_at_n_predict_256": 11,
+     "RETRIEVAL:gold_window_rank_9_outside_top_6": 3,
+     "RETRIEVAL:gold_window_rank_17_outside_top_6": 2,
+     "RETRIEVAL:gold_window_rank_15_outside_top_6": 2,
+     "RETRIEVAL:gold_window_rank_10_outside_top_6": 2,
+     "L3:right_row_wrong_column": 3,
+     "RETRIEVAL:gold_window_rank_7_outside_top_6": 1,
+     "L3:gold_value_stored_without_fy_period": 8,
+     "EXTRACTION:value_right_unit_label_wrong": 1,
+     "RETRIEVAL:gold_window_rank_8_outside_top_6": 1,
+     "FORMAT:unparseable_reply_note": 3,
+     "RETRIEVAL:gold_window_rank_11_outside_top_6": 1,
+     "RETRIEVAL:gold_window_rank_12_outside_top_6": 1
+    }
+   },
+   "recoverable": {
+    "RETRIEVAL": {
+     "n": 13,
+     "l3_cells_also_needing_it": 4,
+     "upper": 13,
+     "point": 11.7,
+     "gold_window_exists": 13,
+     "found_if_k": {
+      "8": 1,
+      "12": 8,
+      "16": 11,
+      "24": 13
+     },
+     "field_query_top6": 13,
+     "field_query_top3": 12,
+     "row_locator_window_present": 11,
+     "row_locator_top6": 11,
+     "fix": "field-specific query (+ union with the current top-k) and/or a table-aware row locator"
+    },
+    "FORMAT": {
+     "n": 14,
+     "l3_cells_also_needing_it": 7,
+     "upper": 14,
+     "point": 14.0,
+     "fix": "constrained/typed output (row cap + bounded quote length, AGG-1.6) or n_predict 512; the replies were cut at exactly 256 tokens"
+    },
+    "EXTRACTION": {
+     "n": 1,
+     "upper": 1,
+     "point": null,
+     "fix": "prompt or model change; the one cell is a unit label (L4d unit_override shipped in orchestrator 1a408ce4); not testable offline"
+    },
+    "L3": {
+     "n": 11,
+     "upper": 11,
+     "point": null,
+     "first_column_is_gold": 11,
+     "single_row_candidate": 6,
+     "multi_row_candidates": 5,
+     "fix": "L3 period/column attribution: a text row 'label v1 v2 v3' lists the filing's FY first; emit v1 with period = FY. Zero model calls. Needs a row-selection rule where several rows share the label"
+    },
+    "CANONICAL": {
+     "n": 0,
+     "upper": 0,
+     "point": null,
+     "fix": "canonicalisation guard rules"
+    }
+   }
+  }
+ },
+ "cells": [
+  {
+   "group": "a",
+   "doc": "MICROSOFT_2022_10K",
+   "field": "capex",
+   "fy": "2021",
+   "gold": 20622.0,
+   "unit": "l4:capex:MICROSOFT_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Additions to property and equipment (20,622"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00101#w0"
+    ],
+    "by_row": [
+     "00101#w0"
+    ],
+    "by_number": [
+     "00101#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "94871b823d067ea7:00101#w0"
+   ],
+   "gold_best_rank": 4,
+   "gold_ranks": [
+    4
+   ],
+   "top": [
+    {
+     "chunk_id": "94871b823d067ea7:00077#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 49
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00084#w0",
+     "rank": 1,
+     "sim": 0.8978,
+     "page_start": 51
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00058#w0",
+     "rank": 2,
+     "sim": 0.79,
+     "page_start": 37
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00083#w0",
+     "rank": 3,
+     "sim": 0.781,
+     "page_start": 51
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00101#w0",
+     "rank": 4,
+     "sim": 0.7755,
+     "page_start": 60
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00087#w0",
+     "rank": 5,
+     "sim": 0.7478,
+     "page_start": 53
+    }
+   ],
+   "admission_status": {
+    "94871b823d067ea7:00077#w0": "admit_sim",
+    "94871b823d067ea7:00084#w0": "admit_sim",
+    "94871b823d067ea7:00058#w0": "admit_sim",
+    "94871b823d067ea7:00083#w0": "admit_sim",
+    "94871b823d067ea7:00101#w0": "admit_sim",
+    "94871b823d067ea7:00087#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "94871b823d067ea7:00101#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "FORMAT",
+   "sub": "reply_cut_at_n_predict_256",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 5,
+   "fix_probes": {
+    "current_rank": 4,
+    "field_query_rank": 1,
+    "n_row_locator_windows": 4,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "a",
+   "doc": "MICROSOFT_2022_10K",
+   "field": "total_assets",
+   "fy": "2021",
+   "gold": 333779.0,
+   "unit": "l4:total_assets:MICROSOFT_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total assets $ 333,779"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00100#w0"
+    ],
+    "by_row": [
+     "00100#w0"
+    ],
+    "by_number": [
+     "00100#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "94871b823d067ea7:00100#w0"
+   ],
+   "gold_best_rank": 9,
+   "gold_ranks": [
+    9
+   ],
+   "top": [
+    {
+     "chunk_id": "94871b823d067ea7:00107#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 64
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00134#w0",
+     "rank": 1,
+     "sim": 0.998,
+     "page_start": 78
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00132#w0",
+     "rank": 2,
+     "sim": 0.9949,
+     "page_start": 74
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00137#w0",
+     "rank": 3,
+     "sim": 0.9893,
+     "page_start": 85
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00135#w0",
+     "rank": 4,
+     "sim": 0.9846,
+     "page_start": 79
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00141#w0",
+     "rank": 5,
+     "sim": 0.9252,
+     "page_start": 89
+    }
+   ],
+   "admission_status": {
+    "94871b823d067ea7:00107#w0": "admit_sim",
+    "94871b823d067ea7:00134#w0": "admit_sim",
+    "94871b823d067ea7:00132#w0": "admit_sim",
+    "94871b823d067ea7:00137#w0": "admit_sim",
+    "94871b823d067ea7:00135#w0": "admit_sim",
+    "94871b823d067ea7:00141#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_9_outside_top_6",
+   "secondary": [],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_9_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 10,
+   "fix_probes": {
+    "current_rank": 9,
+    "field_query_rank": 2,
+    "n_row_locator_windows": 1,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "a",
+   "doc": "MICROSOFT_2022_10K",
+   "field": "operating_cash_flow",
+   "fy": "2021",
+   "gold": 76740.0,
+   "unit": "l4:operating_cash_flow:MICROSOFT_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Net cash from operations 76,740"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00101#w0"
+    ],
+    "by_row": [],
+    "by_number": [
+     "00101#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "94871b823d067ea7:00101#w0"
+   ],
+   "gold_best_rank": 2,
+   "gold_ranks": [
+    2
+   ],
+   "top": [
+    {
+     "chunk_id": "94871b823d067ea7:00137#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 85
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00132#w0",
+     "rank": 1,
+     "sim": 0.9058,
+     "page_start": 74
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00101#w0",
+     "rank": 2,
+     "sim": 0.8662,
+     "page_start": 60
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00135#w0",
+     "rank": 3,
+     "sim": 0.8632,
+     "page_start": 79
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00100#w0",
+     "rank": 4,
+     "sim": 0.8202,
+     "page_start": 59
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00084#w0",
+     "rank": 5,
+     "sim": 0.809,
+     "page_start": 51
+    }
+   ],
+   "admission_status": {
+    "94871b823d067ea7:00137#w0": "admit_sim",
+    "94871b823d067ea7:00132#w0": "admit_sim",
+    "94871b823d067ea7:00101#w0": "admit_sim",
+    "94871b823d067ea7:00135#w0": "admit_sim",
+    "94871b823d067ea7:00100#w0": "admit_sim",
+    "94871b823d067ea7:00084#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "94871b823d067ea7:00101#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "FORMAT",
+   "sub": "reply_cut_at_n_predict_256",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 3,
+   "fix_probes": {
+    "current_rank": 2,
+    "field_query_rank": 1,
+    "n_row_locator_windows": 0,
+    "row_locator_hit": false,
+    "row_locator_top6_hit": false
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "a",
+   "doc": "MICROSOFT_2022_10K",
+   "field": "dividends_paid",
+   "fy": "2021",
+   "gold": 16521.0,
+   "unit": "l4:dividends_paid:MICROSOFT_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Common stock cash dividends paid (16,521"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00101#w0"
+    ],
+    "by_row": [
+     "00101#w0"
+    ],
+    "by_number": [
+     "00101#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "94871b823d067ea7:00101#w0"
+   ],
+   "gold_best_rank": 3,
+   "gold_ranks": [
+    3
+   ],
+   "top": [
+    {
+     "chunk_id": "94871b823d067ea7:00102#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 61
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00058#w0",
+     "rank": 1,
+     "sim": 0.9828,
+     "page_start": 37
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00076#w0",
+     "rank": 2,
+     "sim": 0.8996,
+     "page_start": 49
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00101#w0",
+     "rank": 3,
+     "sim": 0.8921,
+     "page_start": 60
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00059#w0",
+     "rank": 4,
+     "sim": 0.7893,
+     "page_start": 37
+    },
+    {
+     "chunk_id": "94871b823d067ea7:00120#w0",
+     "rank": 5,
+     "sim": 0.7673,
+     "page_start": 69
+    }
+   ],
+   "admission_status": {
+    "94871b823d067ea7:00102#w0": "admit_sim",
+    "94871b823d067ea7:00058#w0": "admit_sim",
+    "94871b823d067ea7:00076#w0": "admit_sim",
+    "94871b823d067ea7:00101#w0": "admit_sim",
+    "94871b823d067ea7:00059#w0": "admit_sim",
+    "94871b823d067ea7:00120#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "94871b823d067ea7:00102#w0",
+    "94871b823d067ea7:00101#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 2
+   },
+   "primary": "FORMAT",
+   "sub": "reply_cut_at_n_predict_256",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 4,
+   "fix_probes": {
+    "current_rank": 3,
+    "field_query_rank": 2,
+    "n_row_locator_windows": 2,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "a",
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "capex",
+   "fy": "2021",
+   "gold": 3652.0,
+   "unit": "l4:capex:JOHNSON_JOHNSON_2022_10K",
+   "diag_verdict": "NEAR_ROUNDED",
+   "n_facts": 1,
+   "candidate": {
+    "period": "FY2021",
+    "stored_value": 3700.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 3700.0,
+    "extractor": "l4_llm.v1",
+    "page": 36,
+    "quote": "$ (3.7) additions to property, plant and equipment"
+   },
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Additions to property, plant and equipment (3,652"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00072#w0"
+    ],
+    "by_row": [
+     "00072#w0"
+    ],
+    "by_number": [
+     "00072#w0",
+     "00131#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "f6d5d2daf5d70ac3:00072#w0"
+   ],
+   "gold_best_rank": 4,
+   "gold_ranks": [
+    4
+   ],
+   "top": [
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00057#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 36
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00083#w0",
+     "rank": 1,
+     "sim": 0.9505,
+     "page_start": 61
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00085#w0",
+     "rank": 2,
+     "sim": 0.9378,
+     "page_start": 63
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00020#w0",
+     "rank": 3,
+     "sim": 0.8914,
+     "page_start": 9
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00072#w0",
+     "rank": 4,
+     "sim": 0.8621,
+     "page_start": 50
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00005#w0",
+     "rank": 5,
+     "sim": 0.7748,
+     "page_start": 2
+    }
+   ],
+   "admission_status": {
+    "f6d5d2daf5d70ac3:00057#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00083#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00085#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00020#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00072#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00005#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "f6d5d2daf5d70ac3:00072#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 1,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "FORMAT",
+   "sub": "reply_cut_at_n_predict_256",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 5,
+   "fix_probes": {
+    "current_rank": 4,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 3,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "a",
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "total_assets",
+   "fy": "2021",
+   "gold": 182018.0,
+   "unit": "l4:total_assets:JOHNSON_JOHNSON_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total assets $ 182,018"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00070#w0"
+    ],
+    "by_row": [
+     "00070#w0"
+    ],
+    "by_number": [
+     "00070#w0",
+     "00130#w0",
+     "00133#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "f6d5d2daf5d70ac3:00070#w0"
+   ],
+   "gold_best_rank": 17,
+   "gold_ranks": [
+    17
+   ],
+   "top": [
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00103#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 78
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00100#w0",
+     "rank": 1,
+     "sim": 0.928,
+     "page_start": 72
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00082#w0",
+     "rank": 2,
+     "sim": 0.8816,
+     "page_start": 60
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00102#w0",
+     "rank": 3,
+     "sim": 0.876,
+     "page_start": 75
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00081#w0",
+     "rank": 4,
+     "sim": 0.8536,
+     "page_start": 59
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00099#w0",
+     "rank": 5,
+     "sim": 0.8476,
+     "page_start": 72
+    }
+   ],
+   "admission_status": {
+    "f6d5d2daf5d70ac3:00103#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00100#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00082#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00102#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00081#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00099#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_17_outside_top_6",
+   "secondary": [],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_17_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 18,
+   "fix_probes": {
+    "current_rank": 17,
+    "field_query_rank": 1,
+    "n_row_locator_windows": 2,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "a",
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "total_current_assets",
+   "fy": "2021",
+   "gold": 60979.0,
+   "unit": "l4:total_current_assets:JOHNSON_JOHNSON_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total current assets 60,979"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00070#w0"
+    ],
+    "by_row": [
+     "00070#w0"
+    ],
+    "by_number": [
+     "00070#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "f6d5d2daf5d70ac3:00070#w0"
+   ],
+   "gold_best_rank": 15,
+   "gold_ranks": [
+    15
+   ],
+   "top": [
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00100#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 72
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00099#w0",
+     "rank": 1,
+     "sim": 0.9405,
+     "page_start": 72
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00106#w0",
+     "rank": 2,
+     "sim": 0.9127,
+     "page_start": 79
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00089#w0",
+     "rank": 3,
+     "sim": 0.892,
+     "page_start": 66
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00085#w0",
+     "rank": 4,
+     "sim": 0.8854,
+     "page_start": 63
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00092#w0",
+     "rank": 5,
+     "sim": 0.8391,
+     "page_start": 67
+    }
+   ],
+   "admission_status": {
+    "f6d5d2daf5d70ac3:00100#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00099#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00106#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00089#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00085#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00092#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_15_outside_top_6",
+   "secondary": [],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_15_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 16,
+   "fix_probes": {
+    "current_rank": 15,
+    "field_query_rank": 1,
+    "n_row_locator_windows": 1,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "a",
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "total_current_liabilities",
+   "fy": "2021",
+   "gold": 45226.0,
+   "unit": "l4:total_current_liabilities:JOHNSON_JOHNSON_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total current liabilities 45,226"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00070#w0"
+    ],
+    "by_row": [
+     "00070#w0"
+    ],
+    "by_number": [
+     "00070#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "f6d5d2daf5d70ac3:00070#w0"
+   ],
+   "gold_best_rank": 9,
+   "gold_ranks": [
+    9
+   ],
+   "top": [
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00081#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 59
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00098#w0",
+     "rank": 1,
+     "sim": 0.9969,
+     "page_start": 71
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00100#w0",
+     "rank": 2,
+     "sim": 0.8858,
+     "page_start": 72
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00092#w0",
+     "rank": 3,
+     "sim": 0.8702,
+     "page_start": 67
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00079#w0",
+     "rank": 4,
+     "sim": 0.8109,
+     "page_start": 58
+    },
+    {
+     "chunk_id": "f6d5d2daf5d70ac3:00102#w0",
+     "rank": 5,
+     "sim": 0.8054,
+     "page_start": 75
+    }
+   ],
+   "admission_status": {
+    "f6d5d2daf5d70ac3:00081#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00098#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00100#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00092#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00079#w0": "admit_sim",
+    "f6d5d2daf5d70ac3:00102#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_9_outside_top_6",
+   "secondary": [],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_9_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 10,
+   "fix_probes": {
+    "current_rank": 9,
+    "field_query_rank": 1,
+    "n_row_locator_windows": 1,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "a",
+   "doc": "3M_2022_10K",
+   "field": "total_assets",
+   "fy": "2021",
+   "gold": 47072.0,
+   "unit": "l4:total_assets:3M_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total assets $ 47,072"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00066#w0"
+    ],
+    "by_row": [
+     "00066#w0"
+    ],
+    "by_number": [
+     "00066#w0",
+     "00134#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "0518361ded196dc8:00066#w0"
+   ],
+   "gold_best_rank": 10,
+   "gold_ranks": [
+    10
+   ],
+   "top": [
+    {
+     "chunk_id": "0518361ded196dc8:00095#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 76
+    },
+    {
+     "chunk_id": "0518361ded196dc8:00047#w0",
+     "rank": 1,
+     "sim": 0.774,
+     "page_start": 33
+    },
+    {
+     "chunk_id": "0518361ded196dc8:00100#w0",
+     "rank": 2,
+     "sim": 0.756,
+     "page_start": 79
+    },
+    {
+     "chunk_id": "0518361ded196dc8:00039#w0",
+     "rank": 3,
+     "sim": 0.6882,
+     "page_start": 25
+    },
+    {
+     "chunk_id": "0518361ded196dc8:00112#w0",
+     "rank": 4,
+     "sim": 0.6713,
+     "page_start": 92
+    },
+    {
+     "chunk_id": "0518361ded196dc8:00115#w0",
+     "rank": 5,
+     "sim": 0.641,
+     "page_start": 94
+    }
+   ],
+   "admission_status": {
+    "0518361ded196dc8:00095#w0": "admit_sim",
+    "0518361ded196dc8:00047#w0": "admit_sim",
+    "0518361ded196dc8:00100#w0": "admit_sim",
+    "0518361ded196dc8:00039#w0": "admit_sim",
+    "0518361ded196dc8:00112#w0": "admit_sim",
+    "0518361ded196dc8:00115#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_10_outside_top_6",
+   "secondary": [],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_10_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 11,
+   "fix_probes": {
+    "current_rank": 10,
+    "field_query_rank": 1,
+    "n_row_locator_windows": 1,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "a",
+   "doc": "3M_2022_10K",
+   "field": "total_current_liabilities",
+   "fy": "2021",
+   "gold": 9035.0,
+   "unit": "l4:total_current_liabilities:3M_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total current liabilities 9,035"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00066#w0"
+    ],
+    "by_row": [
+     "00066#w0"
+    ],
+    "by_number": [
+     "00048#w0",
+     "00066#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "0518361ded196dc8:00066#w0"
+   ],
+   "gold_best_rank": 5,
+   "gold_ranks": [
+    5
+   ],
+   "top": [
+    {
+     "chunk_id": "0518361ded196dc8:00095#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 76
+    },
+    {
+     "chunk_id": "0518361ded196dc8:00112#w0",
+     "rank": 1,
+     "sim": 0.7758,
+     "page_start": 92
+    },
+    {
+     "chunk_id": "0518361ded196dc8:00047#w0",
+     "rank": 2,
+     "sim": 0.7469,
+     "page_start": 33
+    },
+    {
+     "chunk_id": "0518361ded196dc8:00100#w0",
+     "rank": 3,
+     "sim": 0.6973,
+     "page_start": 79
+    },
+    {
+     "chunk_id": "0518361ded196dc8:00097#w0",
+     "rank": 4,
+     "sim": 0.6864,
+     "page_start": 77
+    },
+    {
+     "chunk_id": "0518361ded196dc8:00066#w0",
+     "rank": 5,
+     "sim": 0.6862,
+     "page_start": 46
+    }
+   ],
+   "admission_status": {
+    "0518361ded196dc8:00095#w0": "admit_sim",
+    "0518361ded196dc8:00112#w0": "admit_sim",
+    "0518361ded196dc8:00047#w0": "admit_sim",
+    "0518361ded196dc8:00100#w0": "admit_sim",
+    "0518361ded196dc8:00097#w0": "admit_sim",
+    "0518361ded196dc8:00066#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "0518361ded196dc8:00066#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "FORMAT",
+   "sub": "reply_cut_at_n_predict_256",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 6,
+   "fix_probes": {
+    "current_rank": 5,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 1,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "b",
+   "doc": "COCACOLA_2022_10K",
+   "field": "long_term_debt",
+   "fy": "2022",
+   "gold": 36377.0,
+   "unit": "l4:long_term_debt:COCACOLA_2022_10K",
+   "diag_verdict": "WRONG_VALUE",
+   "n_facts": 1,
+   "candidate": {
+    "period": "2024",
+    "stored_value": 38116.0,
+    "stored_unit": "unknown",
+    "scored_value": 38116.0,
+    "extractor": "l3_table.v1",
+    "page": 91,
+    "quote": "Long-term debt $ 36,377 | $ 38,116"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": {
+    "period": "2024",
+    "stored_value": 38116.0,
+    "stored_unit": "unknown",
+    "extractor": "l3_table.v1",
+    "page": 91,
+    "quote": "Long-term debt $ 36,377 | $ 38,116"
+   },
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Long-term debt 36,377"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00093#w0"
+    ],
+    "by_row": [
+     "00093#w0",
+     "00121#w0"
+    ],
+    "by_number": [
+     "00093#w0",
+     "00121#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "4db361e85cc6ff9c:00093#w0",
+    "4db361e85cc6ff9c:00121#w0"
+   ],
+   "gold_best_rank": 1,
+   "gold_ranks": [
+    1,
+    5
+   ],
+   "top": [
+    {
+     "chunk_id": "4db361e85cc6ff9c:00119#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 88
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00121#w0",
+     "rank": 1,
+     "sim": 0.9295,
+     "page_start": 91
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00098#w0",
+     "rank": 2,
+     "sim": 0.9034,
+     "page_start": 70
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00144#w0",
+     "rank": 3,
+     "sim": 0.8344,
+     "page_start": 112
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00150#w0",
+     "rank": 4,
+     "sim": 0.8272,
+     "page_start": 116
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00093#w0",
+     "rank": 5,
+     "sim": 0.824,
+     "page_start": 65
+    }
+   ],
+   "admission_status": {
+    "4db361e85cc6ff9c:00119#w0": "admit_sim",
+    "4db361e85cc6ff9c:00121#w0": "admit_sim",
+    "4db361e85cc6ff9c:00098#w0": "admit_sim",
+    "4db361e85cc6ff9c:00144#w0": "admit_sim",
+    "4db361e85cc6ff9c:00150#w0": "admit_sim",
+    "4db361e85cc6ff9c:00093#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "4db361e85cc6ff9c:00121#w0",
+    "4db361e85cc6ff9c:00093#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256,
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 2
+   },
+   "primary": "L3",
+   "sub": "right_row_wrong_column",
+   "secondary": [
+    "wrong_l3_fact_present",
+    "l4_also_format"
+   ],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": true,
+   "l3_distinct_row_candidates": 1,
+   "top_k_needed": 2,
+   "fix_probes": {
+    "current_rank": 1,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 10,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "b",
+   "doc": "ACTIVISIONBLIZZARD_2022_10K",
+   "field": "long_term_debt",
+   "fy": "2022",
+   "gold": 3611.0,
+   "unit": "l4:long_term_debt:ACTIVISIONBLIZZARD_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Long-term debt, net 3,611"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00123#w0"
+    ],
+    "by_row": [
+     "00095#w0",
+     "00123#w0",
+     "00169#w0"
+    ],
+    "by_number": [
+     "00095#w0",
+     "00123#w0",
+     "00169#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "ee13e878757671a3:00123#w0",
+    "ee13e878757671a3:00095#w0",
+    "ee13e878757671a3:00169#w0"
+   ],
+   "gold_best_rank": 7,
+   "gold_ranks": [
+    7,
+    11,
+    19
+   ],
+   "top": [
+    {
+     "chunk_id": "ee13e878757671a3:00168#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 91
+    },
+    {
+     "chunk_id": "ee13e878757671a3:00185#w0",
+     "rank": 1,
+     "sim": 0.9839,
+     "page_start": 112
+    },
+    {
+     "chunk_id": "ee13e878757671a3:00129#w0",
+     "rank": 2,
+     "sim": 0.9428,
+     "page_start": 69
+    },
+    {
+     "chunk_id": "ee13e878757671a3:00136#w0",
+     "rank": 3,
+     "sim": 0.9306,
+     "page_start": 73
+    },
+    {
+     "chunk_id": "ee13e878757671a3:00142#w0",
+     "rank": 4,
+     "sim": 0.8436,
+     "page_start": 78
+    },
+    {
+     "chunk_id": "ee13e878757671a3:00079#w0",
+     "rank": 5,
+     "sim": 0.8286,
+     "page_start": 44
+    }
+   ],
+   "admission_status": {
+    "ee13e878757671a3:00168#w0": "admit_sim",
+    "ee13e878757671a3:00185#w0": "admit_sim",
+    "ee13e878757671a3:00129#w0": "admit_sim",
+    "ee13e878757671a3:00136#w0": "admit_sim",
+    "ee13e878757671a3:00142#w0": "admit_sim",
+    "ee13e878757671a3:00079#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_7_outside_top_6",
+   "secondary": [],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_7_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 8,
+   "fix_probes": {
+    "current_rank": 7,
+    "field_query_rank": 1,
+    "n_row_locator_windows": 5,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "b",
+   "doc": "BOEING_2022_10K",
+   "field": "long_term_debt",
+   "fy": "2022",
+   "gold": 51811.0,
+   "unit": "l4:long_term_debt:BOEING_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Long-term debt 51,811"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00054#w0"
+    ],
+    "by_row": [
+     "00054#w0"
+    ],
+    "by_number": [
+     "00054#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "7b470cf51ac23581:00054#w0"
+   ],
+   "gold_best_rank": 17,
+   "gold_ranks": [
+    17
+   ],
+   "top": [
+    {
+     "chunk_id": "7b470cf51ac23581:00088#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 83
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00043#w0",
+     "rank": 1,
+     "sim": 0.9575,
+     "page_start": 45
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00119#w0",
+     "rank": 2,
+     "sim": 0.8589,
+     "page_start": 112
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00055#w0",
+     "rank": 3,
+     "sim": 0.8508,
+     "page_start": 57
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00042#w0",
+     "rank": 4,
+     "sim": 0.8213,
+     "page_start": 42
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00041#w0",
+     "rank": 5,
+     "sim": 0.7816,
+     "page_start": 40
+    }
+   ],
+   "admission_status": {
+    "7b470cf51ac23581:00088#w0": "admit_sim",
+    "7b470cf51ac23581:00043#w0": "admit_sim",
+    "7b470cf51ac23581:00119#w0": "admit_sim",
+    "7b470cf51ac23581:00055#w0": "admit_sim",
+    "7b470cf51ac23581:00042#w0": "admit_sim",
+    "7b470cf51ac23581:00041#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [
+    "7b470cf51ac23581:00042#w0"
+   ],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_17_outside_top_6",
+   "secondary": [],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_17_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 18,
+   "fix_probes": {
+    "current_rank": 17,
+    "field_query_rank": 3,
+    "n_row_locator_windows": 4,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": null
+  },
+  {
+   "group": "c",
+   "doc": "3M_2022_10K",
+   "field": "net_income",
+   "fy": "2022",
+   "gold": 5777.0,
+   "unit": "l4:net_income:3M_2022_10K",
+   "diag_verdict": "NEAR_ROUNDED",
+   "n_facts": 1,
+   "candidate": {
+    "period": "FY2022",
+    "stored_value": 5854.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 5854.0,
+    "extractor": "l4_llm.v1",
+    "page": 49,
+    "quote": "Comprehensive income (loss) attributable to 3M $ 5,854"
+   },
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Net income attributable to 3M $ 5,777"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00060#w0",
+     "00072#w0",
+     "00079#w0"
+    ],
+    "by_row": [
+     "00060#w0",
+     "00072#w0",
+     "00074#w0",
+     "00079#w0"
+    ],
+    "by_number": [
+     "00027#w0",
+     "00060#w0",
+     "00072#w0",
+     "00074#w0",
+     "00079#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "77c8f6cf618ea745:00060#w0",
+    "77c8f6cf618ea745:00072#w0",
+    "77c8f6cf618ea745:00079#w0",
+    "77c8f6cf618ea745:00074#w0"
+   ],
+   "gold_best_rank": 0,
+   "gold_ranks": [
+    0,
+    4,
+    10,
+    21
+   ],
+   "top": [
+    {
+     "chunk_id": "77c8f6cf618ea745:00072#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 48
+    },
+    {
+     "chunk_id": "77c8f6cf618ea745:00073#w0",
+     "rank": 1,
+     "sim": 0.9099,
+     "page_start": 49
+    },
+    {
+     "chunk_id": "77c8f6cf618ea745:00036#w0",
+     "rank": 2,
+     "sim": 0.8175,
+     "page_start": 28
+    },
+    {
+     "chunk_id": "77c8f6cf618ea745:00058#w0",
+     "rank": 3,
+     "sim": 0.7027,
+     "page_start": 41
+    },
+    {
+     "chunk_id": "77c8f6cf618ea745:00079#w0",
+     "rank": 4,
+     "sim": 0.7005,
+     "page_start": 57
+    },
+    {
+     "chunk_id": "77c8f6cf618ea745:00080#w0",
+     "rank": 5,
+     "sim": 0.6603,
+     "page_start": 58
+    }
+   ],
+   "admission_status": {
+    "77c8f6cf618ea745:00072#w0": "admit_sim",
+    "77c8f6cf618ea745:00073#w0": "admit_sim",
+    "77c8f6cf618ea745:00036#w0": "admit_sim",
+    "77c8f6cf618ea745:00058#w0": "admit_sim",
+    "77c8f6cf618ea745:00079#w0": "admit_sim",
+    "77c8f6cf618ea745:00080#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "77c8f6cf618ea745:00072#w0",
+    "77c8f6cf618ea745:00079#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256,
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 1,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 2
+   },
+   "primary": "FORMAT",
+   "sub": "reply_cut_at_n_predict_256",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 1,
+   "fix_probes": {
+    "current_rank": 0,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 8,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "wrong"
+  },
+  {
+   "group": "c",
+   "doc": "ADOBE_2022_10K",
+   "field": "total_assets",
+   "fy": "2022",
+   "gold": 27165.0,
+   "unit": "l4:total_assets:ADOBE_2022_10K",
+   "diag_verdict": "PERIOD_LABEL",
+   "n_facts": 8,
+   "candidate": {
+    "period": null,
+    "stored_value": 27165.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 27165.0,
+    "extractor": "l3_textrow.v1",
+    "page": 53,
+    "quote": "Total assets $ 27,165 $ 27,241"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": null,
+   "l3_gold_fact": {
+    "period": null,
+    "stored_value": 27165.0,
+    "stored_unit": "USD_millions",
+    "extractor": "l3_textrow.v1",
+    "page": 53,
+    "quote": "Total assets $ 27,165 $ 27,241"
+   },
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total assets $ 27,165"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00064#w0"
+    ],
+    "by_row": [
+     "00064#w0"
+    ],
+    "by_number": [
+     "00064#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "6b7ea02c48d72b41:00064#w0"
+   ],
+   "gold_best_rank": 6,
+   "gold_ranks": [
+    6
+   ],
+   "top": [
+    {
+     "chunk_id": "6b7ea02c48d72b41:00077#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 76
+    },
+    {
+     "chunk_id": "6b7ea02c48d72b41:00075#w0",
+     "rank": 1,
+     "sim": 0.9011,
+     "page_start": 69
+    },
+    {
+     "chunk_id": "6b7ea02c48d72b41:00068#w0",
+     "rank": 2,
+     "sim": 0.8819,
+     "page_start": 57
+    },
+    {
+     "chunk_id": "6b7ea02c48d72b41:00055#w0",
+     "rank": 3,
+     "sim": 0.8649,
+     "page_start": 38
+    },
+    {
+     "chunk_id": "6b7ea02c48d72b41:00073#w0",
+     "rank": 4,
+     "sim": 0.8434,
+     "page_start": 64
+    },
+    {
+     "chunk_id": "6b7ea02c48d72b41:00079#w0",
+     "rank": 5,
+     "sim": 0.7943,
+     "page_start": 80
+    }
+   ],
+   "admission_status": {
+    "6b7ea02c48d72b41:00077#w0": "admit_sim",
+    "6b7ea02c48d72b41:00075#w0": "admit_sim",
+    "6b7ea02c48d72b41:00068#w0": "admit_sim",
+    "6b7ea02c48d72b41:00055#w0": "admit_sim",
+    "6b7ea02c48d72b41:00073#w0": "admit_sim",
+    "6b7ea02c48d72b41:00079#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "L3",
+   "sub": "gold_value_stored_without_fy_period",
+   "secondary": [
+    "wrong_l3_fact_present",
+    "l4_also_retrieval"
+   ],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_6_outside_top_6",
+   "l3_first_col_is_gold": true,
+   "l3_distinct_row_candidates": 3,
+   "top_k_needed": 7,
+   "fix_probes": {
+    "current_rank": 6,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 2,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "ADOBE_2022_10K",
+   "field": "total_current_liabilities",
+   "fy": "2022",
+   "gold": 8128.0,
+   "unit": "l4:total_current_liabilities:ADOBE_2022_10K",
+   "diag_verdict": "PERIOD_LABEL",
+   "n_facts": 2,
+   "candidate": {
+    "period": null,
+    "stored_value": 8128.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 8128.0,
+    "extractor": "l3_textrow.v1",
+    "page": 53,
+    "quote": "Total current liabilities 8,128 6,932"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": null,
+   "l3_gold_fact": {
+    "period": null,
+    "stored_value": 8128.0,
+    "stored_unit": "USD_millions",
+    "extractor": "l3_textrow.v1",
+    "page": 53,
+    "quote": "Total current liabilities 8,128 6,932"
+   },
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total current liabilities 8,128"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00064#w0"
+    ],
+    "by_row": [
+     "00064#w0"
+    ],
+    "by_number": [
+     "00064#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "6b7ea02c48d72b41:00064#w0"
+   ],
+   "gold_best_rank": 3,
+   "gold_ranks": [
+    3
+   ],
+   "top": [
+    {
+     "chunk_id": "6b7ea02c48d72b41:00075#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 69
+    },
+    {
+     "chunk_id": "6b7ea02c48d72b41:00077#w0",
+     "rank": 1,
+     "sim": 0.9702,
+     "page_start": 76
+    },
+    {
+     "chunk_id": "6b7ea02c48d72b41:00074#w0",
+     "rank": 2,
+     "sim": 0.9203,
+     "page_start": 67
+    },
+    {
+     "chunk_id": "6b7ea02c48d72b41:00064#w0",
+     "rank": 3,
+     "sim": 0.9108,
+     "page_start": 53
+    },
+    {
+     "chunk_id": "6b7ea02c48d72b41:00083#w0",
+     "rank": 4,
+     "sim": 0.8223,
+     "page_start": 84
+    },
+    {
+     "chunk_id": "6b7ea02c48d72b41:00076#w0",
+     "rank": 5,
+     "sim": 0.8199,
+     "page_start": 73
+    }
+   ],
+   "admission_status": {
+    "6b7ea02c48d72b41:00075#w0": "admit_sim",
+    "6b7ea02c48d72b41:00077#w0": "admit_sim",
+    "6b7ea02c48d72b41:00074#w0": "admit_sim",
+    "6b7ea02c48d72b41:00064#w0": "admit_sim",
+    "6b7ea02c48d72b41:00083#w0": "admit_sim",
+    "6b7ea02c48d72b41:00076#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "6b7ea02c48d72b41:00064#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "L3",
+   "sub": "gold_value_stored_without_fy_period",
+   "secondary": [
+    "wrong_l3_fact_present",
+    "l4_also_format"
+   ],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": true,
+   "l3_distinct_row_candidates": 1,
+   "top_k_needed": 4,
+   "fix_probes": {
+    "current_rank": 3,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 1,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "AMD_2022_10K",
+   "field": "net_income",
+   "fy": "2022",
+   "gold": 1320.0,
+   "unit": "l4:net_income:AMD_2022_10K",
+   "diag_verdict": "PERIOD_LABEL",
+   "n_facts": 14,
+   "candidate": {
+    "period": null,
+    "stored_value": 1320.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 1320.0,
+    "extractor": "l3_textrow.v1",
+    "page": 54,
+    "quote": "Net income $ 1,320 $ 3,162 $ 2,490"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": null,
+   "l3_gold_fact": {
+    "period": null,
+    "stored_value": 1320.0,
+    "stored_unit": "USD_millions",
+    "extractor": "l3_textrow.v1",
+    "page": 54,
+    "quote": "Net income $ 1,320 $ 3,162 $ 2,490"
+   },
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Net income $ 1,320"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00113#w0",
+     "00114#w0",
+     "00120#w0"
+    ],
+    "by_row": [
+     "00113#w0",
+     "00114#w0",
+     "00117#w0",
+     "00120#w0",
+     "00149#w0"
+    ],
+    "by_number": [
+     "00113#w0",
+     "00114#w0",
+     "00117#w0",
+     "00120#w0",
+     "00149#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "bcdada7c0deb2e74:00113#w0",
+    "bcdada7c0deb2e74:00114#w0",
+    "bcdada7c0deb2e74:00120#w0",
+    "bcdada7c0deb2e74:00117#w0",
+    "bcdada7c0deb2e74:00149#w0"
+   ],
+   "gold_best_rank": 9,
+   "gold_ranks": [
+    9,
+    10,
+    14,
+    17,
+    28
+   ],
+   "top": [
+    {
+     "chunk_id": "bcdada7c0deb2e74:00141#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 71
+    },
+    {
+     "chunk_id": "bcdada7c0deb2e74:00129#w0",
+     "rank": 1,
+     "sim": 0.8917,
+     "page_start": 63
+    },
+    {
+     "chunk_id": "bcdada7c0deb2e74:00154#w0",
+     "rank": 2,
+     "sim": 0.8889,
+     "page_start": 84
+    },
+    {
+     "chunk_id": "bcdada7c0deb2e74:00155#w0",
+     "rank": 3,
+     "sim": 0.8764,
+     "page_start": 88
+    },
+    {
+     "chunk_id": "bcdada7c0deb2e74:00139#w0",
+     "rank": 4,
+     "sim": 0.8722,
+     "page_start": 69
+    },
+    {
+     "chunk_id": "bcdada7c0deb2e74:00136#w0",
+     "rank": 5,
+     "sim": 0.8594,
+     "page_start": 65
+    }
+   ],
+   "admission_status": {
+    "bcdada7c0deb2e74:00141#w0": "admit_sim",
+    "bcdada7c0deb2e74:00129#w0": "admit_sim",
+    "bcdada7c0deb2e74:00154#w0": "admit_sim",
+    "bcdada7c0deb2e74:00155#w0": "admit_sim",
+    "bcdada7c0deb2e74:00139#w0": "admit_sim",
+    "bcdada7c0deb2e74:00136#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "L3",
+   "sub": "gold_value_stored_without_fy_period",
+   "secondary": [
+    "wrong_l3_fact_present",
+    "l4_also_retrieval"
+   ],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_9_outside_top_6",
+   "l3_first_col_is_gold": true,
+   "l3_distinct_row_candidates": 5,
+   "top_k_needed": 10,
+   "fix_probes": {
+    "current_rank": 9,
+    "field_query_rank": 1,
+    "n_row_locator_windows": 9,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "AMD_2022_10K",
+   "field": "total_current_liabilities",
+   "fy": "2022",
+   "gold": 6369.0,
+   "unit": "l4:total_current_liabilities:AMD_2022_10K",
+   "diag_verdict": "UNIT_SCALE",
+   "n_facts": 1,
+   "candidate": {
+    "period": "2022-12-31",
+    "stored_value": 0.006369,
+    "stored_unit": "USD_millions",
+    "scored_value": 0.006369,
+    "extractor": "l4_llm.v1",
+    "page": 56,
+    "quote": "6,369"
+   },
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total current liabilities 6,369"
+   },
+   "gold_windows": {
+    "by_quote": [],
+    "by_row": [],
+    "by_number": [
+     "00116#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "bcdada7c0deb2e74:00116#w0"
+   ],
+   "gold_best_rank": 4,
+   "gold_ranks": [
+    4
+   ],
+   "top": [
+    {
+     "chunk_id": "bcdada7c0deb2e74:00155#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 88
+    },
+    {
+     "chunk_id": "bcdada7c0deb2e74:00154#w0",
+     "rank": 1,
+     "sim": 0.9902,
+     "page_start": 84
+    },
+    {
+     "chunk_id": "bcdada7c0deb2e74:00141#w0",
+     "rank": 2,
+     "sim": 0.7966,
+     "page_start": 71
+    },
+    {
+     "chunk_id": "bcdada7c0deb2e74:00136#w0",
+     "rank": 3,
+     "sim": 0.7884,
+     "page_start": 65
+    },
+    {
+     "chunk_id": "bcdada7c0deb2e74:00116#w0",
+     "rank": 4,
+     "sim": 0.778,
+     "page_start": 56
+    },
+    {
+     "chunk_id": "bcdada7c0deb2e74:00139#w0",
+     "rank": 5,
+     "sim": 0.6759,
+     "page_start": 69
+    }
+   ],
+   "admission_status": {
+    "bcdada7c0deb2e74:00155#w0": "admit_sim",
+    "bcdada7c0deb2e74:00154#w0": "admit_sim",
+    "bcdada7c0deb2e74:00141#w0": "admit_sim",
+    "bcdada7c0deb2e74:00136#w0": "admit_sim",
+    "bcdada7c0deb2e74:00116#w0": "admit_sim",
+    "bcdada7c0deb2e74:00139#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [
+    71
+   ],
+   "gold_reply_tokens_min": 71,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 1,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "EXTRACTION",
+   "sub": "value_right_unit_label_wrong",
+   "secondary": [],
+   "l4_class": "EXTRACTION",
+   "l4_sub": "value_right_unit_label_wrong",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 5,
+   "fix_probes": {
+    "current_rank": 4,
+    "field_query_rank": 3,
+    "n_row_locator_windows": 0,
+    "row_locator_hit": false,
+    "row_locator_top6_hit": false
+   },
+   "miss": true,
+   "agg18_state": "wrong"
+  },
+  {
+   "group": "c",
+   "doc": "AMERICANEXPRESS_2022_10K",
+   "field": "capex",
+   "fy": "2022",
+   "gold": 1855.0,
+   "unit": "l4:capex:AMERICANEXPRESS_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Purchase of premises and equipment, net of sales: 2022, $1; 2021, $88; 2020, $1 (1,855"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00142#w0"
+    ],
+    "by_row": [],
+    "by_number": [
+     "00142#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "46a5c6bebd715df8:00142#w0"
+   ],
+   "gold_best_rank": 10,
+   "gold_ranks": [
+    10
+   ],
+   "top": [
+    {
+     "chunk_id": "46a5c6bebd715df8:00095#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 72
+    },
+    {
+     "chunk_id": "46a5c6bebd715df8:00123#w0",
+     "rank": 1,
+     "sim": 0.9039,
+     "page_start": 83
+    },
+    {
+     "chunk_id": "46a5c6bebd715df8:00259#w0",
+     "rank": 2,
+     "sim": 0.8848,
+     "page_start": 157
+    },
+    {
+     "chunk_id": "46a5c6bebd715df8:00224#w0",
+     "rank": 3,
+     "sim": 0.8716,
+     "page_start": 138
+    },
+    {
+     "chunk_id": "46a5c6bebd715df8:00125#w0",
+     "rank": 4,
+     "sim": 0.8481,
+     "page_start": 85
+    },
+    {
+     "chunk_id": "46a5c6bebd715df8:00047#w0",
+     "rank": 5,
+     "sim": 0.8372,
+     "page_start": 39
+    }
+   ],
+   "admission_status": {
+    "46a5c6bebd715df8:00095#w0": "admit_sim",
+    "46a5c6bebd715df8:00123#w0": "admit_sim",
+    "46a5c6bebd715df8:00259#w0": "admit_sim",
+    "46a5c6bebd715df8:00224#w0": "admit_sim",
+    "46a5c6bebd715df8:00125#w0": "admit_sim",
+    "46a5c6bebd715df8:00047#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_10_outside_top_6",
+   "secondary": [],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_10_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 11,
+   "fix_probes": {
+    "current_rank": 10,
+    "field_query_rank": 2,
+    "n_row_locator_windows": 0,
+    "row_locator_hit": false,
+    "row_locator_top6_hit": false
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "APPLE_2022_10K",
+   "field": "capex",
+   "fy": "2022",
+   "gold": 10708.0,
+   "unit": "l4:capex:APPLE_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Payments for acquisition of property, plant and equipment (10,708"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00037#w0"
+    ],
+    "by_row": [],
+    "by_number": [
+     "00037#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "aefab5af8054e564:00037#w0"
+   ],
+   "gold_best_rank": 5,
+   "gold_ranks": [
+    5
+   ],
+   "top": [
+    {
+     "chunk_id": "aefab5af8054e564:00048#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 42
+    },
+    {
+     "chunk_id": "aefab5af8054e564:00042#w0",
+     "rank": 1,
+     "sim": 0.7826,
+     "page_start": 39
+    },
+    {
+     "chunk_id": "aefab5af8054e564:00095#w0",
+     "rank": 2,
+     "sim": 0.7202,
+     "page_start": 75
+    },
+    {
+     "chunk_id": "aefab5af8054e564:00052#w0",
+     "rank": 3,
+     "sim": 0.6451,
+     "page_start": 46
+    },
+    {
+     "chunk_id": "aefab5af8054e564:00029#w0",
+     "rank": 4,
+     "sim": 0.5718,
+     "page_start": 27
+    },
+    {
+     "chunk_id": "aefab5af8054e564:00037#w0",
+     "rank": 5,
+     "sim": 0.5554,
+     "page_start": 36
+    }
+   ],
+   "admission_status": {
+    "aefab5af8054e564:00048#w0": "admit_sim",
+    "aefab5af8054e564:00042#w0": "admit_sim",
+    "aefab5af8054e564:00095#w0": "admit_sim",
+    "aefab5af8054e564:00052#w0": "admit_sim",
+    "aefab5af8054e564:00029#w0": "gate_yes",
+    "aefab5af8054e564:00037#w0": "gate_yes"
+   },
+   "admission_n_gated": 2,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "aefab5af8054e564:00037#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 2,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "FORMAT",
+   "sub": "reply_cut_at_n_predict_256",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 6,
+   "fix_probes": {
+    "current_rank": 5,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 0,
+    "row_locator_hit": false,
+    "row_locator_top6_hit": false
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "BOEING_2022_10K",
+   "field": "total_assets",
+   "fy": "2022",
+   "gold": 137100.0,
+   "unit": "l4:total_assets:BOEING_2022_10K",
+   "diag_verdict": "NEAR_ROUNDED",
+   "n_facts": 3,
+   "candidate": {
+    "period": null,
+    "stored_value": 138552.0,
+    "stored_unit": "unknown",
+    "scored_value": 138552.0,
+    "extractor": "l3_table.v1",
+    "page": 57,
+    "quote": "Total assets $137,100 | $138,552"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": {
+    "period": null,
+    "stored_value": 138552.0,
+    "stored_unit": "unknown",
+    "extractor": "l3_table.v1",
+    "page": 57,
+    "quote": "Total assets $137,100 | $138,552"
+   },
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total assets $137,100"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00052#w0"
+    ],
+    "by_row": [
+     "00052#w0"
+    ],
+    "by_number": [
+     "00052#w0",
+     "00054#w0",
+     "00123#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "7b470cf51ac23581:00052#w0"
+   ],
+   "gold_best_rank": 4,
+   "gold_ranks": [
+    4
+   ],
+   "top": [
+    {
+     "chunk_id": "7b470cf51ac23581:00041#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 40
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00055#w0",
+     "rank": 1,
+     "sim": 0.9611,
+     "page_start": 57
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00088#w0",
+     "rank": 2,
+     "sim": 0.8298,
+     "page_start": 83
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00042#w0",
+     "rank": 3,
+     "sim": 0.7659,
+     "page_start": 42
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00052#w0",
+     "rank": 4,
+     "sim": 0.706,
+     "page_start": 55
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00111#w0",
+     "rank": 5,
+     "sim": 0.6857,
+     "page_start": 106
+    }
+   ],
+   "admission_status": {
+    "7b470cf51ac23581:00041#w0": "admit_sim",
+    "7b470cf51ac23581:00055#w0": "admit_sim",
+    "7b470cf51ac23581:00088#w0": "admit_sim",
+    "7b470cf51ac23581:00042#w0": "admit_sim",
+    "7b470cf51ac23581:00052#w0": "admit_sim",
+    "7b470cf51ac23581:00111#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "7b470cf51ac23581:00052#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 1,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "L3",
+   "sub": "right_row_wrong_column",
+   "secondary": [
+    "wrong_l3_fact_present",
+    "l4_also_format"
+   ],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": true,
+   "l3_distinct_row_candidates": 2,
+   "top_k_needed": 5,
+   "fix_probes": {
+    "current_rank": 4,
+    "field_query_rank": 8,
+    "n_row_locator_windows": 3,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "wrong"
+  },
+  {
+   "group": "c",
+   "doc": "BOEING_2022_10K",
+   "field": "total_current_assets",
+   "fy": "2022",
+   "gold": 109523.0,
+   "unit": "l4:total_current_assets:BOEING_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total current assets 109,523"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00052#w0"
+    ],
+    "by_row": [
+     "00052#w0"
+    ],
+    "by_number": [
+     "00052#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "7b470cf51ac23581:00052#w0"
+   ],
+   "gold_best_rank": 9,
+   "gold_ranks": [
+    9
+   ],
+   "top": [
+    {
+     "chunk_id": "7b470cf51ac23581:00088#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 83
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00041#w0",
+     "rank": 1,
+     "sim": 0.9497,
+     "page_start": 40
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00081#w0",
+     "rank": 2,
+     "sim": 0.9183,
+     "page_start": 79
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00098#w0",
+     "rank": 3,
+     "sim": 0.8796,
+     "page_start": 92
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00043#w0",
+     "rank": 4,
+     "sim": 0.8542,
+     "page_start": 45
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00055#w0",
+     "rank": 5,
+     "sim": 0.8325,
+     "page_start": 57
+    }
+   ],
+   "admission_status": {
+    "7b470cf51ac23581:00088#w0": "admit_sim",
+    "7b470cf51ac23581:00041#w0": "admit_sim",
+    "7b470cf51ac23581:00081#w0": "admit_sim",
+    "7b470cf51ac23581:00098#w0": "admit_sim",
+    "7b470cf51ac23581:00043#w0": "admit_sim",
+    "7b470cf51ac23581:00055#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_9_outside_top_6",
+   "secondary": [],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_9_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 10,
+   "fix_probes": {
+    "current_rank": 9,
+    "field_query_rank": 2,
+    "n_row_locator_windows": 1,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "BOEING_2022_10K",
+   "field": "total_current_liabilities",
+   "fy": "2022",
+   "gold": 90052.0,
+   "unit": "l4:total_current_liabilities:BOEING_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total current liabilities 90,052"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00054#w0"
+    ],
+    "by_row": [
+     "00054#w0"
+    ],
+    "by_number": [
+     "00054#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "7b470cf51ac23581:00054#w0"
+   ],
+   "gold_best_rank": 8,
+   "gold_ranks": [
+    8
+   ],
+   "top": [
+    {
+     "chunk_id": "7b470cf51ac23581:00041#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 40
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00055#w0",
+     "rank": 1,
+     "sim": 0.9251,
+     "page_start": 57
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00088#w0",
+     "rank": 2,
+     "sim": 0.8956,
+     "page_start": 83
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00042#w0",
+     "rank": 3,
+     "sim": 0.7475,
+     "page_start": 42
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00111#w0",
+     "rank": 4,
+     "sim": 0.6621,
+     "page_start": 106
+    },
+    {
+     "chunk_id": "7b470cf51ac23581:00080#w0",
+     "rank": 5,
+     "sim": 0.6581,
+     "page_start": 75
+    }
+   ],
+   "admission_status": {
+    "7b470cf51ac23581:00041#w0": "admit_sim",
+    "7b470cf51ac23581:00055#w0": "admit_sim",
+    "7b470cf51ac23581:00088#w0": "admit_sim",
+    "7b470cf51ac23581:00042#w0": "admit_sim",
+    "7b470cf51ac23581:00111#w0": "admit_sim",
+    "7b470cf51ac23581:00080#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_8_outside_top_6",
+   "secondary": [],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_8_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 9,
+   "fix_probes": {
+    "current_rank": 8,
+    "field_query_rank": 1,
+    "n_row_locator_windows": 1,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "COCACOLA_2022_10K",
+   "field": "net_income",
+   "fy": "2022",
+   "gold": 9542.0,
+   "unit": "l4:net_income:COCACOLA_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Net Income Attributable to Shareowners of The Coca-Cola Company $ 9,542"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00089#w0"
+    ],
+    "by_row": [
+     "00089#w0",
+     "00095#w0",
+     "00140#w0"
+    ],
+    "by_number": [
+     "00089#w0",
+     "00095#w0",
+     "00140#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "4db361e85cc6ff9c:00089#w0",
+    "4db361e85cc6ff9c:00095#w0",
+    "4db361e85cc6ff9c:00140#w0"
+   ],
+   "gold_best_rank": 0,
+   "gold_ranks": [
+    0,
+    1,
+    2
+   ],
+   "top": [
+    {
+     "chunk_id": "4db361e85cc6ff9c:00140#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 108
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00089#w0",
+     "rank": 1,
+     "sim": 0.9498,
+     "page_start": 63
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00095#w0",
+     "rank": 2,
+     "sim": 0.9095,
+     "page_start": 67
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00117#w0",
+     "rank": 3,
+     "sim": 0.884,
+     "page_start": 86
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00141#w0",
+     "rank": 4,
+     "sim": 0.8589,
+     "page_start": 109
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00093#w0",
+     "rank": 5,
+     "sim": 0.7987,
+     "page_start": 65
+    }
+   ],
+   "admission_status": {
+    "4db361e85cc6ff9c:00140#w0": "admit_sim",
+    "4db361e85cc6ff9c:00089#w0": "admit_sim",
+    "4db361e85cc6ff9c:00095#w0": "admit_sim",
+    "4db361e85cc6ff9c:00117#w0": "admit_sim",
+    "4db361e85cc6ff9c:00141#w0": "admit_sim",
+    "4db361e85cc6ff9c:00093#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "4db361e85cc6ff9c:00140#w0",
+    "4db361e85cc6ff9c:00089#w0",
+    "4db361e85cc6ff9c:00095#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "unit_reused_no_log",
+   "unit_reused": true,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 3
+   },
+   "primary": "FORMAT",
+   "sub": "unparseable_reply_note",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "unparseable_reply_note",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 1,
+   "fix_probes": {
+    "current_rank": 0,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 11,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "COCACOLA_2022_10K",
+   "field": "total_assets",
+   "fy": "2022",
+   "gold": 92763.0,
+   "unit": "l4:total_assets:COCACOLA_2022_10K",
+   "diag_verdict": "NEAR_ROUNDED",
+   "n_facts": 6,
+   "candidate": {
+    "period": null,
+    "stored_value": 94354.0,
+    "stored_unit": "unknown",
+    "scored_value": 94354.0,
+    "extractor": "l3_table.v1",
+    "page": 65,
+    "quote": "Total Assets $ 92,763 | $ 94,354"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": {
+    "period": null,
+    "stored_value": 94354.0,
+    "stored_unit": "unknown",
+    "extractor": "l3_table.v1",
+    "page": 65,
+    "quote": "Total Assets $ 92,763 | $ 94,354"
+   },
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total Assets $ 92,763"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00093#w0"
+    ],
+    "by_row": [
+     "00093#w0"
+    ],
+    "by_number": [
+     "00093#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "4db361e85cc6ff9c:00093#w0"
+   ],
+   "gold_best_rank": 14,
+   "gold_ranks": [
+    14
+   ],
+   "top": [
+    {
+     "chunk_id": "4db361e85cc6ff9c:00149#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 116
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00105#w0",
+     "rank": 1,
+     "sim": 0.974,
+     "page_start": 78
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00133#w0",
+     "rank": 2,
+     "sim": 0.9025,
+     "page_start": 102
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00119#w0",
+     "rank": 3,
+     "sim": 0.8933,
+     "page_start": 88
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00106#w0",
+     "rank": 4,
+     "sim": 0.8854,
+     "page_start": 79
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00095#w0",
+     "rank": 5,
+     "sim": 0.8524,
+     "page_start": 67
+    }
+   ],
+   "admission_status": {
+    "4db361e85cc6ff9c:00149#w0": "admit_sim",
+    "4db361e85cc6ff9c:00105#w0": "admit_sim",
+    "4db361e85cc6ff9c:00133#w0": "admit_sim",
+    "4db361e85cc6ff9c:00119#w0": "admit_sim",
+    "4db361e85cc6ff9c:00106#w0": "admit_sim",
+    "4db361e85cc6ff9c:00095#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "unit_reused_no_log",
+   "unit_reused": true,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "L3",
+   "sub": "right_row_wrong_column",
+   "secondary": [
+    "wrong_l3_fact_present",
+    "l4_also_retrieval"
+   ],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_14_outside_top_6",
+   "l3_first_col_is_gold": true,
+   "l3_distinct_row_candidates": 6,
+   "top_k_needed": 15,
+   "fix_probes": {
+    "current_rank": 14,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 4,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "COCACOLA_2022_10K",
+   "field": "total_current_assets",
+   "fy": "2022",
+   "gold": 22591.0,
+   "unit": "l4:total_current_assets:COCACOLA_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total Current Assets 22,591"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00093#w0"
+    ],
+    "by_row": [
+     "00093#w0"
+    ],
+    "by_number": [
+     "00093#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "4db361e85cc6ff9c:00093#w0"
+   ],
+   "gold_best_rank": 11,
+   "gold_ranks": [
+    11
+   ],
+   "top": [
+    {
+     "chunk_id": "4db361e85cc6ff9c:00139#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 107
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00119#w0",
+     "rank": 1,
+     "sim": 0.9957,
+     "page_start": 88
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00149#w0",
+     "rank": 2,
+     "sim": 0.9108,
+     "page_start": 116
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00138#w0",
+     "rank": 3,
+     "sim": 0.8312,
+     "page_start": 106
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00098#w0",
+     "rank": 4,
+     "sim": 0.8264,
+     "page_start": 70
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00155#w0",
+     "rank": 5,
+     "sim": 0.8149,
+     "page_start": 120
+    }
+   ],
+   "admission_status": {
+    "4db361e85cc6ff9c:00139#w0": "admit_sim",
+    "4db361e85cc6ff9c:00119#w0": "admit_sim",
+    "4db361e85cc6ff9c:00149#w0": "admit_sim",
+    "4db361e85cc6ff9c:00138#w0": "admit_sim",
+    "4db361e85cc6ff9c:00098#w0": "admit_sim",
+    "4db361e85cc6ff9c:00155#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "unit_reused_no_log",
+   "unit_reused": true,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_11_outside_top_6",
+   "secondary": [],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_11_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 12,
+   "fix_probes": {
+    "current_rank": 11,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 1,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "COCACOLA_2022_10K",
+   "field": "total_current_liabilities",
+   "fy": "2022",
+   "gold": 19724.0,
+   "unit": "l4:total_current_liabilities:COCACOLA_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total Current Liabilities 19,724"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00093#w0"
+    ],
+    "by_row": [
+     "00093#w0"
+    ],
+    "by_number": [
+     "00093#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "4db361e85cc6ff9c:00093#w0"
+   ],
+   "gold_best_rank": 4,
+   "gold_ranks": [
+    4
+   ],
+   "top": [
+    {
+     "chunk_id": "4db361e85cc6ff9c:00119#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 88
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00139#w0",
+     "rank": 1,
+     "sim": 0.9937,
+     "page_start": 107
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00095#w0",
+     "rank": 2,
+     "sim": 0.8057,
+     "page_start": 67
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00155#w0",
+     "rank": 3,
+     "sim": 0.8057,
+     "page_start": 120
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00093#w0",
+     "rank": 4,
+     "sim": 0.8053,
+     "page_start": 65
+    },
+    {
+     "chunk_id": "4db361e85cc6ff9c:00136#w0",
+     "rank": 5,
+     "sim": 0.7931,
+     "page_start": 104
+    }
+   ],
+   "admission_status": {
+    "4db361e85cc6ff9c:00119#w0": "admit_sim",
+    "4db361e85cc6ff9c:00139#w0": "admit_sim",
+    "4db361e85cc6ff9c:00095#w0": "admit_sim",
+    "4db361e85cc6ff9c:00155#w0": "admit_sim",
+    "4db361e85cc6ff9c:00093#w0": "admit_sim",
+    "4db361e85cc6ff9c:00136#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "4db361e85cc6ff9c:00093#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "unit_reused_no_log",
+   "unit_reused": true,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "FORMAT",
+   "sub": "unparseable_reply_note",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "unparseable_reply_note",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 5,
+   "fix_probes": {
+    "current_rank": 4,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 1,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "CORNING_2022_10K",
+   "field": "net_income",
+   "fy": "2022",
+   "gold": 1316.0,
+   "unit": "l4:net_income:CORNING_2022_10K",
+   "diag_verdict": "PERIOD_LABEL",
+   "n_facts": 9,
+   "candidate": {
+    "period": null,
+    "stored_value": 1316.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 1316.0,
+    "extractor": "l3_textrow.v1",
+    "page": 103,
+    "quote": "Net income $ 1,316 $ 1,906 $ 512"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": null,
+   "l3_gold_fact": {
+    "period": null,
+    "stored_value": 1316.0,
+    "stored_unit": "USD_millions",
+    "extractor": "l3_textrow.v1",
+    "page": 103,
+    "quote": "Net income $ 1,316 $ 1,906 $ 512"
+   },
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Net income attributable to Corning Incorporated $ 1,316"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00031#w0",
+     "00033#w0",
+     "00077#w0",
+     "00132#w0"
+    ],
+    "by_row": [
+     "00030#w0",
+     "00031#w0",
+     "00033#w0",
+     "00040#w0",
+     "00077#w0",
+     "00084#w0",
+     "00132#w0",
+     "00133#w0"
+    ],
+    "by_number": [
+     "00030#w0",
+     "00031#w0",
+     "00033#w0",
+     "00040#w0",
+     "00077#w0",
+     "00084#w0",
+     "00132#w0",
+     "00133#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "d9e837be617451e0:00031#w0",
+    "d9e837be617451e0:00033#w0",
+    "d9e837be617451e0:00077#w0",
+    "d9e837be617451e0:00132#w0",
+    "d9e837be617451e0:00030#w0",
+    "d9e837be617451e0:00040#w0",
+    "d9e837be617451e0:00084#w0",
+    "d9e837be617451e0:00133#w0"
+   ],
+   "gold_best_rank": 0,
+   "gold_ranks": [
+    0,
+    1,
+    4,
+    5,
+    6,
+    8
+   ],
+   "top": [
+    {
+     "chunk_id": "d9e837be617451e0:00077#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 57
+    },
+    {
+     "chunk_id": "d9e837be617451e0:00033#w0",
+     "rank": 1,
+     "sim": 0.9459,
+     "page_start": 25
+    },
+    {
+     "chunk_id": "d9e837be617451e0:00039#w0",
+     "rank": 2,
+     "sim": 0.8929,
+     "page_start": 30
+    },
+    {
+     "chunk_id": "d9e837be617451e0:00034#w0",
+     "rank": 3,
+     "sim": 0.8392,
+     "page_start": 27
+    },
+    {
+     "chunk_id": "d9e837be617451e0:00030#w0",
+     "rank": 4,
+     "sim": 0.8356,
+     "page_start": 23
+    },
+    {
+     "chunk_id": "d9e837be617451e0:00040#w0",
+     "rank": 5,
+     "sim": 0.7582,
+     "page_start": 31
+    }
+   ],
+   "admission_status": {
+    "d9e837be617451e0:00077#w0": "admit_sim",
+    "d9e837be617451e0:00033#w0": "admit_sim",
+    "d9e837be617451e0:00039#w0": "admit_sim",
+    "d9e837be617451e0:00034#w0": "admit_sim",
+    "d9e837be617451e0:00030#w0": "admit_sim",
+    "d9e837be617451e0:00040#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "d9e837be617451e0:00077#w0",
+    "d9e837be617451e0:00033#w0",
+    "d9e837be617451e0:00030#w0",
+    "d9e837be617451e0:00040#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "unit_reused_no_log",
+   "unit_reused": true,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 4
+   },
+   "primary": "L3",
+   "sub": "gold_value_stored_without_fy_period",
+   "secondary": [
+    "wrong_l3_fact_present",
+    "l4_also_format"
+   ],
+   "l4_class": "FORMAT",
+   "l4_sub": "unparseable_reply_note",
+   "l3_first_col_is_gold": true,
+   "l3_distinct_row_candidates": 3,
+   "top_k_needed": 1,
+   "fix_probes": {
+    "current_rank": 0,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 17,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "COSTCO_2022_10K",
+   "field": "net_income",
+   "fy": "2022",
+   "gold": 5844.0,
+   "unit": "l4:net_income:COSTCO_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "NET INCOME ATTRIBUTABLE TO COSTCO $ 5,844"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00045#w0"
+    ],
+    "by_row": [
+     "00045#w0",
+     "00049#w0",
+     "00060#w0"
+    ],
+    "by_number": [
+     "00045#w0",
+     "00049#w0",
+     "00060#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "9b4318fa67fbd97b:00045#w0",
+    "9b4318fa67fbd97b:00049#w0",
+    "9b4318fa67fbd97b:00060#w0"
+   ],
+   "gold_best_rank": 0,
+   "gold_ranks": [
+    0,
+    5,
+    8
+   ],
+   "top": [
+    {
+     "chunk_id": "9b4318fa67fbd97b:00045#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 36
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00051#w0",
+     "rank": 1,
+     "sim": 0.9777,
+     "page_start": 40
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00046#w0",
+     "rank": 2,
+     "sim": 0.9519,
+     "page_start": 37
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00055#w0",
+     "rank": 3,
+     "sim": 0.7453,
+     "page_start": 48
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00052#w0",
+     "rank": 4,
+     "sim": 0.739,
+     "page_start": 41
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00060#w0",
+     "rank": 5,
+     "sim": 0.7235,
+     "page_start": 60
+    }
+   ],
+   "admission_status": {
+    "9b4318fa67fbd97b:00045#w0": "admit_sim",
+    "9b4318fa67fbd97b:00051#w0": "admit_sim",
+    "9b4318fa67fbd97b:00046#w0": "admit_sim",
+    "9b4318fa67fbd97b:00055#w0": "admit_sim",
+    "9b4318fa67fbd97b:00052#w0": "admit_sim",
+    "9b4318fa67fbd97b:00060#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "9b4318fa67fbd97b:00045#w0",
+    "9b4318fa67fbd97b:00060#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256,
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 2
+   },
+   "primary": "FORMAT",
+   "sub": "reply_cut_at_n_predict_256",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 1,
+   "fix_probes": {
+    "current_rank": 0,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 7,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "COSTCO_2022_10K",
+   "field": "total_assets",
+   "fy": "2022",
+   "gold": 64166.0,
+   "unit": "l4:total_assets:COSTCO_2022_10K",
+   "diag_verdict": "PERIOD_LABEL",
+   "n_facts": 2,
+   "candidate": {
+    "period": null,
+    "stored_value": 64166.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 64166.0,
+    "extractor": "l3_textrow.v1",
+    "page": 38,
+    "quote": "TOTAL ASSETS $ 64,166 $ 59,268"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": null,
+   "l3_gold_fact": {
+    "period": null,
+    "stored_value": 64166.0,
+    "stored_unit": "USD_millions",
+    "extractor": "l3_textrow.v1",
+    "page": 38,
+    "quote": "TOTAL ASSETS $ 64,166 $ 59,268"
+   },
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "TOTAL ASSETS $ 64,166"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00047#w0"
+    ],
+    "by_row": [
+     "00047#w0",
+     "00063#w0"
+    ],
+    "by_number": [
+     "00047#w0",
+     "00048#w0",
+     "00063#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "9b4318fa67fbd97b:00047#w0",
+    "9b4318fa67fbd97b:00063#w0"
+   ],
+   "gold_best_rank": 3,
+   "gold_ranks": [
+    3,
+    17
+   ],
+   "top": [
+    {
+     "chunk_id": "9b4318fa67fbd97b:00059#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 55
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00056#w0",
+     "rank": 1,
+     "sim": 0.9105,
+     "page_start": 51
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00055#w0",
+     "rank": 2,
+     "sim": 0.8891,
+     "page_start": 48
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00047#w0",
+     "rank": 3,
+     "sim": 0.8446,
+     "page_start": 38
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00050#w0",
+     "rank": 4,
+     "sim": 0.8188,
+     "page_start": 40
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00053#w0",
+     "rank": 5,
+     "sim": 0.8157,
+     "page_start": 44
+    }
+   ],
+   "admission_status": {
+    "9b4318fa67fbd97b:00059#w0": "admit_sim",
+    "9b4318fa67fbd97b:00056#w0": "admit_sim",
+    "9b4318fa67fbd97b:00055#w0": "admit_sim",
+    "9b4318fa67fbd97b:00047#w0": "admit_sim",
+    "9b4318fa67fbd97b:00050#w0": "admit_sim",
+    "9b4318fa67fbd97b:00053#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "9b4318fa67fbd97b:00047#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "L3",
+   "sub": "gold_value_stored_without_fy_period",
+   "secondary": [
+    "wrong_l3_fact_present",
+    "l4_also_format"
+   ],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": true,
+   "l3_distinct_row_candidates": 1,
+   "top_k_needed": 4,
+   "fix_probes": {
+    "current_rank": 3,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 2,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "COSTCO_2022_10K",
+   "field": "total_current_liabilities",
+   "fy": "2022",
+   "gold": 31998.0,
+   "unit": "l4:total_current_liabilities:COSTCO_2022_10K",
+   "diag_verdict": "PERIOD_LABEL",
+   "n_facts": 2,
+   "candidate": {
+    "period": null,
+    "stored_value": 31998.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 31998.0,
+    "extractor": "l3_textrow.v1",
+    "page": 38,
+    "quote": "Total current liabilities 31,998 29,441"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": null,
+   "l3_gold_fact": {
+    "period": null,
+    "stored_value": 31998.0,
+    "stored_unit": "USD_millions",
+    "extractor": "l3_textrow.v1",
+    "page": 38,
+    "quote": "Total current liabilities 31,998 29,441"
+   },
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total current liabilities 31,998"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00047#w0"
+    ],
+    "by_row": [
+     "00047#w0"
+    ],
+    "by_number": [
+     "00047#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "9b4318fa67fbd97b:00047#w0"
+   ],
+   "gold_best_rank": 3,
+   "gold_ranks": [
+    3
+   ],
+   "top": [
+    {
+     "chunk_id": "9b4318fa67fbd97b:00059#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 55
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00056#w0",
+     "rank": 1,
+     "sim": 0.8745,
+     "page_start": 51
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00054#w0",
+     "rank": 2,
+     "sim": 0.8685,
+     "page_start": 45
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00047#w0",
+     "rank": 3,
+     "sim": 0.8561,
+     "page_start": 38
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00052#w0",
+     "rank": 4,
+     "sim": 0.8373,
+     "page_start": 41
+    },
+    {
+     "chunk_id": "9b4318fa67fbd97b:00055#w0",
+     "rank": 5,
+     "sim": 0.8134,
+     "page_start": 48
+    }
+   ],
+   "admission_status": {
+    "9b4318fa67fbd97b:00059#w0": "admit_sim",
+    "9b4318fa67fbd97b:00056#w0": "admit_sim",
+    "9b4318fa67fbd97b:00054#w0": "admit_sim",
+    "9b4318fa67fbd97b:00047#w0": "admit_sim",
+    "9b4318fa67fbd97b:00052#w0": "admit_sim",
+    "9b4318fa67fbd97b:00055#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "9b4318fa67fbd97b:00047#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "L3",
+   "sub": "gold_value_stored_without_fy_period",
+   "secondary": [
+    "wrong_l3_fact_present",
+    "l4_also_format"
+   ],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": true,
+   "l3_distinct_row_candidates": 1,
+   "top_k_needed": 4,
+   "fix_probes": {
+    "current_rank": 3,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 1,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "GENERALMILLS_2022_10K",
+   "field": "net_income",
+   "fy": "2022",
+   "gold": 2707.3,
+   "unit": "l4:net_income:GENERALMILLS_2022_10K",
+   "diag_verdict": "WRONG_VALUE",
+   "n_facts": 1,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 28.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 28.0,
+    "extractor": "l3_regex.v1",
+    "page": 20,
+    "quote": "Net earnings attributable to redeemable and noncontrolling interests increased to $28 mill"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Net earnings attributable to General Mills $ 2,707.3"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00065#w0",
+     "00090#w0"
+    ],
+    "by_row": [
+     "00026#w0",
+     "00065#w0",
+     "00066#w0",
+     "00088#w0",
+     "00090#w0"
+    ],
+    "by_number": [
+     "00026#w0",
+     "00065#w0",
+     "00066#w0",
+     "00088#w0",
+     "00090#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "cbf53c278378a0b9:00065#w0",
+    "cbf53c278378a0b9:00090#w0",
+    "cbf53c278378a0b9:00026#w0",
+    "cbf53c278378a0b9:00066#w0",
+    "cbf53c278378a0b9:00088#w0"
+   ],
+   "gold_best_rank": 2,
+   "gold_ranks": [
+    2,
+    7,
+    9,
+    16,
+    17
+   ],
+   "top": [
+    {
+     "chunk_id": "cbf53c278378a0b9:00051#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 34
+    },
+    {
+     "chunk_id": "cbf53c278378a0b9:00102#w0",
+     "rank": 1,
+     "sim": 0.9164,
+     "page_start": 91
+    },
+    {
+     "chunk_id": "cbf53c278378a0b9:00065#w0",
+     "rank": 2,
+     "sim": 0.7788,
+     "page_start": 45
+    },
+    {
+     "chunk_id": "cbf53c278378a0b9:00064#w0",
+     "rank": 3,
+     "sim": 0.772,
+     "page_start": 42
+    },
+    {
+     "chunk_id": "cbf53c278378a0b9:00100#w0",
+     "rank": 4,
+     "sim": 0.7599,
+     "page_start": 86
+    },
+    {
+     "chunk_id": "cbf53c278378a0b9:00025#w0",
+     "rank": 5,
+     "sim": 0.7513,
+     "page_start": 14
+    }
+   ],
+   "admission_status": {
+    "cbf53c278378a0b9:00051#w0": "admit_sim",
+    "cbf53c278378a0b9:00102#w0": "admit_sim",
+    "cbf53c278378a0b9:00065#w0": "admit_sim",
+    "cbf53c278378a0b9:00064#w0": "admit_sim",
+    "cbf53c278378a0b9:00100#w0": "admit_sim",
+    "cbf53c278378a0b9:00025#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "cbf53c278378a0b9:00065#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "unit_reused_no_log",
+   "unit_reused": true,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 1,
+    "unparseable": 1
+   },
+   "primary": "FORMAT",
+   "sub": "unparseable_reply_note",
+   "secondary": [
+    "wrong_l3_fact_present"
+   ],
+   "l4_class": "FORMAT",
+   "l4_sub": "unparseable_reply_note",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 3,
+   "fix_probes": {
+    "current_rank": 2,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 8,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "wrong"
+  },
+  {
+   "group": "c",
+   "doc": "JOHNSON_JOHNSON_2022_10K",
+   "field": "capex",
+   "fy": "2022",
+   "gold": 4009.0,
+   "unit": "l4:capex:JOHNSON_JOHNSON_2022_10K",
+   "diag_verdict": "UNIT_SCALE",
+   "n_facts": 1,
+   "candidate": {
+    "period": "FY2022",
+    "stored_value": 4.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 4.0,
+    "extractor": "l4_llm.v1",
+    "page": 36,
+    "quote": "$ (4.0) additions to property, plant and equipment"
+   },
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Additions to property, plant and equipment (4,009"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00062#w0"
+    ],
+    "by_row": [
+     "00062#w0"
+    ],
+    "by_number": [
+     "00062#w0",
+     "00127#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "d92aa4b58a89b2b1:00062#w0"
+   ],
+   "gold_best_rank": 2,
+   "gold_ranks": [
+    2
+   ],
+   "top": [
+    {
+     "chunk_id": "d92aa4b58a89b2b1:00075#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 61
+    },
+    {
+     "chunk_id": "d92aa4b58a89b2b1:00018#w0",
+     "rank": 1,
+     "sim": 0.9558,
+     "page_start": 9
+    },
+    {
+     "chunk_id": "d92aa4b58a89b2b1:00062#w0",
+     "rank": 2,
+     "sim": 0.9224,
+     "page_start": 49
+    },
+    {
+     "chunk_id": "d92aa4b58a89b2b1:00050#w0",
+     "rank": 3,
+     "sim": 0.8893,
+     "page_start": 36
+    },
+    {
+     "chunk_id": "d92aa4b58a89b2b1:00072#w0",
+     "rank": 4,
+     "sim": 0.8804,
+     "page_start": 58
+    },
+    {
+     "chunk_id": "d92aa4b58a89b2b1:00005#w0",
+     "rank": 5,
+     "sim": 0.8194,
+     "page_start": 2
+    }
+   ],
+   "admission_status": {
+    "d92aa4b58a89b2b1:00075#w0": "admit_sim",
+    "d92aa4b58a89b2b1:00018#w0": "admit_sim",
+    "d92aa4b58a89b2b1:00062#w0": "admit_sim",
+    "d92aa4b58a89b2b1:00050#w0": "admit_sim",
+    "d92aa4b58a89b2b1:00072#w0": "admit_sim",
+    "d92aa4b58a89b2b1:00005#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "d92aa4b58a89b2b1:00062#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 1,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "FORMAT",
+   "sub": "reply_cut_at_n_predict_256",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 3,
+   "fix_probes": {
+    "current_rank": 2,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 3,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "unit1000"
+  },
+  {
+   "group": "c",
+   "doc": "MGMRESORTS_2022_10K",
+   "field": "total_assets",
+   "fy": "2022",
+   "gold": 45692.206,
+   "unit": "l4:total_assets:MGMRESORTS_2022_10K",
+   "diag_verdict": "WRONG_VALUE",
+   "n_facts": 2,
+   "candidate": {
+    "period": "2022",
+    "stored_value": 10339667.0,
+    "stored_unit": "USD_thousands",
+    "scored_value": 10339.667,
+    "extractor": "l3_textrow.v1",
+    "page": 78,
+    "quote": "Total assets $ 10,339,667 $ 1,422,126"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Total other assets 32,313,586 20,047,441 $ 45,692,206"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00064#w0"
+    ],
+    "by_row": [],
+    "by_number": []
+   },
+   "gold_window_ids": [
+    "62e8bef7977db54d:00064#w0"
+   ],
+   "gold_best_rank": 12,
+   "gold_ranks": [
+    12
+   ],
+   "top": [
+    {
+     "chunk_id": "62e8bef7977db54d:00088#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 86
+    },
+    {
+     "chunk_id": "62e8bef7977db54d:00059#w0",
+     "rank": 1,
+     "sim": 0.9361,
+     "page_start": 53
+    },
+    {
+     "chunk_id": "62e8bef7977db54d:00083#w0",
+     "rank": 2,
+     "sim": 0.8838,
+     "page_start": 81
+    },
+    {
+     "chunk_id": "62e8bef7977db54d:00047#w0",
+     "rank": 3,
+     "sim": 0.8576,
+     "page_start": 39
+    },
+    {
+     "chunk_id": "62e8bef7977db54d:00090#w0",
+     "rank": 4,
+     "sim": 0.8344,
+     "page_start": 89
+    },
+    {
+     "chunk_id": "62e8bef7977db54d:00042#w0",
+     "rank": 5,
+     "sim": 0.8079,
+     "page_start": 34
+    }
+   ],
+   "admission_status": {
+    "62e8bef7977db54d:00088#w0": "admit_sim",
+    "62e8bef7977db54d:00059#w0": "admit_sim",
+    "62e8bef7977db54d:00083#w0": "admit_sim",
+    "62e8bef7977db54d:00047#w0": "admit_sim",
+    "62e8bef7977db54d:00090#w0": "admit_sim",
+    "62e8bef7977db54d:00042#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_12_outside_top_6",
+   "secondary": [
+    "wrong_l3_fact_present"
+   ],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_12_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 13,
+   "fix_probes": {
+    "current_rank": 12,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 3,
+    "row_locator_hit": false,
+    "row_locator_top6_hit": false
+   },
+   "miss": true,
+   "agg18_state": "wrong"
+  },
+  {
+   "group": "c",
+   "doc": "MICROSOFT_2022_10K",
+   "field": "capex",
+   "fy": "2022",
+   "gold": 23886.0,
+   "unit": "l4:capex:MICROSOFT_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Additions to property and equipment (23,886"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00103#w0"
+    ],
+    "by_row": [
+     "00103#w0"
+    ],
+    "by_number": [
+     "00103#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "6676617ed62d3fd9:00103#w0"
+   ],
+   "gold_best_rank": 5,
+   "gold_ranks": [
+    5
+   ],
+   "top": [
+    {
+     "chunk_id": "6676617ed62d3fd9:00079#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 50
+    },
+    {
+     "chunk_id": "6676617ed62d3fd9:00086#w0",
+     "rank": 1,
+     "sim": 0.9034,
+     "page_start": 52
+    },
+    {
+     "chunk_id": "6676617ed62d3fd9:00075#w0",
+     "rank": 2,
+     "sim": 0.8654,
+     "page_start": 48
+    },
+    {
+     "chunk_id": "6676617ed62d3fd9:00165#w0",
+     "rank": 3,
+     "sim": 0.8473,
+     "page_start": 112
+    },
+    {
+     "chunk_id": "6676617ed62d3fd9:00059#w0",
+     "rank": 4,
+     "sim": 0.8253,
+     "page_start": 38
+    },
+    {
+     "chunk_id": "6676617ed62d3fd9:00103#w0",
+     "rank": 5,
+     "sim": 0.8029,
+     "page_start": 60
+    }
+   ],
+   "admission_status": {
+    "6676617ed62d3fd9:00079#w0": "admit_sim",
+    "6676617ed62d3fd9:00086#w0": "admit_sim",
+    "6676617ed62d3fd9:00075#w0": "admit_sim",
+    "6676617ed62d3fd9:00165#w0": "admit_sim",
+    "6676617ed62d3fd9:00059#w0": "admit_sim",
+    "6676617ed62d3fd9:00103#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "6676617ed62d3fd9:00103#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "FORMAT",
+   "sub": "reply_cut_at_n_predict_256",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 6,
+   "fix_probes": {
+    "current_rank": 5,
+    "field_query_rank": 1,
+    "n_row_locator_windows": 4,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "MICROSOFT_2022_10K",
+   "field": "dividends_paid",
+   "fy": "2022",
+   "gold": 18135.0,
+   "unit": "l4:dividends_paid:MICROSOFT_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Common stock cash dividends paid (18,135"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00103#w0"
+    ],
+    "by_row": [
+     "00103#w0"
+    ],
+    "by_number": [
+     "00103#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "6676617ed62d3fd9:00103#w0"
+   ],
+   "gold_best_rank": 2,
+   "gold_ranks": [
+    2
+   ],
+   "top": [
+    {
+     "chunk_id": "6676617ed62d3fd9:00059#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 38
+    },
+    {
+     "chunk_id": "6676617ed62d3fd9:00105#w0",
+     "rank": 1,
+     "sim": 0.9657,
+     "page_start": 61
+    },
+    {
+     "chunk_id": "6676617ed62d3fd9:00103#w0",
+     "rank": 2,
+     "sim": 0.8988,
+     "page_start": 60
+    },
+    {
+     "chunk_id": "6676617ed62d3fd9:00123#w0",
+     "rank": 3,
+     "sim": 0.8108,
+     "page_start": 69
+    },
+    {
+     "chunk_id": "6676617ed62d3fd9:00060#w0",
+     "rank": 4,
+     "sim": 0.8006,
+     "page_start": 38
+    },
+    {
+     "chunk_id": "6676617ed62d3fd9:00142#w0",
+     "rank": 5,
+     "sim": 0.7125,
+     "page_start": 92
+    }
+   ],
+   "admission_status": {
+    "6676617ed62d3fd9:00059#w0": "admit_sim",
+    "6676617ed62d3fd9:00105#w0": "admit_sim",
+    "6676617ed62d3fd9:00103#w0": "admit_sim",
+    "6676617ed62d3fd9:00123#w0": "admit_sim",
+    "6676617ed62d3fd9:00060#w0": "admit_sim",
+    "6676617ed62d3fd9:00142#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "6676617ed62d3fd9:00103#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 1
+   },
+   "primary": "FORMAT",
+   "sub": "reply_cut_at_n_predict_256",
+   "secondary": [],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 3,
+   "fix_probes": {
+    "current_rank": 2,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 1,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "PFIZER_2022_10K",
+   "field": "capex",
+   "fy": "2022",
+   "gold": 3236.0,
+   "unit": "l4:capex:PFIZER_2022_10K",
+   "diag_verdict": "NO_FACT",
+   "n_facts": 0,
+   "candidate": null,
+   "l3_wrong_fact": false,
+   "l3_column_error": null,
+   "l3_gold_fact": null,
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Purchases of property, plant and equipment (3,236"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00133#w0"
+    ],
+    "by_row": [
+     "00133#w0"
+    ],
+    "by_number": [
+     "00133#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "dd77a3c356fed9d8:00133#w0"
+   ],
+   "gold_best_rank": 15,
+   "gold_ranks": [
+    15
+   ],
+   "top": [
+    {
+     "chunk_id": "dd77a3c356fed9d8:00165#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 85
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00166#w0",
+     "rank": 1,
+     "sim": 0.7543,
+     "page_start": 85
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00037#w0",
+     "rank": 2,
+     "sim": 0.7507,
+     "page_start": 19
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00082#w0",
+     "rank": 3,
+     "sim": 0.6844,
+     "page_start": 32
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00115#w0",
+     "rank": 4,
+     "sim": 0.6793,
+     "page_start": 49
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00174#w0",
+     "rank": 5,
+     "sim": 0.6777,
+     "page_start": 90
+    }
+   ],
+   "admission_status": {
+    "dd77a3c356fed9d8:00165#w0": "admit_sim",
+    "dd77a3c356fed9d8:00166#w0": "admit_sim",
+    "dd77a3c356fed9d8:00037#w0": "admit_sim",
+    "dd77a3c356fed9d8:00082#w0": "admit_sim",
+    "dd77a3c356fed9d8:00115#w0": "admit_sim",
+    "dd77a3c356fed9d8:00174#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "RETRIEVAL",
+   "sub": "gold_window_rank_15_outside_top_6",
+   "secondary": [],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_15_outside_top_6",
+   "l3_first_col_is_gold": null,
+   "l3_distinct_row_candidates": null,
+   "top_k_needed": 16,
+   "fix_probes": {
+    "current_rank": 15,
+    "field_query_rank": 0,
+    "n_row_locator_windows": 3,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "PFIZER_2022_10K",
+   "field": "dividends_paid",
+   "fy": "2022",
+   "gold": 8983.0,
+   "unit": "l4:dividends_paid:PFIZER_2022_10K",
+   "diag_verdict": "PERIOD_LABEL",
+   "n_facts": 3,
+   "candidate": {
+    "period": null,
+    "stored_value": -8983.0,
+    "stored_unit": "USD_millions",
+    "scored_value": -8983.0,
+    "extractor": "l3_textrow.v1",
+    "page": 58,
+    "quote": "Cash dividends paid (8,983) (8,729) (8,440)"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": null,
+   "l3_gold_fact": {
+    "period": null,
+    "stored_value": -8983.0,
+    "stored_unit": "USD_millions",
+    "extractor": "l3_textrow.v1",
+    "page": 58,
+    "quote": "Cash dividends paid (8,983) (8,729) (8,440)"
+   },
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Cash dividends paid (8,983"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00133#w0"
+    ],
+    "by_row": [
+     "00133#w0"
+    ],
+    "by_number": [
+     "00133#w0",
+     "00152#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "dd77a3c356fed9d8:00133#w0"
+   ],
+   "gold_best_rank": 6,
+   "gold_ranks": [
+    6
+   ],
+   "top": [
+    {
+     "chunk_id": "dd77a3c356fed9d8:00132#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 56
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00130#w0",
+     "rank": 1,
+     "sim": 0.8421,
+     "page_start": 55
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00186#w0",
+     "rank": 2,
+     "sim": 0.823,
+     "page_start": 95
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00264#w0",
+     "rank": 3,
+     "sim": 0.7629,
+     "page_start": 139
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00116#w0",
+     "rank": 4,
+     "sim": 0.7155,
+     "page_start": 49
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00265#w0",
+     "rank": 5,
+     "sim": 0.7123,
+     "page_start": 140
+    }
+   ],
+   "admission_status": {
+    "dd77a3c356fed9d8:00132#w0": "admit_sim",
+    "dd77a3c356fed9d8:00130#w0": "admit_sim",
+    "dd77a3c356fed9d8:00186#w0": "admit_sim",
+    "dd77a3c356fed9d8:00264#w0": "admit_sim",
+    "dd77a3c356fed9d8:00116#w0": "admit_sim",
+    "dd77a3c356fed9d8:00265#w0": "admit_sim"
+   },
+   "admission_n_gated": 0,
+   "admission_consistent": true,
+   "gold_in_admitted": false,
+   "unparseable_windows": [],
+   "gold_unparseable_all": false,
+   "gold_reply_tokens": [],
+   "gold_reply_tokens_min": null,
+   "reply_evidence": "receipt_notes_only",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 0,
+    "l4a_rejected": 0,
+    "l4b": 6,
+    "l4b_rejected": 0,
+    "unparseable": 0
+   },
+   "primary": "L3",
+   "sub": "gold_value_stored_without_fy_period",
+   "secondary": [
+    "wrong_l3_fact_present",
+    "l4_also_retrieval"
+   ],
+   "l4_class": "RETRIEVAL",
+   "l4_sub": "gold_window_rank_6_outside_top_6",
+   "l3_first_col_is_gold": true,
+   "l3_distinct_row_candidates": 1,
+   "top_k_needed": 7,
+   "fix_probes": {
+    "current_rank": 6,
+    "field_query_rank": 1,
+    "n_row_locator_windows": 3,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  },
+  {
+   "group": "c",
+   "doc": "PFIZER_2022_10K",
+   "field": "operating_cash_flow",
+   "fy": "2022",
+   "gold": 29267.0,
+   "unit": "l4:operating_cash_flow:PFIZER_2022_10K",
+   "diag_verdict": "PERIOD_LABEL",
+   "n_facts": 3,
+   "candidate": {
+    "period": null,
+    "stored_value": 29267.0,
+    "stored_unit": "USD_millions",
+    "scored_value": 29267.0,
+    "extractor": "l3_textrow.v1",
+    "page": 58,
+    "quote": "Net cash provided by operating activities 29,267 32,580 14,403"
+   },
+   "l3_wrong_fact": true,
+   "l3_column_error": null,
+   "l3_gold_fact": {
+    "period": null,
+    "stored_value": 29267.0,
+    "stored_unit": "USD_millions",
+    "extractor": "l3_textrow.v1",
+    "page": 58,
+    "quote": "Net cash provided by operating activities 29,267 32,580 14,403"
+   },
+   "gold_check": {
+    "xcheck_ok": true,
+    "quote": "Net cash provided by operating activities 29,267"
+   },
+   "gold_windows": {
+    "by_quote": [
+     "00133#w0"
+    ],
+    "by_row": [
+     "00133#w0"
+    ],
+    "by_number": [
+     "00114#w0",
+     "00133#w0"
+    ]
+   },
+   "gold_window_ids": [
+    "dd77a3c356fed9d8:00133#w0"
+   ],
+   "gold_best_rank": 0,
+   "gold_ranks": [
+    0
+   ],
+   "top": [
+    {
+     "chunk_id": "dd77a3c356fed9d8:00133#w0",
+     "rank": 0,
+     "sim": 1.0,
+     "page_start": 57
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00114#w0",
+     "rank": 1,
+     "sim": 0.835,
+     "page_start": 49
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00145#w0",
+     "rank": 2,
+     "sim": 0.6348,
+     "page_start": 68
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00144#w0",
+     "rank": 3,
+     "sim": 0.5958,
+     "page_start": 67
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00188#w0",
+     "rank": 4,
+     "sim": 0.5647,
+     "page_start": 96
+    },
+    {
+     "chunk_id": "dd77a3c356fed9d8:00160#w0",
+     "rank": 5,
+     "sim": 0.5455,
+     "page_start": 83
+    }
+   ],
+   "admission_status": {
+    "dd77a3c356fed9d8:00133#w0": "admit_sim",
+    "dd77a3c356fed9d8:00114#w0": "admit_sim",
+    "dd77a3c356fed9d8:00145#w0": "admit_sim",
+    "dd77a3c356fed9d8:00144#w0": "gate_no",
+    "dd77a3c356fed9d8:00188#w0": "gate_no",
+    "dd77a3c356fed9d8:00160#w0": "gate_no"
+   },
+   "admission_n_gated": 3,
+   "admission_consistent": true,
+   "gold_in_admitted": true,
+   "unparseable_windows": [
+    "dd77a3c356fed9d8:00133#w0"
+   ],
+   "gold_unparseable_all": true,
+   "gold_reply_tokens": [
+    256
+   ],
+   "gold_reply_tokens_min": 256,
+   "reply_evidence": "server_log_mapped",
+   "unit_reused": false,
+   "unit_record": {
+    "n_candidates": 6,
+    "n_facts": 0,
+    "l4a": 3,
+    "l4a_rejected": 3,
+    "l4b": 3,
+    "l4b_rejected": 1,
+    "unparseable": 1
+   },
+   "primary": "L3",
+   "sub": "gold_value_stored_without_fy_period",
+   "secondary": [
+    "wrong_l3_fact_present",
+    "l4_also_format"
+   ],
+   "l4_class": "FORMAT",
+   "l4_sub": "reply_cut_at_n_predict_256",
+   "l3_first_col_is_gold": true,
+   "l3_distinct_row_candidates": 1,
+   "top_k_needed": 1,
+   "fix_probes": {
+    "current_rank": 0,
+    "field_query_rank": 1,
+    "n_row_locator_windows": 2,
+    "row_locator_hit": true,
+    "row_locator_top6_hit": true
+   },
+   "miss": true,
+   "agg18_state": "missing"
+  }
+ ],
+ "parse_to_hit_in_sample": {
+  "n_pool": 31,
+  "hits": 31,
+  "rate": 1.0
+ },
+ "retrieval_probe_211": {
+  "cells": 211,
+  "gold_in_no_window": 0,
+  "no_window_cells": [],
+  "current_top6": 173,
+  "field_top6": 205,
+  "field_top3": 194,
+  "union_cur6_field3": 206,
+  "lost_by_field_top6": [
+   "ACTIVISIONBLIZZARD_2022_10K|net_income",
+   "BOEING_2022_10K|total_assets",
+   "CVSHEALTH_2022_10K|total_assets",
+   "EBAY_2022_10K|net_income"
+  ],
+  "lost_by_union": [],
+  "gained_by_field_top6": 36,
+  "avg_windows_union": 7.15,
+  "cells_with_gold_window": 211
+ },
+ "pilot19_reply_lengths": {
+  "available": true,
+  "calls": 30,
+  "fresh_units": 5,
+  "fresh_calls": 30,
+  "unparseable_notes": 7,
+  "replies_cut_at_256": 7,
+  "replies_empty_array": 22,
+  "replies_with_rows": 1,
+  "mapping_ok": true,
+  "hit_rate_when_parsed": null
+ },
+ "l4b_cut_rate_fresh_runs": {
+  "l4b_calls": 1029,
+  "cut_rate": 0.097
+ }
+}
