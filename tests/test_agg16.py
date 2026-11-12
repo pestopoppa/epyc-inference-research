@@ -199,10 +199,12 @@ class Scoring(unittest.TestCase):
         self.assertEqual(G.c0_summary(t, {"c": []})["missing"], ["D|capex|2022"])
 
     def test_estimates_are_labelled_and_use_the_measured_rates(self):
-        e = G.estimates({"t_calls": 201})
+        e = G.estimates({"t_calls": 201, "c1_extract_calls_upper_bound": 280, "c1_gate_calls": 8})
         self.assertEqual(e["label"], "ESTIMATE")
-        self.assertEqual(e["c1_calls"], 38 * 6.0)
+        self.assertEqual((e["c1_calls"], e["c1_calls_at_6_per_unit"]), (288, 38 * 6.0))
         self.assertAlmostEqual(e["t_s"], 201 * 8.2, places=1)
+        self.assertAlmostEqual(e["total_s"], (288 + 201) * 8.2 + 120, places=1)
+        self.assertLessEqual(e["total_s"], 4200)                 # the booked figure in PREDECLARED_AGG16.md
 
 
 @unittest.skipUnless(HAVE_ORCH, "orchestrator tree not available")

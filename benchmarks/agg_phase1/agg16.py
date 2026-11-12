@@ -587,15 +587,17 @@ def plan_cells(targets: list[dict[str, Any]], wins_by_store: dict[str, dict[str,
 
 
 def estimates(plan: dict[str, Any], n_targets: int = N_TARGETS) -> dict[str, Any]:
-    """Wall estimates at the MEASURED rates (about 6 calls per unit, about 8.2 s per call). ESTIMATES, not measurements: the
-    run replaces them. T's calls are the offline distinct-window count; its per-call cost is taken at the same rate although the
-    typed reply decodes longer."""
-    c1_calls = n_targets * RATE_CALLS_PER_UNIT
-    c1_s = c1_calls * RATE_S_PER_CALL
+    """Wall estimates at the MEASURED per-call rate (about 8.2 s per call; about 6 calls per L4 unit in the AGG-1.1 / AGG-1.4
+    receipts). C1's calls are the offline union-window plan (admitted windows plus gate calls); the 6-calls-per-unit figure is
+    reported beside it. T's calls are the offline distinct-window count. ESTIMATES, not measurements: C1 at ``n_predict`` 512 and T's
+    typed replies decode longer than the measured average, so these may be low; the run replaces them."""
+    c1_plan = plan["c1_extract_calls_upper_bound"] + plan["c1_gate_calls"]
+    c1_s = c1_plan * RATE_S_PER_CALL
     t_s = plan["t_calls"] * RATE_S_PER_CALL
     return {"label": "ESTIMATE", "rates": {"calls_per_unit": RATE_CALLS_PER_UNIT, "s_per_call": RATE_S_PER_CALL},
-            "c1_calls": c1_calls, "c1_s": round(c1_s, 1), "t_calls": plan["t_calls"], "t_s": round(t_s, 1),
-            "server_start_s": SERVER_START_S, "total_s": round(c1_s + t_s + SERVER_START_S, 1)}
+            "c1_calls": c1_plan, "c1_calls_at_6_per_unit": n_targets * RATE_CALLS_PER_UNIT, "c1_s": round(c1_s, 1),
+            "t_calls": plan["t_calls"], "t_s": round(t_s, 1), "server_start_s": SERVER_START_S,
+            "total_s": round(c1_s + t_s + SERVER_START_S, 1)}
 
 
 # --------------------------------------------------------------------------- the run
