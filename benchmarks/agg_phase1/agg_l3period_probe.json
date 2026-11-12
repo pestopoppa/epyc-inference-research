@@ -1,0 +1,1356 @@
+{
+ "adopted_candidates": [
+  "v2",
+  "v2_minus_table_split",
+  "v2_minus_table_header_narrow",
+  "v2_minus_row_select"
+ ],
+ "before": {
+  "canon_v1_ok": 177,
+  "canon_v2_attrib_ok": 181,
+  "l3_only_found": 150,
+  "m1_raw": 0.8767772511848341,
+  "raw_found": 185
+ },
+ "corpus_id": "agg_phase0_fb10",
+ "extra_store": {
+  "before_l3_only": {
+   "COCACOLA_2022_10K|long_term_debt": false
+  },
+  "before_raw": {
+   "COCACOLA_2022_10K|long_term_debt": false
+  },
+  "cells": [
+   "COCACOLA_2022_10K|long_term_debt"
+  ],
+  "path": "/mnt/raid0/llm/tmp/agg14-backfill-cpu-20261111-r3/out/store.sqlite",
+  "sha256": "5c57f284a5632fd73cdbbc4d4eb1fd164c094d14b68824519d68bb77278342ce",
+  "source_unchanged": true,
+  "variants": {
+   "control_v1": {
+    "l3_only": {
+     "COCACOLA_2022_10K|long_term_debt": false
+    },
+    "raw": {
+     "COCACOLA_2022_10K|long_term_debt": false
+    }
+   },
+   "v2": {
+    "l3_only": {
+     "COCACOLA_2022_10K|long_term_debt": true
+    },
+    "raw": {
+     "COCACOLA_2022_10K|long_term_debt": true
+    }
+   },
+   "v2_minus_first_column": {
+    "l3_only": {
+     "COCACOLA_2022_10K|long_term_debt": false
+    },
+    "raw": {
+     "COCACOLA_2022_10K|long_term_debt": false
+    }
+   },
+   "v2_minus_row_select": {
+    "l3_only": {
+     "COCACOLA_2022_10K|long_term_debt": true
+    },
+    "raw": {
+     "COCACOLA_2022_10K|long_term_debt": true
+    }
+   },
+   "v2_minus_table_header_narrow": {
+    "l3_only": {
+     "COCACOLA_2022_10K|long_term_debt": false
+    },
+    "raw": {
+     "COCACOLA_2022_10K|long_term_debt": false
+    }
+   },
+   "v2_minus_table_split": {
+    "l3_only": {
+     "COCACOLA_2022_10K|long_term_debt": false
+    },
+    "raw": {
+     "COCACOLA_2022_10K|long_term_debt": false
+    }
+   },
+   "v2_plus_all_optional": {
+    "l3_only": {
+     "COCACOLA_2022_10K|long_term_debt": true
+    },
+    "raw": {
+     "COCACOLA_2022_10K|long_term_debt": true
+    }
+   },
+   "v2_plus_date_header": {
+    "l3_only": {
+     "COCACOLA_2022_10K|long_term_debt": true
+    },
+    "raw": {
+     "COCACOLA_2022_10K|long_term_debt": true
+    }
+   },
+   "v2_plus_inline_header": {
+    "l3_only": {
+     "COCACOLA_2022_10K|long_term_debt": true
+    },
+    "raw": {
+     "COCACOLA_2022_10K|long_term_debt": true
+    }
+   }
+  }
+ },
+ "fiscal_years": [
+  "2022"
+ ],
+ "in_sample": true,
+ "l3_class_cells": [
+  {
+   "doc": "COCACOLA_2022_10K",
+   "field": "long_term_debt",
+   "gold": 36377.0,
+   "group": "b"
+  },
+  {
+   "doc": "ADOBE_2022_10K",
+   "field": "total_assets",
+   "gold": 27165.0,
+   "group": "c"
+  },
+  {
+   "doc": "ADOBE_2022_10K",
+   "field": "total_current_liabilities",
+   "gold": 8128.0,
+   "group": "c"
+  },
+  {
+   "doc": "AMD_2022_10K",
+   "field": "net_income",
+   "gold": 1320.0,
+   "group": "c"
+  },
+  {
+   "doc": "BOEING_2022_10K",
+   "field": "total_assets",
+   "gold": 137100.0,
+   "group": "c"
+  },
+  {
+   "doc": "COCACOLA_2022_10K",
+   "field": "total_assets",
+   "gold": 92763.0,
+   "group": "c"
+  },
+  {
+   "doc": "CORNING_2022_10K",
+   "field": "net_income",
+   "gold": 1316.0,
+   "group": "c"
+  },
+  {
+   "doc": "COSTCO_2022_10K",
+   "field": "total_assets",
+   "gold": 64166.0,
+   "group": "c"
+  },
+  {
+   "doc": "COSTCO_2022_10K",
+   "field": "total_current_liabilities",
+   "gold": 31998.0,
+   "group": "c"
+  },
+  {
+   "doc": "PFIZER_2022_10K",
+   "field": "dividends_paid",
+   "gold": 8983.0,
+   "group": "c"
+  },
+  {
+   "doc": "PFIZER_2022_10K",
+   "field": "operating_cash_flow",
+   "gold": 29267.0,
+   "group": "c"
+  }
+ ],
+ "model_calls": 0,
+ "n_cells": 211,
+ "note": "Written after reading the 11 L3-class cells of agg111_triage.json and scored on the store they come from: POST-HOC and IN-SAMPLE. Not a registered gate; adoption here means 'safe to opt in', not 'validated out of sample'.",
+ "orch": {
+  "commit": "749afcd0e0b7f8e145b679f29c4125bf0dedf9f9",
+  "facts_det_sha256": "64c98535ab57f66361a4c43ef229554d06c3346b143b4be9126a855784a34d47",
+  "root": "/mnt/raid0/llm/worktrees/agg-l3period-orch-20261112",
+  "tracked_dirty": false
+ },
+ "post_hoc": true,
+ "schema": "agg_l3period_probe.v1",
+ "source_store_unchanged": true,
+ "store": {
+  "path": "/mnt/raid0/llm/tmp/agg1-ingest-cpu-20261111/out/store.sqlite",
+  "sha256": "74e21c68652da5d671f84a59d78b7eafcce2be9328973933cd86989d282d1194"
+ },
+ "store_sha256_after": "74e21c68652da5d671f84a59d78b7eafcce2be9328973933cd86989d282d1194",
+ "variants": {
+  "control_v1": {
+   "adoption": {
+    "adopted": false,
+    "rule": "0 breaks under raw M1, canonical.v1 and canonical.v2(attributable_net_income); at least one fix"
+   },
+   "canon_v1": {
+    "after": 177,
+    "before": 177,
+    "broken": [],
+    "fixed": [],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 0
+   },
+   "canon_v2_attrib": {
+    "after": 181,
+    "before": 181,
+    "broken": [],
+    "fixed": [],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 0
+   },
+   "census": {
+    "l3_facts": 34666,
+    "period_2022": 9563,
+    "period_none": 10623
+   },
+   "l3_class_group_c": {
+    "cells": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "found_after_raw": [],
+    "found_before_raw": [],
+    "l3_only_found_after": [],
+    "l3_only_found_before": []
+   },
+   "l3_only": {
+    "after": 150,
+    "before": 150,
+    "broken": [],
+    "fixed": [],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 0
+   },
+   "m1_raw": {
+    "found": 185,
+    "m1": 0.8767772511848341
+   },
+   "n_rerun_l3": 34666,
+   "n_stored_l3": 34666,
+   "raw": {
+    "after": 185,
+    "before": 185,
+    "broken": [],
+    "fixed": [],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 0
+   },
+   "reproduces_stored_l3_exactly": true,
+   "spec": {
+    "components": null,
+    "period_version": null
+   }
+  },
+  "v2": {
+   "adoption": {
+    "adopted": true,
+    "rule": "0 breaks under raw M1, canonical.v1 and canonical.v2(attributable_net_income); at least one fix"
+   },
+   "canon_v1": {
+    "after": 185,
+    "before": 177,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 8
+   },
+   "canon_v2_attrib": {
+    "after": 188,
+    "before": 181,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 7
+   },
+   "census": {
+    "l3_facts": 34677,
+    "period_2022": 9630,
+    "period_none": 10572
+   },
+   "l3_class_group_c": {
+    "cells": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "found_after_raw": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "found_before_raw": [],
+    "l3_only_found_after": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "l3_only_found_before": []
+   },
+   "l3_only": {
+    "after": 167,
+    "before": 150,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|capex",
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|capex",
+     "AMD_2022_10K|net_income",
+     "AMD_2022_10K|operating_cash_flow",
+     "BOEING_2022_10K|net_income",
+     "BOEING_2022_10K|revenue",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|operating_cash_flow",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|revenue",
+     "COSTCO_2022_10K|capex",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 17
+   },
+   "m1_raw": {
+    "found": 192,
+    "m1": 0.909952606635071
+   },
+   "raw": {
+    "after": 192,
+    "before": 185,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 7
+   },
+   "spec": {
+    "components": [
+     "table_split",
+     "table_header_narrow",
+     "first_column",
+     "row_select"
+    ],
+    "period_version": "l3_period.v2"
+   }
+  },
+  "v2_minus_first_column": {
+   "adoption": {
+    "adopted": false,
+    "rule": "0 breaks under raw M1, canonical.v1 and canonical.v2(attributable_net_income); at least one fix"
+   },
+   "canon_v1": {
+    "after": 177,
+    "before": 177,
+    "broken": [],
+    "fixed": [],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 0
+   },
+   "canon_v2_attrib": {
+    "after": 181,
+    "before": 181,
+    "broken": [],
+    "fixed": [],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 0
+   },
+   "census": {
+    "l3_facts": 34677,
+    "period_2022": 9553,
+    "period_none": 10649
+   },
+   "l3_class_group_c": {
+    "cells": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "found_after_raw": [],
+    "found_before_raw": [],
+    "l3_only_found_after": [],
+    "l3_only_found_before": []
+   },
+   "l3_only": {
+    "after": 150,
+    "before": 150,
+    "broken": [],
+    "fixed": [],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 0
+   },
+   "m1_raw": {
+    "found": 185,
+    "m1": 0.8767772511848341
+   },
+   "raw": {
+    "after": 185,
+    "before": 185,
+    "broken": [],
+    "fixed": [],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 0
+   },
+   "spec": {
+    "components": [
+     "table_split",
+     "table_header_narrow",
+     "row_select"
+    ],
+    "period_version": "l3_period.v2"
+   }
+  },
+  "v2_minus_row_select": {
+   "adoption": {
+    "adopted": true,
+    "rule": "0 breaks under raw M1, canonical.v1 and canonical.v2(attributable_net_income); at least one fix"
+   },
+   "canon_v1": {
+    "after": 183,
+    "before": 177,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "BOEING_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 6
+   },
+   "canon_v2_attrib": {
+    "after": 186,
+    "before": 181,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "BOEING_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 5
+   },
+   "census": {
+    "l3_facts": 34677,
+    "period_2022": 9688,
+    "period_none": 10514
+   },
+   "l3_class_group_c": {
+    "cells": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "found_after_raw": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "found_before_raw": [],
+    "l3_only_found_after": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "l3_only_found_before": []
+   },
+   "l3_only": {
+    "after": 168,
+    "before": 150,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|capex",
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|capex",
+     "AMD_2022_10K|net_income",
+     "AMD_2022_10K|operating_cash_flow",
+     "BOEING_2022_10K|net_income",
+     "BOEING_2022_10K|revenue",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|operating_cash_flow",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "CORNING_2022_10K|revenue",
+     "COSTCO_2022_10K|capex",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 18
+   },
+   "m1_raw": {
+    "found": 193,
+    "m1": 0.9146919431279621
+   },
+   "raw": {
+    "after": 193,
+    "before": 185,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 8
+   },
+   "spec": {
+    "components": [
+     "table_split",
+     "table_header_narrow",
+     "first_column"
+    ],
+    "period_version": "l3_period.v2"
+   }
+  },
+  "v2_minus_table_header_narrow": {
+   "adoption": {
+    "adopted": true,
+    "rule": "0 breaks under raw M1, canonical.v1 and canonical.v2(attributable_net_income); at least one fix"
+   },
+   "canon_v1": {
+    "after": 185,
+    "before": 177,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 8
+   },
+   "canon_v2_attrib": {
+    "after": 188,
+    "before": 181,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 7
+   },
+   "census": {
+    "l3_facts": 34684,
+    "period_2022": 9646,
+    "period_none": 10557
+   },
+   "l3_class_group_c": {
+    "cells": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "found_after_raw": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "found_before_raw": [],
+    "l3_only_found_after": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "l3_only_found_before": []
+   },
+   "l3_only": {
+    "after": 167,
+    "before": 150,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|capex",
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|capex",
+     "AMD_2022_10K|net_income",
+     "AMD_2022_10K|operating_cash_flow",
+     "BOEING_2022_10K|net_income",
+     "BOEING_2022_10K|revenue",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|operating_cash_flow",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|revenue",
+     "COSTCO_2022_10K|capex",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 17
+   },
+   "m1_raw": {
+    "found": 192,
+    "m1": 0.909952606635071
+   },
+   "raw": {
+    "after": 192,
+    "before": 185,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 7
+   },
+   "spec": {
+    "components": [
+     "table_split",
+     "first_column",
+     "row_select"
+    ],
+    "period_version": "l3_period.v2"
+   }
+  },
+  "v2_minus_table_split": {
+   "adoption": {
+    "adopted": true,
+    "rule": "0 breaks under raw M1, canonical.v1 and canonical.v2(attributable_net_income); at least one fix"
+   },
+   "canon_v1": {
+    "after": 182,
+    "before": 177,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 5
+   },
+   "canon_v2_attrib": {
+    "after": 186,
+    "before": 181,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 5
+   },
+   "census": {
+    "l3_facts": 34666,
+    "period_2022": 9612,
+    "period_none": 10579
+   },
+   "l3_class_group_c": {
+    "cells": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "found_after_raw": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "found_before_raw": [],
+    "l3_only_found_after": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "l3_only_found_before": []
+   },
+   "l3_only": {
+    "after": 162,
+    "before": 150,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|capex",
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|capex",
+     "AMD_2022_10K|net_income",
+     "AMD_2022_10K|operating_cash_flow",
+     "CORNING_2022_10K|revenue",
+     "COSTCO_2022_10K|capex",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 12
+   },
+   "m1_raw": {
+    "found": 190,
+    "m1": 0.9004739336492891
+   },
+   "raw": {
+    "after": 190,
+    "before": 185,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 5
+   },
+   "spec": {
+    "components": [
+     "table_header_narrow",
+     "first_column",
+     "row_select"
+    ],
+    "period_version": "l3_period.v2"
+   }
+  },
+  "v2_plus_all_optional": {
+   "adoption": {
+    "adopted": false,
+    "rule": "0 breaks under raw M1, canonical.v1 and canonical.v2(attributable_net_income); at least one fix"
+   },
+   "canon_v1": {
+    "after": 186,
+    "before": 177,
+    "broken": [
+     "AMD_2022_10K|revenue",
+     "PFIZER_2022_10K|net_income"
+    ],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "BOEING_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|revenue",
+     "COSTCO_2022_10K|revenue",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "n": 211,
+    "n_broken": 2,
+    "n_fixed": 11
+   },
+   "canon_v2_attrib": {
+    "after": 189,
+    "before": 181,
+    "broken": [
+     "AMD_2022_10K|revenue",
+     "PFIZER_2022_10K|net_income"
+    ],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|revenue",
+     "COSTCO_2022_10K|revenue",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "n": 211,
+    "n_broken": 2,
+    "n_fixed": 10
+   },
+   "census": {
+    "l3_facts": 34497,
+    "period_2022": 10262,
+    "period_none": 8613
+   },
+   "l3_class_group_c": {
+    "cells": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "found_after_raw": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "found_before_raw": [],
+    "l3_only_found_after": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "l3_only_found_before": []
+   },
+   "l3_only": {
+    "after": 173,
+    "before": 150,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|capex",
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|capex",
+     "AMD_2022_10K|net_income",
+     "AMD_2022_10K|operating_cash_flow",
+     "BOEING_2022_10K|net_income",
+     "BOEING_2022_10K|revenue",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|operating_cash_flow",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|capex",
+     "CORNING_2022_10K|dividends_paid",
+     "CORNING_2022_10K|net_income",
+     "CORNING_2022_10K|revenue",
+     "COSTCO_2022_10K|capex",
+     "COSTCO_2022_10K|revenue",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 23
+   },
+   "m1_raw": {
+    "found": 195,
+    "m1": 0.9241706161137441
+   },
+   "raw": {
+    "after": 195,
+    "before": 185,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 10
+   },
+   "spec": {
+    "components": [
+     "table_split",
+     "table_header_narrow",
+     "first_column",
+     "row_select",
+     "date_header",
+     "inline_header"
+    ],
+    "period_version": "l3_period.v2"
+   }
+  },
+  "v2_plus_date_header": {
+   "adoption": {
+    "adopted": false,
+    "rule": "0 breaks under raw M1, canonical.v1 and canonical.v2(attributable_net_income); at least one fix"
+   },
+   "canon_v1": {
+    "after": 184,
+    "before": 177,
+    "broken": [
+     "AMD_2022_10K|revenue"
+    ],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "BOEING_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|revenue",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 1,
+    "n_fixed": 8
+   },
+   "canon_v2_attrib": {
+    "after": 187,
+    "before": 181,
+    "broken": [
+     "AMD_2022_10K|revenue"
+    ],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|revenue",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 1,
+    "n_fixed": 7
+   },
+   "census": {
+    "l3_facts": 34677,
+    "period_2022": 10011,
+    "period_none": 9501
+   },
+   "l3_class_group_c": {
+    "cells": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "found_after_raw": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "found_before_raw": [],
+    "l3_only_found_after": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "l3_only_found_before": []
+   },
+   "l3_only": {
+    "after": 168,
+    "before": 150,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|capex",
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|capex",
+     "AMD_2022_10K|net_income",
+     "AMD_2022_10K|operating_cash_flow",
+     "BOEING_2022_10K|net_income",
+     "BOEING_2022_10K|revenue",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|operating_cash_flow",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|revenue",
+     "COSTCO_2022_10K|capex",
+     "COSTCO_2022_10K|revenue",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 18
+   },
+   "m1_raw": {
+    "found": 192,
+    "m1": 0.909952606635071
+   },
+   "raw": {
+    "after": 192,
+    "before": 185,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 7
+   },
+   "spec": {
+    "components": [
+     "table_split",
+     "table_header_narrow",
+     "first_column",
+     "row_select",
+     "date_header"
+    ],
+    "period_version": "l3_period.v2"
+   }
+  },
+  "v2_plus_inline_header": {
+   "adoption": {
+    "adopted": false,
+    "rule": "0 breaks under raw M1, canonical.v1 and canonical.v2(attributable_net_income); at least one fix"
+   },
+   "canon_v1": {
+    "after": 187,
+    "before": 177,
+    "broken": [
+     "PFIZER_2022_10K|net_income"
+    ],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|revenue",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "n": 211,
+    "n_broken": 1,
+    "n_fixed": 11
+   },
+   "canon_v2_attrib": {
+    "after": 190,
+    "before": 181,
+    "broken": [
+     "PFIZER_2022_10K|net_income"
+    ],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|revenue",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "n": 211,
+    "n_broken": 1,
+    "n_fixed": 10
+   },
+   "census": {
+    "l3_facts": 34497,
+    "period_2022": 9881,
+    "period_none": 9684
+   },
+   "l3_class_group_c": {
+    "cells": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "found_after_raw": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "found_before_raw": [],
+    "l3_only_found_after": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "l3_only_found_before": []
+   },
+   "l3_only": {
+    "after": 172,
+    "before": 150,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|capex",
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|capex",
+     "AMD_2022_10K|net_income",
+     "AMD_2022_10K|operating_cash_flow",
+     "BOEING_2022_10K|net_income",
+     "BOEING_2022_10K|revenue",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|operating_cash_flow",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|capex",
+     "CORNING_2022_10K|dividends_paid",
+     "CORNING_2022_10K|net_income",
+     "CORNING_2022_10K|revenue",
+     "COSTCO_2022_10K|capex",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 22
+   },
+   "m1_raw": {
+    "found": 195,
+    "m1": 0.9241706161137441
+   },
+   "raw": {
+    "after": 195,
+    "before": 185,
+    "broken": [],
+    "fixed": [
+     "ADOBE_2022_10K|total_assets",
+     "ADOBE_2022_10K|total_current_liabilities",
+     "AMD_2022_10K|net_income",
+     "BOEING_2022_10K|total_assets",
+     "COCACOLA_2022_10K|total_assets",
+     "CORNING_2022_10K|net_income",
+     "COSTCO_2022_10K|total_assets",
+     "COSTCO_2022_10K|total_current_liabilities",
+     "PFIZER_2022_10K|dividends_paid",
+     "PFIZER_2022_10K|operating_cash_flow"
+    ],
+    "n": 211,
+    "n_broken": 0,
+    "n_fixed": 10
+   },
+   "spec": {
+    "components": [
+     "table_split",
+     "table_header_narrow",
+     "first_column",
+     "row_select",
+     "inline_header"
+    ],
+    "period_version": "l3_period.v2"
+   }
+  }
+ },
+ "verdict": {
+  "m1_after": 0.909952606635071,
+  "m1_before": 0.8767772511848341,
+  "v2_breaks_canon_v1": 0,
+  "v2_breaks_raw": 0,
+  "v2_default_adopted": true,
+  "v2_raw": 7
+ }
+}
