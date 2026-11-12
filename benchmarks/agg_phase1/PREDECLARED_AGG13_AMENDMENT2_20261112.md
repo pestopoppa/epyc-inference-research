@@ -57,6 +57,14 @@ every document's gold cells with the descriptions rendered for that document's o
 fiscal year other than the cells' fails preflight (rc 2) before any model call. `agg13.pin_problems` asserts this amendment's
 sha256. The shell `precond.sh` of the r3 job asserts it too.
 
+**(d) The GPU row's L4c audit uses the same rendering (the row is prepared, not published by this amendment's authors).**
+`phase0_arms.run_audit` (frozen, sha256-pinned, not edited) re-extracts every audited fact with `A.METRICS[field]`, i.e. with
+`FY2022`, which on a FY2021 slot would dispute every correct fact. `agg13.run_audit_fy` is that audit with the description
+rendered for the audited fact's document's own fiscal year (`phase1_arms.l4_description`) and the re-extracted rows passed
+through `facts_llm.reconcile` (so the unit cross-check applies as it did to the stored fact); `run_agg13.py --phase gpu-audit`
+uses it. For an FY2022 document with correct unit labels its verdicts are those of `run_audit`. The audit result is
+informational (`audit_status`, `audit_done`); no gate reads it. The P-large answer prompts (`phase0_arms`) are untouched.
+
 ## 4. What does NOT change
 
 * All gates and thresholds: G1 (exactly 3 re-parsed and re-extracted, 25 skipped by hash), G2 (supersession), G3 (fresh calls

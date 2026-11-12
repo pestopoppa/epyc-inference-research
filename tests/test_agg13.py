@@ -426,6 +426,28 @@ class ReingestTests(unittest.TestCase):
                                   cache_dirs=[fx2["cache11"]], guard=self.guard, parse_fn=new_parse, bounds=LENIENT)
         self.assertEqual((res2["m1_changed"]["gold"], res2["m1_changed"]["found"]), (3, 0))
 
+    def test_gpu_audit_renders_the_documents_own_fiscal_year(self):
+        """``run_audit_fy``: audited FY2021-slot facts agree when the audit asks for FY2021 and are disputed under the
+        r2 (FY2022) rendering; retained FY2022 documents agree either way."""
+        fx = make_fixture(self.tmp)
+        out = self.tmp / "out"
+        self._run(fx, out, DescBackend())
+        verdicts = {}
+        for name, fy_of in (("fixed", G.fy_lookup(fx["inp"])), ("r2", lambda d: "2022")):
+            tmp = Path(tempfile.mkdtemp())
+            P.copy_store(out / "store.sqlite", tmp / "store.sqlite")
+            st = CorpusStore(tmp / "store.sqlite")
+            rec = P.Recorder(tmp / "audit.jsonl")
+            res = G.run_audit_fy(rec, st, DescBackend(), guard=self.guard, fy_of=fy_of)
+            self.assertTrue(res["complete"], res)
+            verdicts[name] = {r["doc"]: r["verdict"] for r in rec.records if r["kind"] == "audit" and r["status"] == "ok"}
+            st.close()
+        self.assertTrue(set(verdicts["fixed"]) & set(G.REPLACED))
+        self.assertEqual({v for d, v in verdicts["fixed"].items() if d in G.REPLACED}, {"audited_ok"})
+        self.assertEqual({v for d, v in verdicts["r2"].items() if d in G.REPLACED}, {"disputed"})
+        self.assertEqual({v for d, v in verdicts["fixed"].items() if d not in G.REPLACED},
+                         {v for d, v in verdicts["r2"].items() if d not in G.REPLACED})
+
     def test_retained_document_without_a_cached_parse_trips_g1_before_any_compute(self):
         fx = make_fixture(self.tmp, drop_cache="PAYPAL_2022_10K")
         out = self.tmp / "out"

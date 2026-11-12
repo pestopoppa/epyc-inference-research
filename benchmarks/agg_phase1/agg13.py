@@ -17,7 +17,7 @@ Phases (``run_agg13.py --phase``):
                    ``CorpusStore.ingest`` (retained: parse cache -> ``unchanged``; changed: real parse -> ``replaced``);
                    L3 + 8 L4 units for the changed ones; G1 manifest, G2 supersession (structural), G3 cost, G4 M1;
                    ``result.cpu.json``.
-* ``gpu-audit``    the Phase 0 L4c audit over the changed store (27B np4).
+* ``gpu-audit``    the Phase 0 L4c audit over the changed store (27B np4), per-document fiscal year (``run_audit_fy``).
 * ``gpu-answers``  P-large on the 58 AGG-1.1 questions (no B1; not scored); G5 (M4) and G2 (behavioural half).
 * ``score``        verdict only (no model).
 
@@ -52,7 +52,7 @@ from agg1314_zero_cell_diag import fy_contract_problems  # noqa: E402
 # --------------------------------------------------------------------------- pins
 AMENDMENT1_SHA = "07831066b7549c1bb2b97b92e97ec960ec415ee794724189d120be537031d84c"
 AMENDMENT2_FILE = "PREDECLARED_AGG13_AMENDMENT2_20261112.md"
-AMENDMENT2_SHA = "2bf12216a43eba69644d93c55118ddfeb0f1a3b4a0cc3f00b6d6196180bc0b1f"   # 2026-11-12: period-parameterised L4 description + unit-label cross-check
+AMENDMENT2_SHA = "918f0899f88fe0cae78114a52785036c812ab6e98076ae55470e7ef32def9b23"   # 2026-11-12: period-parameterised L4 description + unit-label cross-check
 PREDECLARED_SHA = "fde0cb0d4bea0fc816e1393b38533c82c766853330d1218d2b0b37c3c5607183"
 FROZEN = {  # asserted by preflight and by the tests (the gold sheet is read by one reader + the cross-extractor check)
     "corpus_agg13.json": "933b4d2f47f313cb903127a27f12f6f348b6887bdf813d8bc2fc8fe424926e43",
@@ -200,6 +200,58 @@ def fy_problems(inp: dict[str, Any]) -> list[str]:
         descs = {f: X.l4_description(A.METRICS[f], fy_doc) for f in A.METRICS}
         out += [f"{d}: {p}" for p in fy_contract_problems(descs, cells)]
     return out
+
+
+def fy_lookup(inp: dict[str, Any]) -> Callable[[str], str]:
+    """doc_id -> the document's own fiscal year (corpus manifest), for the GPU audit."""
+    by = {d["doc_name"]: X.doc_fiscal_year(d, inp["corpus11"]) for d in inp["corpus"]["docs"]}
+    return lambda doc: by.get(doc, X.BASE_FY)
+
+
+def run_audit_fy(rec: P.Recorder, store, backend, *, guard: Callable[[], None], fy_of: Callable[[str], str],
+                 smoke: bool = False, cfg: P.Cfg = P.CFG) -> dict[str, Any]:
+    """``phase0_arms.run_audit`` (the Phase 0 L4c audit; that file is frozen and not edited) with the two amendment-2
+    changes it needs on the changed store: the field description is rendered for the AUDITED FACT'S DOCUMENT's own fiscal
+    year (``fy_of``), and the re-extracted rows go through ``facts_llm.reconcile`` so a unit label is cross-checked the
+    way the stored fact's was. For an FY2022 document with correct unit labels the verdicts are those of ``run_audit``."""
+    from src.aggregation import facts_llm  # noqa: PLC0415
+    from src.aggregation.llm_backend import OutOfWindow  # noqa: PLC0415
+    facts = store.facts(X.CORPUS_ID, extractor=facts_llm.EXTRACTOR_L4)
+    queue = facts_llm.audit_sample(facts)
+    wins = {u["chunk_id"]: u for u in P.windows(store, X.CORPUS_ID, cfg.window_chars)}
+    n = 0
+    for f in queue:
+        unit = f"audit:{f['fact_id']}"
+        if unit in rec.done:
+            continue
+        guard()
+        w = wins.get(f["chunk_id"])
+        r = facts_llm.StageReceipt("L4c_audit")
+        status = "ok"
+        try:
+            desc = X.l4_description(A.METRICS.get(f["field"], f["field"]), fy_of(f["doc_id"])) \
+                if f["field"] in A.METRICS else f["field"]
+            rows = facts_llm.extract(w, f["field"], desc, backend, n_predict=cfg.l4_n_predict, id_slot=None,
+                                     receipt=r) if w else []
+            kept, _ = facts_llm.reconcile(rows)
+            agree = any(str(x["period"]) == str(f["period"]) and abs(x["value"] - f["value"])
+                        <= cfg.rel_tol * abs(f["value"]) + 1e-9 for x in kept)
+            verdict = "audited_ok" if agree else "disputed"
+            store.conn.execute("UPDATE facts SET audit_status = ? WHERE fact_id = ?", [verdict, f["fact_id"]])
+            store.conn.commit()
+        except OutOfWindow:
+            status, verdict = "out_of_window", None
+        rec.emit("audit", unit=unit, fact_id=f["fact_id"], field=f["field"], doc=f["doc_id"],
+                 status=status, verdict=verdict, calls=r.calls, prefill_tokens=r.prompt_tokens,
+                 cache_n=r.cache_n, fy=fy_of(f["doc_id"]))
+        n += 1
+        if smoke:
+            break
+    done = all(f"audit:{f['fact_id']}" in rec.done for f in queue)
+    if done and not smoke and "audit_done" not in rec.done:
+        rec.emit("audit_done", unit="audit_done", n_queue=len(queue),
+                 disputed=sum(1 for r in rec.records if r["kind"] == "audit" and r.get("verdict") == "disputed"))
+    return {"complete": done, "n_audited_now": n, "n_queue": len(queue)}
 
 
 def corpus_problems(corpus: dict[str, Any], corpus11: dict[str, Any], *, check_pdfs: bool = True) -> list[str]:

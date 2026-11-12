@@ -6,7 +6,7 @@ process is started here.
 
   preflight     zero-compute checks (pins, 28 PDFs, L4 reuse test, base store + parse-cache hash check)
   reingest      CPU: ingest the 28 documents (25 skipped by hash, 3 replaced), L3 + L4 for the 3, G1-G4, result.cpu.json
-  gpu-audit     the Phase 0 L4c audit over the changed store (27B np4)
+  gpu-audit     the Phase 0 L4c audit over the changed store (per-document fiscal year; amendment 2) (27B np4)
   gpu-answers   P-large on the 58 questions (no B1, not scored), G5 and the behavioural half of G2, the verdict
   score         verdict only
 
@@ -233,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
                 from src.aggregation.llm_backend import LlamaServerBackend  # noqa: PLC0415
                 backend = LlamaServerBackend(a.url, model_id=a.model_id)
                 if a.phase == "gpu-audit":
-                    res = P.run_audit(rec, store, backend, guard=guard, smoke=smoke)
+                    res = G.run_audit_fy(rec, store, backend, guard=guard, fy_of=G.fy_lookup(inp), smoke=smoke)
                 else:
                     res = G.run_p_large(rec, store, backend, agg=agg, names=names, guard=guard, smoke=smoke,
                                         corpus_id=a.corpus_id)
