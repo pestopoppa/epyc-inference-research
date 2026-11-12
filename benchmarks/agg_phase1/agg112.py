@@ -402,6 +402,7 @@ def finish_doc(rec: P.Recorder, tb: Any, store: Any, doc: str, plan: dict[str, A
                     decode_tokens=sum(r["decode_tokens"] for r in recs), wall_s=sum(r["wall_s"] for r in recs),
                     bad_replies=bad, cut=sum(1 for r in recs if r.get("cut")), unparseable=sum(1 for r in recs if not r.get("parsed")),
                     n_facts_in=len(kept_in), n_facts_kept=len(out["facts"]), n_conflicts=len(out["conflicts"]),
+                    n_quote_dropped=len(out.get("quote_dropped", [])),    # AGG-1.14 value-in-quote rule (absent before it)
                     n_unit_overrides=len(out["unit_overrides"]), unit_overrides=out["unit_overrides"][:20],
                     by_field={f: sum(1 for k in out["facts"] if k.get("field") == f) for f in ft.SCHEMA_FIELDS},
                     chars=plan["chars"], final=True)

@@ -1,0 +1,4469 @@
+{
+ "baseline_replay": {
+  "canonical": 202,
+  "canonical_cells_equal_saved": true,
+  "l4_facts_match_saved_store": true,
+  "n_l4_facts": 345,
+  "note": "rule OFF; must reproduce the saved store before the rule-on numbers are trusted",
+  "raw": 208,
+  "raw_cells_equal_saved": true
+ },
+ "corrected": {
+  "agg11": {
+   "canonical": 177,
+   "raw": 185
+  },
+  "agg112_recorded": {
+   "canonical": 202,
+   "raw": 208
+  },
+  "agg112_saved": {
+   "canonical_broken": [
+    "JOHNSON_JOHNSON_2022_10K|dividends_paid"
+   ],
+   "n_canonical_broken": 1,
+   "n_canonical_fixed": 26,
+   "n_raw_broken": 0,
+   "n_raw_fixed": 23
+  },
+  "canonical": 203,
+  "canonical_broken_vs_agg11": [],
+  "canonical_cells_gained_by_the_rule_vs_agg112": [
+   "JOHNSON_JOHNSON_2022_10K|dividends_paid"
+  ],
+  "canonical_cells_lost_by_the_rule_vs_agg112": [],
+  "canonical_fixed_vs_agg11": [
+   "3M_2022_10K|net_income",
+   "ADOBE_2022_10K|total_assets",
+   "ADOBE_2022_10K|total_current_liabilities",
+   "AMD_2022_10K|net_income",
+   "APPLE_2022_10K|capex",
+   "BOEING_2022_10K|net_income",
+   "BOEING_2022_10K|total_assets",
+   "BOEING_2022_10K|total_current_assets",
+   "BOEING_2022_10K|total_current_liabilities",
+   "COCACOLA_2022_10K|net_income",
+   "COCACOLA_2022_10K|total_assets",
+   "COCACOLA_2022_10K|total_current_assets",
+   "COCACOLA_2022_10K|total_current_liabilities",
+   "CORNING_2022_10K|net_income",
+   "COSTCO_2022_10K|net_income",
+   "COSTCO_2022_10K|total_assets",
+   "COSTCO_2022_10K|total_current_liabilities",
+   "GENERALMILLS_2022_10K|net_income",
+   "JOHNSON_JOHNSON_2022_10K|capex",
+   "MGMRESORTS_2022_10K|net_income",
+   "MICROSOFT_2022_10K|capex",
+   "PEPSICO_2022_10K|net_income",
+   "PFIZER_2022_10K|capex",
+   "PFIZER_2022_10K|dividends_paid",
+   "PFIZER_2022_10K|operating_cash_flow",
+   "VERIZON_2022_10K|net_income"
+  ],
+  "cells_lost_by_the_rule_vs_agg112": [],
+  "n_canonical_broken": 0,
+  "n_canonical_fixed": 26,
+  "n_cells": 211,
+  "n_raw_broken": 0,
+  "n_raw_fixed": 23,
+  "raw": 208,
+  "raw_broken_vs_agg11": [],
+  "raw_fixed_vs_agg11": [
+   "3M_2022_10K|net_income",
+   "ADOBE_2022_10K|total_assets",
+   "ADOBE_2022_10K|total_current_liabilities",
+   "AMD_2022_10K|net_income",
+   "APPLE_2022_10K|capex",
+   "BOEING_2022_10K|total_assets",
+   "BOEING_2022_10K|total_current_assets",
+   "BOEING_2022_10K|total_current_liabilities",
+   "COCACOLA_2022_10K|net_income",
+   "COCACOLA_2022_10K|total_assets",
+   "COCACOLA_2022_10K|total_current_assets",
+   "COCACOLA_2022_10K|total_current_liabilities",
+   "CORNING_2022_10K|net_income",
+   "COSTCO_2022_10K|net_income",
+   "COSTCO_2022_10K|total_assets",
+   "COSTCO_2022_10K|total_current_liabilities",
+   "GENERALMILLS_2022_10K|net_income",
+   "JOHNSON_JOHNSON_2022_10K|capex",
+   "MICROSOFT_2022_10K|capex",
+   "MICROSOFT_2022_10K|dividends_paid",
+   "PFIZER_2022_10K|capex",
+   "PFIZER_2022_10K|dividends_paid",
+   "PFIZER_2022_10K|operating_cash_flow"
+  ],
+  "strata": {
+   "all": {
+    "canonical": {
+     "agg11_v1": 177,
+     "ok": 203
+    },
+    "label": "IN-SAMPLE for any gain (the design saw every cell in aggregate)",
+    "n": 211,
+    "raw": {
+     "agg11": 185,
+     "found": 208
+    }
+   },
+   "held_out": {
+    "canonical": {
+     "agg11_v1": 158,
+     "ok": 158
+    },
+    "label": "HELD-OUT (never named in a design artifact): a regression test only, AGG-1.1 was already 100% on these, so no gain is possible",
+    "n": 158,
+    "raw": {
+     "agg11": 158,
+     "found": 158
+    }
+   },
+   "touched": {
+    "canonical": {
+     "agg11_v1": 19,
+     "ok": 45
+    },
+    "label": "IN-SAMPLE (named in the miss tables / triage the design came from)",
+    "n": 53,
+    "raw": {
+     "agg11": 27,
+     "found": 50
+    }
+   }
+  }
+ },
+ "inputs": {
+  "cpu_results": "/mnt/raid0/llm/tmp/agg112-ingest-cpu-20261112/out/results.jsonl",
+  "cpu_store": "/mnt/raid0/llm/tmp/agg114-scratch/store.sqlite",
+  "gpu_results": "/mnt/raid0/llm/tmp/agg112-arms-gpu-20261112/out/results.jsonl",
+  "gpu_store": "/mnt/raid0/llm/tmp/agg112-arms-gpu-20261112/out/store.sqlite"
+ },
+ "johnson_johnson_dividends_paid": {
+  "canonical_ok_agg11": true,
+  "canonical_ok_agg112": false,
+  "canonical_ok_now": true,
+  "canonical_rows_now": [
+   {
+    "period": "2022",
+    "quote": "Cash dividends paid ($4.45 per share) (11,682)",
+    "unit": "USD_millions",
+    "value": 11682.0
+   }
+  ],
+  "raw_ok_now": true
+ },
+ "n_l4_facts_after_rule": 324,
+ "n_rows_entering_stage": 445,
+ "no_previously_correct_cell_regresses": true,
+ "orch_pin": "737bf0535d1abecba154a2a22fbba0d910821ed8",
+ "p_large": {
+  "planners": {
+   "agg11.v0": {
+    "answer_changed_questions": [
+     "agg18"
+    ],
+    "changed_questions": [
+     "agg18",
+     "p1_35"
+    ],
+    "fixed_vs_agg11": [
+     "agg11",
+     "agg18",
+     "p1_08",
+     "p1_19",
+     "p1_20",
+     "p1_24",
+     "p1_33",
+     "p1_34",
+     "p1_35"
+    ],
+    "n": 58,
+    "n_sql_questions": 57,
+    "old_rows_not_reproducing_saved": [],
+    "regressed_vs_agg11": [],
+    "renderer_agrees_on_old_rows": [
+     54,
+     57
+    ],
+    "rescored_accuracy": 0.46551724137931033,
+    "rescored_correct": 27,
+    "rows": [
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Amazon"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Amazon"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg01",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'revenue' AND period = '2022' ORDER BY value DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Corning"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Corning"
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg02",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'revenue' AND period = '2022' ORDER BY value ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(value)": 2677995.254
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(value)": 2677995.254
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg03",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'revenue' AND period = '2022'"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 13
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 13
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg04",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'revenue' AND period = '2022' AND value > 50000"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Amazon"
+       },
+       {
+        "entity": "Apple"
+       },
+       {
+        "entity": "CVS Health"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Amazon"
+       },
+       {
+        "entity": "Apple"
+       },
+       {
+        "entity": "CVS Health"
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg05",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'revenue' AND period = '2022' ORDER BY value DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Apple"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg06",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'net_income' AND period = '2022' ORDER BY value DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 4
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 4
+       }
+      ],
+      "op": "count_lt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg07",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'net_income' AND period = '2022' AND value < 0"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(value)": 345836.717
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(value)": 345836.717
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg08",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'net_income' AND period = '2022'"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Amazon"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Amazon"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg09",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'capex' AND period = '2022' ORDER BY value DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(value)": 161667.629
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(value)": 161667.629
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg10",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'capex' AND period = '2022'"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 5
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 5
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg11",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'capex' AND period = '2022' AND value > 5000"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "JPMorgan"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "JPMorgan"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg12",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'total_assets' AND period = '2022' ORDER BY value DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "JPMorgan"
+       },
+       {
+        "entity": "Amazon"
+       },
+       {
+        "entity": "Verizon"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "JPMorgan"
+       },
+       {
+        "entity": "Amazon"
+       },
+       {
+        "entity": "Verizon"
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg13",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'total_assets' AND period = '2022' ORDER BY value DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Apple"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg14",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'operating_cash_flow' AND period = '2022' ORDER BY value DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": "OperationalError:incomplete input",
+      "new_n_rows": 0,
+      "new_rows": [],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 0,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg15",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 0,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE period = '2022' AND field = 'operating_cash_flow' AND value > 0 AND entity = '3M' AND value > 0 AND entity = 'AES Corporation' AND value > 0 AND entity = 'AMD' AND value > 0 AND entity = 'Activision Blizzard' AND value > 0 AND entity = 'Adobe' AND value > 0 AND entity = 'Amazon' AND value > 0 AND entity = 'American Express' AND value > 0 AND entity = 'American Water Works' AND value > 0 AND entity = 'Apple' AND value > 0 AND entity = 'Boeing' AND value > 0 AND entity = 'CVS Health' AND value >"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 0
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg16",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE period = '2022' AND field = 'total_current_assets' AND value > 0 AND entity = '3M' AND value > 0 AND entity = 'AES Corporation' AND value > 0 AND entity = 'AMD' AND value > 0 AND entity = 'Activision Blizzard' AND value > 0 AND entity = 'Adobe' AND value > 0 AND entity = 'Amazon' AND value > 0 AND entity = 'American Express' AND value > 0 AND entity = 'American Water Works' AND value > 0 AND entity = 'Apple' AND value > 0 AND entity = 'Boeing' AND value > 0 AND entity = 'CVS Health' AND value > 0"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Microsoft"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Microsoft"
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg17",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'total_current_assets' AND value != 'NA' AND period = '2022' ORDER BY value DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": true,
+      "kind": "sql_rows_changed",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_new_correct": true,
+      "mechanical_new_text": "FINAL: 99,494.548",
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(value)": 99494.548
+       }
+      ],
+      "note": "saved answer void; rescored from the rows by the deterministic renderer + frozen scorer (MECHANICAL, not a model answer)",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(value)": 101707.848
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg18",
+      "rescored_correct": true,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express'"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Amazon"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Amazon"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg19",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE period = '2022' AND field = 'capex' ORDER BY value DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 24
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 24
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "agg20",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE period = '2022' AND field = 'net_income' AND value > 0.10"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": false,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Apple"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_01",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE period = '2022' AND field = 'net_income' ORDER BY value DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Amazon"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Amazon"
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_02",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'net_income' AND period = '2022' ORDER BY value ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "not_sql",
+      "note": "answer did not read the fact table (or no valid SQL): saved answer and score stand",
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_03",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_status": "ok"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 4
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 4
+       }
+      ],
+      "op": "count_lt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_04",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'net_income' AND period = '2022' AND value < 0.05"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 6
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 6
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_05",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'net_income' AND period = '2022' AND value > 10000"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Apple"
+       },
+       {
+        "entity": "Microsoft"
+       },
+       {
+        "entity": "JPMorgan"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple"
+       },
+       {
+        "entity": "Microsoft"
+       },
+       {
+        "entity": "JPMorgan"
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_06",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'net_income' AND period = '2022' ORDER BY value DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(field)": 0.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(field)": 0.0
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_07",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(field) FROM facts_canonical WHERE field = 'net_income' AND period = '2022' AND entity = 'Apple'"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "op": "count_lt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_08",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'net_income' AND period = '2022' AND value < 2000"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_09",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'revenue' AND period = '2022' AND value > 90000"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(value)": 7528.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(value)": 7528.0
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_10",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(value) FROM facts_canonical WHERE field = 'revenue' AND period = '2022' AND entity = 'Activision Blizzard'"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 6
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 6
+       }
+      ],
+      "op": "count_lt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_11",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'revenue' AND period = '2022' AND value < 15000"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Apple"
+       },
+       {
+        "entity": "JPMorgan"
+       },
+       {
+        "entity": "Microsoft"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple"
+       },
+       {
+        "entity": "JPMorgan"
+       },
+       {
+        "entity": "Microsoft"
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_12",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'operating_cash_flow' AND period = '2022' ORDER BY value DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "American Water Works"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "American Water Works"
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_13",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'operating_cash_flow' AND period = '2022' ORDER BY value ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(quote)": 0.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(quote)": 0.0
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_14",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(quote) FROM facts_canonical WHERE field = 'operating_cash_flow' AND period = '2022' AND entity = 'Netflix'"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Apple",
+        "value": 122151.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple",
+        "value": 122151.0
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_15",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, value FROM facts_canonical WHERE field = 'operating_cash_flow' AND period = '2022' AND entity != 'JPMorgan' ORDER BY value DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Apple",
+        "value": 122151.0
+       },
+       {
+        "entity": "Microsoft",
+        "value": 89035.0
+       },
+       {
+        "entity": "Amazon",
+        "value": 46752.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple",
+        "value": 122151.0
+       },
+       {
+        "entity": "Microsoft",
+        "value": 89035.0
+       },
+       {
+        "entity": "Amazon",
+        "value": 46752.0
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_16",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity, value FROM facts_canonical WHERE field = 'operating_cash_flow' AND period = '2022' AND entity != 'JPMorgan' ORDER BY value DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 0
+       }
+      ],
+      "op": "count_lt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_17",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE period = '2022' AND field = 'operating_cash_flow' AND entity != 'JPMorgan' AND value < 0"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "American Water Works",
+        "value": 1108.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "American Water Works",
+        "value": 1108.0
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_18",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, value FROM facts_canonical WHERE field = 'operating_cash_flow' AND period = '2022' AND entity != 'JPMorgan' ORDER BY value ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_19",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'capex' AND period = '2022' AND value > 3000"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Amazon"
+       },
+       {
+        "entity": "Microsoft"
+       },
+       {
+        "entity": "Verizon"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Amazon"
+       },
+       {
+        "entity": "Microsoft"
+       },
+       {
+        "entity": "Verizon"
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_20",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'capex' AND period = '2022' ORDER BY value DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Activision Blizzard",
+        "page": 70,
+        "quote": "Capital expenditures (91) (80) (78)",
+        "unit": "USD_millions",
+        "value": 91.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Activision Blizzard",
+        "page": 70,
+        "quote": "Capital expenditures (91) (80) (78)",
+        "unit": "USD_millions",
+        "value": 91.0
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_21",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, value, unit, quote, page FROM facts_canonical WHERE field = 'capex' AND period = '2022' AND entity != 'JPMorgan' ORDER BY value ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(field)": 0.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(field)": 0.0
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_22",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(field) FROM facts_canonical WHERE field = 'capex' AND entity = '3M' AND period = '2022'"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 26
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 26
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_23",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'capex' AND period = '2022' AND entity != 'JPMorgan' AND value > 0.050000000000000003000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 10
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 10
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_24",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'total_assets' AND period = '2022' AND value > 100000"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "MGM Resorts"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "MGM Resorts"
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_25",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'total_assets' AND period = '2022' ORDER BY value ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(field)": 0.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(field)": 0.0
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_26",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(field) FROM facts_canonical WHERE field = 'total_assets' AND period = '2022' AND entity = 'Activision Blizzard'"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Microsoft"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Microsoft"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_27",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'total_current_assets' AND period = '2022' AND value != 'NA' ORDER BY value DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 0
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_28",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE period = '2022' AND field = 'total_current_assets' AND value > 1.25 AND entity = '3M' AND doc_id = '3M' AND unit = 'USD millions' AND quote = '3M' AND page = '3M' AND field = 'total_current_liabilities' AND value > 0"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Microsoft",
+        "value": 169684.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Microsoft",
+        "value": 169684.0
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_29",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, value FROM facts_canonical WHERE field = 'total_current_assets' AND period = '2022' AND value != 'NA' ORDER BY value DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": false,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "American Water Works",
+        "value": 1250.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "American Water Works",
+        "value": 1250.0
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_30",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, value FROM facts_canonical WHERE field = 'total_current_assets' AND period = '2022' AND value != 'NA' ORDER BY value ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(field)": 0.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(field)": 0.0
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_31",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(field) FROM facts_canonical WHERE field = 'total_current_assets' AND period = '2022' AND value != 'NA'"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Microsoft",
+        "value": 169684.0
+       },
+       {
+        "entity": "Amazon",
+        "value": 146791.0
+       },
+       {
+        "entity": "Apple",
+        "value": 135405.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Microsoft",
+        "value": 169684.0
+       },
+       {
+        "entity": "Amazon",
+        "value": 146791.0
+       },
+       {
+        "entity": "Apple",
+        "value": 135405.0
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_32",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity, value FROM facts_canonical WHERE field = 'total_current_assets' AND period = '2022' AND value != 'NA' ORDER BY value DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Microsoft"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Microsoft"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_33",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express' ORDER BY value DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 7
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 7
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_34",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND value > 5000 AND entity != 'JPMorgan' AND entity != 'American Express'"
+     },
+     {
+      "agg11_correct": false,
+      "changed": true,
+      "kind": "sql_rows_changed",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_new_correct": true,
+      "mechanical_new_text": "FINAL: Microsoft; Apple; Johnson & Johnson",
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Microsoft",
+        "value": 18552.0
+       },
+       {
+        "entity": "Apple",
+        "value": 14841.0
+       },
+       {
+        "entity": "Johnson & Johnson",
+        "value": 11682.0
+       }
+      ],
+      "note": "saved answer void; rescored from the rows by the deterministic renderer + frozen scorer (MECHANICAL, not a model answer)",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Microsoft",
+        "value": 18552.0
+       },
+       {
+        "entity": "Apple",
+        "value": 14841.0
+       },
+       {
+        "entity": "Johnson & Johnson",
+        "value": 13895.3
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_35",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity, value FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express' ORDER BY value DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(field)": 0.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(field)": 0.0
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_36",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(field) FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express' AND entity = 'Apple'"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": false,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Kraft Heinz",
+        "page": 56,
+        "quote": "Dividends paid (1,960) (1,959) (1,958)",
+        "value": 1960.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Kraft Heinz",
+        "page": 56,
+        "quote": "Dividends paid (1,960) (1,959) (1,958)",
+        "value": 1960.0
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_37",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, value, quote, page FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express' AND value > 0 AND entity = 'Kraft Heinz'"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 0
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg11.v0",
+      "qid": "p1_38",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_canonical WHERE field = 'dividends_paid' AND period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express' AND value > 0 AND value < 0.6000000000000001"
+     }
+    ],
+    "saved_accuracy": 0.4482758620689655,
+    "saved_correct": 26,
+    "vs_agg11_rescored": {
+     "both": 18,
+     "n": 58,
+     "neither": 31,
+     "only_new": 9,
+     "only_old": 0,
+     "z": 3.0
+    },
+    "vs_agg11_saved": {
+     "both": 18,
+     "n": 58,
+     "neither": 32,
+     "only_new": 8,
+     "only_old": 0,
+     "z": 2.82842712474619
+    }
+   },
+   "agg110.v1": {
+    "answer_changed_questions": [
+     "agg18"
+    ],
+    "changed_questions": [
+     "agg18",
+     "p1_35",
+     "p1_36"
+    ],
+    "fixed_vs_agg11": [
+     "agg11",
+     "agg17",
+     "agg18",
+     "p1_02",
+     "p1_04",
+     "p1_08",
+     "p1_14",
+     "p1_16",
+     "p1_17",
+     "p1_18",
+     "p1_19",
+     "p1_20",
+     "p1_21",
+     "p1_24",
+     "p1_26",
+     "p1_29",
+     "p1_30",
+     "p1_32",
+     "p1_33",
+     "p1_34",
+     "p1_35",
+     "p1_37",
+     "p1_38"
+    ],
+    "n": 58,
+    "n_sql_questions": 58,
+    "old_rows_not_reproducing_saved": [],
+    "regressed_vs_agg11": [
+     "p1_01"
+    ],
+    "renderer_agrees_on_old_rows": [
+     56,
+     58
+    ],
+    "rescored_accuracy": 0.6896551724137931,
+    "rescored_correct": 40,
+    "rows": [
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Amazon"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Amazon"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg01",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_pivot WHERE period = '2022' ORDER BY revenue DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Corning"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Corning"
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg02",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_pivot WHERE period = '2022' ORDER BY revenue ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(revenue)": 2677995.254
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(revenue)": 2677995.254
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg03",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(revenue) FROM facts_pivot WHERE period = '2022'"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 13
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 13
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg04",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND revenue > 50000"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Amazon",
+        "revenue": 513983.0
+       },
+       {
+        "entity": "Apple",
+        "revenue": 394328.0
+       },
+       {
+        "entity": "CVS Health",
+        "revenue": 322467.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Amazon",
+        "revenue": 513983.0
+       },
+       {
+        "entity": "Apple",
+        "revenue": 394328.0
+       },
+       {
+        "entity": "CVS Health",
+        "revenue": 322467.0
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg05",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity, revenue FROM facts_pivot WHERE period = '2022' ORDER BY revenue DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Apple"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg06",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_pivot WHERE period = '2022' ORDER BY net_income DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 4
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 4
+       }
+      ],
+      "op": "count_lt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg07",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND net_income < 0"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(net_income)": 345836.717
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(net_income)": 345836.717
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg08",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(net_income) FROM facts_pivot WHERE period = '2022'"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Amazon"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Amazon"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg09",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_pivot WHERE period = '2022' ORDER BY capex DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(capex)": 161667.629
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(capex)": 161667.629
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg10",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(capex) FROM facts_pivot WHERE period = '2022'"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 5
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 5
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg11",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND capex > 5000"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "JPMorgan"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "JPMorgan"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg12",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_pivot WHERE period = '2022' ORDER BY total_assets DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "JPMorgan",
+        "total_assets": 3665743.0
+       },
+       {
+        "entity": "Amazon",
+        "total_assets": 462675.0
+       },
+       {
+        "entity": "Verizon",
+        "total_assets": 379680.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "JPMorgan",
+        "total_assets": 3665743.0
+       },
+       {
+        "entity": "Amazon",
+        "total_assets": 462675.0
+       },
+       {
+        "entity": "Verizon",
+        "total_assets": 379680.0
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg13",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity, total_assets FROM facts_pivot WHERE period = '2022' ORDER BY total_assets DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Apple"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg14",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_pivot WHERE period = '2022' ORDER BY operating_cash_flow DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 24
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 24
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg15",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND operating_cash_flow > 0 AND net_income > 0 AND operating_cash_flow > 0 AND net_income > 0"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 16
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 16
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg16",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND total_current_assets > 0 AND total_current_liabilities > 0 AND total_current_assets - total_current_liabilities > 0"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Apple",
+        "total_current_assets - total_current_liabilities": -18577.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple",
+        "total_current_assets - total_current_liabilities": -18577.0
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg17",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, total_current_assets - total_current_liabilities FROM facts_pivot WHERE period = '2022' AND total_current_assets != 0 AND total_current_liabilities != 0 ORDER BY total_current_assets - total_current_liabilities ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": true,
+      "kind": "sql_rows_changed",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_new_correct": true,
+      "mechanical_new_text": "FINAL: 99,494.548",
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(dividends_paid)": 99494.548
+       }
+      ],
+      "note": "saved answer void; rescored from the rows by the deterministic renderer + frozen scorer (MECHANICAL, not a model answer)",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(dividends_paid)": 101707.848
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg18",
+      "rescored_correct": true,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(dividends_paid) FROM facts_pivot WHERE period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express'"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "capex / revenue": 30.846153846153847,
+        "entity": "Corning"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "capex / revenue": 30.846153846153847,
+        "entity": "Corning"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg19",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, capex / revenue FROM facts_pivot WHERE period = '2022' ORDER BY capex / revenue DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 18
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 18
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "agg20",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND net_income / revenue > 0.1"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Corning",
+        "net_income / revenue": 25.307692307692307
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Corning",
+        "net_income / revenue": 25.307692307692307
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_01",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, net_income / revenue FROM facts_pivot WHERE period = '2022' ORDER BY net_income / revenue DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "eBay",
+        "net_income / revenue": -0.12955589586523736
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "eBay",
+        "net_income / revenue": -0.12955589586523736
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_02",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, net_income / revenue FROM facts_pivot WHERE period = '2022' ORDER BY net_income / revenue ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Corning",
+        "net_income / revenue": 25.307692307692307
+       },
+       {
+        "entity": "Microsoft",
+        "net_income / revenue": 0.3668633681343622
+       },
+       {
+        "entity": "Pfizer",
+        "net_income / revenue": 0.3126881291737267
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Corning",
+        "net_income / revenue": 25.307692307692307
+       },
+       {
+        "entity": "Microsoft",
+        "net_income / revenue": 0.3668633681343622
+       },
+       {
+        "entity": "Pfizer",
+        "net_income / revenue": 0.3126881291737267
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_03",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity, net_income / revenue FROM facts_pivot WHERE period = '2022' ORDER BY net_income / revenue DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 6
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 6
+       }
+      ],
+      "op": "count_lt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_04",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND net_income / revenue < 0.05"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 6
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 6
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_05",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND net_income > 10000"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Apple",
+        "net_income": 99803.0
+       },
+       {
+        "entity": "Microsoft",
+        "net_income": 72738.0
+       },
+       {
+        "entity": "JPMorgan",
+        "net_income": 37676.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple",
+        "net_income": 99803.0
+       },
+       {
+        "entity": "Microsoft",
+        "net_income": 72738.0
+       },
+       {
+        "entity": "JPMorgan",
+        "net_income": 37676.0
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_06",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity, net_income FROM facts_pivot WHERE period = '2022' ORDER BY net_income DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(net_income)": 285750.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(net_income)": 285750.0
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_07",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(net_income) FROM facts_pivot WHERE period = '2022' AND revenue > 90000"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "op": "count_lt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_08",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND net_income < 2000"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_09",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND revenue > 90000"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": false,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(revenue)": 603003.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(revenue)": 603003.0
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_10",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(revenue) FROM facts_pivot WHERE period = '2022' AND net_income < 0"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 6
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 6
+       }
+      ],
+      "op": "count_lt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_11",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND revenue < 15000"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Apple",
+        "operating_cash_flow": 122151.0
+       },
+       {
+        "entity": "JPMorgan",
+        "operating_cash_flow": 107119.0
+       },
+       {
+        "entity": "Microsoft",
+        "operating_cash_flow": 89035.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple",
+        "operating_cash_flow": 122151.0
+       },
+       {
+        "entity": "JPMorgan",
+        "operating_cash_flow": 107119.0
+       },
+       {
+        "entity": "Microsoft",
+        "operating_cash_flow": 89035.0
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_12",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity, operating_cash_flow FROM facts_pivot WHERE period = '2022' ORDER BY operating_cash_flow DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "American Water Works"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "American Water Works"
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_13",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_pivot WHERE period = '2022' ORDER BY operating_cash_flow ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(operating_cash_flow)": 55233.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(operating_cash_flow)": 55233.0
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_14",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(operating_cash_flow) FROM facts_pivot WHERE period = '2022' AND net_income < 0"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Apple",
+        "operating_cash_flow - capex": 111443.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple",
+        "operating_cash_flow - capex": 111443.0
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_15",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, operating_cash_flow - capex FROM facts_pivot WHERE period = '2022' AND capex != 0 ORDER BY operating_cash_flow - capex DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Apple",
+        "operating_cash_flow - capex": 111443.0
+       },
+       {
+        "entity": "Microsoft",
+        "operating_cash_flow - capex": 65149.0
+       },
+       {
+        "entity": "Pfizer",
+        "operating_cash_flow - capex": 26031.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Apple",
+        "operating_cash_flow - capex": 111443.0
+       },
+       {
+        "entity": "Microsoft",
+        "operating_cash_flow - capex": 65149.0
+       },
+       {
+        "entity": "Pfizer",
+        "operating_cash_flow - capex": 26031.0
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_16",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity, operating_cash_flow - capex FROM facts_pivot WHERE period = '2022' AND capex != 0 ORDER BY operating_cash_flow - capex DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 3
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 3
+       }
+      ],
+      "op": "count_lt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_17",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND capex != 0 AND operating_cash_flow - capex < 0"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Amazon",
+        "operating_cash_flow - capex": -16893.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Amazon",
+        "operating_cash_flow - capex": -16893.0
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_18",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, operating_cash_flow - capex FROM facts_pivot WHERE period = '2022' AND capex != 0 ORDER BY operating_cash_flow - capex ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_19",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND capex > 3000"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "capex": 63645.0,
+        "entity": "Amazon"
+       },
+       {
+        "capex": 23886.0,
+        "entity": "Microsoft"
+       },
+       {
+        "capex": 23087.0,
+        "entity": "Verizon"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "capex": 63645.0,
+        "entity": "Amazon"
+       },
+       {
+        "capex": 23886.0,
+        "entity": "Microsoft"
+       },
+       {
+        "capex": 23087.0,
+        "entity": "Verizon"
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_20",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity, capex FROM facts_pivot WHERE period = '2022' ORDER BY capex DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "capex / revenue": 0.008456679288113202,
+        "entity": "CVS Health"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "capex / revenue": 0.008456679288113202,
+        "entity": "CVS Health"
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_21",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, capex / revenue FROM facts_pivot WHERE period = '2022' AND capex != 0 ORDER BY capex / revenue ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": false,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(capex)": 135189.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(capex)": 135189.0
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_22",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(capex) FROM facts_pivot WHERE period = '2022' AND revenue > 90000 AND capex != 0"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 26
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 26
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_23",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND capex > 0.05"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 10
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 10
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_24",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND total_assets > 100000"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "MGM Resorts"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "MGM Resorts"
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_25",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_pivot WHERE period = '2022' ORDER BY total_assets ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(total_assets)": 658988.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(total_assets)": 658988.0
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_26",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(total_assets) FROM facts_pivot WHERE period = '2022' AND net_income < 0"
+     },
+     {
+      "agg11_correct": true,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Microsoft",
+        "total_current_assets": 169684.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Microsoft",
+        "total_current_assets": 169684.0
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_27",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, total_current_assets FROM facts_pivot WHERE period = '2022' AND total_current_assets > 0 ORDER BY total_current_assets DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 9
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_28",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND total_current_assets > 0 AND total_current_liabilities > 0 AND total_current_assets / total_current_liabilities > 1.25"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Activision Blizzard",
+        "total_current_assets / total_current_liabilities": 4.070042194092827
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Activision Blizzard",
+        "total_current_assets / total_current_liabilities": 4.070042194092827
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_29",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, total_current_assets / total_current_liabilities FROM facts_pivot WHERE period = '2022' AND total_current_assets != 0 AND total_current_liabilities != 0 ORDER BY total_current_assets / total_current_liabilities DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "American Water Works",
+        "total_current_assets / total_current_liabilities": 0.44468160796869444
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "American Water Works",
+        "total_current_assets / total_current_liabilities": 0.44468160796869444
+       }
+      ],
+      "op": "argmin",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_30",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, total_current_assets / total_current_liabilities FROM facts_pivot WHERE period = '2022' AND total_current_assets != 0 AND total_current_liabilities != 0 ORDER BY total_current_assets / total_current_liabilities ASC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(total_current_assets - total_current_liabilities)": 101348.299
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(total_current_assets - total_current_liabilities)": 101348.299
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_31",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(total_current_assets - total_current_liabilities) FROM facts_pivot WHERE period = '2022' AND total_current_assets != 0 AND total_current_liabilities != 0"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "entity": "Microsoft",
+        "total_current_assets - total_current_liabilities": 74602.0
+       },
+       {
+        "entity": "Boeing",
+        "total_current_assets - total_current_liabilities": 19471.0
+       },
+       {
+        "entity": "Paypal",
+        "total_current_assets - total_current_liabilities": 12416.0
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Microsoft",
+        "total_current_assets - total_current_liabilities": 74602.0
+       },
+       {
+        "entity": "Boeing",
+        "total_current_assets - total_current_liabilities": 19471.0
+       },
+       {
+        "entity": "Paypal",
+        "total_current_assets - total_current_liabilities": 12416.0
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_32",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity, total_current_assets - total_current_liabilities FROM facts_pivot WHERE period = '2022' AND total_current_assets != 0 AND total_current_liabilities != 0 ORDER BY total_current_assets - total_current_liabilities DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "entity": "Microsoft"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "entity": "Microsoft"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_33",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity FROM facts_pivot WHERE period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express' ORDER BY dividends_paid DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 7
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 7
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_34",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND dividends_paid > 5000 AND entity != 'JPMorgan' AND entity != 'American Express'"
+     },
+     {
+      "agg11_correct": false,
+      "changed": true,
+      "kind": "sql_rows_changed",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_new_correct": true,
+      "mechanical_new_text": "FINAL: Microsoft; Apple; Johnson & Johnson",
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 3,
+      "new_rows": [
+       {
+        "dividends_paid": 18552.0,
+        "entity": "Microsoft"
+       },
+       {
+        "dividends_paid": 14841.0,
+        "entity": "Apple"
+       },
+       {
+        "dividends_paid": 11682.0,
+        "entity": "Johnson & Johnson"
+       }
+      ],
+      "note": "saved answer void; rescored from the rows by the deterministic renderer + frozen scorer (MECHANICAL, not a model answer)",
+      "old_n_rows": 3,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "dividends_paid": 18552.0,
+        "entity": "Microsoft"
+       },
+       {
+        "dividends_paid": 14841.0,
+        "entity": "Apple"
+       },
+       {
+        "dividends_paid": 13895.3,
+        "entity": "Johnson & Johnson"
+       }
+      ],
+      "op": "top3",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_35",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 3,
+      "saved_status": "ok",
+      "sql": "SELECT entity, dividends_paid FROM facts_pivot WHERE period = '2022' AND entity != 'JPMorgan' AND entity != 'American Express' ORDER BY dividends_paid DESC LIMIT 3"
+     },
+     {
+      "agg11_correct": false,
+      "changed": true,
+      "kind": "sql_rows_changed",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_new_correct": false,
+      "mechanical_new_text": "FINAL: 78,456",
+      "mechanical_old_correct": false,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "SUM(dividends_paid)": 78456.0
+       }
+      ],
+      "note": "saved answer void; rescored from the rows by the deterministic renderer + frozen scorer (MECHANICAL, not a model answer)",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "SUM(dividends_paid)": 80669.3
+       }
+      ],
+      "op": "sum",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_36",
+      "rescored_correct": false,
+      "saved_correct": false,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT SUM(dividends_paid) FROM facts_pivot WHERE period = '2022' AND revenue > 50000 AND entity != 'JPMorgan' AND entity != 'American Express'"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "dividends_paid / net_income": 0.8277027027027027,
+        "entity": "Kraft Heinz"
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "dividends_paid / net_income": 0.8277027027027027,
+        "entity": "Kraft Heinz"
+       }
+      ],
+      "op": "argmax",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_37",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT entity, dividends_paid / net_income FROM facts_pivot WHERE period = '2022' AND net_income > 0 AND dividends_paid > 0 AND entity != 'JPMorgan' AND entity != 'American Express' ORDER BY dividends_paid / net_income DESC LIMIT 1"
+     },
+     {
+      "agg11_correct": false,
+      "changed": false,
+      "kind": "sql_rows_unchanged",
+      "mechanical_agrees_with_saved_on_old_rows": true,
+      "mechanical_old_correct": true,
+      "new_error": null,
+      "new_n_rows": 1,
+      "new_rows": [
+       {
+        "COUNT(*)": 7
+       }
+      ],
+      "note": "identical SQL result => identical answer prompt => saved answer and score stand",
+      "old_n_rows": 1,
+      "old_reproduces_saved_n_rows": true,
+      "old_rows": [
+       {
+        "COUNT(*)": 7
+       }
+      ],
+      "op": "count_gt",
+      "path": "sql",
+      "planner": "agg110.v1",
+      "qid": "p1_38",
+      "rescored_correct": true,
+      "saved_correct": true,
+      "saved_n_rows": 1,
+      "saved_status": "ok",
+      "sql": "SELECT COUNT(*) FROM facts_pivot WHERE period = '2022' AND net_income > 0 AND dividends_paid > 0 AND dividends_paid / net_income > 0.6 AND entity != 'JPMorgan'"
+     }
+    ],
+    "saved_accuracy": 0.6724137931034483,
+    "saved_correct": 39,
+    "vs_agg11_rescored": {
+     "both": 17,
+     "n": 58,
+     "neither": 17,
+     "only_new": 23,
+     "only_old": 1,
+     "z": 4.4907311951024935
+    },
+    "vs_agg11_saved": {
+     "both": 17,
+     "n": 58,
+     "neither": 18,
+     "only_new": 22,
+     "only_old": 1,
+     "z": 4.37880269519857
+    }
+   }
+  }
+ },
+ "pipeline": "agg_pipeline.v2",
+ "saved_agg112": {
+  "canonical": 202,
+  "raw": 208
+ },
+ "task": "AGG-1.14",
+ "violations": {
+  "all_window_rows": {
+   "by_basis": {
+    "printed": 537,
+    "restated": 82,
+    "violation": 74
+   },
+   "by_doc": {
+    "ACTIVISIONBLIZZARD_2022_10K": 1,
+    "AES_2022_10K": 4,
+    "AMD_2022_10K": 8,
+    "AMERICANEXPRESS_2022_10K": 1,
+    "AMERICANWATERWORKS_2022_10K": 9,
+    "BOEING_2022_10K": 1,
+    "COCACOLA_2022_10K": 1,
+    "CVSHEALTH_2022_10K": 1,
+    "GENERALMILLS_2022_10K": 4,
+    "JOHNSON_JOHNSON_2022_10K": 4,
+    "MCDONALDS_2022_10K": 20,
+    "MGMRESORTS_2022_10K": 2,
+    "MICROSOFT_2022_10K": 14,
+    "NETFLIX_2022_10K": 3,
+    "PAYPAL_2022_10K": 1
+   },
+   "by_field": {
+    "capex": 10,
+    "dividends_paid": 14,
+    "long_term_debt": 8,
+    "net_income": 7,
+    "operating_cash_flow": 8,
+    "revenue": 6,
+    "total_assets": 7,
+    "total_current_assets": 7,
+    "total_current_liabilities": 7
+   },
+   "n_rows": 693,
+   "n_violating": 74
+  },
+  "dropped_notes_from_finish_doc": 21,
+  "rows_entering_stage": {
+   "by_basis": {
+    "printed": 372,
+    "restated": 52,
+    "violation": 21
+   },
+   "by_doc": {
+    "ACTIVISIONBLIZZARD_2022_10K": 1,
+    "AES_2022_10K": 2,
+    "AMD_2022_10K": 1,
+    "AMERICANEXPRESS_2022_10K": 1,
+    "AMERICANWATERWORKS_2022_10K": 1,
+    "BOEING_2022_10K": 1,
+    "COCACOLA_2022_10K": 1,
+    "GENERALMILLS_2022_10K": 3,
+    "JOHNSON_JOHNSON_2022_10K": 4,
+    "MCDONALDS_2022_10K": 1,
+    "MGMRESORTS_2022_10K": 1,
+    "NETFLIX_2022_10K": 3,
+    "PAYPAL_2022_10K": 1
+   },
+   "by_field": {
+    "capex": 4,
+    "dividends_paid": 7,
+    "net_income": 6,
+    "operating_cash_flow": 2,
+    "revenue": 2
+   },
+   "n_rows": 445,
+   "n_violating": 21
+  },
+  "violating_rows_entering_stage": [
+   {
+    "declared_scale": null,
+    "doc": "ACTIVISIONBLIZZARD_2022_10K",
+    "field": "net_income",
+    "period": "FY2022",
+    "quote": "diluted earnings per common share decreased 44% to $1.92",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 758.0
+   },
+   {
+    "declared_scale": "USD_millions",
+    "doc": "AES_2022_10K",
+    "field": "net_income",
+    "period": "FY2022",
+    "quote": "Net income (loss) attributable to The AES Corporation $ 115 $ (179) $ 421 $ (903)",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": -1467.0
+   },
+   {
+    "declared_scale": "USD_millions",
+    "doc": "AES_2022_10K",
+    "field": "capex",
+    "period": "FY2022",
+    "quote": "Capital Expenditures (in millions)",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 0.0
+   },
+   {
+    "declared_scale": "USD_billions",
+    "doc": "AMD_2022_10K",
+    "field": "revenue",
+    "period": "FY2022",
+    "quote": "Embedded net revenue of $4.6 billion in 2022",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 23600.0
+   },
+   {
+    "declared_scale": "USD_billions",
+    "doc": "AMERICANEXPRESS_2022_10K",
+    "field": "dividends_paid",
+    "period": "FY2022",
+    "quote": "common stock dividends of $1.6 billion",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 1657.0
+   },
+   {
+    "declared_scale": null,
+    "doc": "AMERICANWATERWORKS_2022_10K",
+    "field": "net_income",
+    "period": "FY2022",
+    "quote": "Net income attributable to common shareholders 158 218 297 147",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 820.0
+   },
+   {
+    "declared_scale": "USD_millions",
+    "doc": "BOEING_2022_10K",
+    "field": "dividends_paid",
+    "period": "FY2022",
+    "quote": "we did not pay any dividends in 2022",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 0.0
+   },
+   {
+    "declared_scale": null,
+    "doc": "COCACOLA_2022_10K",
+    "field": "capex",
+    "period": "FY2022",
+    "quote": "Purchases of property, plant and equipment during the years ended December 31, 2022 and 2021 were $1",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 1484.0
+   },
+   {
+    "declared_scale": "USD_millions",
+    "doc": "GENERALMILLS_2022_10K",
+    "field": "net_income",
+    "period": "FY2022",
+    "quote": "Net earnings, including earnings attributable to redeemable and",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 2511.6
+   },
+   {
+    "declared_scale": null,
+    "doc": "GENERALMILLS_2022_10K",
+    "field": "net_income",
+    "period": "FY2022",
+    "quote": "Diluted EPS of $4.42 was up 17 percent compared to fiscal 2021 results.",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 1900.0
+   },
+   {
+    "declared_scale": null,
+    "doc": "GENERALMILLS_2022_10K",
+    "field": "dividends_paid",
+    "period": "FY2022",
+    "quote": "We returned cash to shareholders through dividends totaling $1.2",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 1200.0
+   },
+   {
+    "declared_scale": "USD_billions",
+    "doc": "JOHNSON_JOHNSON_2022_10K",
+    "field": "capex",
+    "period": "FY2022",
+    "quote": "additions to property, plant and equipment",
+    "stored_in_agg112_store": true,
+    "unit": "USD",
+    "value": 4.0
+   },
+   {
+    "declared_scale": "USD_billions",
+    "doc": "JOHNSON_JOHNSON_2022_10K",
+    "field": "operating_cash_flow",
+    "period": "FY2022",
+    "quote": "Cash Flow from operations",
+    "stored_in_agg112_store": true,
+    "unit": "USD",
+    "value": 21.2
+   },
+   {
+    "declared_scale": "USD_billions",
+    "doc": "JOHNSON_JOHNSON_2022_10K",
+    "field": "dividends_paid",
+    "period": "FY2022",
+    "quote": "dividends to shareholders",
+    "stored_in_agg112_store": true,
+    "unit": "USD",
+    "value": 11.7
+   },
+   {
+    "declared_scale": "USD_millions",
+    "doc": "JOHNSON_JOHNSON_2022_10K",
+    "field": "dividends_paid",
+    "period": "FY2022",
+    "quote": "Cash dividends paid were $4.45 per share in fiscal year 2022",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 13895.3
+   },
+   {
+    "declared_scale": "USD_billions",
+    "doc": "MCDONALDS_2022_10K",
+    "field": "dividends_paid",
+    "period": "FY2022",
+    "quote": "The Company returned a total of $8.1 billion to shareholders through dividends and share repurchases",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 0.0
+   },
+   {
+    "declared_scale": null,
+    "doc": "MGMRESORTS_2022_10K",
+    "field": "net_income",
+    "period": "FY2022",
+    "quote": "Net income (loss) attributable to MGM Resorts International $ 1,473,093",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 1473.093
+   },
+   {
+    "declared_scale": null,
+    "doc": "NETFLIX_2022_10K",
+    "field": "revenue",
+    "period": "FY2022",
+    "quote": "Total revenues $ 31,615,550",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 31615.55
+   },
+   {
+    "declared_scale": null,
+    "doc": "NETFLIX_2022_10K",
+    "field": "capex",
+    "period": "FY2022",
+    "quote": "Purchases of property and equipment (407,729)",
+    "stored_in_agg112_store": false,
+    "unit": "USD_millions",
+    "value": 407.729
+   },
+   {
+    "declared_scale": null,
+    "doc": "NETFLIX_2022_10K",
+    "field": "operating_cash_flow",
+    "period": "FY2022",
+    "quote": "Net cash provided by operating activities 2,026,257",
+    "stored_in_agg112_store": false,
+    "unit": "USD_millions",
+    "value": 2026.257
+   },
+   {
+    "declared_scale": null,
+    "doc": "PAYPAL_2022_10K",
+    "field": "dividends_paid",
+    "period": "FY2022",
+    "quote": "We have never paid any cash dividends",
+    "stored_in_agg112_store": true,
+    "unit": "USD_millions",
+    "value": 0.0
+   }
+  ]
+ }
+}
