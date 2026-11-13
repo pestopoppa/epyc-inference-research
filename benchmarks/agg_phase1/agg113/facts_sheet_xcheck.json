@@ -1,0 +1,811 @@
+{
+ "schema": "agg_phase1_xcheck.v1",
+ "summary": {
+  "cells": 80,
+  "checked": 80,
+  "fails": 0,
+  "single_page_cells": 30
+ },
+ "cells": [
+  {
+   "doc": "AMCOR_2022_10K",
+   "metric": "revenue",
+   "page": 49,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 6,
+   "ok": true
+  },
+  {
+   "doc": "AMCOR_2022_10K",
+   "metric": "net_income",
+   "page": 49,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 6,
+   "ok": true
+  },
+  {
+   "doc": "AMCOR_2022_10K",
+   "metric": "capex",
+   "page": 52,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "AMCOR_2022_10K",
+   "metric": "total_assets",
+   "page": 51,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "AMCOR_2022_10K",
+   "metric": "operating_cash_flow",
+   "page": 52,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "AMCOR_2022_10K",
+   "metric": "total_current_assets",
+   "page": 51,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "AMCOR_2022_10K",
+   "metric": "total_current_liabilities",
+   "page": 51,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "AMCOR_2022_10K",
+   "metric": "dividends_paid",
+   "page": 52,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 6,
+   "ok": true
+  },
+  {
+   "doc": "BESTBUY_2022_10K",
+   "metric": "revenue",
+   "page": 41,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 4,
+   "ok": true
+  },
+  {
+   "doc": "BESTBUY_2022_10K",
+   "metric": "net_income",
+   "page": 41,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 6,
+   "ok": true
+  },
+  {
+   "doc": "BESTBUY_2022_10K",
+   "metric": "capex",
+   "page": 43,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "BESTBUY_2022_10K",
+   "metric": "total_assets",
+   "page": 40,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "BESTBUY_2022_10K",
+   "metric": "operating_cash_flow",
+   "page": 43,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "BESTBUY_2022_10K",
+   "metric": "total_current_assets",
+   "page": 40,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "BESTBUY_2022_10K",
+   "metric": "total_current_liabilities",
+   "page": 40,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "BESTBUY_2022_10K",
+   "metric": "dividends_paid",
+   "page": 43,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "BLOCK_2022_10K",
+   "metric": "revenue",
+   "page": 95,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 5,
+   "ok": true
+  },
+  {
+   "doc": "BLOCK_2022_10K",
+   "metric": "net_income",
+   "page": 95,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 5,
+   "ok": true
+  },
+  {
+   "doc": "BLOCK_2022_10K",
+   "metric": "capex",
+   "page": 99,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "BLOCK_2022_10K",
+   "metric": "total_assets",
+   "page": 94,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "BLOCK_2022_10K",
+   "metric": "operating_cash_flow",
+   "page": 99,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "BLOCK_2022_10K",
+   "metric": "total_current_assets",
+   "page": 94,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "BLOCK_2022_10K",
+   "metric": "total_current_liabilities",
+   "page": 94,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "BLOCK_2022_10K",
+   "metric": "dividends_paid",
+   "page": 63,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": null,
+   "pages_with_value": null,
+   "ok": true
+  },
+  {
+   "doc": "FOOTLOCKER_2023_10K",
+   "metric": "revenue",
+   "page": 35,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "FOOTLOCKER_2023_10K",
+   "metric": "net_income",
+   "page": 35,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 10,
+   "ok": true
+  },
+  {
+   "doc": "FOOTLOCKER_2023_10K",
+   "metric": "capex",
+   "page": 39,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 5,
+   "ok": true
+  },
+  {
+   "doc": "FOOTLOCKER_2023_10K",
+   "metric": "total_assets",
+   "page": 37,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "FOOTLOCKER_2023_10K",
+   "metric": "operating_cash_flow",
+   "page": 39,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 5,
+   "ok": true
+  },
+  {
+   "doc": "FOOTLOCKER_2023_10K",
+   "metric": "total_current_assets",
+   "page": 37,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "FOOTLOCKER_2023_10K",
+   "metric": "total_current_liabilities",
+   "page": 37,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "FOOTLOCKER_2023_10K",
+   "metric": "dividends_paid",
+   "page": 39,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 4,
+   "ok": true
+  },
+  {
+   "doc": "INTEL_2022_10K",
+   "metric": "revenue",
+   "page": 78,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 5,
+   "ok": true
+  },
+  {
+   "doc": "INTEL_2022_10K",
+   "metric": "net_income",
+   "page": 78,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 4,
+   "ok": true
+  },
+  {
+   "doc": "INTEL_2022_10K",
+   "metric": "capex",
+   "page": 81,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "INTEL_2022_10K",
+   "metric": "total_assets",
+   "page": 80,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "INTEL_2022_10K",
+   "metric": "operating_cash_flow",
+   "page": 81,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "INTEL_2022_10K",
+   "metric": "total_current_assets",
+   "page": 80,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "INTEL_2022_10K",
+   "metric": "total_current_liabilities",
+   "page": 80,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "INTEL_2022_10K",
+   "metric": "dividends_paid",
+   "page": 81,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "NIKE_2022_10K",
+   "metric": "revenue",
+   "page": 58,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 7,
+   "ok": true
+  },
+  {
+   "doc": "NIKE_2022_10K",
+   "metric": "net_income",
+   "page": 58,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 7,
+   "ok": true
+  },
+  {
+   "doc": "NIKE_2022_10K",
+   "metric": "capex",
+   "page": 61,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "NIKE_2022_10K",
+   "metric": "total_assets",
+   "page": 60,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "NIKE_2022_10K",
+   "metric": "operating_cash_flow",
+   "page": 61,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "NIKE_2022_10K",
+   "metric": "total_current_assets",
+   "page": 60,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "NIKE_2022_10K",
+   "metric": "total_current_liabilities",
+   "page": 60,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "NIKE_2022_10K",
+   "metric": "dividends_paid",
+   "page": 61,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": null,
+   "pages_with_value": null,
+   "ok": true
+  },
+  {
+   "doc": "ORACLE_2022_10K",
+   "metric": "revenue",
+   "page": 69,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 5,
+   "ok": true
+  },
+  {
+   "doc": "ORACLE_2022_10K",
+   "metric": "net_income",
+   "page": 69,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 6,
+   "ok": true
+  },
+  {
+   "doc": "ORACLE_2022_10K",
+   "metric": "capex",
+   "page": 72,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "ORACLE_2022_10K",
+   "metric": "total_assets",
+   "page": 68,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "ORACLE_2022_10K",
+   "metric": "operating_cash_flow",
+   "page": 72,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "ORACLE_2022_10K",
+   "metric": "total_current_assets",
+   "page": 68,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "ORACLE_2022_10K",
+   "metric": "total_current_liabilities",
+   "page": 68,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "ORACLE_2022_10K",
+   "metric": "dividends_paid",
+   "page": 72,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "PG_E_2022_10K",
+   "metric": "revenue",
+   "page": 98,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 4,
+   "ok": true
+  },
+  {
+   "doc": "PG_E_2022_10K",
+   "metric": "net_income",
+   "page": 98,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 6,
+   "ok": true
+  },
+  {
+   "doc": "PG_E_2022_10K",
+   "metric": "capex",
+   "page": 102,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "PG_E_2022_10K",
+   "metric": "total_assets",
+   "page": 100,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "PG_E_2022_10K",
+   "metric": "operating_cash_flow",
+   "page": 102,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "PG_E_2022_10K",
+   "metric": "total_current_assets",
+   "page": 100,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "PG_E_2022_10K",
+   "metric": "total_current_liabilities",
+   "page": 101,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "PG_E_2022_10K",
+   "metric": "dividends_paid",
+   "page": 52,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": null,
+   "pages_with_value": null,
+   "ok": true
+  },
+  {
+   "doc": "ULTABEAUTY_2023_10K",
+   "metric": "revenue",
+   "page": 55,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "ULTABEAUTY_2023_10K",
+   "metric": "net_income",
+   "page": 55,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 6,
+   "ok": true
+  },
+  {
+   "doc": "ULTABEAUTY_2023_10K",
+   "metric": "capex",
+   "page": 57,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "ULTABEAUTY_2023_10K",
+   "metric": "total_assets",
+   "page": 54,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "ULTABEAUTY_2023_10K",
+   "metric": "operating_cash_flow",
+   "page": 57,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  },
+  {
+   "doc": "ULTABEAUTY_2023_10K",
+   "metric": "total_current_assets",
+   "page": 54,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "ULTABEAUTY_2023_10K",
+   "metric": "total_current_liabilities",
+   "page": 54,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "ULTABEAUTY_2023_10K",
+   "metric": "dividends_paid",
+   "page": 75,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": null,
+   "pages_with_value": null,
+   "ok": true
+  },
+  {
+   "doc": "WALMART_2022_10K",
+   "metric": "revenue",
+   "page": 53,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "WALMART_2022_10K",
+   "metric": "net_income",
+   "page": 53,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 4,
+   "ok": true
+  },
+  {
+   "doc": "WALMART_2022_10K",
+   "metric": "capex",
+   "page": 57,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 4,
+   "ok": true
+  },
+  {
+   "doc": "WALMART_2022_10K",
+   "metric": "total_assets",
+   "page": 55,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "WALMART_2022_10K",
+   "metric": "operating_cash_flow",
+   "page": 57,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 3,
+   "ok": true
+  },
+  {
+   "doc": "WALMART_2022_10K",
+   "metric": "total_current_assets",
+   "page": 55,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "WALMART_2022_10K",
+   "metric": "total_current_liabilities",
+   "page": 55,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 1,
+   "ok": true
+  },
+  {
+   "doc": "WALMART_2022_10K",
+   "metric": "dividends_paid",
+   "page": 57,
+   "pdfium_found": true,
+   "pypdf_found": true,
+   "value_in_quote": true,
+   "pages_with_value": 2,
+   "ok": true
+  }
+ ]
+}

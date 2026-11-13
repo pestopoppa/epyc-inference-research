@@ -1,0 +1,277 @@
+{
+ "schema": "agg113_verification.v1",
+ "standard": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+ "questions": {
+  "n13_01": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 0.1822
+  },
+  "n13_02": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 1.774
+  },
+  "n13_03": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 0.0181
+  },
+  "n13_04": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 0.1697
+  },
+  "n13_05": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.3384
+  },
+  "n13_06": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.0999
+  },
+  "n13_07": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.2773
+  },
+  "n13_08": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 1.6325
+  },
+  "n13_09": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.2773
+  },
+  "n13_10": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.0976
+  },
+  "n13_11": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.142
+  },
+  "n13_12": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.3618
+  },
+  "n13_13": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.0165
+  },
+  "n13_14": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.2773
+  },
+  "n13_15": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 0.546
+  },
+  "n13_16": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 0.1189
+  },
+  "n13_17": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 1.0
+  },
+  "n13_18": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.5566
+  },
+  "n13_19": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.2687
+  },
+  "n13_20": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 0.3157
+  },
+  "n13_21": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.328
+  },
+  "n13_22": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.3208
+  },
+  "n13_23": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 10,
+   "near_tie": false,
+   "min_rel_gap": 0.3782
+  },
+  "n13_24": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 0.042
+  },
+  "n13_25": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 20,
+   "near_tie": false,
+   "min_rel_gap": 0.2955
+  },
+  "n13_26": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 6,
+   "near_tie": false,
+   "min_rel_gap": 0.0252
+  },
+  "n13_27": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 6,
+   "near_tie": false,
+   "min_rel_gap": 0.512
+  },
+  "n13_28": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 6,
+   "near_tie": false,
+   "min_rel_gap": 0.0252
+  },
+  "n13_29": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 8,
+   "near_tie": false,
+   "min_rel_gap": 0.2773
+  },
+  "n13_30": {
+   "verified": true,
+   "verified_by": "One reader (the AGG-1.13 step A agent, reading the extracted page text) plus a deterministic cross-extractor check: the quote must be found, whitespace/$-normalised, on the stated PDF page in BOTH pypdfium2 and pypdf text (../verify_phase1_cells.py -> facts_sheet_xcheck.json), and the stated value must be a number printed in the quote. A cell that fails is NA/unverified and excluded, never repaired by assertion. No LLM call produced or scored any value. This is the AGG-1.1 step A standard for its 144 non-Phase-0 cells.",
+   "verified_at": "2026-11-13",
+   "unverified_cells": [],
+   "n_cells": 18,
+   "near_tie": false,
+   "min_rel_gap": 0.1771
+  }
+ },
+ "dropped_templates": []
+}
