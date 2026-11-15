@@ -1,5 +1,5 @@
 """AGG-1.13 step B runner tests (fake backends: no model, no network, no process). Stdlib tests always run; the store / ingest tests import the
-orchestrator package and skip without it (``AGG_ORCH_ROOT``, default the AGG-1.13 pinned tree 737bf0535)."""
+orchestrator package and skip without it (``AGG_ORCH_ROOT``, default the AGG-1.13 pinned tree: 737bf0535 plus the amendment-1 ``fy_end`` commit 8ac97157)."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ try:
     sys.path.insert(0, str(ORCH))
     from src.aggregation import facts_det, facts_typed as ft, pipeline as pl  # noqa: E402
     from src.aggregation.store import CorpusStore  # noqa: E402
-    from src.models.document import DocumentPreprocessResult, Section  # noqa: E402
+    from src.models.document import DocumentPreprocessResult, Section, TableRef  # noqa: E402
     HAVE_ORCH = hasattr(pl, "pipeline_spec")
 except Exception:  # pragma: no cover
     HAVE_ORCH = False
@@ -46,6 +46,12 @@ BBY = next(d for d in JAN if d not in (FL, ULTA, WMT))
 class PinsAndInputs(unittest.TestCase):
     def test_pins_match_the_committed_files(self):
         self.assertEqual(H.pin_problems(H.D113), [])
+
+    def test_the_amendment_sha_is_pinned_and_a_changed_amendment_is_refused(self):
+        self.assertEqual(H.SHA256(H.D113 / H.AMENDMENT_FILE), H.AMENDMENT_SHA)
+        self.assertTrue(H.pin_problems(H.D113, amendment_sha="0" * 64))
+        self.assertEqual(H.SHA256(H.D113 / H.PREDECLARED_FILE), H.PREDECLARED_SHA)          # the parent is untouched
+        self.assertEqual(H.ORCH_PIN_MIN, "8ac97157557ca45a4b86c8c9d2874c4b13977b6b")
 
     def test_a_changed_input_or_predeclared_is_refused(self):
         self.assertTrue(H.pin_problems(H.D113, predeclared_sha="0" * 64))
@@ -225,6 +231,38 @@ class FiscalYearContract(unittest.TestCase):
         self.assertTrue(any("no declared printed-header fixture" in p for p in fc["problems"]))
         self.assertTrue(any("'2023'" in p for p in fc["problems"]))
 
+    def test_with_the_amendment_flag_the_real_corpus_passes_for_all_31_cells_in_both_versions(self):
+        fc = H.fy_contract(INP["corpus"], INP["cells"], fy_end=True)
+        self.assertTrue(fc["ok"], fc["problems"])
+        self.assertEqual((fc["fy_end"], fc["n_cells_checked"]), (True, 31))
+        for doc, rec in fc["by_doc"].items():
+            for cell in rec["cells"].values():
+                self.assertTrue(cell["v1_legacy"]["m1_hits_sees_it"] and cell["v2"]["m1_hits_sees_it"], (doc, cell))
+        for doc in (ULTA, FL):                                                  # the cells the original contract lost now carry fiscal 2022
+            self.assertTrue(all(c["v2"]["period"] == "2022" and c["v1_legacy"]["period"] == "2022" for c in fc["by_doc"][doc]["cells"].values()))
+
+    def test_the_default_without_the_flag_is_still_the_original_failing_check(self):
+        self.assertEqual(H.fy_contract(INP["corpus"], INP["cells"], fy_end=False)["problems"], H.fy_contract(INP["corpus"], INP["cells"])["problems"])
+
+    def test_a_next_calendar_year_header_passes_only_through_the_rule_and_best_buy_is_not_shifted(self):
+        corpus = {"docs": [{"doc_name": ULTA, "fiscal_year_end": "2023-01-28"}, {"doc_name": BBY, "fiscal_year_end": "2022-01-29"}]}
+        cells = [(ULTA, "revenue", 1.0), (BBY, "revenue", 1.0)]
+        self.assertFalse(H.fy_contract(corpus, cells)["ok"])
+        fc = H.fy_contract(corpus, cells, fy_end=True)
+        self.assertTrue(fc["ok"], fc["problems"])
+        self.assertEqual(fc["by_doc"][BBY]["cells"]["revenue"]["v2"]["period"], "2022")
+
+    def test_the_preflight_cli_exits_0_with_the_amendment_flag_and_asserts_its_sha(self):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = C.main(["--phase", "preflight", "--dry-run", "--fy-end", "--orch-root", str(ORCH), "--orch-pin", H.ORCH_PIN_MIN])
+        out = json.loads(buf.getvalue())
+        self.assertEqual((rc, out["problems"]), (0, []))
+        self.assertEqual((out["fy_contract"]["ok"], out["fy_contract"]["n_cells_checked"], out["fy_end"]), (True, 31, True))
+        self.assertEqual(out["amendment1_sha256"], H.AMENDMENT_SHA)
+
     def test_the_preflight_cli_exits_2_on_the_failed_contract(self):
         import io
         from contextlib import redirect_stdout
@@ -352,6 +390,60 @@ class Stage(unittest.TestCase):
         corpus_rec = next(x for x in rec.records if x.get("unit") == "corpus")
         self.assertEqual((corpus_rec["n_docs"], corpus_rec["llm_calls"], corpus_rec["prefill_tokens"]), (2, 0, 0))
         self.assertTrue((out / "store.sqlite").exists())
+
+    def _ulta_like_parse(self, pdf: Path):
+        hdr = ["January 28, 2023", "January 29, 2022"]
+        secs = [Section(id="s1", title="Consolidated Balance Sheets", level=1, content="(in millions)\n" + "  ".join(hdr) + "\nTotal assets 27,165 1\n" + self.long,
+                        page_start=1, page_end=1)]
+        tb = TableRef(id="t1", page=1, caption="(in millions)", section_id="s1", rows=[[""] + hdr, ["Total assets", "27,165", "1"]])
+        return DocumentPreprocessResult(original_path=str(pdf), sections=secs, figures=[], total_pages=2, tables=[tb])
+
+    def _l3_periods(self, fy_end):
+        out = self.tmp / f"l3fy{int(fy_end)}"
+        rec = P.Recorder(out / "results.jsonl")
+        r = H.run_l3(rec, out, self.inp, orch_root=ORCH, guard=self.guard, parse_fn=self._ulta_like_parse, fy_end=fy_end)
+        self.assertEqual((r["complete"], r["rc"], r["fy_end"], r["amendment_sha256"]), (True, 0, fy_end, H.AMENDMENT_SHA))
+        (out / "result.l3.json").write_text(json.dumps({k: v for k, v in r.items() if k != "rc"}))      # what run_agg113.main files next to the store
+        st = P.open_store(out / "store.sqlite")
+        try:
+            rows = [(f["extractor"], f["period"], f["value"]) for f in st.facts(self.CID) if f["field"] == "total_assets"]
+        finally:
+            st.close()
+        return out, rows
+
+    def test_l3_fy_end_labels_both_paths_once_and_the_default_keeps_the_defect(self):
+        _o, off = self._l3_periods(False)
+        self.assertIn("2023", {p for _e, p, _v in off})
+        _o, on = self._l3_periods(True)
+        self.assertEqual({p for _e, p, _v in on} - {None}, {"2022", "2021"})              # no 2023 left, on every extractor the store has
+        self.assertIn("l3_table.v1", {e for e, _p, _v in on})
+        self.assertEqual(len(on), len(set(on)))                                             # no fact twice under two labels (both L3 paths of run_l3)
+        self.assertEqual(sorted(p for e, p, v in on if e == "l3_table.v1" and v == 27165.0), ["2022"])
+
+    def test_the_seed_must_carry_the_rule_and_an_arm_refuses_one_that_does_not(self):
+        out, _on = self._l3_periods(True)
+        self.assertIsNone(H.seed_fy_end_problem(out / "store.sqlite"))
+        out0, _off = self._l3_periods(False)
+        self.assertTrue(H.seed_fy_end_problem(out0 / "store.sqlite"))
+        self.assertTrue(H.seed_fy_end_problem(self.tmp / "nowhere" / "store.sqlite"))
+        rec = P.Recorder(self.tmp / "arm" / "results.jsonl")
+        r = H.run_ingest(rec, self.tmp / "arm", self.inp, None, pipeline=H.V1, guard=self.guard, seed_store=out0 / "store.sqlite", fy_end=True)
+        self.assertEqual(r["rc"], H.RC_PRECOND)
+        self.assertEqual(rec.records[-1]["kind"], "precondition_failed")
+
+    def test_v2_arm_l3_applies_the_same_rule_to_its_copy_and_leaves_the_seed_alone(self):
+        out, _on = self._l3_periods(True)
+        copy = self.tmp / "arm2.sqlite"
+        P.copy_store(out / "store.sqlite", copy)
+        st = P.open_store(copy)
+        try:
+            rec = P.Recorder(self.tmp / "arm2" / "results.jsonl")
+            H.arm_l3(rec, st, self.inp, H.V2, fy_end=True)
+            got = {f["period"] for f in st.facts(self.CID) if f["field"] == "total_assets"}
+            self.assertTrue({"2022"} <= got and "2023" not in got, got)
+            self.assertTrue(rec.records[-1]["fy_end"])
+        finally:
+            st.close()
 
     def test_l3_two_parse_failures_stop_with_rc_6_and_one_is_a_recorded_miss(self):
         out = self.tmp / "l3x"

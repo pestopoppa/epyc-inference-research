@@ -61,6 +61,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--answers-url")
     ap.add_argument("--model-id", default="")
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--fy-end", action="store_true", dest="fy_end",
+                    help="PREDECLARED_AGG113_AMENDMENT1_20261114.md: the orchestrator's opt-in fiscal-year-end column labelling, applied identically to every "
+                         "L3 path and to both ingest arms; without it the preflight fiscal-year contract fails on the real corpus (the original finding)")
     return ap
 
 
@@ -103,8 +106,8 @@ def checks(a: argparse.Namespace, inp: dict[str, Any], *, deep: bool) -> tuple[l
                               "gpu": "M4 median calls <= 3 and median prefill <= 2510 for each of A, B, C; P-large accuracy is not a gate"}}
     if not problems:
         try:
-            fc = H.fy_contract(corpus, inp["cells"])
-            info["fy_contract"] = {"ok": fc["ok"], "january_end_docs": fc["january_end_docs"], "n_cells_checked": fc["n_cells_checked"]}
+            fc = H.fy_contract(corpus, inp["cells"], fy_end=a.fy_end)
+            info["fy_contract"] = {"ok": fc["ok"], "fy_end": a.fy_end, "january_end_docs": fc["january_end_docs"], "n_cells_checked": fc["n_cells_checked"]}
             problems += [f"fiscal-year contract: {p}" for p in fc["problems"]]
         except Exception as e:  # noqa: BLE001
             problems.append(f"fiscal-year contract check could not run: {type(e).__name__}: {e}")
@@ -115,6 +118,8 @@ def checks(a: argparse.Namespace, inp: dict[str, Any], *, deep: bool) -> tuple[l
             info["seed_store"] = "missing (the l3 row has not produced it yet): informational in a dry run"
             if not a.dry_run:
                 problems.append(f"seed store missing: {a.seed_store}")
+        elif a.fy_end and H.seed_fy_end_problem(a.seed_store):
+            problems.append(H.seed_fy_end_problem(a.seed_store))
         elif deep and not problems:
             docs = [d["doc_name"] for d in corpus["docs"]]
             store = G16.mem_store(a.seed_store, docs)
@@ -160,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         problems, info = checks(a, inp, deep=True)
         out = {"dry_run": a.dry_run, "phase": a.phase, "model_calls": 0, "servers_started": 0, "wrote_files": 0,
                "predeclared_sha256": H.SHA256(a.set_dir / H.PREDECLARED_FILE) if (a.set_dir / H.PREDECLARED_FILE).exists() else None,
+               "amendment1_sha256": H.SHA256(a.set_dir / H.AMENDMENT_FILE) if (a.set_dir / H.AMENDMENT_FILE).exists() else None, "fy_end": a.fy_end,
                "problems": problems, "ok": not problems, **info}
         print(json.dumps(out, indent=1, default=str))
         if a.phase == "preflight" and not a.dry_run:
@@ -169,7 +175,8 @@ def main(argv: list[str] | None = None) -> int:
             rec = P.Recorder(a.out / "results.jsonl")
             rec.emit("preflight", unit=None, ok=not problems, final=False, problems=problems)
             X._atomic_write(a.out / "result.preflight.json", json.dumps(
-                {"phase": "preflight", "complete": not problems, "problems": problems, "predeclared_sha256": H.PREDECLARED_SHA},
+                {"phase": "preflight", "complete": not problems, "problems": problems, "predeclared_sha256": H.PREDECLARED_SHA,
+                 "amendment1_sha256": H.AMENDMENT_SHA, "fy_end": a.fy_end},
                 indent=1, default=str) + "\n")
         return H.RC_PREFLIGHT if problems else 0
     if a.out is None:
@@ -184,18 +191,20 @@ def main(argv: list[str] | None = None) -> int:
         return H.RC_PREFLIGHT
     deadline = float(os.environ["FILLER_DEADLINE"]) if os.environ.get("FILLER_DEADLINE") else None
     guard = P.make_guard(deadline, os.environ.get("FILLER_STOPFILE"))
-    rec.emit("meta", phase=a.phase, pipeline=a.pipeline, smoke=smoke, predeclared_sha256=H.PREDECLARED_SHA, orch_pin=a.orch_pin,
+    rec.emit("meta", phase=a.phase, pipeline=a.pipeline, smoke=smoke, predeclared_sha256=H.PREDECLARED_SHA, amendment1_sha256=H.AMENDMENT_SHA,
+             fy_end=a.fy_end, orch_pin=a.orch_pin,
              research_pin=a.research_pin, corpus_id=H.CORPUS_ID, url=a.url, model_id=a.model_id, cfg=dict(vars(P.CFG)), final=False)
     try:
         if a.phase == "l3":
-            res = H.run_l3(rec, a.out, inp, orch_root=a.orch_root, guard=guard, smoke=smoke, orch_pin=a.orch_pin, research_pin=a.research_pin)
+            res = H.run_l3(rec, a.out, inp, orch_root=a.orch_root, guard=guard, smoke=smoke, orch_pin=a.orch_pin, research_pin=a.research_pin,
+                           fy_end=a.fy_end)
         elif a.phase == "ingest":
             if not a.url:
                 build_parser().error("--url is required for this phase")
             from src.aggregation.llm_backend import LlamaServerBackend  # noqa: PLC0415
             backend = LlamaServerBackend(a.url, model_id=a.model_id)
             res = H.run_ingest(rec, a.out, inp, backend, pipeline=a.pipeline, guard=guard, seed_store=a.seed_store, stage=a.stage, smoke=smoke,
-                               peer_out=a.peer_out, booked_l4_s=a.booked_l4_s)
+                               peer_out=a.peer_out, booked_l4_s=a.booked_l4_s, fy_end=a.fy_end)
         else:  # gpu-audit | gpu-answers | gpu | score
             for t, d in ((H.V1, a.v1_dir), (H.V2, a.v2_dir)):
                 r, _c, why = load_arm(d, t)
@@ -242,6 +251,8 @@ def main(argv: list[str] | None = None) -> int:
     rc = res.pop("rc", None)
     res.setdefault("phase", a.phase)
     res["predeclared_sha256"] = H.PREDECLARED_SHA
+    res["amendment1_sha256"] = H.AMENDMENT_SHA
+    res["fy_end"] = a.fy_end
     if not smoke and a.phase in ("l3", "gpu-audit", "gpu-answers", "gpu", "score") and res.get("complete") is not None:
         X._atomic_write(a.out / f"result.{a.phase}.json", json.dumps(res, indent=1, default=str) + "\n")
     print(json.dumps({k: v for k, v in res.items() if k not in ("summaries", "verdict")}, indent=1, default=str))

@@ -48,6 +48,9 @@ import design113 as D113_DESIGN  # noqa: E402
 # --------------------------------------------------------------------------- pins
 PREDECLARED_FILE = "PREDECLARED_AGG113.md"
 PREDECLARED_SHA = "a8b715254051062d6bfe184066916a01ae4c9f7a7b7a7db67203e26a1fff7ecf"
+AMENDMENT_FILE = "PREDECLARED_AGG113_AMENDMENT1_20261114.md"    # the fiscal-year-end rule (operator decision 2026-11-14), written before any data
+AMENDMENT_SHA = "279645ad90b74f479a3decd397c8ffc8b26750491332a478985750d9aae2daaa"
+FY_END_MONTHS = (1, 2, 3)                                        # the fy_end rule's months (orchestrator facts_det.FY_END_MONTHS)
 FROZEN = {   # sha256 of the step A inputs, exactly the table in PREDECLARED_AGG113.md (set dir = benchmarks/agg_phase1/agg113)
     "financebench_document_information.jsonl": "1c69127783879de8cdadb159d2181f39bc3123b8e0ebf74031c3969d69189575",
     "selection.json": "52e11d3b93b321cb1feac4dbbaa429bdfda0328dcb6ef1c1cbe85c02dd80191d",
@@ -60,7 +63,7 @@ FROZEN = {   # sha256 of the step A inputs, exactly the table in PREDECLARED_AGG
 }
 VERIFY_CELLS_SHA = "ce74aa5ab65d460009768274fa3d2e4d569ec511ee4700dee693c5b5056fad78"    # ../verify_phase1_cells.py, reused unchanged
 MANIFEST_DIGEST = "94c8497392bd304685b1b48aac553af0b18bbb97ea29a41286b3257a5ca5dc97"
-ORCH_PIN_MIN = "737bf0535d1abecba154a2a22fbba0d910821ed8"      # or a descendant (PREDECLARED *Arms*)
+ORCH_PIN_MIN = "8ac97157557ca45a4b86c8c9d2874c4b13977b6b"      # 737bf0535 (PREDECLARED *Arms*) plus the opt-in fy_end rule (amendment 1) or a descendant
 SHA256 = X.sha256_file
 CORPUS_ID = X.CORPUS_ID                                         # one corpus id per store file; the stores are separate files
 V1, V2 = "v1", "v2"
@@ -97,8 +100,14 @@ def load_inputs(set_dir: Path = D113) -> dict[str, Any]:
     return inp
 
 
-def pin_problems(set_dir: Path = D113, *, predeclared_sha: str | None = None, frozen: dict[str, str] | None = None) -> list[str]:
+def pin_problems(set_dir: Path = D113, *, predeclared_sha: str | None = None, frozen: dict[str, str] | None = None,
+                 amendment_sha: str | None = None) -> list[str]:
     out = []
+    want_am = AMENDMENT_SHA if amendment_sha is None else amendment_sha
+    q_am = set_dir / AMENDMENT_FILE
+    got_am = SHA256(q_am) if q_am.exists() else None
+    if got_am != want_am:
+        out.append(f"{AMENDMENT_FILE} sha256 {got_am} != recorded {want_am}")
     want_pd = PREDECLARED_SHA if predeclared_sha is None else predeclared_sha
     p = set_dir / PREDECLARED_FILE
     got = SHA256(p) if p.exists() else None
@@ -165,14 +174,17 @@ def january_end_docs(corpus: dict[str, Any]) -> list[str]:
 
 
 # --------------------------------------------------------------------------- the fiscal-year contract (preflight hard check)
-def fy_contract(corpus: dict[str, Any], cells: list[tuple[str, str, float]], *, orch: Any = None) -> dict[str, Any]:
+def fy_contract(corpus: dict[str, Any], cells: list[tuple[str, str, float]], *, orch: Any = None, fy_end: bool = False) -> dict[str, Any]:
     """PREDECLARED checkpoint 0: the January-end filers (Best Buy, Walmart: fiscal 2022 ends 2022-01; Foot Locker, Ulta: ends 2023-01) must be
     reachable as fiscal ``2022`` by the L3 period logic and by ``m1_hits``. No model, no PDF, no store: the L3 table logic of the pinned
     orchestrator is run on one fixture table per (document, statement) whose header is the one the filing PRINTS; the fact it makes for the
     fiscal-2022 (first) column is then read by the frozen ``m1_hits`` exactly as a real fact would be. A period that does not contain 2022 is
     a problem: the runner's own period reading, not the pipeline, would then decide M1 (rule 2: needs a dated amendment BEFORE any data).
 
-    Also the description rule of ``agg1314_zero_cell_diag.fy_contract_problems`` (no L4 field description may name another fiscal year)."""
+    Also the description rule of ``agg1314_zero_cell_diag.fy_contract_problems`` (no L4 field description may name another fiscal year).
+
+    ``fy_end=True`` (PREDECLARED_AGG113_AMENDMENT1_20261114.md) runs the same fixtures with the orchestrator's opt-in fiscal-year-end column
+    labelling on, for BOTH L3 versions; ``False`` is the original, unamended check (it fails on the real corpus)."""
     from src.aggregation import facts_det  # noqa: PLC0415
     problems: list[str] = []
     descs = {f: G16.field_desc(f, "2022") for f in A.METRICS}
@@ -196,6 +208,8 @@ def fy_contract(corpus: dict[str, Any], cells: list[tuple[str, str, float]], *, 
             seen = {}
             for vname, pv in versions:
                 kw = {} if pv is None else {"period_version": pv, "fiscal_year": "2022"}
+                if fy_end:
+                    kw = {**kw, "fiscal_year": "2022", "fy_end": FY_END_MONTHS}
                 facts = facts_det.facts_from_table(table, "", **kw)
                 f0 = next((f for f in facts if f["value"] == sentinel), None)
                 period = f0["period"] if f0 else None
@@ -207,7 +221,7 @@ def fy_contract(corpus: dict[str, Any], cells: list[tuple[str, str, float]], *, 
                                     f"column the period {period!r}; m1_hits needs '2022' in the period")
             rec["cells"][field] = {"statement": STATEMENT[field], "printed_first_column": hdr[0], **seen}
         by_doc[doc] = rec
-    return {"ok": not problems, "problems": problems, "january_end_docs": jan, "by_doc": by_doc,
+    return {"ok": not problems, "problems": problems, "january_end_docs": jan, "by_doc": by_doc, "fy_end": bool(fy_end),
             "n_cells_checked": sum(len(v["cells"]) for v in by_doc.values())}
 
 
@@ -257,7 +271,44 @@ def failed_docs(store: Any, corpus: dict[str, Any], corpus_id: str = CORPUS_ID) 
     return seed_ready(store, corpus, corpus_id)
 
 
-def arm_l3(rec: P.Recorder, store: Any, inp: dict[str, Any], pipeline: str, corpus_id: str = CORPUS_ID) -> None:
+def doc_l3_facts_113(store: Any, corpus_id: str, doc_id: str, fiscal_year: str | None, fy_end: bool) -> tuple[list[dict[str, Any]], int, int]:
+    """``l3_load.doc_l3_facts`` (the table and regex facts of one document) with the orchestrator's fiscal-year-end column labelling when
+    ``fy_end``; with it off this IS ``l3_load.doc_l3_facts``. The corpus-level rebuild uses the same rule, so one fact is never written
+    twice under two period labels (the period is part of the table fact's id)."""
+    if not fy_end:
+        return L3.doc_l3_facts(store, corpus_id, doc_id)
+    from src.aggregation import facts_det  # noqa: PLC0415
+    chunks = [c for c in store.chunks(corpus_id) if c["doc_id"] == doc_id]
+    by_id = {c["chunk_id"]: c for c in chunks}
+    ent = {d["doc_hash"]: d["entity"] for d in store.corpus_docs(corpus_id)}
+    facts: list[dict[str, Any]] = []
+    n_tab = 0
+    for t in (t for t in store.tables(corpus_id) if t["doc_id"] == doc_id):
+        got = facts_det.facts_from_table(t, (by_id.get(t["chunk_id"]) or {}).get("text", ""), fiscal_year=fiscal_year, fy_end=FY_END_MONTHS)
+        n_tab += len(got)
+        facts.extend(got)
+    n_rx = 0
+    for c in chunks:
+        got = facts_det.facts_from_text(c, ent.get(c["doc_hash"]))
+        n_rx += len(got)
+        facts.extend(got)
+    return facts, n_tab, n_rx
+
+
+def seed_fy_end_problem(seed_store: Path) -> str | None:
+    """The l3 row writes ``result.l3.json`` next to its store; an arm that reads a seed built WITHOUT the fiscal-year-end rule would silently
+    lose the amendment's cells, so the seed must say ``fy_end`` true and the amendment sha it was built under."""
+    f = seed_store.parent / "result.l3.json"
+    try:
+        r = json.loads(f.read_text())
+    except (OSError, ValueError):
+        return f"{f} missing or unreadable: the seed is not a recorded l3 row output"
+    if r.get("fy_end") is not True or r.get("amendment_sha256") != AMENDMENT_SHA or r.get("complete") is not True:
+        return f"{f}: the seed was not built complete under the fy_end rule and amendment {AMENDMENT_SHA[:12]}"
+    return None
+
+
+def arm_l3(rec: P.Recorder, store: Any, inp: dict[str, Any], pipeline: str, corpus_id: str = CORPUS_ID, fy_end: bool = False) -> None:
     """v1 keeps the seed's legacy L3 facts exactly (the Phase 0 / AGG-1.1 path); v2 wipes the COPY's facts and re-extracts L3 under
     ``l3_period.v2`` (no model, no PDF) as AGG-1.12 did."""
     unit = "l3v1" if pipeline == V1 else "l3v2"
@@ -269,20 +320,20 @@ def arm_l3(rec: P.Recorder, store: Any, inp: dict[str, Any], pipeline: str, corp
     n_before = len(store.facts(corpus_id))
     if pipeline == V2:
         G._wipe_facts(store)
-        facts = spec.extract_l3(store, corpus_id, fiscal_years(inp["corpus"]))
+        facts = spec.extract_l3(store, corpus_id, fiscal_years(inp["corpus"]), FY_END_MONTHS if fy_end else None)
         store.write_facts(facts)
         h = store.corpus_content_hash(corpus_id)
         store.record_index(corpus_id, h, "l3_facts_det", "", layer="L3", n_items=len(facts))
     n_l3 = len(store.facts(corpus_id))
     raw = G19.raw_hits(G19.fact_rows(store.conn, corpus_id), inp["cells"])
-    rec.emit(unit, unit=unit, pipeline=spec.as_record(), n_facts_seed=n_before, n_l3_facts=n_l3, m1_l3_only_raw=sum(raw.values()),
+    rec.emit(unit, unit=unit, pipeline=spec.as_record(), fy_end=bool(fy_end), n_facts_seed=n_before, n_l3_facts=n_l3, m1_l3_only_raw=sum(raw.values()),
              n_cells=len(raw), llm_calls=0, prefill_tokens=0, wall_s=time.time() - t0, final=True)
 
 
 # --------------------------------------------------------------------------- shared L3 load (phase l3): no model
 def run_l3(rec: P.Recorder, out: Path, inp: dict[str, Any], *, orch_root: Path, guard: Callable[[], None],
            parse_fn: Callable[[Path], Any] | None = None, now: Callable[[], float] = time.time, smoke: bool = False,
-           corpus_id: str = CORPUS_ID, orch_pin: str = "", research_pin: str = "") -> dict[str, Any]:
+           corpus_id: str = CORPUS_ID, orch_pin: str = "", research_pin: str = "", fy_end: bool = False) -> dict[str, Any]:
     """Checkpoint 1 (CPU, no model): each of the 10 documents is parsed with the existing document flow (local ODL, no OCR server), stored,
     L3-extracted (legacy path) and recorded with the ``l3_load.py`` record kinds. A fresh store (no base store). >= 2 failed parses
     stop the run (rc 6, infrastructure); fewer are ``doc_fail`` (final): their cells count as misses."""
@@ -299,7 +350,8 @@ def run_l3(rec: P.Recorder, out: Path, inp: dict[str, Any], *, orch_root: Path, 
     from src.aggregation.store import CorpusStore  # noqa: PLC0415
     from src.models.document import DocumentPreprocessResult  # noqa: PLC0415
     store = CorpusStore(out / "store.sqlite")
-    rec.emit("meta", phase="l3", smoke=smoke, schema="agg113_l3.v1", model_calls=0, orch_pin=orch_pin, research_pin=research_pin,
+    fyears = fiscal_years(corpus)
+    rec.emit("meta", phase="l3", smoke=smoke, schema="agg113_l3.v1", fy_end=bool(fy_end), amendment_sha256=AMENDMENT_SHA, model_calls=0, orch_pin=orch_pin, research_pin=research_pin,
              n_planned=len(order), corpus_id=corpus_id, final=False)
     failed = {r["doc"] for r in rec.records if r["kind"] == "doc_fail"} - {r["doc"] for r in rec.records if r["kind"] == "doc_done"}
     cache_dir = out / "cache"
@@ -335,7 +387,7 @@ def run_l3(rec: P.Recorder, out: Path, inp: dict[str, Any], *, orch_root: Path, 
                     rc = store.ingest(result, corpus_id=corpus_id, doc_id=name, entity=d["company"])
                     rec.emit("store", doc=name, status=rc.status, doc_hash=rc.doc_hash, n_chunks=rc.n_chunks, n_tables=rc.n_tables,
                              n_tokens_est=rc.n_tokens_est)
-                    facts, n_tab, n_rx = L3.doc_l3_facts(store, corpus_id, name)
+                    facts, n_tab, n_rx = doc_l3_facts_113(store, corpus_id, name, fyears.get(name), fy_end)
                     store.write_facts(facts)
                     units: dict[str, int] = {}
                     for f in facts:
@@ -351,7 +403,7 @@ def run_l3(rec: P.Recorder, out: Path, inp: dict[str, Any], *, orch_root: Path, 
                 return {"complete": True, "infrastructure_stop": "l3_parse_futility", "failed": sorted(failed), "rc": RC_L3}
         if smoke:
             return {"complete": False, "smoke": True, "failed": sorted(failed), "rc": RC_OK}
-        reg = IndexRegistry(store)
+        reg = IndexRegistry(store, fiscal_years=fyears, fy_end=FY_END_MONTHS) if fy_end else IndexRegistry(store)
         reg.get_or_build(corpus_id, "l1_bm25")
         facts = reg.get_or_build(corpus_id, "l3_facts_det")
         rec.emit("corpus", unit="corpus", n_docs=len(store.corpus_docs(corpus_id)), corpus_tokens=store.corpus_tokens(corpus_id),
@@ -363,7 +415,8 @@ def run_l3(rec: P.Recorder, out: Path, inp: dict[str, Any], *, orch_root: Path, 
         fy = store_fy_check(store, corpus, inp["cells"], corpus_id)
         rec.emit("m1_l3", unit="m1_l3", kind_note="L3-only, informational counts (the gate reads M1 after L4d)", gold_facts=len(inp["cells"]),
                  found=sum(hits), store_fy_check=fy, final=True)
-        res = {"complete": True, "phase": "l3", "n_docs": len(order), "failed": sorted(failed), "m1_l3_found": sum(hits),
+        res = {"complete": True, "phase": "l3", "fy_end": bool(fy_end), "amendment_sha256": AMENDMENT_SHA, "n_docs": len(order),
+               "failed": sorted(failed), "m1_l3_found": sum(hits),
                "m1_l3_n": len(hits), "store_fy_check": fy, "model_calls": 0, "rc": RC_OK}
         return res
     finally:
@@ -565,7 +618,7 @@ def doc_plans_v2(store: Any, corpus: dict[str, Any], failed: set[str]) -> dict[s
 # --------------------------------------------------------------------------- ingest (one arm)
 def run_ingest(rec: P.Recorder, out: Path, inp: dict[str, Any], backend: Any, *, pipeline: str, guard: Callable[[], None],
                seed_store: Path, stage: str = "all", smoke: bool = False, peer_out: Path | None = None,
-               booked_l4_s: float | None = None, pilot_wall_s: float = PILOT_WALL_S) -> dict[str, Any]:
+               booked_l4_s: float | None = None, pilot_wall_s: float = PILOT_WALL_S, fy_end: bool = False) -> dict[str, Any]:
     """Checkpoints 2-4 for ONE arm (``pipeline`` v1 or v2). Copies the shared seed once (never mutated), prepares the arm's L3, runs the 3 pilot
     documents (futility on projected M3, budget stops), then ``stage`` ``all`` the other 7 with the interim look after 6, then the final look
     and ``result.cpu.json``. ``stage`` = ``pilot`` stops after the pilot. Smoke: ONE real call on the smallest document, then return."""
@@ -576,6 +629,10 @@ def run_ingest(rec: P.Recorder, out: Path, inp: dict[str, Any], backend: Any, *,
         if not seed_store.exists():
             rec.emit("precondition_failed", reason=f"no seed store {seed_store} (run the l3 row first)")
             return {"complete": False, "rc": RC_PRECOND}
+        why = seed_fy_end_problem(seed_store) if fy_end else None
+        if why:
+            rec.emit("precondition_failed", reason=why)
+            return {"complete": False, "rc": RC_PRECOND}
         P.copy_store(seed_store, store_path)
         rec.emit("store_copied", src=str(seed_store), sha256=SHA256(store_path), final=False)
     store = P.open_store(store_path)
@@ -585,7 +642,7 @@ def run_ingest(rec: P.Recorder, out: Path, inp: dict[str, Any], backend: Any, *,
         if len(failed) >= L3_FUTILITY_FAILS:
             rec.emit("precondition_failed", reason=f"the shared seed lacks {sorted(failed)}")
             return {"complete": False, "rc": RC_PRECOND}
-        arm_l3(rec, store, inp, pipeline)
+        arm_l3(rec, store, inp, pipeline, fy_end=fy_end)
         order = [d for d in doc_order(corpus) if d not in failed]
         stats = X.doc_stats(store, CORPUS_ID)
         fy = fiscal_years(corpus)
@@ -879,7 +936,11 @@ def score(v1: dict[str, Any], v2: dict[str, Any], cells1: dict[str, Any], cells2
 def orch_checks(orch_root: Path, orch_pin: str) -> list[str]:
     out = G.orch_problems(orch_root, orch_pin)
     try:
-        from src.aggregation import facts_typed  # noqa: PLC0415
+        from src.aggregation import facts_det, facts_typed, pipeline as _pl  # noqa: PLC0415
+        if not hasattr(facts_det, "fy_end_months") or _pl.pipeline_spec(_pl.PIPELINE_V1).l3_kwargs({"x": "2022"}, fy_end=True).get("fy_end") != FY_END_MONTHS:
+            out.append("orchestrator lacks the opt-in fy_end rule (facts_det.fy_end_months, PipelineSpec.l3_kwargs(fy_end=)): amendment 1 would not apply")
+        if _pl.pipeline_spec(_pl.PIPELINE_V1).l3_kwargs({"x": "2022"}) != {}:
+            out.append("orchestrator agg_pipeline.v1 default is no longer the legacy call")
         if not hasattr(facts_typed, "drop_unquoted"):
             out.append("orchestrator lacks facts_typed.drop_unquoted (AGG-1.14 value-in-quote rule): the run would not count")
     except Exception as e:  # noqa: BLE001
