@@ -1,5 +1,5 @@
 """AGG-1.13 step B runner tests (fake backends: no model, no network, no process). Stdlib tests always run; the store / ingest tests import the
-orchestrator package and skip without it (``AGG_ORCH_ROOT``, default the AGG-1.13 pinned tree: 737bf0535 plus the amendment-1 ``fy_end`` commit 8ac97157)."""
+orchestrator package and skip without it (``AGG_ORCH_ROOT``, default the AGG-1.13 pinned tree: 737bf0535 plus the amendment-1 ``fy_end`` commit 8ac97157 plus the amendment-2 split-header commit cc613c22)."""
 
 from __future__ import annotations
 
@@ -51,7 +51,17 @@ class PinsAndInputs(unittest.TestCase):
         self.assertEqual(H.SHA256(H.D113 / H.AMENDMENT_FILE), H.AMENDMENT_SHA)
         self.assertTrue(H.pin_problems(H.D113, amendment_sha="0" * 64))
         self.assertEqual(H.SHA256(H.D113 / H.PREDECLARED_FILE), H.PREDECLARED_SHA)          # the parent is untouched
-        self.assertEqual(H.ORCH_PIN_MIN, "8ac97157557ca45a4b86c8c9d2874c4b13977b6b")
+        self.assertEqual(H.ORCH_PIN_MIN, "cc613c22e39c6e605ca2f717107b8e3fc1498093")
+
+    def test_the_amendment2_sha_is_pinned_and_a_changed_or_missing_amendment2_is_refused(self):
+        self.assertEqual(H.SHA256(H.D113 / H.AMENDMENT2_FILE), H.AMENDMENT2_SHA)
+        self.assertEqual(H.AMENDMENT2_SHA, "67d652703fe9221e71a372a04c02d147731a35f0723491649e42d70aad963d48")
+        self.assertTrue(any(H.AMENDMENT2_FILE in p for p in H.pin_problems(H.D113, amendment2_sha="0" * 64)))
+        self.assertEqual(H.SHA256(H.D113 / H.AMENDMENT_FILE), H.AMENDMENT_SHA)             # amendment 1 stays pinned and in force
+        text = (H.D113 / H.AMENDMENT2_FILE).read_text()
+        for needle in ("no-op on the real parse", "printed headers", "identically", "no model", "cc613c22e39c6e605ca2f717107b8e3fc1498093",
+                       H.PREDECLARED_SHA, H.AMENDMENT_SHA, "POST-DATA"):
+            self.assertIn(needle, text, needle)
 
     def test_a_changed_input_or_predeclared_is_refused(self):
         self.assertTrue(H.pin_problems(H.D113, predeclared_sha="0" * 64))
@@ -207,13 +217,14 @@ class FiscalYearContract(unittest.TestCase):
         self.assertEqual({p.split("/")[0] for p in fc["problems"]}, {FL, ULTA})
         ulta = [p for p in fc["problems"] if p.startswith(ULTA)]
         fl = [p for p in fc["problems"] if p.startswith(FL)]
-        self.assertEqual(len(ulta), 14)                                        # 7 cells x 2 L3 versions
-        self.assertEqual(len(fl), 6)                                           # 3 balance-sheet cells x 2 L3 versions
+        self.assertEqual(len(ulta), 28)                                        # 7 cells x 2 L3 versions x 2 paths (text-row and table)
+        self.assertEqual(len(fl), 12)                                          # 3 balance-sheet cells x 2 L3 versions x 2 paths
         self.assertTrue(all("balance_sheet" in p for p in fl))
         self.assertEqual(fc["n_cells_checked"], 31)
         for doc in (BBY, WMT):
             for cell in fc["by_doc"][doc]["cells"].values():
                 self.assertTrue(cell["v1_legacy"]["m1_hits_sees_it"] and cell["v2"]["m1_hits_sees_it"])
+                self.assertTrue(cell["table"]["v1_legacy"]["m1_hits_sees_it"] and cell["table"]["v2"]["m1_hits_sees_it"])
 
     def test_a_fiscal_label_header_passes(self):
         corpus = {"docs": [{"doc_name": WMT, "fiscal_year_end": "2022-01-31"}]}
@@ -238,8 +249,10 @@ class FiscalYearContract(unittest.TestCase):
         for doc, rec in fc["by_doc"].items():
             for cell in rec["cells"].values():
                 self.assertTrue(cell["v1_legacy"]["m1_hits_sees_it"] and cell["v2"]["m1_hits_sees_it"], (doc, cell))
-        for doc in (ULTA, FL):                                                  # the cells the original contract lost now carry fiscal 2022
-            self.assertTrue(all(c["v2"]["period"] == "2022" and c["v1_legacy"]["period"] == "2022" for c in fc["by_doc"][doc]["cells"].values()))
+        for doc in (ULTA, FL):                                                  # the cells the original contract lost now carry fiscal 2022, on BOTH paths
+            for c in fc["by_doc"][doc]["cells"].values():
+                self.assertTrue(c["v2"]["period"] == "2022" and c["v1_legacy"]["period"] == "2022")
+                self.assertTrue(c["table"]["v2"]["period"] == "2022" and c["table"]["v1_legacy"]["period"] == "2022")
 
     def test_the_default_without_the_flag_is_still_the_original_failing_check(self):
         self.assertEqual(H.fy_contract(INP["corpus"], INP["cells"], fy_end=False)["problems"], H.fy_contract(INP["corpus"], INP["cells"])["problems"])
@@ -252,6 +265,77 @@ class FiscalYearContract(unittest.TestCase):
         self.assertTrue(fc["ok"], fc["problems"])
         self.assertEqual(fc["by_doc"][BBY]["cells"]["revenue"]["v2"]["period"], "2022")
 
+    def test_the_fixtures_are_the_real_split_shapes_not_intact_dates(self):
+        """The amendment 1 vacuous pass: its fixtures had intact dates, a shape the real parse never produced. The Ulta and Foot Locker fixtures must stay split."""
+        whole = re.compile(r"(?:January|February|March)\s+\d{1,2},?\s+(?:19|20)\d\d")
+        for doc in (ULTA, FL):
+            for stmt, text in H.PRINTED_HEADERS[doc].items():
+                if stmt == "balance_sheet" or doc == ULTA:
+                    self.assertIsNone(whole.search(text), (doc, stmt, text))                 # no whole date: months and years are separate fragments
+        self.assertIn("\n\n", H.PRINTED_HEADERS[ULTA]["income"])                             # month-day line, blank line, year line
+        self.assertTrue(H.PRINTED_HEADERS[ULTA]["balance_sheet"].startswith("January 28, January 29, ("))  # month-days lead the year line
+        self.assertIsNotNone(whole.search(H.TABLE_HEADERS[ULTA]["income"][0]))              # the table fixtures keep amendment 1's intact dates
+
+    def test_the_text_row_path_alone_fails_without_the_rule_and_passes_with_it(self):
+        """Each path is exercised: break the text-row fixtures by an intact-date header (what amendment 1 used) and the text-row check is the one that notices."""
+        corpus = {"docs": [{"doc_name": ULTA, "fiscal_year_end": "2023-01-28"}]}
+        cells = [(ULTA, "revenue", 1.0)]
+        off = H.fy_contract(corpus, cells, fy_end=False)
+        self.assertTrue(any("text-row printed first column" in p for p in off["problems"]))
+        self.assertTrue(any("table printed first column" in p for p in off["problems"]))
+        self.assertTrue(H.fy_contract(corpus, cells, fy_end=True)["ok"])
+
+    def test_the_real_page_text_check_fails_a_no_op_rule_reads_the_cache_and_never_passes_on_nothing(self):
+        out = Path(tempfile.mkdtemp())
+        cache = out / "cache"
+        cache.mkdir()
+        fye = {ULTA: "2023-01-28", FL: "2023-01-28", WMT: "2022-01-31", BBY: "2022-01-29"}
+        corpus = {"fiscal_year": 2022, "docs": [{"doc_name": d, "sha256": hashlib.sha256(d.encode()).hexdigest(), "fiscal_year_end": f} for d, f in fye.items()]}
+        cells = [(ULTA, "revenue", 1.0), (WMT, "revenue", 1000.0)]       # the gold is in millions: 1,000 thousands = 1.0, 1,000 millions = 1,000.0
+        no_cache = H.fy_contract_real(corpus, cells, cache, fy_end=True)
+        self.assertFalse(no_cache["ok"])                                                       # four documents, no cache: four problems, not a pass
+        self.assertEqual(sum("missing" in p for p in no_cache["problems"]), 4)
+        self.assertEqual(no_cache["checked_docs"], [])
+        pages = {ULTA: "Fiscal year ended January 28, January 29, January 30,\n\n(In thousands) 2023 2022 2021\nTotal revenues $ 1,000 $ 900 $ 800\n",
+                 FL: "($ in millions) 2022 2021 2020\nTotal revenues $ 5 $ 4 $ 3\n",
+                 WMT: "Fiscal Years Ended January 31, (Amounts in millions) 2022 2021 2020\n\nTotal revenues $ 1,000 $ 900 $ 800\n",
+                 BBY: "Fiscal Years Ended January 29, 2022 January 30, 2021\nRevenue $ 1 $ 2\n"}
+        for d in corpus["docs"]:
+            res = DocumentPreprocessResult(original_path="x.pdf", sections=[Section(id="s", title="t", level=1, content=pages[d["doc_name"]], page_start=1, page_end=1)],
+                                           figures=[], total_pages=1, tables=[])
+            H.parse_cache_path(cache, d).write_text(json.dumps(res.to_cache_dict()))
+        on = H.fy_contract_real(corpus, cells, cache, fy_end=True)
+        self.assertTrue(on["ok"], on["problems"])
+        self.assertEqual(on["checked_docs"], sorted(fye))
+        self.assertEqual(on["by_doc"][ULTA]["v2"]["l3_value_with_2022"], 1)
+        off = H.fy_contract_real(corpus, cells, cache, fy_end=False)                            # the unamended reading: Ulta's cell sits under 2023 only
+        self.assertFalse(off["ok"])
+        self.assertTrue(all(ULTA in p for p in off["problems"]), off["problems"])
+        self.assertEqual(off["by_doc"][ULTA]["v1_legacy"]["l3_value_other_period_only"], 1)
+
+    def test_the_real_parse_floor(self):
+        ok = {"cells": 7, "l3_value_with_2022": 7, "l3_value_other_period_only": 0, "no_l3_value": 0}
+        self.assertEqual(H.fy_count_problems({ULTA: ok, FL: {"cells": 8, "l3_value_with_2022": 5, "l3_value_other_period_only": 0, "no_l3_value": 3}}, "w"), [])
+        self.assertTrue(H.fy_count_problems({ULTA: {**ok, "l3_value_with_2022": 0, "l3_value_other_period_only": 7}}, "w"))
+        self.assertTrue(H.fy_count_problems({ULTA: {**ok, "l3_value_with_2022": 6, "no_l3_value": 1}}, "w"))      # all 7 are required for Ulta
+        self.assertTrue(H.fy_count_problems({FL: {"cells": 8, "l3_value_with_2022": 4, "l3_value_other_period_only": 1, "no_l3_value": 3}}, "w"))
+
+    def test_the_preflight_cli_exits_2_when_the_parse_cache_is_absent_and_0_without_the_flag_with_a_note(self):
+        import io
+        from contextlib import redirect_stdout
+        empty = Path(tempfile.mkdtemp())
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = C.main(["--phase", "preflight", "--dry-run", "--fy-end", "--parse-cache", str(empty), "--orch-root", str(ORCH), "--orch-pin", H.ORCH_PIN_MIN])
+        self.assertEqual(rc, H.RC_PREFLIGHT)
+        self.assertEqual(sum("parse cache" in p and "missing" in p for p in json.loads(buf.getvalue())["problems"]), 4)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = C.main(["--phase", "preflight", "--dry-run", "--fy-end", "--orch-root", str(ORCH), "--orch-pin", H.ORCH_PIN_MIN])
+        out = json.loads(buf.getvalue())
+        self.assertEqual((rc, out["problems"]), (0, []))
+        self.assertTrue(str(out["fy_contract_real"]).startswith("not run"))                      # said out loud, never a silent pass
+
     def test_the_preflight_cli_exits_0_with_the_amendment_flag_and_asserts_its_sha(self):
         import io
         from contextlib import redirect_stdout
@@ -262,6 +346,7 @@ class FiscalYearContract(unittest.TestCase):
         self.assertEqual((rc, out["problems"]), (0, []))
         self.assertEqual((out["fy_contract"]["ok"], out["fy_contract"]["n_cells_checked"], out["fy_end"]), (True, 31, True))
         self.assertEqual(out["amendment1_sha256"], H.AMENDMENT_SHA)
+        self.assertEqual(out["amendment2_sha256"], H.AMENDMENT2_SHA)
 
     def test_the_preflight_cli_exits_2_on_the_failed_contract(self):
         import io
@@ -402,7 +487,7 @@ class Stage(unittest.TestCase):
         out = self.tmp / f"l3fy{int(fy_end)}"
         rec = P.Recorder(out / "results.jsonl")
         r = H.run_l3(rec, out, self.inp, orch_root=ORCH, guard=self.guard, parse_fn=self._ulta_like_parse, fy_end=fy_end)
-        self.assertEqual((r["complete"], r["rc"], r["fy_end"], r["amendment_sha256"]), (True, 0, fy_end, H.AMENDMENT_SHA))
+        self.assertEqual((r["complete"], r["rc"], r["fy_end"], r["amendment_sha256"], r["amendment2_sha256"]), (True, 0, fy_end, H.AMENDMENT_SHA, H.AMENDMENT2_SHA))
         (out / "result.l3.json").write_text(json.dumps({k: v for k, v in r.items() if k != "rc"}))      # what run_agg113.main files next to the store
         st = P.open_store(out / "store.sqlite")
         try:
@@ -425,11 +510,26 @@ class Stage(unittest.TestCase):
         self.assertIsNone(H.seed_fy_end_problem(out / "store.sqlite"))
         out0, _off = self._l3_periods(False)
         self.assertTrue(H.seed_fy_end_problem(out0 / "store.sqlite"))
+        rj = json.loads((out / "result.l3.json").read_text())
+        (out / "result.l3.json").write_text(json.dumps({k: v for k, v in rj.items() if k != "amendment2_sha256"}))       # an amendment-1-only seed is refused
+        self.assertIn("amendments", H.seed_fy_end_problem(out / "store.sqlite"))
+        (out / "result.l3.json").write_text(json.dumps(rj))
         self.assertTrue(H.seed_fy_end_problem(self.tmp / "nowhere" / "store.sqlite"))
         rec = P.Recorder(self.tmp / "arm" / "results.jsonl")
         r = H.run_ingest(rec, self.tmp / "arm", self.inp, None, pipeline=H.V1, guard=self.guard, seed_store=out0 / "store.sqlite", fy_end=True)
         self.assertEqual(r["rc"], H.RC_PRECOND)
         self.assertEqual(rec.records[-1]["kind"], "precondition_failed")
+
+    def test_l3_is_not_complete_when_the_real_store_fails_the_amendment2_floor(self):
+        out = self.tmp / "floor"
+        rec = P.Recorder(out / "results.jsonl")
+        bad = {ULTA: {"cells": 7, "l3_value_with_2022": 0, "l3_value_other_period_only": 7, "no_l3_value": 0}}
+        with mock.patch.object(H, "store_fy_check", return_value=bad):
+            r = H.run_l3(rec, out, self.inp, orch_root=ORCH, guard=self.guard, parse_fn=self.parse, fy_end=True)
+        self.assertEqual((r["complete"], r["rc"]), (False, H.RC_PREFLIGHT))
+        self.assertTrue(r["store_fy_problems"])
+        (out / "result.l3.json").write_text(json.dumps({k: v for k, v in r.items() if k != "rc"}))
+        self.assertTrue(H.seed_fy_end_problem(out / "store.sqlite"))                          # an arm refuses it
 
     def test_v2_arm_l3_applies_the_same_rule_to_its_copy_and_leaves_the_seed_alone(self):
         out, _on = self._l3_periods(True)

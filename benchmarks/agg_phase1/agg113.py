@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import time
@@ -50,6 +51,8 @@ PREDECLARED_FILE = "PREDECLARED_AGG113.md"
 PREDECLARED_SHA = "a8b715254051062d6bfe184066916a01ae4c9f7a7b7a7db67203e26a1fff7ecf"
 AMENDMENT_FILE = "PREDECLARED_AGG113_AMENDMENT1_20261114.md"    # the fiscal-year-end rule (operator decision 2026-11-14), written before any data
 AMENDMENT_SHA = "279645ad90b74f479a3decd397c8ffc8b26750491332a478985750d9aae2daaa"
+AMENDMENT2_FILE = "PREDECLARED_AGG113_AMENDMENT2_20261115.md"   # the split-header fiscal-year-end rule (amendment 1 was a no-op on the real parse), written before any data
+AMENDMENT2_SHA = "67d652703fe9221e71a372a04c02d147731a35f0723491649e42d70aad963d48"
 FY_END_MONTHS = (1, 2, 3)                                        # the fy_end rule's months (orchestrator facts_det.FY_END_MONTHS)
 FROZEN = {   # sha256 of the step A inputs, exactly the table in PREDECLARED_AGG113.md (set dir = benchmarks/agg_phase1/agg113)
     "financebench_document_information.jsonl": "1c69127783879de8cdadb159d2181f39bc3123b8e0ebf74031c3969d69189575",
@@ -63,7 +66,7 @@ FROZEN = {   # sha256 of the step A inputs, exactly the table in PREDECLARED_AGG
 }
 VERIFY_CELLS_SHA = "ce74aa5ab65d460009768274fa3d2e4d569ec511ee4700dee693c5b5056fad78"    # ../verify_phase1_cells.py, reused unchanged
 MANIFEST_DIGEST = "94c8497392bd304685b1b48aac553af0b18bbb97ea29a41286b3257a5ca5dc97"
-ORCH_PIN_MIN = "8ac97157557ca45a4b86c8c9d2874c4b13977b6b"      # 737bf0535 (PREDECLARED *Arms*) plus the opt-in fy_end rule (amendment 1) or a descendant
+ORCH_PIN_MIN = "cc613c22e39c6e605ca2f717107b8e3fc1498093"      # 737bf0535 (PREDECLARED *Arms*) plus the opt-in fy_end rule (amendment 1, 8ac97157) plus its split-header reading (amendment 2, cc613c22) or a descendant
 SHA256 = X.sha256_file
 CORPUS_ID = X.CORPUS_ID                                         # one corpus id per store file; the stores are separate files
 V1, V2 = "v1", "v2"
@@ -88,7 +91,8 @@ STATEMENT = {"revenue": "income", "net_income": "income", "capex": "cash_flow", 
 LABEL = {"revenue": "Total revenues", "net_income": "Net income", "capex": "Capital expenditures", "total_assets": "Total assets",
          "operating_cash_flow": "Net cash provided by operating activities", "total_current_assets": "Total current assets",
          "total_current_liabilities": "Total current liabilities", "dividends_paid": "Dividends paid"}
-PRINTED_HEADERS = D113_DESIGN.PRINTED_HEADERS
+PRINTED_HEADERS = D113_DESIGN.PRINTED_HEADERS        # the TEXT-ROW shape of the real parse (split headers kept split)
+TABLE_HEADERS = D113_DESIGN.TABLE_HEADERS            # the intact-date TABLE shape (amendment 1's fixtures)
 
 
 # --------------------------------------------------------------------------- inputs and pins
@@ -101,8 +105,13 @@ def load_inputs(set_dir: Path = D113) -> dict[str, Any]:
 
 
 def pin_problems(set_dir: Path = D113, *, predeclared_sha: str | None = None, frozen: dict[str, str] | None = None,
-                 amendment_sha: str | None = None) -> list[str]:
+                 amendment_sha: str | None = None, amendment2_sha: str | None = None) -> list[str]:
     out = []
+    want_am2 = AMENDMENT2_SHA if amendment2_sha is None else amendment2_sha
+    q_am2 = set_dir / AMENDMENT2_FILE
+    got_am2 = SHA256(q_am2) if q_am2.exists() else None
+    if got_am2 != want_am2:
+        out.append(f"{AMENDMENT2_FILE} sha256 {got_am2} != recorded {want_am2}")
     want_am = AMENDMENT_SHA if amendment_sha is None else amendment_sha
     q_am = set_dir / AMENDMENT_FILE
     got_am = SHA256(q_am) if q_am.exists() else None
@@ -174,17 +183,35 @@ def january_end_docs(corpus: dict[str, Any]) -> list[str]:
 
 
 # --------------------------------------------------------------------------- the fiscal-year contract (preflight hard check)
+def _hit(doc: str, field: str, sentinel: float, period: Any) -> bool:
+    return bool(X.m1_hits([{"doc_id": doc, "field": field, "value": sentinel, "unit": "USD_millions", "period": period}],
+                          [(doc, field, sentinel)], unit_scale=X.M1R_UNIT_SCALE)[0])
+
+
+def text_row_page(field: str, header_text: str, sentinel: float) -> str:
+    """One fixture page in the shape the real parse produces: the printed header lines (split headers kept split), a blank line, one flattened
+    statement row ``Label $ a $ b $ c`` with one number per printed year. The sentinel is the FIRST printed column's value."""
+    n = len(re.findall(r"\b(?:19|20)\d\d\b", header_text))
+    nums = [sentinel] + [sentinel + 10 * (i + 1) for i in range(n - 1)]
+    return f"{header_text}\n\n{LABEL[field]} " + " ".join(f"$ {v:,.0f}" for v in nums)
+
+
 def fy_contract(corpus: dict[str, Any], cells: list[tuple[str, str, float]], *, orch: Any = None, fy_end: bool = False) -> dict[str, Any]:
     """PREDECLARED checkpoint 0: the January-end filers (Best Buy, Walmart: fiscal 2022 ends 2022-01; Foot Locker, Ulta: ends 2023-01) must be
-    reachable as fiscal ``2022`` by the L3 period logic and by ``m1_hits``. No model, no PDF, no store: the L3 table logic of the pinned
-    orchestrator is run on one fixture table per (document, statement) whose header is the one the filing PRINTS; the fact it makes for the
-    fiscal-2022 (first) column is then read by the frozen ``m1_hits`` exactly as a real fact would be. A period that does not contain 2022 is
-    a problem: the runner's own period reading, not the pipeline, would then decide M1 (rule 2: needs a dated amendment BEFORE any data).
+    reachable as fiscal ``2022`` by the L3 period logic and by ``m1_hits``. No model, no PDF, no store: the pinned orchestrator's L3 is run on one
+    fixture per (document, statement, PATH) whose header is the one the filing PRINTS; the fact it makes for the fiscal-2022 (first) column is then
+    read by the frozen ``m1_hits`` exactly as a real fact would be. A period that does not contain 2022 is a problem: the runner's own period reading,
+    not the pipeline, would then decide M1 (rule 2: needs a dated amendment BEFORE any data).
+
+    TWO PATHS (AMENDMENT 2, PREDECLARED_AGG113_AMENDMENT2_20261115.md): the TEXT-ROW path (``facts_from_page_text`` on the header as the real
+    parse flattens it, split headers kept split: ``PRINTED_HEADERS``) is the path the real Ulta and Foot Locker statements take; the TABLE path
+    (``facts_from_table`` on intact printed dates: ``TABLE_HEADERS``) is kept for parses that do detect the table. Amendment 1 checked only the table
+    path on intact dates, so it passed on a shape the real parse never produced. ``fy_contract_real`` runs the same logic on the seed's own page text.
 
     Also the description rule of ``agg1314_zero_cell_diag.fy_contract_problems`` (no L4 field description may name another fiscal year).
 
-    ``fy_end=True`` (PREDECLARED_AGG113_AMENDMENT1_20261114.md) runs the same fixtures with the orchestrator's opt-in fiscal-year-end column
-    labelling on, for BOTH L3 versions; ``False`` is the original, unamended check (it fails on the real corpus)."""
+    ``fy_end=True`` (amendments 1 and 2) runs the same fixtures with the orchestrator's opt-in fiscal-year-end column labelling on, for BOTH L3
+    versions; ``False`` is the original, unamended check (it fails on the real corpus)."""
     from src.aggregation import facts_det  # noqa: PLC0415
     problems: list[str] = []
     descs = {f: G16.field_desc(f, "2022") for f in A.METRICS}
@@ -193,60 +220,120 @@ def fy_contract(corpus: dict[str, Any], cells: list[tuple[str, str, float]], *, 
     by_doc: dict[str, dict[str, Any]] = {}
     versions = (("v1_legacy", None), ("v2", facts_det.L3_PERIOD_V2))
     for doc in jan:
-        hdrs = PRINTED_HEADERS.get(doc)
-        if hdrs is None:
+        hdrs, tbls = PRINTED_HEADERS.get(doc), TABLE_HEADERS.get(doc)
+        if hdrs is None or tbls is None:
             problems.append(f"{doc}: January-end filer with no declared printed-header fixture")
             continue
         fye = next(d["fiscal_year_end"] for d in corpus["docs"] if d["doc_name"] == doc)
         rec = {"fiscal_year_end": fye, "cells": {}}
         for field in sorted({f for d, f, _g in cells if d == doc}):
-            hdr = hdrs[STATEMENT[field]]
+            stmt = STATEMENT[field]
+            hdr = tbls[stmt]
             sentinel = 1000.0 + len(rec["cells"])
             nums = [sentinel] + [sentinel + 10 * (i + 1) for i in range(len(hdr) - 1)]
             table = {"table_id": f"fx:{doc}:{field}", "doc_hash": "fx", "doc_id": doc, "entity": doc, "chunk_id": "fx#0", "page": 1,
                      "caption": "($ in millions)", "rows": [[""] + list(hdr), [LABEL[field]] + [f"{v:,.0f}" for v in nums]]}
-            seen = {}
+            page = text_row_page(field, hdrs[stmt], sentinel)
+            seen: dict[str, Any] = {}
+            seen_t: dict[str, Any] = {}
             for vname, pv in versions:
                 kw = {} if pv is None else {"period_version": pv, "fiscal_year": "2022"}
                 if fy_end:
                     kw = {**kw, "fiscal_year": "2022", "fy_end": FY_END_MONTHS}
-                facts = facts_det.facts_from_table(table, "", **kw)
-                f0 = next((f for f in facts if f["value"] == sentinel), None)
-                period = f0["period"] if f0 else None
-                hit = bool(X.m1_hits([{"doc_id": doc, "field": field, "value": sentinel, "unit": "USD_millions", "period": period}],
-                                     [(doc, field, sentinel)], unit_scale=X.M1R_UNIT_SCALE)[0]) if f0 else False
-                seen[vname] = {"period": period, "m1_hits_sees_it": hit}
-                if not hit:
-                    problems.append(f"{doc}/{field} ({STATEMENT[field]}, printed first column {hdr[0]!r}): L3 {vname} gives the fiscal-2022 "
-                                    f"column the period {period!r}; m1_hits needs '2022' in the period")
-            rec["cells"][field] = {"statement": STATEMENT[field], "printed_first_column": hdr[0], **seen}
+                for path, facts, tgt in (
+                        ("text-row", facts_det.facts_from_page_text([(1, page)], doc_hash="fx", doc_id=doc, entity=doc, **kw), seen),
+                        ("table", facts_det.facts_from_table(table, "", **kw), seen_t)):
+                    f0 = next((f for f in facts if f["value"] == sentinel), None)
+                    period = f0["period"] if f0 else None
+                    hit = _hit(doc, field, sentinel, period) if f0 else False
+                    tgt[vname] = {"period": period, "m1_hits_sees_it": hit}
+                    if not hit:
+                        problems.append(f"{doc}/{field} ({stmt}, {path} printed first column {hdr[0]!r}): L3 {vname} gives the fiscal-2022 "
+                                        f"column the period {period!r}; m1_hits needs '2022' in the period")
+            rec["cells"][field] = {"statement": stmt, "printed_first_column": hdr[0], **seen, "table": seen_t}
         by_doc[doc] = rec
     return {"ok": not problems, "problems": problems, "january_end_docs": jan, "by_doc": by_doc, "fy_end": bool(fy_end),
             "n_cells_checked": sum(len(v["cells"]) for v in by_doc.values())}
+
+
+def fy_counts(rows: list[dict[str, Any]], doc: str, cells: list[tuple[str, str, float]]) -> dict[str, int]:
+    """Per document, how many gold cells have an L3 fact carrying the gold value (0.5%) under a period containing 2022, under another period only,
+    or no L3 fact at all (counts only). ``rows`` are L3 fact rows (store rows or fresh extractor output)."""
+    c = {"cells": 0, "l3_value_with_2022": 0, "l3_value_other_period_only": 0, "no_l3_value": 0}
+    for d, f, g in cells:
+        if d != doc:
+            continue
+        c["cells"] += 1
+        vals = [(x, float(x["value"]) * X.M1R_UNIT_SCALE.get(x.get("unit"), 1.0)) for x in rows
+                if x.get("doc_id") == d and x.get("field") == f and x.get("value") is not None]
+        match = [x for x, v in vals if abs(abs(v) - abs(g)) <= P.CFG.rel_tol * abs(g) + 1e-9]
+        if any("2022" in str(x.get("period") or "") for x in match):
+            c["l3_value_with_2022"] += 1
+        elif match:
+            c["l3_value_other_period_only"] += 1
+        else:
+            c["no_l3_value"] += 1
+    return c
+
+
+def fy_count_problems(counts: dict[str, dict[str, int]], where: str) -> list[str]:
+    """The AMENDMENT 2 floor over ``fy_counts`` of every January-end document: no cell may hold its value ONLY under another period (the amendment 1
+    defect), and every cell of ``REAL_PARSE_ALL_2022`` documents must hold it under fiscal 2022."""
+    out = []
+    for doc, c in counts.items():
+        if c["l3_value_other_period_only"]:
+            out.append(f"{where}: {doc}: {c['l3_value_other_period_only']} gold cell(s) have an L3 value ONLY under another period")
+        if doc in D113_DESIGN.REAL_PARSE_ALL_2022 and c["l3_value_with_2022"] != c["cells"]:
+            out.append(f"{where}: {doc}: {c['l3_value_with_2022']} of {c['cells']} gold cells carry the value under fiscal 2022 (all are required)")
+    return out
+
+
+def parse_cache_path(cache_dir: Path, doc: dict[str, Any]) -> Path:
+    return cache_dir / f"{doc['doc_name']}.{doc['sha256'][:12]}.json"
+
+
+def fy_contract_real(corpus: dict[str, Any], cells: list[tuple[str, str, float]], cache_dir: Path, *, fy_end: bool = False) -> dict[str, Any]:
+    """The same contract on the REAL page text of the seed's own parse cache (``run_l3`` writes ``out/cache/<doc>.<sha12>.json``; an r2 row copies it).
+    No model, no PDF, no JVM: ``DocumentPreprocessResult.from_cache_dict`` -> ``facts_det.page_texts`` -> ``facts_from_page_text`` for BOTH L3 versions
+    -> ``fy_counts`` per January-end document -> ``fy_count_problems``. A January-end document whose cache file is missing is a problem (a check that
+    reads nothing must not pass: the amendment 1 vacuous pass). Counts only."""
+    from src.aggregation import facts_det  # noqa: PLC0415
+    from src.models.document import DocumentPreprocessResult  # noqa: PLC0415
+    problems: list[str] = []
+    by_doc: dict[str, Any] = {}
+    jan = january_end_docs(corpus)
+    for doc in jan:
+        d = next(x for x in corpus["docs"] if x["doc_name"] == doc)
+        f = parse_cache_path(cache_dir, d)
+        if not f.exists():
+            problems.append(f"real-parse contract: parse cache {f} missing for {doc}: the check would read nothing")
+            continue
+        pages = facts_det.page_texts(DocumentPreprocessResult.from_cache_dict(json.loads(f.read_text())))
+        if not pages:
+            problems.append(f"real-parse contract: {doc}: the parse cache holds no page text")
+            continue
+        fy = fiscal_years(corpus).get(doc)
+        per: dict[str, Any] = {"cache_file": f.name, "pages": len(pages)}
+        for vname, pv in (("v1_legacy", None), ("v2", facts_det.L3_PERIOD_V2)):
+            kw: dict[str, Any] = {"fiscal_year": fy}
+            if pv:
+                kw["period_version"] = pv
+            if fy_end:
+                kw["fy_end"] = FY_END_MONTHS
+            rows = facts_det.facts_from_page_text(pages, doc_hash="real", doc_id=doc, entity=doc, **kw)
+            per[vname] = fy_counts(rows, doc, cells)
+        by_doc[doc] = per
+        for vname in ("v1_legacy", "v2"):
+            problems += fy_count_problems({doc: per[vname]}, f"real-parse contract ({vname}, fy_end={bool(fy_end)})")
+    return {"ok": not problems, "problems": problems, "fy_end": bool(fy_end), "january_end_docs": jan,
+            "checked_docs": sorted(by_doc), "n_pages": sum(v["pages"] for v in by_doc.values()), "by_doc": by_doc}
 
 
 def store_fy_check(store: Any, corpus: dict[str, Any], cells: list[tuple[str, str, float]], corpus_id: str = CORPUS_ID) -> dict[str, Any]:
     """The same contract on the REAL L3 facts of the shared seed (counts only): per January-end document, how many gold cells have an L3 fact
     carrying the gold value (0.5%) under a period containing 2022, under another period only, or no L3 fact at all."""
     rows = [f for f in store.facts(corpus_id) if str(f.get("extractor") or "").startswith("l3")]
-    out: dict[str, dict[str, int]] = {}
-    for doc in january_end_docs(corpus):
-        c = {"cells": 0, "l3_value_with_2022": 0, "l3_value_other_period_only": 0, "no_l3_value": 0}
-        for d, f, g in cells:
-            if d != doc:
-                continue
-            c["cells"] += 1
-            vals = [(x, float(x["value"]) * X.M1R_UNIT_SCALE.get(x.get("unit"), 1.0)) for x in rows
-                    if x.get("doc_id") == d and x.get("field") == f and x.get("value") is not None]
-            match = [x for x, v in vals if abs(abs(v) - abs(g)) <= P.CFG.rel_tol * abs(g) + 1e-9]
-            if any("2022" in str(x.get("period") or "") for x in match):
-                c["l3_value_with_2022"] += 1
-            elif match:
-                c["l3_value_other_period_only"] += 1
-            else:
-                c["no_l3_value"] += 1
-        out[doc] = c
-    return out
+    return {doc: fy_counts(rows, doc, cells) for doc in january_end_docs(corpus)}
 
 
 # --------------------------------------------------------------------------- the offline plan / estimates
@@ -303,8 +390,9 @@ def seed_fy_end_problem(seed_store: Path) -> str | None:
         r = json.loads(f.read_text())
     except (OSError, ValueError):
         return f"{f} missing or unreadable: the seed is not a recorded l3 row output"
-    if r.get("fy_end") is not True or r.get("amendment_sha256") != AMENDMENT_SHA or r.get("complete") is not True:
-        return f"{f}: the seed was not built complete under the fy_end rule and amendment {AMENDMENT_SHA[:12]}"
+    if (r.get("fy_end") is not True or r.get("amendment_sha256") != AMENDMENT_SHA or r.get("amendment2_sha256") != AMENDMENT2_SHA
+            or r.get("complete") is not True):
+        return f"{f}: the seed was not built complete under the fy_end rule and amendments {AMENDMENT_SHA[:12]} + {AMENDMENT2_SHA[:12]}"
     return None
 
 
@@ -351,7 +439,8 @@ def run_l3(rec: P.Recorder, out: Path, inp: dict[str, Any], *, orch_root: Path, 
     from src.models.document import DocumentPreprocessResult  # noqa: PLC0415
     store = CorpusStore(out / "store.sqlite")
     fyears = fiscal_years(corpus)
-    rec.emit("meta", phase="l3", smoke=smoke, schema="agg113_l3.v1", fy_end=bool(fy_end), amendment_sha256=AMENDMENT_SHA, model_calls=0, orch_pin=orch_pin, research_pin=research_pin,
+    rec.emit("meta", phase="l3", smoke=smoke, schema="agg113_l3.v1", fy_end=bool(fy_end), amendment_sha256=AMENDMENT_SHA,
+             amendment2_sha256=AMENDMENT2_SHA, model_calls=0, orch_pin=orch_pin, research_pin=research_pin,
              n_planned=len(order), corpus_id=corpus_id, final=False)
     failed = {r["doc"] for r in rec.records if r["kind"] == "doc_fail"} - {r["doc"] for r in rec.records if r["kind"] == "doc_done"}
     cache_dir = out / "cache"
@@ -413,11 +502,14 @@ def run_l3(rec: P.Recorder, out: Path, inp: dict[str, Any], *, orch_root: Path, 
         l3f = [f for f in store.facts(corpus_id) if str(f.get("extractor") or "").startswith("l3")]
         hits = X.m1_hits(l3f, inp["cells"], unit_scale=X.M1R_UNIT_SCALE)
         fy = store_fy_check(store, corpus, inp["cells"], corpus_id)
+        fy_problems = fy_count_problems(fy, "l3 store") if fy_end else []     # AMENDMENT 2 floor on the REAL L3 facts of the finished seed
         rec.emit("m1_l3", unit="m1_l3", kind_note="L3-only, informational counts (the gate reads M1 after L4d)", gold_facts=len(inp["cells"]),
-                 found=sum(hits), store_fy_check=fy, final=True)
-        res = {"complete": True, "phase": "l3", "fy_end": bool(fy_end), "amendment_sha256": AMENDMENT_SHA, "n_docs": len(order),
-               "failed": sorted(failed), "m1_l3_found": sum(hits),
-               "m1_l3_n": len(hits), "store_fy_check": fy, "model_calls": 0, "rc": RC_OK}
+                 found=sum(hits), store_fy_check=fy, store_fy_problems=fy_problems, final=True)
+        res = {"complete": not fy_problems, "phase": "l3", "fy_end": bool(fy_end), "amendment_sha256": AMENDMENT_SHA, "amendment2_sha256": AMENDMENT2_SHA,
+               "n_docs": len(order), "failed": sorted(failed), "m1_l3_found": sum(hits),
+               "m1_l3_n": len(hits), "store_fy_check": fy, "model_calls": 0, "rc": RC_PREFLIGHT if fy_problems else RC_OK}
+        if fy_problems:
+            res["store_fy_problems"] = fy_problems
         return res
     finally:
         store.close()
@@ -941,6 +1033,8 @@ def orch_checks(orch_root: Path, orch_pin: str) -> list[str]:
             out.append("orchestrator lacks the opt-in fy_end rule (facts_det.fy_end_months, PipelineSpec.l3_kwargs(fy_end=)): amendment 1 would not apply")
         if _pl.pipeline_spec(_pl.PIPELINE_V1).l3_kwargs({"x": "2022"}) != {}:
             out.append("orchestrator agg_pipeline.v1 default is no longer the legacy call")
+        if not hasattr(facts_det, "month_day_only_line"):
+            out.append("orchestrator lacks the split-header fy_end reading (facts_det.month_day_only_line, amendment 2): the rule would be a no-op on the real parse")
         if not hasattr(facts_typed, "drop_unquoted"):
             out.append("orchestrator lacks facts_typed.drop_unquoted (AGG-1.14 value-in-quote rule): the run would not count")
     except Exception as e:  # noqa: BLE001
