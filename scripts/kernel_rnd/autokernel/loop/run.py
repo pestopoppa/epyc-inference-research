@@ -105,6 +105,7 @@ from . import actor_opencode_config
 from . import belief_context, planner_only
 from . import actor_passthrough
 from . import cross_target, kernel_coverage
+from . import gpu_counter_signals
 from . import longctx
 from . import floor_registry
 from . import epoch_aliases
@@ -2642,6 +2643,11 @@ def _main(argv: list[str] | None = None) -> int:
                         help="operator-attention warning after this many consecutive pool "
                              "outcomes with no recorded native Comparison; observe-only, "
                              "default %(default)s")
+    parser.add_argument("--gpu-counters", type=Path, default=None,
+                        help="RVP-CTR-1 treatment arm: a gpu_counter_signals observation JSON "
+                             "(declared rocprofv3 counter subset of this target's hotspots); "
+                             "the planner sees it and must cite a present counter. Omit for "
+                             "the control arm.")
     parser.add_argument("--keep-rate-alarm-window", type=int,
                         default=status.KEEP_RATE_ALARM_WINDOW,
                         help="operator-attention warning window in measured candidates; "
@@ -4467,6 +4473,8 @@ def _main(argv: list[str] | None = None) -> int:
             **({"node_profile": dict(node_profile_observation)} if cpu_launch else {}),
             **({"gpu_serving_profile": dict(gpu_profile_observation)}
                if direct_launch and not cpu_launch else {}),
+            **({"gpu_counters": gpu_counter_signals.load_observation(args.gpu_counters)}
+               if getattr(args, "gpu_counters", None) and not cpu_launch else {}),
             **({"long_context": longctx.planner_context(
                 longctx_surface.spec, histogram=longctx_observation["histogram"],
                 cpu_profile=longctx_observation["cpu_profile"],

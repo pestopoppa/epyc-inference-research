@@ -51,7 +51,7 @@ from typing import Any, Callable, Mapping, Sequence
 import uuid
 
 from ..custody import append_rows, sync_path as _sync_path
-from . import actor_metrics, belief_context, history_fields, hotspots, integrity, procguard, scratch
+from . import actor_metrics, belief_context, gpu_counter_signals, history_fields, hotspots, integrity, procguard, scratch
 from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
                    Review, RunAborted)
 
@@ -2888,6 +2888,8 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12,
         if context.get("two_denominator"):   # AK-PROF-TWO-DENOM: wall share + launch gap
             lines.extend(["", "## GPU share by two denominators",
                           hotspots.render_two_denominator(context["two_denominator"])])
+    if not cpu and context.get("gpu_counters"):   # RVP-CTR-1: counter-grounded planner signals
+        lines.extend(gpu_counter_signals.render(context["gpu_counters"], limit=limit))
     if cpu and context.get("long_context"):
         lines.extend(_render_long_context(context["long_context"], limit=limit))
 
@@ -4294,6 +4296,14 @@ class AgentPlanner:
         if echoed:
             raise ProviderTransient(
                 f"hypothesis echoed the prompt template for {echoed}")
+        # RVP-CTR-1: with counters in the context (treatment arm), a proposal must cite a
+        # PRESENT counter as ctr:<name> and may not cite an ABSENT one (absent is not 0).
+        if context.get("gpu_counters") and not _cpu_target(context):
+            try:
+                gpu_counter_signals.check_citations(
+                    (str(body["statement"]), str(body["falsifier"])), context["gpu_counters"])
+            except gpu_counter_signals.CitationRefused as exc:
+                raise ProviderTransient(f"counter citation rule: {exc}") from None
         return Hypothesis(
             mechanism_id=str(body["mechanism_id"]), statement=str(body["statement"]),
             falsifier=str(body["falsifier"]),
