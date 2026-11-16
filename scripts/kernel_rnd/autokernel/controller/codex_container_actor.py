@@ -29,7 +29,30 @@ from typing import Any, Mapping, Sequence
 EXECUTABLE_MODULE = (
     "scripts.kernel_rnd.autokernel.controller.codex_container_actor")
 CONTAINER_IMAGE_ID = (
-    "sha256:3a2e92b4133d06d1287f96ec47bacd743717b377f4b9df6be1e3af626c35dbb0")
+    # ubuntu:24.04 as present on this host since 2026-10-25.  The original
+    # 08-11 pin (sha256:3a2e92b4...) was pruned from the daemon, so every
+    # actor launch died in `docker run` with rc=125 "No such image"
+    # (c6-admission-live-proof-r3, 2026-11-16).
+    "sha256:d9b8c34d61a9b9a3c44cab883d7d2f2619d674966ab520186f799cf32e3e0377")
+# `docker run` exit statuses that mean the container never ran the actor:
+# 125 = the Docker CLI/daemon refused (missing image, bad flag, daemon down),
+# 126 = actor command not executable, 127 = actor command not found.  These
+# are deployment faults, never provider availability, and must not be retried.
+DOCKER_LAUNCH_FAILURE_CODES = frozenset({125, 126, 127})
+# Codex output that means the staged credential itself is dead; retrying the
+# same auth.json cannot succeed until an operator re-runs `codex login`.
+AUTH_FATAL_MARKERS = (
+    "refresh token was already used",
+    "Please log out and sign in again",
+)
+
+
+def is_non_transient_failure(result: subprocess.CompletedProcess[str]) -> bool:
+    """True when a nonzero actor exit cannot be cured by backing off."""
+    if result.returncode in DOCKER_LAUNCH_FAILURE_CODES:
+        return True
+    text = f"{getattr(result, 'stdout', '')}\n{getattr(result, 'stderr', '')}"
+    return any(marker in text for marker in AUTH_FATAL_MARKERS)
 CONTAINER_WORKSPACE = "/workspace"
 CONTAINER_ASSETS = "/codex-assets"
 CONTAINER_CODEX_HOME = "/codex-home"
@@ -49,6 +72,22 @@ DEFAULT_ACTOR_TIMEOUT_S = 1800.0
 
 class CodexContainerError(RuntimeError):
     """The workspace-only actor boundary cannot be established."""
+
+
+class CodexContainerConfigurationError(CodexContainerError):
+    """A non-transient deployment fault (e.g. the pinned image is absent)."""
+
+
+def _require_image_present(environment: Mapping[str, str]) -> None:
+    probe = subprocess.run(
+        (DOCKER_EXECUTABLE, "image", "inspect", "--format", "{{.Id}}",
+         CONTAINER_IMAGE_ID),
+        capture_output=True, text=True, check=False,
+        env=dict(environment), timeout=30)
+    if probe.returncode != 0 or probe.stdout.strip() != CONTAINER_IMAGE_ID:
+        raise CodexContainerConfigurationError(
+            f"pinned actor image {CONTAINER_IMAGE_ID} is not present in the "
+            f"Docker daemon: {probe.stderr.strip()[-300:]}")
 
 
 def _sha256_file(path: Path) -> str:
@@ -162,6 +201,7 @@ def run_actor(
         raise CodexContainerError("Codex actor launcher/argv policy bytes changed before spawn")
     native, code_mode_host = _codex_native_assets(wrapper)
     auth = _auth_file(environment)
+    _require_image_present(environment)
     with tempfile.TemporaryDirectory(
             prefix="autokernel-codex-assets-", dir=ASSET_TEMP_ROOT) as temporary:
         assets = Path(temporary)

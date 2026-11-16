@@ -173,6 +173,10 @@ class PlannerProviderTransient(PlannerOutputRefusal):
     """A retryable provider/API interruption before candidate validation."""
 
 
+class PlannerActorLaunchFailure(DiscoveryControllerError):
+    """The planner actor container could not start; terminal, never retried."""
+
+
 class GovernedStageRefusal(DiscoveryControllerError):
     stage = ""
     disposition = ""
@@ -407,6 +411,13 @@ def _atomic(path: Path, value: Mapping[str, Any]) -> None:
     directory = os.open(path.parent, os.O_DIRECTORY)
     try: os.fsync(directory)
     finally: os.close(directory)
+
+
+def _atomic_text(path: Path, text: str) -> None:
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        f.write(text); f.flush(); os.fsync(f.fileno())
+    os.replace(tmp, path)
 
 
 def sealed_roster() -> dict[str, Any]:
@@ -1286,6 +1297,10 @@ class CodexPlanner:
                 workspace, checkpoint_path, context=context)
             result_facts = dict(checkpoint["result"])
             actor_failure_message = None
+            non_transient_failure = (
+                result_facts.get("returncode")
+                in codex_container_actor.DOCKER_LAUNCH_FAILURE_CODES)
+            actor_failure_detail = ""
         else:
             try:
                 result = codex_container_actor.run_actor(wrapper=self.wrapper, workspace=workspace, model=SOL["model"], effort=SOL["effort"], prompt=prompt, environment=self.environment,
@@ -1308,6 +1323,8 @@ class CodexPlanner:
                 # signal-driven interruption is a real stop request and stays
                 # terminal.
                 if (isinstance(exc, (codex_container_actor.CodexContainerError, OSError))
+                        and not isinstance(
+                            exc, codex_container_actor.CodexContainerConfigurationError)
                         and "interrupted" not in str(exc)):
                     raise PlannerProviderTransient(
                         f"actor transport failure: {type(exc).__name__}: "
@@ -1323,6 +1340,18 @@ class CodexPlanner:
             actor_failure_message = (
                 f"Sol actor failed: {getattr(result, 'stderr', '')[-400:]}"
                 if result.returncode else None)
+            non_transient_failure = bool(
+                result.returncode
+                and codex_container_actor.is_non_transient_failure(result))
+            actor_failure_detail = (
+                getattr(result, "stdout", "")[-400:] if non_transient_failure else "")
+            if result.returncode and checkpoint_path is not None:
+                # The checkpoint and telemetry carry only digests; keep the
+                # failing actor's stderr text beside them for diagnosis.
+                _atomic_text(checkpoint_path.with_name("actor-stderr.txt"),
+                             getattr(result, "stderr", "")[-8000:]
+                             + "\n--- stdout tail ---\n"
+                             + getattr(result, "stdout", "")[-4000:])
             if checkpoint_path is not None:
                 _seal_planner_actor_checkpoint(
                     workspace, checkpoint_path, context=context,
@@ -1337,6 +1366,14 @@ class CodexPlanner:
                     result=result_facts,
                     operation_key=telemetry_operation_key,
                     failure_sink=self.telemetry_failures)
+            if non_transient_failure:
+                # The container never ran, or its credential is dead: a
+                # deployment fault, not provider availability.  Fail closed
+                # now instead of backing off.
+                raise PlannerActorLaunchFailure(
+                    f"planner actor failed non-transiently "
+                    f"(rc={result_facts['returncode']}): "
+                    f"{actor_failure_message or ''} {actor_failure_detail}")
             raise PlannerProviderTransient(
                 actor_failure_message
                 or f"sealed Sol actor invocation failed with return code "

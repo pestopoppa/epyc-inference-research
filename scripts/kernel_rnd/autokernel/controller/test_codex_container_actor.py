@@ -71,6 +71,17 @@ class CodexContainerActorTest(unittest.TestCase):
                     model="other", effort="high",
                     container_name="autokernel-codex-unit")
 
+    def test_missing_pinned_image_is_a_non_transient_configuration_error(self):
+        import subprocess
+        from unittest import mock
+        missing = subprocess.CompletedProcess(
+            (), 1, stdout="", stderr="Error: No such image: x")
+        with mock.patch.object(C.subprocess, "run", return_value=missing):
+            with self.assertRaisesRegex(
+                    C.CodexContainerConfigurationError, "not present"):
+                C._require_image_present({})
+        self.assertIn(125, C.DOCKER_LAUNCH_FAILURE_CODES)
+
 
 if __name__ == "__main__":
     unittest.main()
