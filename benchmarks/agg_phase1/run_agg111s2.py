@@ -122,7 +122,13 @@ def main(argv: list[str] | None = None) -> int:
     rec = P.Recorder(a.out / "results.jsonl")
     smoke = a.smoke or os.environ.get("FILLER_SMOKE") == "1"
     deadline = float(os.environ["FILLER_DEADLINE"]) if os.environ.get("FILLER_DEADLINE") else None
-    guard = P.make_guard(deadline, os.environ.get("FILLER_STOPFILE"))
+    grant_guard = P.make_guard(deadline, os.environ.get("FILLER_STOPFILE"))
+    row_stop = os.environ.get("AGG111S2_ROW_STOP")      # the row's own STOP file, checked before every model call
+
+    def guard() -> None:
+        grant_guard()
+        if row_stop and os.path.exists(row_stop):
+            raise P.Stop("row-stopfile")
     rec.emit("meta", phase=a.phase, smoke=smoke, predeclared_sha256=G.PREDECLARED_SHA, orch_pin=a.orch_pin, url=a.url,
              model_id=a.model_id, booked_s=a.booked_s, final=False)
     from src.aggregation.llm_backend import LlamaServerBackend  # noqa: PLC0415
