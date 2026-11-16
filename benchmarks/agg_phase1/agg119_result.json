@@ -1,0 +1,1257 @@
+{
+ "task": "AGG-1.19 opt-in L3 components fy_end_lone_monthday + fy1_captions, offline replay (no model)",
+ "model_calls": 0,
+ "label": "POST-HOC for the 12 target cells (the AGG-1.18 diagnosis saw them); every other cell is a regression check. The 7 held-out docs are excluded and unscored.",
+ "predeclared_sha256": "d41a9d284e10935e27f2d930847d63cbf89710e1d618569864b280208cb670a4",
+ "orch_head": "e1ccd216988dd74ade13765cc10c087038d432ab",
+ "orch_facts_det_sha256": "327ea39380afb3bb63ccad8a1cbf3b40066e88505b971d41020b524d76cfe8c4",
+ "inputs_sha256": {
+  "/mnt/raid0/llm/tmp/agg116b-replay-20261116/store.v3.sqlite": "f04db76e157a3b3fa40d211a1c2cea14f28c2fb7a013e7d3efb9f888e78e9857",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/seed/store_agg112r2.sqlite": "98f1aabfd89c4869f654a59dc8bbe758be6f2e3f2fdb3c8f59226139df4a6d7f",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/seed/agg112ingest_results.jsonl": "7200032339d09dfcd280f9000ba4f79bcc4317e98f1e972e60d59ecb80957e64",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/out/results.jsonl": "1ec9a62fe6114fa739d34e8c7c9a338487f3b230737ece39b45300b79128193e",
+  "/mnt/raid0/llm/tmp/agg118-ingest-cpu-20261116/out/store.pilot.v3.sqlite": "066b06d13b296481f2e043403e163c8e0339ffb96d65855cef6f715e16770297",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/out/store_agg13.sqlite": "b5d2abd2b3c4685761dd8e2245b6f4e441c3d03bc9bcd07cdaf687e6d28208ce",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/out/store_agg14.sqlite": "54206f934fbb50481d44ed7f831401e70df45858eacb155a3b9e34430efefdf1"
+ },
+ "l3_parity": {
+  "agg113": {
+   "kwargs": "v2+fy_end",
+   "stored_not_replayed": 0,
+   "replayed_not_stored": 0,
+   "excluded_docs": []
+  },
+  "r2": {
+   "kwargs": "v2",
+   "stored_not_replayed": 0,
+   "replayed_not_stored": 0,
+   "excluded_docs": []
+  },
+  "agg13": {
+   "kwargs": "v1",
+   "stored_not_replayed": 0,
+   "replayed_not_stored": 3573,
+   "excluded_docs": [
+    "3M_2022_10K",
+    "JOHNSON_JOHNSON_2022_10K",
+    "MICROSOFT_2022_10K"
+   ]
+  },
+  "agg14": {
+   "kwargs": "v1",
+   "stored_not_replayed": 0,
+   "replayed_not_stored": 0,
+   "excluded_docs": []
+  },
+  "pilot": {
+   "kwargs": "v2+fy_end",
+   "stored_not_replayed": 0,
+   "replayed_not_stored": 0,
+   "excluded_docs": []
+  }
+ },
+ "unseen_docs_excluded": [
+  "AMERICANWATERWORKS_2019_10K",
+  "CORNING_2019_10K",
+  "CVSHEALTH_2019_10K",
+  "FEDEX_2023_10K",
+  "MGMRESORTS_2019_10K",
+  "PEPSICO_2019_10K",
+  "VERIZON_2019_10K"
+ ],
+ "before_v3": {
+  "agg113": {
+   "raw": 71,
+   "canonical": 67,
+   "raw14": 6,
+   "canonical14": 6
+  },
+  "r2": {
+   "raw": 208,
+   "canonical": 203
+  },
+  "agg13": {
+   "raw": 24,
+   "canonical": 22
+  },
+  "agg14": {
+   "raw": 24,
+   "canonical": 23
+  },
+  "pilot": {
+   "raw": 36,
+   "canonical": 35
+  }
+ },
+ "fy_end_stress": {
+  "agg113": {
+   "period_changes_by_doc": {},
+   "facts_only_in_one": 0
+  },
+  "r2": {
+   "period_changes_by_doc": {},
+   "facts_only_in_one": 0
+  },
+  "agg13": {
+   "period_changes_by_doc": {},
+   "facts_only_in_one": 0
+  },
+  "agg14": {
+   "period_changes_by_doc": {},
+   "facts_only_in_one": 0
+  },
+  "pilot": {
+   "period_changes_by_doc": {
+    "SALESFORCE_2023_10K": 190
+   },
+   "facts_only_in_one": 0
+  }
+ },
+ "variants": {
+  "fy_end_lone_monthday": {
+   "components": [
+    "fy_end_lone_monthday"
+   ],
+   "delta": {
+    "agg113": {
+     "removed": 0,
+     "added": 0,
+     "added_by_field_top": {}
+    },
+    "r2": {
+     "removed": 0,
+     "added": 0,
+     "added_by_field_top": {}
+    },
+    "agg13": {
+     "removed": 0,
+     "added": 0,
+     "added_by_field_top": {}
+    },
+    "agg14": {
+     "removed": 0,
+     "added": 0,
+     "added_by_field_top": {}
+    },
+    "pilot": {
+     "removed": 190,
+     "added": 190,
+     "added_by_field_top": {
+      "eps_diluted": 9,
+      "eps_basic": 9,
+      "subscription_and_support": 8,
+      "net_cash_provided_by_used_in_financing_activities": 6,
+      "net_cash_used_in_investing_activities": 6,
+      "gains_losses_on_strategic_investments_net": 6,
+      "professional_services_and_other": 6,
+      "net_income": 6,
+      "operating_cash_flow": 6,
+      "research_and_development": 5,
+      "revenue": 5,
+      "capex": 3
+     }
+    }
+   },
+   "sets": {
+    "76:raw": {
+     "n": 76,
+     "before": 71,
+     "after": 71,
+     "fixed": [],
+     "regressed": []
+    },
+    "76:canonical": {
+     "n": 76,
+     "before": 67,
+     "after": 67,
+     "fixed": [],
+     "regressed": []
+    },
+    "14:raw": {
+     "n": 14,
+     "before": 6,
+     "after": 6,
+     "fixed": [],
+     "regressed": []
+    },
+    "14:canonical": {
+     "n": 14,
+     "before": 6,
+     "after": 6,
+     "fixed": [],
+     "regressed": []
+    },
+    "211:raw": {
+     "n": 211,
+     "before": 208,
+     "after": 208,
+     "fixed": [],
+     "regressed": []
+    },
+    "211:canonical": {
+     "n": 211,
+     "before": 203,
+     "after": 203,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:raw": {
+     "n": 24,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:canonical": {
+     "n": 24,
+     "before": 22,
+     "after": 22,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:raw": {
+     "n": 25,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:canonical": {
+     "n": 25,
+     "before": 23,
+     "after": 23,
+     "fixed": [],
+     "regressed": []
+    },
+    "48:raw": {
+     "n": 48,
+     "before": 36,
+     "after": 44,
+     "fixed": [
+      "SALESFORCE_2023_10K|capex|2021",
+      "SALESFORCE_2023_10K|capex|2022",
+      "SALESFORCE_2023_10K|net_income|2021",
+      "SALESFORCE_2023_10K|net_income|2022",
+      "SALESFORCE_2023_10K|operating_cash_flow|2021",
+      "SALESFORCE_2023_10K|operating_cash_flow|2022",
+      "SALESFORCE_2023_10K|revenue|2021",
+      "SALESFORCE_2023_10K|revenue|2022"
+     ],
+     "regressed": []
+    },
+    "48:canonical": {
+     "n": 48,
+     "before": 35,
+     "after": 41,
+     "fixed": [
+      "SALESFORCE_2023_10K|capex|2021",
+      "SALESFORCE_2023_10K|capex|2022",
+      "SALESFORCE_2023_10K|operating_cash_flow|2021",
+      "SALESFORCE_2023_10K|operating_cash_flow|2022",
+      "SALESFORCE_2023_10K|revenue|2021",
+      "SALESFORCE_2023_10K|revenue|2022"
+     ],
+     "regressed": []
+    }
+   },
+   "regressions_vs_v3": [],
+   "target12_fixed_raw": [
+    "SALESFORCE_2023_10K|capex|2021",
+    "SALESFORCE_2023_10K|capex|2022",
+    "SALESFORCE_2023_10K|net_income|2021",
+    "SALESFORCE_2023_10K|net_income|2022",
+    "SALESFORCE_2023_10K|operating_cash_flow|2021",
+    "SALESFORCE_2023_10K|operating_cash_flow|2022",
+    "SALESFORCE_2023_10K|revenue|2021",
+    "SALESFORCE_2023_10K|revenue|2022"
+   ],
+   "n_target12_fixed_raw": 8,
+   "pilot_fixed_raw_nontarget": [],
+   "boeing_ni_2019_canonical": {
+    "raw_verdict": "HIT",
+    "canonical_value": -677.0,
+    "canonical_quote": ""
+   }
+  },
+  "fy1_captions": {
+   "components": [
+    "fy1_captions"
+   ],
+   "delta": {
+    "agg113": {
+     "removed": 3,
+     "added": 3,
+     "added_by_field_top": {
+      "operating_cash_flow": 3
+     }
+    },
+    "r2": {
+     "removed": 0,
+     "added": 0,
+     "added_by_field_top": {}
+    },
+    "agg13": {
+     "removed": 0,
+     "added": 0,
+     "added_by_field_top": {}
+    },
+    "agg14": {
+     "removed": 0,
+     "added": 0,
+     "added_by_field_top": {}
+    },
+    "pilot": {
+     "removed": 36,
+     "added": 36,
+     "added_by_field_top": {
+      "net_income": 18,
+      "operating_cash_flow": 15,
+      "capex": 3
+     }
+    }
+   },
+   "sets": {
+    "76:raw": {
+     "n": 76,
+     "before": 71,
+     "after": 71,
+     "fixed": [],
+     "regressed": []
+    },
+    "76:canonical": {
+     "n": 76,
+     "before": 67,
+     "after": 67,
+     "fixed": [],
+     "regressed": []
+    },
+    "14:raw": {
+     "n": 14,
+     "before": 6,
+     "after": 6,
+     "fixed": [],
+     "regressed": []
+    },
+    "14:canonical": {
+     "n": 14,
+     "before": 6,
+     "after": 6,
+     "fixed": [],
+     "regressed": []
+    },
+    "211:raw": {
+     "n": 211,
+     "before": 208,
+     "after": 208,
+     "fixed": [],
+     "regressed": []
+    },
+    "211:canonical": {
+     "n": 211,
+     "before": 203,
+     "after": 203,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:raw": {
+     "n": 24,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:canonical": {
+     "n": 24,
+     "before": 22,
+     "after": 22,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:raw": {
+     "n": 25,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:canonical": {
+     "n": 25,
+     "before": 23,
+     "after": 23,
+     "fixed": [],
+     "regressed": []
+    },
+    "48:raw": {
+     "n": 48,
+     "before": 36,
+     "after": 40,
+     "fixed": [
+      "BOEING_2019_10K|capex|2018",
+      "BOEING_2019_10K|net_income|2018",
+      "BOEING_2019_10K|operating_cash_flow|2018",
+      "NETFLIX_2019_10K|operating_cash_flow|2018"
+     ],
+     "regressed": []
+    },
+    "48:canonical": {
+     "n": 48,
+     "before": 35,
+     "after": 40,
+     "fixed": [
+      "BOEING_2019_10K|capex|2018",
+      "BOEING_2019_10K|net_income|2018",
+      "BOEING_2019_10K|net_income|2019",
+      "BOEING_2019_10K|operating_cash_flow|2018",
+      "NETFLIX_2019_10K|operating_cash_flow|2018"
+     ],
+     "regressed": []
+    }
+   },
+   "regressions_vs_v3": [],
+   "target12_fixed_raw": [
+    "BOEING_2019_10K|capex|2018",
+    "BOEING_2019_10K|net_income|2018",
+    "BOEING_2019_10K|operating_cash_flow|2018",
+    "NETFLIX_2019_10K|operating_cash_flow|2018"
+   ],
+   "n_target12_fixed_raw": 4,
+   "pilot_fixed_raw_nontarget": [],
+   "boeing_ni_2019_canonical": {
+    "raw_verdict": "HIT",
+    "canonical_value": -636.0,
+    "canonical_quote": ""
+   }
+  },
+  "both": {
+   "components": [
+    "fy_end_lone_monthday",
+    "fy1_captions"
+   ],
+   "delta": {
+    "agg113": {
+     "removed": 3,
+     "added": 3,
+     "added_by_field_top": {
+      "operating_cash_flow": 3
+     }
+    },
+    "r2": {
+     "removed": 0,
+     "added": 0,
+     "added_by_field_top": {}
+    },
+    "agg13": {
+     "removed": 0,
+     "added": 0,
+     "added_by_field_top": {}
+    },
+    "agg14": {
+     "removed": 0,
+     "added": 0,
+     "added_by_field_top": {}
+    },
+    "pilot": {
+     "removed": 226,
+     "added": 226,
+     "added_by_field_top": {
+      "net_income": 24,
+      "operating_cash_flow": 21,
+      "eps_diluted": 9,
+      "eps_basic": 9,
+      "subscription_and_support": 8,
+      "capex": 6,
+      "net_cash_provided_by_used_in_financing_activities": 6,
+      "net_cash_used_in_investing_activities": 6,
+      "gains_losses_on_strategic_investments_net": 6,
+      "professional_services_and_other": 6,
+      "research_and_development": 5,
+      "revenue": 5
+     }
+    }
+   },
+   "sets": {
+    "76:raw": {
+     "n": 76,
+     "before": 71,
+     "after": 71,
+     "fixed": [],
+     "regressed": []
+    },
+    "76:canonical": {
+     "n": 76,
+     "before": 67,
+     "after": 67,
+     "fixed": [],
+     "regressed": []
+    },
+    "14:raw": {
+     "n": 14,
+     "before": 6,
+     "after": 6,
+     "fixed": [],
+     "regressed": []
+    },
+    "14:canonical": {
+     "n": 14,
+     "before": 6,
+     "after": 6,
+     "fixed": [],
+     "regressed": []
+    },
+    "211:raw": {
+     "n": 211,
+     "before": 208,
+     "after": 208,
+     "fixed": [],
+     "regressed": []
+    },
+    "211:canonical": {
+     "n": 211,
+     "before": 203,
+     "after": 203,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:raw": {
+     "n": 24,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:canonical": {
+     "n": 24,
+     "before": 22,
+     "after": 22,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:raw": {
+     "n": 25,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:canonical": {
+     "n": 25,
+     "before": 23,
+     "after": 23,
+     "fixed": [],
+     "regressed": []
+    },
+    "48:raw": {
+     "n": 48,
+     "before": 36,
+     "after": 48,
+     "fixed": [
+      "BOEING_2019_10K|capex|2018",
+      "BOEING_2019_10K|net_income|2018",
+      "BOEING_2019_10K|operating_cash_flow|2018",
+      "NETFLIX_2019_10K|operating_cash_flow|2018",
+      "SALESFORCE_2023_10K|capex|2021",
+      "SALESFORCE_2023_10K|capex|2022",
+      "SALESFORCE_2023_10K|net_income|2021",
+      "SALESFORCE_2023_10K|net_income|2022",
+      "SALESFORCE_2023_10K|operating_cash_flow|2021",
+      "SALESFORCE_2023_10K|operating_cash_flow|2022",
+      "SALESFORCE_2023_10K|revenue|2021",
+      "SALESFORCE_2023_10K|revenue|2022"
+     ],
+     "regressed": []
+    },
+    "48:canonical": {
+     "n": 48,
+     "before": 35,
+     "after": 46,
+     "fixed": [
+      "BOEING_2019_10K|capex|2018",
+      "BOEING_2019_10K|net_income|2018",
+      "BOEING_2019_10K|net_income|2019",
+      "BOEING_2019_10K|operating_cash_flow|2018",
+      "NETFLIX_2019_10K|operating_cash_flow|2018",
+      "SALESFORCE_2023_10K|capex|2021",
+      "SALESFORCE_2023_10K|capex|2022",
+      "SALESFORCE_2023_10K|operating_cash_flow|2021",
+      "SALESFORCE_2023_10K|operating_cash_flow|2022",
+      "SALESFORCE_2023_10K|revenue|2021",
+      "SALESFORCE_2023_10K|revenue|2022"
+     ],
+     "regressed": []
+    }
+   },
+   "regressions_vs_v3": [],
+   "target12_fixed_raw": [
+    "BOEING_2019_10K|capex|2018",
+    "BOEING_2019_10K|net_income|2018",
+    "BOEING_2019_10K|operating_cash_flow|2018",
+    "NETFLIX_2019_10K|operating_cash_flow|2018",
+    "SALESFORCE_2023_10K|capex|2021",
+    "SALESFORCE_2023_10K|capex|2022",
+    "SALESFORCE_2023_10K|net_income|2021",
+    "SALESFORCE_2023_10K|net_income|2022",
+    "SALESFORCE_2023_10K|operating_cash_flow|2021",
+    "SALESFORCE_2023_10K|operating_cash_flow|2022",
+    "SALESFORCE_2023_10K|revenue|2021",
+    "SALESFORCE_2023_10K|revenue|2022"
+   ],
+   "n_target12_fixed_raw": 12,
+   "pilot_fixed_raw_nontarget": [],
+   "boeing_ni_2019_canonical": {
+    "raw_verdict": "HIT",
+    "canonical_value": -636.0,
+    "canonical_quote": ""
+   }
+  },
+  "v4_textrow": {
+   "components": [
+    "ltd_qualifier",
+    "note_ref",
+    "tail_label",
+    "pipe_cells_ltd"
+   ],
+   "delta": {
+    "agg113": {
+     "removed": 552,
+     "added": 89,
+     "added_by_field_top": {
+      "long_term_debt": 18,
+      "operating_income": 18,
+      "revenue": 9,
+      "net_income": 9,
+      "reorganization_items_net_note_2": 9,
+      "wildfire_fund_expense": 6,
+      "eps": 3,
+      "operating_cash_flow": 3,
+      "total_current_liabilities": 2,
+      "current_portion_of_long_term_debt_note_15": 2,
+      "total_equity": 2,
+      "total_current_assets": 2
+     }
+    },
+    "r2": {
+     "removed": 796,
+     "added": 276,
+     "added_by_field_top": {
+      "net_income": 41,
+      "long_term_debt": 27,
+      "cash_and_equivalents": 12,
+      "revenue": 12,
+      "derivative_instruments_note_14": 8,
+      "eps": 6,
+      "balance_at_end_of_year": 6,
+      "net_income_attributable": 5,
+      "total_equity": 5,
+      "share_repurchase_liability_note_16": 4,
+      "customer_deposits_note_4": 4,
+      "deferred_taxes_on_income_note_8": 4
+     }
+    },
+    "agg13": {
+     "removed": 720,
+     "added": 197,
+     "added_by_field_top": {
+      "long_term_debt": 23,
+      "net_income": 22,
+      "cash_and_equivalents": 12,
+      "revenue": 12,
+      "derivative_instruments_note_14": 8,
+      "balance_at_end_of_year": 6,
+      "net_income_attributable": 5,
+      "total_equity": 5,
+      "share_repurchase_liability_note_16": 4,
+      "customer_deposits_note_4": 4,
+      "deferred_revenue_note_4": 4,
+      "non_cash_consideration_transferred_for_aes_clean_energy_acquisitions_see_note_25": 3
+     }
+    },
+    "agg14": {
+     "removed": 795,
+     "added": 275,
+     "added_by_field_top": {
+      "net_income": 40,
+      "long_term_debt": 27,
+      "cash_and_equivalents": 12,
+      "revenue": 12,
+      "derivative_instruments_note_14": 8,
+      "eps": 6,
+      "balance_at_end_of_year": 6,
+      "net_income_attributable": 5,
+      "total_equity": 5,
+      "share_repurchase_liability_note_16": 4,
+      "customer_deposits_note_4": 4,
+      "deferred_taxes_on_income_note_8": 4
+     }
+    },
+    "pilot": {
+     "removed": 15,
+     "added": 18,
+     "added_by_field_top": {
+      "net_income": 12,
+      "revenue": 3,
+      "restructuring_note_10": 3
+     }
+    }
+   },
+   "sets": {
+    "76:raw": {
+     "n": 76,
+     "before": 71,
+     "after": 71,
+     "fixed": [],
+     "regressed": []
+    },
+    "76:canonical": {
+     "n": 76,
+     "before": 67,
+     "after": 69,
+     "fixed": [
+      "AMCOR_2022_10K|total_current_assets",
+      "AMCOR_2022_10K|total_current_liabilities"
+     ],
+     "regressed": []
+    },
+    "14:raw": {
+     "n": 14,
+     "before": 6,
+     "after": 14,
+     "fixed": [
+      "AMCOR_2022_10K|long_term_debt|2021",
+      "BLOCK_2022_10K|long_term_debt|2021",
+      "BLOCK_2022_10K|long_term_debt|2022",
+      "FOOTLOCKER_2023_10K|long_term_debt|2021",
+      "FOOTLOCKER_2023_10K|long_term_debt|2022",
+      "NIKE_2022_10K|long_term_debt|2021",
+      "PG_E_2022_10K|long_term_debt|2021",
+      "PG_E_2022_10K|long_term_debt|2022"
+     ],
+     "regressed": []
+    },
+    "14:canonical": {
+     "n": 14,
+     "before": 6,
+     "after": 14,
+     "fixed": [
+      "AMCOR_2022_10K|long_term_debt|2021",
+      "BLOCK_2022_10K|long_term_debt|2021",
+      "BLOCK_2022_10K|long_term_debt|2022",
+      "FOOTLOCKER_2023_10K|long_term_debt|2021",
+      "FOOTLOCKER_2023_10K|long_term_debt|2022",
+      "NIKE_2022_10K|long_term_debt|2021",
+      "PG_E_2022_10K|long_term_debt|2021",
+      "PG_E_2022_10K|long_term_debt|2022"
+     ],
+     "regressed": []
+    },
+    "211:raw": {
+     "n": 211,
+     "before": 208,
+     "after": 208,
+     "fixed": [],
+     "regressed": []
+    },
+    "211:canonical": {
+     "n": 211,
+     "before": 203,
+     "after": 204,
+     "fixed": [
+      "CORNING_2022_10K|revenue"
+     ],
+     "regressed": []
+    },
+    "49:agg13:raw": {
+     "n": 24,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:canonical": {
+     "n": 24,
+     "before": 22,
+     "after": 22,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:raw": {
+     "n": 25,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:canonical": {
+     "n": 25,
+     "before": 23,
+     "after": 24,
+     "fixed": [
+      "ACTIVISIONBLIZZARD_2022_10K|long_term_debt|2022"
+     ],
+     "regressed": []
+    },
+    "48:raw": {
+     "n": 48,
+     "before": 36,
+     "after": 36,
+     "fixed": [],
+     "regressed": []
+    },
+    "48:canonical": {
+     "n": 48,
+     "before": 35,
+     "after": 35,
+     "fixed": [],
+     "regressed": []
+    }
+   },
+   "regressions_vs_v3": [],
+   "target12_fixed_raw": [],
+   "n_target12_fixed_raw": 0,
+   "pilot_fixed_raw_nontarget": [],
+   "boeing_ni_2019_canonical": {
+    "raw_verdict": "HIT",
+    "canonical_value": 10460.0,
+    "canonical_quote": ""
+   }
+  },
+  "v5_l3": {
+   "components": [
+    "ltd_qualifier",
+    "note_ref",
+    "tail_label",
+    "pipe_cells_ltd",
+    "fy_end_lone_monthday",
+    "fy1_captions"
+   ],
+   "delta": {
+    "agg113": {
+     "removed": 555,
+     "added": 92,
+     "added_by_field_top": {
+      "long_term_debt": 18,
+      "operating_income": 18,
+      "revenue": 9,
+      "net_income": 9,
+      "reorganization_items_net_note_2": 9,
+      "operating_cash_flow": 6,
+      "wildfire_fund_expense": 6,
+      "eps": 3,
+      "total_current_liabilities": 2,
+      "current_portion_of_long_term_debt_note_15": 2,
+      "total_equity": 2,
+      "total_current_assets": 2
+     }
+    },
+    "r2": {
+     "removed": 796,
+     "added": 276,
+     "added_by_field_top": {
+      "net_income": 41,
+      "long_term_debt": 27,
+      "cash_and_equivalents": 12,
+      "revenue": 12,
+      "derivative_instruments_note_14": 8,
+      "eps": 6,
+      "balance_at_end_of_year": 6,
+      "net_income_attributable": 5,
+      "total_equity": 5,
+      "share_repurchase_liability_note_16": 4,
+      "customer_deposits_note_4": 4,
+      "deferred_taxes_on_income_note_8": 4
+     }
+    },
+    "agg13": {
+     "removed": 720,
+     "added": 197,
+     "added_by_field_top": {
+      "long_term_debt": 23,
+      "net_income": 22,
+      "cash_and_equivalents": 12,
+      "revenue": 12,
+      "derivative_instruments_note_14": 8,
+      "balance_at_end_of_year": 6,
+      "net_income_attributable": 5,
+      "total_equity": 5,
+      "share_repurchase_liability_note_16": 4,
+      "customer_deposits_note_4": 4,
+      "deferred_revenue_note_4": 4,
+      "non_cash_consideration_transferred_for_aes_clean_energy_acquisitions_see_note_25": 3
+     }
+    },
+    "agg14": {
+     "removed": 795,
+     "added": 275,
+     "added_by_field_top": {
+      "net_income": 40,
+      "long_term_debt": 27,
+      "cash_and_equivalents": 12,
+      "revenue": 12,
+      "derivative_instruments_note_14": 8,
+      "eps": 6,
+      "balance_at_end_of_year": 6,
+      "net_income_attributable": 5,
+      "total_equity": 5,
+      "share_repurchase_liability_note_16": 4,
+      "customer_deposits_note_4": 4,
+      "deferred_taxes_on_income_note_8": 4
+     }
+    },
+    "pilot": {
+     "removed": 238,
+     "added": 241,
+     "added_by_field_top": {
+      "net_income": 36,
+      "operating_cash_flow": 21,
+      "eps_diluted": 9,
+      "eps_basic": 9,
+      "subscription_and_support": 8,
+      "revenue": 8,
+      "capex": 6,
+      "net_cash_provided_by_used_in_financing_activities": 6,
+      "net_cash_used_in_investing_activities": 6,
+      "gains_losses_on_strategic_investments_net": 6,
+      "professional_services_and_other": 6,
+      "research_and_development": 5
+     }
+    }
+   },
+   "sets": {
+    "76:raw": {
+     "n": 76,
+     "before": 71,
+     "after": 71,
+     "fixed": [],
+     "regressed": []
+    },
+    "76:canonical": {
+     "n": 76,
+     "before": 67,
+     "after": 69,
+     "fixed": [
+      "AMCOR_2022_10K|total_current_assets",
+      "AMCOR_2022_10K|total_current_liabilities"
+     ],
+     "regressed": []
+    },
+    "14:raw": {
+     "n": 14,
+     "before": 6,
+     "after": 14,
+     "fixed": [
+      "AMCOR_2022_10K|long_term_debt|2021",
+      "BLOCK_2022_10K|long_term_debt|2021",
+      "BLOCK_2022_10K|long_term_debt|2022",
+      "FOOTLOCKER_2023_10K|long_term_debt|2021",
+      "FOOTLOCKER_2023_10K|long_term_debt|2022",
+      "NIKE_2022_10K|long_term_debt|2021",
+      "PG_E_2022_10K|long_term_debt|2021",
+      "PG_E_2022_10K|long_term_debt|2022"
+     ],
+     "regressed": []
+    },
+    "14:canonical": {
+     "n": 14,
+     "before": 6,
+     "after": 14,
+     "fixed": [
+      "AMCOR_2022_10K|long_term_debt|2021",
+      "BLOCK_2022_10K|long_term_debt|2021",
+      "BLOCK_2022_10K|long_term_debt|2022",
+      "FOOTLOCKER_2023_10K|long_term_debt|2021",
+      "FOOTLOCKER_2023_10K|long_term_debt|2022",
+      "NIKE_2022_10K|long_term_debt|2021",
+      "PG_E_2022_10K|long_term_debt|2021",
+      "PG_E_2022_10K|long_term_debt|2022"
+     ],
+     "regressed": []
+    },
+    "211:raw": {
+     "n": 211,
+     "before": 208,
+     "after": 208,
+     "fixed": [],
+     "regressed": []
+    },
+    "211:canonical": {
+     "n": 211,
+     "before": 203,
+     "after": 204,
+     "fixed": [
+      "CORNING_2022_10K|revenue"
+     ],
+     "regressed": []
+    },
+    "49:agg13:raw": {
+     "n": 24,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:canonical": {
+     "n": 24,
+     "before": 22,
+     "after": 22,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:raw": {
+     "n": 25,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:canonical": {
+     "n": 25,
+     "before": 23,
+     "after": 24,
+     "fixed": [
+      "ACTIVISIONBLIZZARD_2022_10K|long_term_debt|2022"
+     ],
+     "regressed": []
+    },
+    "48:raw": {
+     "n": 48,
+     "before": 36,
+     "after": 48,
+     "fixed": [
+      "BOEING_2019_10K|capex|2018",
+      "BOEING_2019_10K|net_income|2018",
+      "BOEING_2019_10K|operating_cash_flow|2018",
+      "NETFLIX_2019_10K|operating_cash_flow|2018",
+      "SALESFORCE_2023_10K|capex|2021",
+      "SALESFORCE_2023_10K|capex|2022",
+      "SALESFORCE_2023_10K|net_income|2021",
+      "SALESFORCE_2023_10K|net_income|2022",
+      "SALESFORCE_2023_10K|operating_cash_flow|2021",
+      "SALESFORCE_2023_10K|operating_cash_flow|2022",
+      "SALESFORCE_2023_10K|revenue|2021",
+      "SALESFORCE_2023_10K|revenue|2022"
+     ],
+     "regressed": []
+    },
+    "48:canonical": {
+     "n": 48,
+     "before": 35,
+     "after": 45,
+     "fixed": [
+      "BOEING_2019_10K|capex|2018",
+      "BOEING_2019_10K|net_income|2018",
+      "BOEING_2019_10K|operating_cash_flow|2018",
+      "NETFLIX_2019_10K|operating_cash_flow|2018",
+      "SALESFORCE_2023_10K|capex|2021",
+      "SALESFORCE_2023_10K|capex|2022",
+      "SALESFORCE_2023_10K|operating_cash_flow|2021",
+      "SALESFORCE_2023_10K|operating_cash_flow|2022",
+      "SALESFORCE_2023_10K|revenue|2021",
+      "SALESFORCE_2023_10K|revenue|2022"
+     ],
+     "regressed": []
+    }
+   },
+   "regressions_vs_v3": [],
+   "target12_fixed_raw": [
+    "BOEING_2019_10K|capex|2018",
+    "BOEING_2019_10K|net_income|2018",
+    "BOEING_2019_10K|operating_cash_flow|2018",
+    "NETFLIX_2019_10K|operating_cash_flow|2018",
+    "SALESFORCE_2023_10K|capex|2021",
+    "SALESFORCE_2023_10K|capex|2022",
+    "SALESFORCE_2023_10K|net_income|2021",
+    "SALESFORCE_2023_10K|net_income|2022",
+    "SALESFORCE_2023_10K|operating_cash_flow|2021",
+    "SALESFORCE_2023_10K|operating_cash_flow|2022",
+    "SALESFORCE_2023_10K|revenue|2021",
+    "SALESFORCE_2023_10K|revenue|2022"
+   ],
+   "n_target12_fixed_raw": 12,
+   "pilot_fixed_raw_nontarget": [],
+   "boeing_ni_2019_canonical": {
+    "raw_verdict": "HIT",
+    "canonical_value": 10460.0,
+    "canonical_quote": ""
+   },
+   "sets_vs_v4": {
+    "76:raw": {
+     "n": 76,
+     "before": 71,
+     "after": 71,
+     "fixed": [],
+     "regressed": []
+    },
+    "76:canonical": {
+     "n": 76,
+     "before": 69,
+     "after": 69,
+     "fixed": [],
+     "regressed": []
+    },
+    "14:raw": {
+     "n": 14,
+     "before": 14,
+     "after": 14,
+     "fixed": [],
+     "regressed": []
+    },
+    "14:canonical": {
+     "n": 14,
+     "before": 14,
+     "after": 14,
+     "fixed": [],
+     "regressed": []
+    },
+    "211:raw": {
+     "n": 211,
+     "before": 208,
+     "after": 208,
+     "fixed": [],
+     "regressed": []
+    },
+    "211:canonical": {
+     "n": 211,
+     "before": 204,
+     "after": 204,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:raw": {
+     "n": 24,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:canonical": {
+     "n": 24,
+     "before": 22,
+     "after": 22,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:raw": {
+     "n": 25,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:canonical": {
+     "n": 25,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "48:raw": {
+     "n": 48,
+     "before": 36,
+     "after": 48,
+     "fixed": [
+      "BOEING_2019_10K|capex|2018",
+      "BOEING_2019_10K|net_income|2018",
+      "BOEING_2019_10K|operating_cash_flow|2018",
+      "NETFLIX_2019_10K|operating_cash_flow|2018",
+      "SALESFORCE_2023_10K|capex|2021",
+      "SALESFORCE_2023_10K|capex|2022",
+      "SALESFORCE_2023_10K|net_income|2021",
+      "SALESFORCE_2023_10K|net_income|2022",
+      "SALESFORCE_2023_10K|operating_cash_flow|2021",
+      "SALESFORCE_2023_10K|operating_cash_flow|2022",
+      "SALESFORCE_2023_10K|revenue|2021",
+      "SALESFORCE_2023_10K|revenue|2022"
+     ],
+     "regressed": []
+    },
+    "48:canonical": {
+     "n": 48,
+     "before": 35,
+     "after": 45,
+     "fixed": [
+      "BOEING_2019_10K|capex|2018",
+      "BOEING_2019_10K|net_income|2018",
+      "BOEING_2019_10K|operating_cash_flow|2018",
+      "NETFLIX_2019_10K|operating_cash_flow|2018",
+      "SALESFORCE_2023_10K|capex|2021",
+      "SALESFORCE_2023_10K|capex|2022",
+      "SALESFORCE_2023_10K|operating_cash_flow|2021",
+      "SALESFORCE_2023_10K|operating_cash_flow|2022",
+      "SALESFORCE_2023_10K|revenue|2021",
+      "SALESFORCE_2023_10K|revenue|2022"
+     ],
+     "regressed": []
+    }
+   },
+   "regressions_vs_v4": []
+  }
+ },
+ "boeing_ni_2019_canonical_before": {
+  "raw_verdict": "HIT",
+  "canonical_value": -677.0,
+  "canonical_quote": ""
+ },
+ "pilot_before_detail_target12": {
+  "SALESFORCE_2023_10K|capex|2021": {
+   "raw_verdict": "PERIOD_LABEL",
+   "canonical_value": 710.0,
+   "canonical_quote": ""
+  },
+  "SALESFORCE_2023_10K|capex|2022": {
+   "raw_verdict": "PERIOD_LABEL",
+   "canonical_value": 717.0,
+   "canonical_quote": ""
+  },
+  "SALESFORCE_2023_10K|net_income|2021": {
+   "raw_verdict": "PERIOD_LABEL",
+   "canonical_value": 4072.0,
+   "canonical_quote": ""
+  },
+  "SALESFORCE_2023_10K|net_income|2022": {
+   "raw_verdict": "PERIOD_LABEL",
+   "canonical_value": 1444.0,
+   "canonical_quote": ""
+  },
+  "SALESFORCE_2023_10K|operating_cash_flow|2021": {
+   "raw_verdict": "PERIOD_LABEL",
+   "canonical_value": 4801.0,
+   "canonical_quote": ""
+  },
+  "SALESFORCE_2023_10K|operating_cash_flow|2022": {
+   "raw_verdict": "PERIOD_LABEL",
+   "canonical_value": 6000.0,
+   "canonical_quote": ""
+  },
+  "SALESFORCE_2023_10K|revenue|2021": {
+   "raw_verdict": "PERIOD_LABEL",
+   "canonical_value": 21252.0,
+   "canonical_quote": ""
+  },
+  "SALESFORCE_2023_10K|revenue|2022": {
+   "raw_verdict": "PERIOD_LABEL",
+   "canonical_value": 26492.0,
+   "canonical_quote": ""
+  },
+  "BOEING_2019_10K|capex|2018": {
+   "raw_verdict": "WRONG_VALUE",
+   "canonical_value": null,
+   "canonical_quote": ""
+  },
+  "BOEING_2019_10K|net_income|2018": {
+   "raw_verdict": "WRONG_VALUE",
+   "canonical_value": null,
+   "canonical_quote": ""
+  },
+  "BOEING_2019_10K|operating_cash_flow|2018": {
+   "raw_verdict": "WRONG_VALUE",
+   "canonical_value": null,
+   "canonical_quote": ""
+  },
+  "NETFLIX_2019_10K|operating_cash_flow|2018": {
+   "raw_verdict": "WRONG_VALUE",
+   "canonical_value": null,
+   "canonical_quote": ""
+  }
+ },
+ "futility_rule": "bundle fixes < 6 of 12 pilot raw misses, or any regression (raw or canonical) on any set",
+ "verdict": "pass"
+}
