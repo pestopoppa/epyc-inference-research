@@ -103,6 +103,45 @@ HYP = {"mechanism_id": "akm-ctr", "statement": "MMQ tile stalls on LDS: ctr:lds_
        "target_symbol": "load_tiles"}
 
 
+class RealRocprof62Join(unittest.TestCase):
+    """Rows cut from row ak-gpu-signals-ctr-20261116 (r1, PARTIAL complete=0/10): rocprofv3 6.2
+    counter CSVs name kernels with a `.kd` suffix and carry no timestamps."""
+    KERNEL = "_ZL25dequantize_block_q8_0_f16ILb0EEvPKvP6__halfl"
+
+    def _texts(self):
+        return {p: (HERE / f"fixtures/ctr/PP-{p}.csv").read_text() for p in gcs.PASSES}
+
+    def test_kd_suffix_joins_the_trace_name_and_all_metrics_resolve(self):
+        agent = gcs.agent_constants((HERE / "fixtures/ctr/PP-agent_info.csv").read_text())
+        self.assertEqual(agent, {"CU_NUM": 104.0, "SIMD_NUM": 416.0, "SE_NUM": 8.0})
+        bare = gcs.build_observation(self._texts(), hotspots=[self.KERNEL])
+        self.assertIsNone(bare["kernels"][0]["metrics"]["valu_busy_pct"])  # 6.2 SIMD_NUM counter = 0
+        obs = gcs.build_observation(self._texts(), hotspots=[self.KERNEL],
+                                    durations={self.KERNEL + ".kd": 3_000_000}, agent=agent)
+        row = obs["kernels"][0]
+        self.assertEqual(obs["status"], "present")
+        self.assertEqual(obs["joined_kernels"], 1)
+        self.assertEqual(row["missing"], {})
+        self.assertTrue(all(v is not None for v in row["metrics"].values()), row["metrics"])
+        self.assertGreater(row["metrics"]["valu_busy_pct"], 0)
+        self.assertLess(row["metrics"]["valu_busy_pct"], 100)
+
+    def test_no_timestamps_bandwidth_absent_without_trace_and_zero_join_reported(self):
+        parsed = gcs.parse_counter_csv(self._texts()["alu"])
+        self.assertEqual(list(parsed), [self.KERNEL])
+        self.assertEqual(parsed[self.KERNEL]["_dispatches"], 3)
+        obs = gcs.build_observation(self._texts(), hotspots=[self.KERNEL])
+        self.assertIsNone(obs["kernels"][0]["metrics"]["achieved_bw_gbps"])
+        miss = gcs.build_observation(self._texts(), hotspots=["_Zother"])
+        self.assertEqual((miss["status"], miss["joined_kernels"]), ("absent", 0))
+        self.assertIn("0/1", miss["reason"])
+
+    def test_trace_durations(self):
+        text = ("Kind,Kernel_Name,Start_Timestamp,End_Timestamp\n"
+                f"K,{self.KERNEL}.kd,10,30\nK,{self.KERNEL},40,45\n")
+        self.assertEqual(gcs.trace_durations(text), {self.KERNEL: 25.0})
+
+
 class PlannerWiring(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

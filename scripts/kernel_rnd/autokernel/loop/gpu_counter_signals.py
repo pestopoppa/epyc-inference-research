@@ -97,7 +97,8 @@ METRICS: dict[str, tuple[str, tuple[str, ...], Any, str]] = {
             v["TCC_EA_RDREQ_32B"] * 32 + (v["TCC_EA_RDREQ"] - v["TCC_EA_RDREQ_32B"]) * 64
             + (v["TCC_EA_WRREQ"] - v["TCC_EA_WRREQ_64B"]) * 32 + v["TCC_EA_WRREQ_64B"] * 64,
             d),
-        "(FETCH_SIZE+WRITE_SIZE) bytes / kernel duration ns (gfx90a TCC_EA formulas)"),
+        "(FETCH_SIZE+WRITE_SIZE) bytes of the counter run / device ns of the same kernel in the "
+        "kernel-trace run of the same workload (6.2 counter CSVs carry no timestamps)"),
 }
 
 ROCPROFV3 = "/mnt/raid0/llm/tools/rocprofiler-sdk-6.2.0-66/opt/rocm-6.2.0/bin/rocprofv3"
@@ -130,6 +131,42 @@ def pass_argv(name: str, out_dir: Path, command: Sequence[str], *,
     return [*argv, "--", *command]
 
 
+def kernel_key(name: str) -> str:
+    """Join key for a kernel name. rocprofv3 6.2 -M writes the code-object symbol in
+    counter_collection.csv WITH the ``.kd`` descriptor suffix, while the kernel trace
+    (and the ISA audit) name the function without it. Without this the first r1 row
+    (ak-gpu-signals-ctr-20261116) joined 0 of 10 hotspots: every metric came back None."""
+    name = name.strip()
+    return name[:-3] if name.endswith(".kd") else name
+
+
+def agent_constants(text: str, *, gfx: str = "gfx90a") -> dict[str, float]:
+    """CU_NUM / SIMD_NUM / SE_NUM from rocprofv3 ``*_agent_info.csv`` (the GPU agent row).
+
+    On gfx90a with rocprofiler-sdk 6.2 the constant COUNTERS are wrong: SIMD_NUM reads
+    0 (every VALUBusy was a zero-denominator None in row r1) and CU_NUM reads 112 (the
+    8x14 physical slots, not the 104 enabled CUs). The agent table carries the true
+    Cu_Count 104 / Simd_Count 416 / Array_Count 8, so it overrides the counters."""
+    for row in csv.DictReader(io.StringIO(text)):
+        if row.get("Name") == gfx:
+            return {"CU_NUM": float(row["Cu_Count"]), "SIMD_NUM": float(row["Simd_Count"]),
+                    "SE_NUM": float(row["Array_Count"])}
+    raise ValueError(f"no {gfx} agent in agent_info")
+
+
+def trace_durations(text: str) -> dict[str, float]:
+    """rocprofv3 kernel_trace.csv -> {kernel_key: summed device ns}."""
+    out: dict[str, float] = {}
+    for row in csv.DictReader(io.StringIO(text)):
+        try:
+            ns = int(row["End_Timestamp"]) - int(row["Start_Timestamp"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        key = kernel_key(row.get("Kernel_Name") or "")
+        out[key] = out.get(key, 0.0) + max(ns, 0)
+    return out
+
+
 def parse_counter_csv(text: str) -> dict[str, dict[str, Any]]:
     """rocprofv3 counter_collection.csv -> {kernel: {counter: value, _dispatches, _duration_ns}}.
 
@@ -142,7 +179,7 @@ def parse_counter_csv(text: str) -> dict[str, dict[str, Any]]:
     if not reader.fieldnames or need - set(reader.fieldnames):
         raise ValueError(f"counter csv lacks columns {sorted(need - set(reader.fieldnames or []))}")
     for row in reader:
-        kernel = row["Kernel_Name"]
+        kernel = kernel_key(row["Kernel_Name"])
         name = row["Counter_Name"]
         value = float(row["Counter_Value"])
         entry = out.setdefault(kernel, {})
@@ -150,19 +187,25 @@ def parse_counter_csv(text: str) -> dict[str, dict[str, Any]]:
             entry[name] = max(entry.get(name, 0.0), value)
         else:
             entry[name] = entry.get(name, 0.0) + value
+        # rocprofv3 6.2 counter CSVs carry NO timestamps; dispatches are counted by id
+        # and the duration comes from the kernel trace (build_observation durations=).
         dispatch = row.get("Dispatch_Id") or row.get("Correlation_Id") or ""
         start, end = row.get("Start_Timestamp"), row.get("End_Timestamp")
-        if dispatch and start and end:
-            seen.setdefault(kernel, {})[dispatch] = (int(start), int(end))
+        span = (int(start), int(end)) if start and end else None
+        if dispatch:
+            seen.setdefault(kernel, {})[dispatch] = span
     for kernel, entry in out.items():
         dispatches = seen.get(kernel, {})
         entry["_dispatches"] = len(dispatches)
-        entry["_duration_ns"] = float(sum(e - s for s, e in dispatches.values())) or None
+        spans = [v for v in dispatches.values() if v]
+        entry["_duration_ns"] = float(sum(e - s for s, e in spans)) or None
     return out
 
 
 def build_observation(pass_csvs: Mapping[str, str], *, hotspots: Sequence[str] = (),
-                      top: int = 5, source: Mapping[str, str] | None = None) -> dict:
+                      top: int = 5, source: Mapping[str, str] | None = None,
+                      durations: Mapping[str, float] | None = None,
+                      agent: Mapping[str, float] | None = None) -> dict:
     """Fold the per-pass CSV texts into the planner observation.
 
     ``hotspots``: kernel names in device-time order (from the kernel-trace hotspot
@@ -174,13 +217,22 @@ def build_observation(pass_csvs: Mapping[str, str], *, hotspots: Sequence[str] =
     parsed = {name: parse_counter_csv(text) for name, text in pass_csvs.items()}
     kernels: list[str]
     if hotspots:
-        kernels = list(hotspots)[:top]
+        kernels = [kernel_key(k) for k in list(hotspots)[:top]]
     else:
         durations: dict[str, float] = {}
         for table in parsed.values():
             for kernel, entry in table.items():
                 durations[kernel] = max(durations.get(kernel, 0.0), entry["_duration_ns"] or 0.0)
         kernels = sorted(durations, key=lambda k: -durations[k])[:top]
+    durations = {kernel_key(k): v for k, v in (durations or {}).items()}
+    for table in parsed.values():   # a counter run has no timestamps: use the trace's device time
+        for kernel, entry in table.items():
+            if not entry["_duration_ns"] and durations.get(kernel):
+                entry["_duration_ns"] = float(durations[kernel])
+            for name, value in (agent or {}).items():   # agent table beats 6.2 constant counters
+                if name in entry:
+                    entry["_counter_" + name] = entry[name]
+                entry[name] = float(value)
     rows = []
     for kernel in kernels:
         metrics: dict[str, float | None] = {}
@@ -203,9 +255,13 @@ def build_observation(pass_csvs: Mapping[str, str], *, hotspots: Sequence[str] =
         rows.append({"kernel": kernel, "metrics": metrics, "missing": missing,
                      "duration_ns": duration})
     present = any(v is not None for row in rows for v in row["metrics"].values())
+    joined = sum(1 for k in kernels if any(k in t for t in parsed.values()))
     return {"schema": SCHEMA, "status": "present" if present else "absent",
             "counter_set_sha256": counter_set_sha256(),
             "passes_captured": sorted(pass_csvs), "kernels": rows,
+            "joined_kernels": joined, "agent_constants": dict(agent or {}),
+            **({} if present else {"reason": f"0 metrics resolved; {joined}/{len(kernels)} "
+                                             "hotspot kernels found in the counter CSVs"}),
             "source": dict(source or {})}
 
 
@@ -288,6 +344,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     b.add_argument("--pass", dest="passes", action="append", default=[], metavar="NAME=CSV")
     b.add_argument("--hotspots", type=Path, help="JSON list of kernel names, device-time order")
     b.add_argument("--top", type=int, default=5)
+    b.add_argument("--trace", type=Path, help="kernel_trace.csv of the same workload (durations)")
+    b.add_argument("--agent-info", type=Path, help="rocprofv3 *_agent_info.csv (CU/SIMD/SE counts)")
     b.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     if args.cmd == "argv":
@@ -302,7 +360,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         texts[name] = data.decode()
         source[name] = hashlib.sha256(data).hexdigest()
     hot = json.loads(args.hotspots.read_text()) if args.hotspots else ()
-    doc = build_observation(texts, hotspots=hot, top=args.top, source=source)
+    dur = trace_durations(args.trace.read_text()) if args.trace else None
+    agent = agent_constants(args.agent_info.read_text()) if args.agent_info else None
+    doc = build_observation(texts, hotspots=hot, top=args.top, source=source, durations=dur,
+                            agent=agent)
     args.out.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
     print(json.dumps({"status": doc["status"], "kernels": len(doc["kernels"])}))
     return 0
