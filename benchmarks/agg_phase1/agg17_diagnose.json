@@ -1,0 +1,202 @@
+{
+ "misses": [
+  {
+   "qid": "p15_09",
+   "doc": "JPMORGAN_2022_10K",
+   "label": "Total assets",
+   "query_tokens": [
+    "total",
+    "assets"
+   ],
+   "idf": {
+    "total": 1.8593,
+    "assets": 1.9134
+   },
+   "n_passages": 2435,
+   "n_positive": 634,
+   "cutoff_score_rank8": 6.138914238183632,
+   "top1": {
+    "chunk": 917,
+    "score": 7.173144695185432,
+    "tf": {
+     "total": 9,
+     "assets": 12
+    },
+    "len_tokens": 149,
+    "head": "Total assets at fair value\n\nTotal level 3 assets\n\nFederal funds sold and securities purchased under resale agreements $ 311,883 $ Securities borrowed 70,041 Tra"
+   },
+   "n_passages_with_all_terms": 104,
+   "gold": [
+    {
+     "chunk": 983,
+     "start": 638901,
+     "line": 6716,
+     "len_tokens": 142,
+     "bm25_rank": 50,
+     "bm25_score": 4.6247231186826046,
+     "tf": {
+      "total": 1,
+      "assets": 4
+     },
+     "line_label_row": false
+    }
+   ],
+   "gold_split_across_passages": false
+  },
+  {
+   "qid": "p15_10",
+   "doc": "PEPSICO_2022_10K",
+   "label": "Net Revenue",
+   "query_tokens": [
+    "net",
+    "revenue"
+   ],
+   "idf": {
+    "net": 2.6036,
+    "revenue": 3.1289
+   },
+   "n_passages": 1884,
+   "n_positive": 185,
+   "cutoff_score_rank8": 9.1066442445305,
+   "top1": {
+    "chunk": 244,
+    "score": 9.5601600449879,
+    "tf": {
+     "net": 4,
+     "revenue": 4
+    },
+    "len_tokens": 112,
+    "head": "Convenient food volume includes volume sold by us and our noncontrolled affiliates of convenient food products bearing company-owned or licensed trademarks. Int"
+   },
+   "n_passages_with_all_terms": 36,
+   "gold": [
+    {
+     "chunk": 365,
+     "start": 231837,
+     "line": 1744,
+     "len_tokens": 147,
+     "bm25_rank": 21,
+     "bm25_score": 7.198932059851142,
+     "tf": {
+      "net": 6,
+      "revenue": 1
+     },
+     "line_label_row": false
+    }
+   ],
+   "gold_split_across_passages": false
+  },
+  {
+   "qid": "p15_11",
+   "doc": "AMERICANWATERWORKS_2022_10K",
+   "label": "Capital expenditures",
+   "query_tokens": [
+    "capital",
+    "expenditures"
+   ],
+   "idf": {
+    "capital": 2.4019,
+    "expenditures": 3.5712
+   },
+   "n_passages": 1617,
+   "n_positive": 153,
+   "cutoff_score_rank8": 7.439102649556704,
+   "top1": {
+    "chunk": 13,
+    "score": 9.430053450929544,
+    "tf": {
+     "capital": 4,
+     "expenditures": 3
+    },
+    "len_tokens": 115,
+    "head": "Carmel River; the amount and allocation of projected capital expenditures and related funding requirements; the Company\u2019s ability to repay or refinance debt; th"
+   },
+   "n_passages_with_all_terms": 38,
+   "gold": [
+    {
+     "chunk": 500,
+     "start": 316612,
+     "line": 1956,
+     "len_tokens": 90,
+     "bm25_rank": 28,
+     "bm25_score": 6.2638230263039825,
+     "tf": {
+      "capital": 1,
+      "expenditures": 1
+     },
+     "line_label_row": true
+    },
+    {
+     "chunk": 609,
+     "start": 385470,
+     "line": 2514,
+     "len_tokens": 53,
+     "bm25_rank": 9,
+     "bm25_score": 7.4247606262104515,
+     "tf": {
+      "capital": 1,
+      "expenditures": 1
+     },
+     "line_label_row": true
+    }
+   ],
+   "gold_split_across_passages": false
+  },
+  {
+   "qid": "p15_16",
+   "doc": "AES_2022_10K",
+   "label": "Capital expenditures",
+   "query_tokens": [
+    "capital",
+    "expenditures"
+   ],
+   "idf": {
+    "capital": 2.5465,
+    "expenditures": 3.5462
+   },
+   "n_passages": 1473,
+   "n_positive": 134,
+   "cutoff_score_rank8": 6.987920984182376,
+   "top1": {
+    "chunk": 323,
+    "score": 10.328400064638396,
+    "tf": {
+     "capital": 2,
+     "expenditures": 2
+    },
+    "len_tokens": 32,
+    "head": "However, if additional capital expenditures are necessary, they could be material. AES Indiana would seek recovery of these capital expenditures; however, there"
+   },
+   "n_passages_with_all_terms": 23,
+   "gold": [
+    {
+     "chunk": 717,
+     "start": 443743,
+     "line": 3389,
+     "len_tokens": 120,
+     "bm25_rank": 24,
+     "bm25_score": 5.565709349077318,
+     "tf": {
+      "capital": 1,
+      "expenditures": 1
+     },
+     "line_label_row": false
+    },
+    {
+     "chunk": 855,
+     "start": 528286,
+     "line": 4103,
+     "len_tokens": 119,
+     "bm25_rank": 23,
+     "bm25_score": 5.587136083208925,
+     "tf": {
+      "capital": 1,
+      "expenditures": 1
+     },
+     "line_label_row": true
+    }
+   ],
+   "gold_split_across_passages": false
+  }
+ ]
+}

@@ -1,0 +1,90 @@
+{
+ "schema": "agg17_recall.v1",
+ "complete": true,
+ "phase": "agg17",
+ "verdict": "partial_gain",
+ "answered_by": null,
+ "recall_at_8": {
+  "baseline": {
+   "labels": "16/20",
+   "trace_unique": "12/16",
+   "trace_records": "30/45"
+  },
+  "c1_label_norm": {
+   "labels": "16/20",
+   "trace_unique": "13/16",
+   "trace_records": "31/45",
+   "misses_fixed": [],
+   "labels_lost": [],
+   "trace_lost": [],
+   "ms_per_query": 0.741
+  },
+  "c2_line_label": {
+   "labels": "18/20",
+   "trace_unique": "12/16",
+   "trace_records": "30/45",
+   "misses_fixed": [
+    "p15_11",
+    "p15_16"
+   ],
+   "labels_lost": [],
+   "trace_lost": [],
+   "ms_per_query": 1.247
+  },
+  "c3_norm_line_label": {
+   "labels": "18/20",
+   "trace_unique": "13/16",
+   "trace_records": "31/45",
+   "misses_fixed": [
+    "p15_11",
+    "p15_16"
+   ],
+   "labels_lost": [],
+   "trace_lost": [],
+   "ms_per_query": 0.937
+  },
+  "c4_numeric_row": {
+   "labels": "19/20",
+   "trace_unique": "13/16",
+   "trace_records": "31/45",
+   "misses_fixed": [
+    "p15_10",
+    "p15_11",
+    "p15_16"
+   ],
+   "labels_lost": [],
+   "trace_lost": [],
+   "ms_per_query": 1.706
+  }
+ },
+ "not_run": [],
+ "not_available": {
+  "l3_row_pointers": "tables_ rows in the r3 store = 0 (the parity store carries no L3)",
+  "dense_l2": "no embedder: the box forbids a model or server (dense off is the measured mode)"
+ },
+ "baseline_ms_per_query": 1.64,
+ "inputs": {
+  "store_sha256_copy": "59bacbbd2c39dc726bc7c2351e23cd3ad2acfcacc75d77a26ca8cacab1f715ca",
+  "context_search_sha256": "3de7bc9f2ab51d7821ffc52a8b679bfb532c10f4667a740361b55ad18d1c8891",
+  "questions_sha256": "234b7a23f8f6ff265ed702cf56112c5bde56fd632915a9786388386f0fd26e92",
+  "traces_sha256": "269e7e2fad0005c181033245e5096c87220c62e210f24ed31388f45dbfd6ec88",
+  "n_labels": 20,
+  "n_trace_unique": 16,
+  "n_trace_records": 45,
+  "build_s": {
+   "JPMORGAN_2022_10K": 0.062,
+   "PEPSICO_2022_10K": 0.048,
+   "AMERICANWATERWORKS_2022_10K": 0.041,
+   "AES_2022_10K": 0.037
+  },
+  "n_passages": {
+   "JPMORGAN_2022_10K": 2435,
+   "PEPSICO_2022_10K": 1884,
+   "AMERICANWATERWORKS_2022_10K": 1617,
+   "AES_2022_10K": 1473
+  },
+  "l3_table_rows": 0,
+  "labels_without_gold_passage": []
+ },
+ "held_out": "candidates are research re-rankers labelled l1_passage_bm25.v2-cand-*; l1_passage_bm25.v1 and the AGG-1.5 parity claim are untouched"
+}
