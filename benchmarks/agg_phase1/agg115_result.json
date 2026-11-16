@@ -1,0 +1,1179 @@
+{
+ "task": "AGG-1.15 step 1 (offline, no model)",
+ "orch_head": "29bf8936da6787a5ee1b0ac1eae7c0224cea0b82",
+ "predeclared": "PREDECLARED_AGG115.md",
+ "inputs_sha256": {
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/seed/store_agg112r2.sqlite": "98f1aabfd89c4869f654a59dc8bbe758be6f2e3f2fdb3c8f59226139df4a6d7f",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/seed/agg112ingest_results.jsonl": "7200032339d09dfcd280f9000ba4f79bcc4317e98f1e972e60d59ecb80957e64",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/out/results.jsonl": "1ec9a62fe6114fa739d34e8c7c9a338487f3b230737ece39b45300b79128193e",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/out/store_agg13.sqlite": "b5d2abd2b3c4685761dd8e2245b6f4e441c3d03bc9bcd07cdaf687e6d28208ce",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/out/store_agg14.sqlite": "54206f934fbb50481d44ed7f831401e70df45858eacb155a3b9e34430efefdf1",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/seed/store_agg14r3.sqlite": "fbd8fa7f8ca1c9a77345d21931a8e5dfa7b5c06b1efd5fa9aa9bdac922f648a1",
+  "/mnt/raid0/llm/worktrees/agg115-research/benchmarks/agg_phase1/PREDECLARED_AGG115.md": "e3cc1f35b150246f9feb82ddc3633dc7718755fa6c765cbe5d92d69e887a888b"
+ },
+ "label": "IN-SAMPLE, POST-HOC for the 6 cells; the 211 / 49 are a regression check",
+ "parity_current_rule_vs_r2_store": {
+  "stored_l4": 324,
+  "replayed_l4": 324,
+  "stored_not_replayed": 0,
+  "replayed_not_stored": 0
+ },
+ "retrieval": {
+  "LOCKHEEDMARTIN_2022_10K": {
+   "gold": 15429.0,
+   "n_doc_windows": 152,
+   "gold_windows": [
+    "ab16bbcba56c8ac3:00113#w0"
+   ],
+   "gold_windows_strict_regex": [
+    "ab16bbcba56c8ac3:00113#w0"
+   ],
+   "gold_windows_called_in_ingest": {},
+   "n_called_in_ingest": 33,
+   "ranks": {
+    "bm25_desc_query": 7,
+    "bm25_field_query": 13,
+    "bm25_ltd_query": 1,
+    "v2_desc_query": 2,
+    "v2_field_query": 2,
+    "v2_ltd_query": 1
+   },
+   "variants": {
+    "current_union": {
+     "n_windows": 8,
+     "gold_in": [],
+     "new_uncalled": [
+      "ab16bbcba56c8ac3:00085#w0",
+      "ab16bbcba56c8ac3:00095#w0",
+      "ab16bbcba56c8ac3:00116#w0"
+     ]
+    },
+    "union+ltd_query_k3": {
+     "n_windows": 10,
+     "gold_in": [
+      "ab16bbcba56c8ac3:00113#w0"
+     ],
+     "new_uncalled": [
+      "ab16bbcba56c8ac3:00076#w0",
+      "ab16bbcba56c8ac3:00085#w0",
+      "ab16bbcba56c8ac3:00095#w0",
+      "ab16bbcba56c8ac3:00113#w0",
+      "ab16bbcba56c8ac3:00116#w0"
+     ]
+    },
+    "union+ltd_query_k5": {
+     "n_windows": 10,
+     "gold_in": [
+      "ab16bbcba56c8ac3:00113#w0"
+     ],
+     "new_uncalled": [
+      "ab16bbcba56c8ac3:00076#w0",
+      "ab16bbcba56c8ac3:00085#w0",
+      "ab16bbcba56c8ac3:00095#w0",
+      "ab16bbcba56c8ac3:00113#w0",
+      "ab16bbcba56c8ac3:00116#w0"
+     ]
+    },
+    "union_field_query_k5": {
+     "n_windows": 8,
+     "gold_in": [],
+     "new_uncalled": [
+      "ab16bbcba56c8ac3:00085#w0",
+      "ab16bbcba56c8ac3:00095#w0",
+      "ab16bbcba56c8ac3:00116#w0"
+     ]
+    }
+   }
+  },
+  "AMD_2022_10K": {
+   "gold": 2467.0,
+   "n_doc_windows": 185,
+   "gold_windows": [
+    "bcdada7c0deb2e74:00146#w0"
+   ],
+   "gold_windows_strict_regex": [
+    "bcdada7c0deb2e74:00146#w0"
+   ],
+   "gold_windows_called_in_ingest": {},
+   "n_called_in_ingest": 30,
+   "ranks": {
+    "bm25_desc_query": 7,
+    "bm25_field_query": 14,
+    "bm25_ltd_query": 3,
+    "v2_desc_query": 7,
+    "v2_field_query": 11,
+    "v2_ltd_query": 4
+   },
+   "variants": {
+    "current_union": {
+     "n_windows": 7,
+     "gold_in": [],
+     "new_uncalled": []
+    },
+    "union+ltd_query_k3": {
+     "n_windows": 8,
+     "gold_in": [
+      "bcdada7c0deb2e74:00146#w0"
+     ],
+     "new_uncalled": [
+      "bcdada7c0deb2e74:00146#w0"
+     ]
+    },
+    "union+ltd_query_k5": {
+     "n_windows": 8,
+     "gold_in": [
+      "bcdada7c0deb2e74:00146#w0"
+     ],
+     "new_uncalled": [
+      "bcdada7c0deb2e74:00146#w0"
+     ]
+    },
+    "union_field_query_k5": {
+     "n_windows": 7,
+     "gold_in": [],
+     "new_uncalled": []
+    }
+   }
+  },
+  "MGMRESORTS_2022_10K": {
+   "gold": 7432.817,
+   "n_doc_windows": 259,
+   "gold_windows": [
+    "62e8bef7977db54d:00085#w0"
+   ],
+   "gold_windows_strict_regex": [],
+   "gold_windows_called_in_ingest": {},
+   "n_called_in_ingest": 35,
+   "ranks": {
+    "bm25_desc_query": 9,
+    "bm25_field_query": 10,
+    "bm25_ltd_query": 9,
+    "v2_desc_query": 8,
+    "v2_field_query": 8,
+    "v2_ltd_query": 10
+   },
+   "variants": {
+    "current_union": {
+     "n_windows": 7,
+     "gold_in": [],
+     "new_uncalled": [
+      "62e8bef7977db54d:00086#w0"
+     ]
+    },
+    "union+ltd_query_k3": {
+     "n_windows": 7,
+     "gold_in": [],
+     "new_uncalled": [
+      "62e8bef7977db54d:00086#w0"
+     ]
+    },
+    "union+ltd_query_k5": {
+     "n_windows": 8,
+     "gold_in": [],
+     "new_uncalled": [
+      "62e8bef7977db54d:00080#w0",
+      "62e8bef7977db54d:00086#w0"
+     ]
+    },
+    "union_field_query_k5": {
+     "n_windows": 8,
+     "gold_in": [],
+     "new_uncalled": [
+      "62e8bef7977db54d:00086#w0"
+     ]
+    }
+   }
+  },
+  "PEPSICO_2022_10K": {
+   "gold": 35657.0,
+   "n_doc_windows": 400,
+   "gold_windows": [
+    "c23f592eb1ea5048:00126#w0"
+   ],
+   "gold_windows_strict_regex": [
+    "c23f592eb1ea5048:00126#w0"
+   ],
+   "gold_windows_called_in_ingest": {},
+   "n_called_in_ingest": 33,
+   "ranks": {
+    "bm25_desc_query": 2,
+    "bm25_field_query": 9,
+    "bm25_ltd_query": 1,
+    "v2_desc_query": 2,
+    "v2_field_query": 7,
+    "v2_ltd_query": 1
+   },
+   "variants": {
+    "current_union": {
+     "n_windows": 7,
+     "gold_in": [
+      "c23f592eb1ea5048:00126#w0"
+     ],
+     "new_uncalled": [
+      "c23f592eb1ea5048:00126#w0"
+     ]
+    },
+    "union+ltd_query_k3": {
+     "n_windows": 7,
+     "gold_in": [
+      "c23f592eb1ea5048:00126#w0"
+     ],
+     "new_uncalled": [
+      "c23f592eb1ea5048:00126#w0"
+     ]
+    },
+    "union+ltd_query_k5": {
+     "n_windows": 8,
+     "gold_in": [
+      "c23f592eb1ea5048:00126#w0"
+     ],
+     "new_uncalled": [
+      "c23f592eb1ea5048:00126#w0"
+     ]
+    },
+    "union_field_query_k5": {
+     "n_windows": 9,
+     "gold_in": [
+      "c23f592eb1ea5048:00126#w0"
+     ],
+     "new_uncalled": [
+      "c23f592eb1ea5048:00126#w0",
+      "c23f592eb1ea5048:00151#w0"
+     ]
+    }
+   }
+  },
+  "COSTCO_2022_10K": {
+   "gold": 6484.0,
+   "n_doc_windows": 88,
+   "gold_windows": [
+    "9b4318fa67fbd97b:00056#w0"
+   ],
+   "gold_windows_strict_regex": [
+    "9b4318fa67fbd97b:00056#w0"
+   ],
+   "gold_windows_called_in_ingest": {
+    "9b4318fa67fbd97b:00056#w0": [
+     {
+      "period": "FY2022",
+      "value": 6484.0,
+      "unit": "USD_millions",
+      "quote": "Long-term debt, excluding current portion $ 6,484"
+     }
+    ]
+   },
+   "n_called_in_ingest": 22,
+   "ranks": {
+    "bm25_desc_query": 1,
+    "bm25_field_query": 2,
+    "bm25_ltd_query": 2,
+    "v2_desc_query": 1,
+    "v2_field_query": 2,
+    "v2_ltd_query": 2
+   },
+   "variants": {
+    "current_union": {
+     "n_windows": 6,
+     "gold_in": [
+      "9b4318fa67fbd97b:00056#w0"
+     ],
+     "new_uncalled": [
+      "9b4318fa67fbd97b:00043#w0"
+     ]
+    },
+    "union+ltd_query_k3": {
+     "n_windows": 7,
+     "gold_in": [
+      "9b4318fa67fbd97b:00056#w0"
+     ],
+     "new_uncalled": [
+      "9b4318fa67fbd97b:00043#w0"
+     ]
+    },
+    "union+ltd_query_k5": {
+     "n_windows": 7,
+     "gold_in": [
+      "9b4318fa67fbd97b:00056#w0"
+     ],
+     "new_uncalled": [
+      "9b4318fa67fbd97b:00043#w0"
+     ]
+    },
+    "union_field_query_k5": {
+     "n_windows": 6,
+     "gold_in": [
+      "9b4318fa67fbd97b:00056#w0"
+     ],
+     "new_uncalled": [
+      "9b4318fa67fbd97b:00043#w0"
+     ]
+    }
+   }
+  },
+  "JOHNSON_JOHNSON_2022_10K": {
+   "gold": 26888.0,
+   "n_doc_windows": 182,
+   "gold_windows": [
+    "d92aa4b58a89b2b1:00080#w0"
+   ],
+   "gold_windows_strict_regex": [
+    "d92aa4b58a89b2b1:00080#w0"
+   ],
+   "gold_windows_called_in_ingest": {},
+   "n_called_in_ingest": 26,
+   "ranks": {
+    "bm25_desc_query": 4,
+    "bm25_field_query": 6,
+    "bm25_ltd_query": 4,
+    "v2_desc_query": 2,
+    "v2_field_query": 3,
+    "v2_ltd_query": 3
+   },
+   "variants": {
+    "current_union": {
+     "n_windows": 8,
+     "gold_in": [
+      "d92aa4b58a89b2b1:00080#w0"
+     ],
+     "new_uncalled": [
+      "d92aa4b58a89b2b1:00080#w0",
+      "d92aa4b58a89b2b1:00082#w0"
+     ]
+    },
+    "union+ltd_query_k3": {
+     "n_windows": 8,
+     "gold_in": [
+      "d92aa4b58a89b2b1:00080#w0"
+     ],
+     "new_uncalled": [
+      "d92aa4b58a89b2b1:00080#w0",
+      "d92aa4b58a89b2b1:00082#w0"
+     ]
+    },
+    "union+ltd_query_k5": {
+     "n_windows": 9,
+     "gold_in": [
+      "d92aa4b58a89b2b1:00080#w0"
+     ],
+     "new_uncalled": [
+      "d92aa4b58a89b2b1:00020#w0",
+      "d92aa4b58a89b2b1:00080#w0",
+      "d92aa4b58a89b2b1:00082#w0"
+     ]
+    },
+    "union_field_query_k5": {
+     "n_windows": 8,
+     "gold_in": [
+      "d92aa4b58a89b2b1:00080#w0"
+     ],
+     "new_uncalled": [
+      "d92aa4b58a89b2b1:00080#w0",
+      "d92aa4b58a89b2b1:00082#w0"
+     ]
+    }
+   }
+  }
+ },
+ "h1_keep_slot_harvest": {
+  "rule": "keep_slot.harvest.v1",
+  "delta_r2": {
+   "added": 54,
+   "added_by_field": {
+    "long_term_debt": 54
+   },
+   "base_not_in_harvest": 0,
+   "ltd_added": [
+    {
+     "plan": "3M_2022_10K",
+     "doc_id": "3M_2022_10K",
+     "period": "FY2022",
+     "value": 14001.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 14,001",
+     "chunk_id": "77c8f6cf618ea745:00073#w0"
+    },
+    {
+     "plan": "ACTIVISIONBLIZZARD_2022_10K",
+     "doc_id": "ACTIVISIONBLIZZARD_2022_10K",
+     "period": "FY2022",
+     "value": 3611.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt, net 3,611",
+     "chunk_id": "ee13e878757671a3:00123#w0"
+    },
+    {
+     "plan": "ADOBE_2022_10K",
+     "doc_id": "ADOBE_2022_10K",
+     "period": "FY2022",
+     "value": 3629.0,
+     "unit": "USD_millions",
+     "quote": "Debt 3,629",
+     "chunk_id": "6b7ea02c48d72b41:00064#w0"
+    },
+    {
+     "plan": "ADOBE_2022_10K",
+     "doc_id": "ADOBE_2022_10K",
+     "period": "FY2022",
+     "value": 4130.0,
+     "unit": "USD_millions",
+     "quote": "carrying value of our senior notes was $4.13 billion",
+     "chunk_id": "6b7ea02c48d72b41:00060#w0"
+    },
+    {
+     "plan": "ADOBE_2022_10K",
+     "doc_id": "ADOBE_2022_10K",
+     "period": "FY2022",
+     "value": 4130.0,
+     "unit": "USD_millions",
+     "quote": "total carrying amount of our senior notes was $4.13 billion",
+     "chunk_id": "6b7ea02c48d72b41:00062#w0"
+    },
+    {
+     "plan": "ADOBE_2022_10K",
+     "doc_id": "ADOBE_2022_10K",
+     "period": "FY2022",
+     "value": 3629.0,
+     "unit": "USD_millions",
+     "quote": "Carrying value of long-term debt $ 3,629",
+     "chunk_id": "6b7ea02c48d72b41:00083#w0"
+    },
+    {
+     "plan": "AES_2022_10K",
+     "doc_id": "AES_2022_10K",
+     "period": "FY2022",
+     "value": 3894.0,
+     "unit": "USD_millions",
+     "quote": "Total debt $ 3,894",
+     "chunk_id": "46c3db19fd35a8a0:00189#w0"
+    },
+    {
+     "plan": "AMD_2022_10K",
+     "doc_id": "AMD_2022_10K",
+     "period": "FY2022",
+     "value": 1474.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 1,474",
+     "chunk_id": "bcdada7c0deb2e74:00141#w0"
+    },
+    {
+     "plan": "AMD_2022_10K",
+     "doc_id": "AMD_2022_10K",
+     "period": "FY2022",
+     "value": 2500.0,
+     "unit": "USD_millions",
+     "quote": "total debt principal amount outstanding as of December 31, 2022 was $2.5 billion",
+     "chunk_id": "bcdada7c0deb2e74:00080#w0"
+    },
+    {
+     "plan": "AMD_2022_10K",
+     "doc_id": "AMD_2022_10K",
+     "period": "FY2022",
+     "value": 2500.0,
+     "unit": "USD_millions",
+     "quote": "aggregate principal debt obligations were $2.5 billion as of December 31, 2022",
+     "chunk_id": "bcdada7c0deb2e74:00109#w0"
+    },
+    {
+     "plan": "AMD_2022_10K",
+     "doc_id": "AMD_2022_10K",
+     "period": "FY2022",
+     "value": 2467.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt, net of current portion 2,467",
+     "chunk_id": "bcdada7c0deb2e74:00147#w0"
+    },
+    {
+     "plan": "AMERICANEXPRESS_2022_10K",
+     "doc_id": "AMERICANEXPRESS_2022_10K",
+     "period": "FY2022",
+     "value": 42573.0,
+     "unit": "USD_millions",
+     "quote": "Total Long-Term Debt $ 42,573",
+     "chunk_id": "46a5c6bebd715df8:00198#w0"
+    },
+    {
+     "plan": "AMERICANEXPRESS_2022_10K",
+     "doc_id": "AMERICANEXPRESS_2022_10K",
+     "period": "FY2022",
+     "value": 29432.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 29,432",
+     "chunk_id": "46a5c6bebd715df8:00258#w0"
+    },
+    {
+     "plan": "AMERICANWATERWORKS_2022_10K",
+     "doc_id": "AMERICANWATERWORKS_2022_10K",
+     "period": "FY2022",
+     "value": 10929.0,
+     "unit": "USD_millions",
+     "quote": "Total long-term debt 10,929",
+     "chunk_id": "5fce6c967098dc88:00121#w0"
+    },
+    {
+     "plan": "APPLE_2022_10K",
+     "doc_id": "APPLE_2022_10K",
+     "period": "FY2022",
+     "value": 98959.0,
+     "unit": "USD_millions",
+     "quote": "Term debt 98,959",
+     "chunk_id": "aefab5af8054e564:00035#w0"
+    },
+    {
+     "plan": "BOEING_2022_10K",
+     "doc_id": "BOEING_2022_10K",
+     "period": "FY2022",
+     "value": 52338.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt (including current portion) $5,197 $52,338",
+     "chunk_id": "7b470cf51ac23581:00042#w0"
+    },
+    {
+     "plan": "BOEING_2022_10K",
+     "doc_id": "BOEING_2022_10K",
+     "period": "FY2022",
+     "value": 51811.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 51,811",
+     "chunk_id": "7b470cf51ac23581:00054#w0"
+    },
+    {
+     "plan": "BOEING_2022_10K",
+     "doc_id": "BOEING_2022_10K",
+     "period": "FY2022",
+     "value": 56794.0,
+     "unit": "USD_millions",
+     "quote": "Debt, excluding finance lease obligations (56,794)",
+     "chunk_id": "7b470cf51ac23581:00119#w0"
+    },
+    {
+     "plan": "COCACOLA_2022_10K",
+     "doc_id": "COCACOLA_2022_10K",
+     "period": "FY2022",
+     "value": 36377.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 36,377",
+     "chunk_id": "4db361e85cc6ff9c:00093#w0"
+    },
+    {
+     "plan": "COCACOLA_2022_10K",
+     "doc_id": "COCACOLA_2022_10K",
+     "period": "FY2022",
+     "value": 38038.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt, net of current maturities2 38,038",
+     "chunk_id": "4db361e85cc6ff9c:00081#w0"
+    },
+    {
+     "plan": "CORNING_2022_10K",
+     "doc_id": "CORNING_2022_10K",
+     "period": "FY2022",
+     "value": 6687.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt $ 6,687",
+     "chunk_id": "d9e837be617451e0:00042#w0"
+    },
+    {
+     "plan": "COSTCO_2022_10K",
+     "doc_id": "COSTCO_2022_10K",
+     "period": "FY2022",
+     "value": 6484.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt, excluding current portion 6,484",
+     "chunk_id": "9b4318fa67fbd97b:00047#w0"
+    },
+    {
+     "plan": "CVSHEALTH_2022_10K",
+     "doc_id": "CVSHEALTH_2022_10K",
+     "period": "FY2022",
+     "value": 50476.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 50,476",
+     "chunk_id": "b5f6c24d37389158:00136#w0"
+    },
+    {
+     "plan": "CVSHEALTH_2022_10K",
+     "doc_id": "CVSHEALTH_2022_10K",
+     "period": "FY2022",
+     "value": 47653.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 52,257 47,653",
+     "chunk_id": "b5f6c24d37389158:00179#w0"
+    },
+    {
+     "plan": "CVSHEALTH_2022_10K",
+     "doc_id": "CVSHEALTH_2022_10K",
+     "period": "FY2022",
+     "value": 52753.0,
+     "unit": "USD_millions",
+     "quote": "Total debt principal $ 52,753",
+     "chunk_id": "b5f6c24d37389158:00192#w0"
+    },
+    {
+     "plan": "EBAY_2022_10K",
+     "doc_id": "EBAY_2022_10K",
+     "period": "FY2022",
+     "value": 7721.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 7,721",
+     "chunk_id": "52bb8d740d773e65:00064#w0"
+    },
+    {
+     "plan": "GENERALMILLS_2022_10K",
+     "doc_id": "GENERALMILLS_2022_10K",
+     "period": "FY2022",
+     "value": 9134.8,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 9,134.8",
+     "chunk_id": "cbf53c278378a0b9:00066#w0"
+    },
+    {
+     "plan": "GENERALMILLS_2022_10K",
+     "doc_id": "GENERALMILLS_2022_10K",
+     "period": "FY2022",
+     "value": 10508.8,
+     "unit": "USD_millions",
+     "quote": "carrying amount and fair value of our long-term debt, including the current portion, were $ 10,508.8",
+     "chunk_id": "cbf53c278378a0b9:00084#w0"
+    },
+    {
+     "plan": "GENERALMILLS_2022_10K",
+     "doc_id": "GENERALMILLS_2022_10K",
+     "period": "FY2022",
+     "value": 0.009134799999999998,
+     "unit": "USD_millions",
+     "quote": "Total long-term debt $ 9,134.8",
+     "chunk_id": "cbf53c278378a0b9:00088#w0"
+    },
+    {
+     "plan": "JOHNSON_JOHNSON_2022_10K",
+     "doc_id": "JOHNSON_JOHNSON_2022_10K",
+     "period": "FY2022",
+     "value": 39700.0,
+     "unit": "USD_millions",
+     "quote": "Total borrowings at the end of 2022 and 2021 were $39.7 billion and $33.8 billion",
+     "chunk_id": "d92aa4b58a89b2b1:00051#w0"
+    },
+    {
+     "plan": "JOHNSON_JOHNSON_2022_10K",
+     "doc_id": "JOHNSON_JOHNSON_2022_10K",
+     "period": "FY2022",
+     "value": 26888.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt (Note 7) 26,888",
+     "chunk_id": "d92aa4b58a89b2b1:00060#w0"
+    },
+    {
+     "plan": "JOHNSON_JOHNSON_2022_10K",
+     "doc_id": "JOHNSON_JOHNSON_2022_10K",
+     "period": "FY2022",
+     "value": 39700.0,
+     "unit": "USD_millions",
+     "quote": "The debt balance at the end of 2022 was $39.7 billion",
+     "chunk_id": "d92aa4b58a89b2b1:00050#w0"
+    },
+    {
+     "plan": "JOHNSON_JOHNSON_2022_10K",
+     "doc_id": "JOHNSON_JOHNSON_2022_10K",
+     "period": "FY2022",
+     "value": 39700.0,
+     "unit": "USD_millions",
+     "quote": "total debt balance at the end of 2022 was $39.7 billion",
+     "chunk_id": "d92aa4b58a89b2b1:00048#w0"
+    },
+    {
+     "plan": "JPMORGAN_2022_10K",
+     "doc_id": "JPMORGAN_2022_10K",
+     "period": "2022",
+     "value": 175257.0,
+     "unit": "USD_millions",
+     "quote": "Liabilities Long-term debt $ 175,257",
+     "chunk_id": "6f141f7187bcd066:00228#w0"
+    },
+    {
+     "plan": "JPMORGAN_2022_10K",
+     "doc_id": "JPMORGAN_2022_10K",
+     "period": "FY2022",
+     "value": 13569.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt and other instruments qualifying as Tier 2 capital $ 13,569",
+     "chunk_id": "6f141f7187bcd066:00123#w0"
+    },
+    {
+     "plan": "JPMORGAN_2022_10K",
+     "doc_id": "JPMORGAN_2022_10K",
+     "period": "FY2022",
+     "value": 295865.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 295,865",
+     "chunk_id": "6f141f7187bcd066:00056#w0"
+    },
+    {
+     "plan": "JPMORGAN_2022_10K",
+     "doc_id": "JPMORGAN_2022_10K",
+     "period": "FY2022",
+     "value": 72281.0,
+     "unit": "USD_millions",
+     "quote": "Total long-term debt NA $ 72,281 NA",
+     "chunk_id": "6f141f7187bcd066:00219#w0"
+    },
+    {
+     "plan": "JPMORGAN_2022_10K",
+     "doc_id": "JPMORGAN_2022_10K",
+     "period": "FY2022",
+     "value": 250080.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 250,080",
+     "chunk_id": "6f141f7187bcd066:00318#w0"
+    },
+    {
+     "plan": "KRAFTHEINZ_2022_10K",
+     "doc_id": "KRAFTHEINZ_2022_10K",
+     "period": "FY2022",
+     "value": 19233.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 19,233",
+     "chunk_id": "56babf6322a31e2a:00082#w0"
+    },
+    {
+     "plan": "KRAFTHEINZ_2022_10K",
+     "doc_id": "KRAFTHEINZ_2022_10K",
+     "period": "FY2022",
+     "value": 20100.0,
+     "unit": "USD_millions",
+     "quote": "Our long-term debt, including the current portion, was $20.1 billion at December 31, 2022",
+     "chunk_id": "56babf6322a31e2a:00064#w0"
+    },
+    {
+     "plan": "LOCKHEEDMARTIN_2022_10K",
+     "doc_id": "LOCKHEEDMARTIN_2022_10K",
+     "period": "FY2022",
+     "value": 15429.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt, net 15,429",
+     "chunk_id": "ab16bbcba56c8ac3:00090#w0"
+    },
+    {
+     "plan": "MCDONALDS_2022_10K",
+     "doc_id": "MCDONALDS_2022_10K",
+     "period": "FY2022",
+     "value": 35903.5,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 35,903.5",
+     "chunk_id": "8cab75a0102944a0:00116#w0"
+    },
+    {
+     "plan": "MCDONALDS_2022_10K",
+     "doc_id": "MCDONALDS_2022_10K",
+     "period": "FY2022",
+     "value": 36142.4,
+     "unit": "USD_millions",
+     "quote": "Debt obligations before fair value adjustments and deferred debt costs $ 36,142.4",
+     "chunk_id": "8cab75a0102944a0:00210#w0"
+    },
+    {
+     "plan": "MGMRESORTS_2022_10K",
+     "doc_id": "MGMRESORTS_2022_10K",
+     "period": "FY2022",
+     "value": 7432.817,
+     "unit": "USD_millions",
+     "quote": "Long-term debt, net 7,432,817",
+     "chunk_id": "62e8bef7977db54d:00064#w0"
+    },
+    {
+     "plan": "MGMRESORTS_2022_10K",
+     "doc_id": "MGMRESORTS_2022_10K",
+     "period": "FY2022",
+     "value": 88.181,
+     "unit": "USD_millions",
+     "quote": "Long-term portion of lease liabilities $ 25,149,299 $ 88,181",
+     "chunk_id": "62e8bef7977db54d:00091#w0"
+    },
+    {
+     "plan": "MICROSOFT_2022_10K",
+     "doc_id": "MICROSOFT_2022_10K",
+     "period": "FY2022",
+     "value": 47032.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 47,032",
+     "chunk_id": "6676617ed62d3fd9:00102#w0"
+    },
+    {
+     "plan": "NETFLIX_2022_10K",
+     "doc_id": "NETFLIX_2022_10K",
+     "period": "FY2022",
+     "value": 14353.0,
+     "unit": "USD_millions",
+     "quote": "aggregate outstanding notes of $14,353 million",
+     "chunk_id": "c66dbd0c4f0e07f1:00102#w0"
+    },
+    {
+     "plan": "NETFLIX_2022_10K",
+     "doc_id": "NETFLIX_2022_10K",
+     "period": "FY2022",
+     "value": 17529.0,
+     "unit": "USD_millions",
+     "quote": "principal and interest due beyond the next twelve months is $17,529 million",
+     "chunk_id": "c66dbd0c4f0e07f1:00061#w0"
+    },
+    {
+     "plan": "NETFLIX_2022_10K",
+     "doc_id": "NETFLIX_2022_10K",
+     "period": "FY2022",
+     "value": 14400.0,
+     "unit": "USD_millions",
+     "quote": "$14.4 billion aggregate principal amount of senior notes outstanding",
+     "chunk_id": "c66dbd0c4f0e07f1:00040#w0"
+    },
+    {
+     "plan": "NETFLIX_2022_10K",
+     "doc_id": "NETFLIX_2022_10K",
+     "period": "FY2022",
+     "value": 14353.076,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 14,353,076",
+     "chunk_id": "c66dbd0c4f0e07f1:00075#w0"
+    },
+    {
+     "plan": "PAYPAL_2022_10K",
+     "doc_id": "PAYPAL_2022_10K",
+     "period": "FY2022",
+     "value": 10417.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 10,417",
+     "chunk_id": "ea45a3746f368fca:00119#w0"
+    },
+    {
+     "plan": "PEPSICO_2022_10K",
+     "doc_id": "PEPSICO_2022_10K",
+     "period": "FY2022",
+     "value": 35657.0,
+     "unit": "USD_millions",
+     "quote": "Long-Term Debt Obligations 35,657",
+     "chunk_id": "c23f592eb1ea5048:00092#w0"
+    },
+    {
+     "plan": "PFIZER_2022_10K",
+     "doc_id": "PFIZER_2022_10K",
+     "period": "FY2022",
+     "value": 32884.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 32,884",
+     "chunk_id": "dd77a3c356fed9d8:00130#w0"
+    },
+    {
+     "plan": "VERIZON_2022_10K",
+     "doc_id": "VERIZON_2022_10K",
+     "period": "FY2022",
+     "value": 140676.0,
+     "unit": "USD_millions",
+     "quote": "Long-term debt 140,676",
+     "chunk_id": "81835c110ee02540:00177#w0"
+    }
+   ]
+  },
+  "six_cells": {
+   "LOCKHEEDMARTIN_2022_10K|long_term_debt|2022": {
+    "step_agg111s2": "RETRIEVAL",
+    "before": "NO_FACT",
+    "after": "HIT",
+    "after_candidate": {
+     "period": "FY2022",
+     "stored_value": 15429.0,
+     "stored_unit": "USD_millions",
+     "scored_value": 15429.0,
+     "extractor": "l4_llm.v1",
+     "page": 61,
+     "quote": "Long-term debt, net 15,429"
+    },
+    "canonical_v2_after": true,
+    "canonical_v3_after": true
+   },
+   "AMD_2022_10K|long_term_debt|2022": {
+    "step_agg111s2": "RETRIEVAL",
+    "before": "NO_FACT",
+    "after": "HIT",
+    "after_candidate": {
+     "period": "FY2022",
+     "stored_value": 2467.0,
+     "stored_unit": "USD_millions",
+     "scored_value": 2467.0,
+     "extractor": "l4_llm.v1",
+     "page": 78,
+     "quote": "Long-term debt, net of current portion 2,467"
+    },
+    "canonical_v2_after": false,
+    "canonical_v3_after": true
+   },
+   "MGMRESORTS_2022_10K|long_term_debt|2022": {
+    "step_agg111s2": "RETRIEVAL",
+    "before": "NO_FACT",
+    "after": "HIT",
+    "after_candidate": {
+     "period": "FY2022",
+     "stored_value": 7432.817,
+     "stored_unit": "USD_millions",
+     "scored_value": 7432.817,
+     "extractor": "l4_llm.v1",
+     "page": 59,
+     "quote": "Long-term debt, net 7,432,817"
+    },
+    "canonical_v2_after": true,
+    "canonical_v3_after": true
+   },
+   "PEPSICO_2022_10K|long_term_debt|2022": {
+    "step_agg111s2": "CANONICAL",
+    "before": "NO_FACT",
+    "after": "HIT",
+    "after_candidate": {
+     "period": "FY2022",
+     "stored_value": 35657.0,
+     "stored_unit": "USD_millions",
+     "scored_value": 35657.0,
+     "extractor": "l4_llm.v1",
+     "page": 61,
+     "quote": "Long-Term Debt Obligations 35,657"
+    },
+    "canonical_v2_after": true,
+    "canonical_v3_after": true
+   },
+   "COSTCO_2022_10K|long_term_debt|2022": {
+    "step_agg111s2": "CANONICAL",
+    "before": "NO_FACT",
+    "after": "HIT",
+    "after_candidate": {
+     "period": "FY2022",
+     "stored_value": 6484.0,
+     "stored_unit": "USD_millions",
+     "scored_value": 6484.0,
+     "extractor": "l4_llm.v1",
+     "page": 38,
+     "quote": "Long-term debt, excluding current portion 6,484"
+    },
+    "canonical_v2_after": true,
+    "canonical_v3_after": true
+   },
+   "JOHNSON_JOHNSON_2022_10K|long_term_debt|2022": {
+    "step_agg111s2": "CANONICAL",
+    "before": "NO_FACT",
+    "after": "HIT",
+    "after_candidate": {
+     "period": "FY2022",
+     "stored_value": 26888.0,
+     "stored_unit": "USD_millions",
+     "scored_value": 26888.0,
+     "extractor": "l4_llm.v1",
+     "page": 45,
+     "quote": "Long-term debt (Note 7) 26,888"
+    },
+    "canonical_v2_after": false,
+    "canonical_v3_after": true
+   }
+  },
+  "backfill25_m1": {
+   "n": 25,
+   "before": 17,
+   "after": 25,
+   "fixed": [
+    "ACTIVISIONBLIZZARD_2022_10K|long_term_debt|2022",
+    "AMD_2022_10K|long_term_debt|2022",
+    "BOEING_2022_10K|long_term_debt|2022",
+    "COSTCO_2022_10K|long_term_debt|2022",
+    "JOHNSON_JOHNSON_2022_10K|long_term_debt|2022",
+    "LOCKHEEDMARTIN_2022_10K|long_term_debt|2022",
+    "MGMRESORTS_2022_10K|long_term_debt|2022",
+    "PEPSICO_2022_10K|long_term_debt|2022"
+   ],
+   "regressed": []
+  },
+  "backfill25_canonical": {
+   "canonical.v1:tier>conf>audit>|value|desc>page>fact_id": {
+    "n": 25,
+    "before": 17,
+    "after": 22,
+    "fixed": [
+     "ACTIVISIONBLIZZARD_2022_10K|long_term_debt|2022",
+     "COSTCO_2022_10K|long_term_debt|2022",
+     "LOCKHEEDMARTIN_2022_10K|long_term_debt|2022",
+     "MGMRESORTS_2022_10K|long_term_debt|2022",
+     "PEPSICO_2022_10K|long_term_debt|2022"
+    ],
+    "regressed": []
+   },
+   "canonical.v2:v1+attributable_net_income+thousands_unit": {
+    "n": 25,
+    "before": 17,
+    "after": 22,
+    "fixed": [
+     "ACTIVISIONBLIZZARD_2022_10K|long_term_debt|2022",
+     "COSTCO_2022_10K|long_term_debt|2022",
+     "LOCKHEEDMARTIN_2022_10K|long_term_debt|2022",
+     "MGMRESORTS_2022_10K|long_term_debt|2022",
+     "PEPSICO_2022_10K|long_term_debt|2022"
+    ],
+    "regressed": []
+   }
+  },
+  "fy2022_211": {
+   "raw": {
+    "n": 211,
+    "before": 208,
+    "after": 208,
+    "fixed": [],
+    "regressed": []
+   },
+   "canonical_v2": {
+    "n": 211,
+    "before": 203,
+    "after": 203,
+    "fixed": [],
+    "regressed": []
+   }
+  },
+  "agg111_49": {
+   "agg13": {
+    "delta": {
+     "added": 16,
+     "added_by_field": {
+      "long_term_debt": 8,
+      "total_current_assets": 2,
+      "capex": 1,
+      "operating_cash_flow": 1,
+      "dividends_paid": 1,
+      "revenue": 1,
+      "net_income": 1,
+      "total_current_liabilities": 1
+     },
+     "base_not_in_harvest": 0
+    },
+    "m1": {
+     "n": 24,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "canonical_v1": {
+     "n": 24,
+     "before": 21,
+     "after": 22,
+     "fixed": [
+      "JOHNSON_JOHNSON_2022_10K|revenue|2021"
+     ],
+     "regressed": []
+    },
+    "canonical_v2": {
+     "n": 24,
+     "before": 21,
+     "after": 22,
+     "fixed": [
+      "JOHNSON_JOHNSON_2022_10K|revenue|2021"
+     ],
+     "regressed": []
+    }
+   },
+   "agg14": {
+    "delta": {
+     "added": 16,
+     "added_by_field": {
+      "net_income": 2,
+      "capex": 2,
+      "operating_cash_flow": 2,
+      "dividends_paid": 1,
+      "revenue": 2,
+      "total_assets": 3,
+      "total_current_assets": 2,
+      "total_current_liabilities": 2
+     },
+     "base_not_in_harvest": 0
+    },
+    "m1": {
+     "n": 25,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "canonical_v1": {
+     "n": 25,
+     "before": 23,
+     "after": 23,
+     "fixed": [],
+     "regressed": []
+    },
+    "canonical_v2": {
+     "n": 25,
+     "before": 23,
+     "after": 23,
+     "fixed": [],
+     "regressed": []
+    }
+   }
+  },
+  "extra_calls": 0
+ },
+ "c_canonical_v3_vs_v2": {
+  "r2": {
+   "fy2022_211": {
+    "n": 211,
+    "before": 203,
+    "after": 203,
+    "fixed": [],
+    "regressed": []
+   },
+   "backfill25": {
+    "n": 25,
+    "before": 17,
+    "after": 17,
+    "fixed": [],
+    "regressed": []
+   }
+  },
+  "r2_h1": {
+   "fy2022_211": {
+    "n": 211,
+    "before": 203,
+    "after": 203,
+    "fixed": [],
+    "regressed": []
+   },
+   "backfill25": {
+    "n": 25,
+    "before": 22,
+    "after": 24,
+    "fixed": [
+     "AMD_2022_10K|long_term_debt|2022",
+     "JOHNSON_JOHNSON_2022_10K|long_term_debt|2022"
+    ],
+    "regressed": []
+   }
+  },
+  "agg13_work": {
+   "n": 24,
+   "before": 21,
+   "after": 21,
+   "fixed": [],
+   "regressed": []
+  },
+  "agg13_work_h1": {
+   "n": 24,
+   "before": 22,
+   "after": 22,
+   "fixed": [],
+   "regressed": []
+  },
+  "agg14_work": {
+   "n": 25,
+   "before": 23,
+   "after": 23,
+   "fixed": [],
+   "regressed": []
+  },
+  "agg14_work_h1": {
+   "n": 25,
+   "before": 23,
+   "after": 23,
+   "fixed": [],
+   "regressed": []
+  }
+ }
+}
