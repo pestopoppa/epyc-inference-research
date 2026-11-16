@@ -1,0 +1,1633 @@
+{
+ "schema": "agg118_gold_check.v1",
+ "extractor": "pypdfium2",
+ "n_cells": 180,
+ "filled": 174,
+ "na": 4,
+ "excluded": 2,
+ "verified": 180,
+ "problems": [],
+ "cells": [
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "revenue",
+   "fiscal_year": "2023",
+   "page": 81,
+   "line": 6,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "revenue",
+   "fiscal_year": "2022",
+   "page": 81,
+   "line": 6,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "net_income",
+   "fiscal_year": "2023",
+   "page": 81,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "net_income",
+   "fiscal_year": "2022",
+   "page": 81,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "capex",
+   "fiscal_year": "2023",
+   "page": 83,
+   "line": 26,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "capex",
+   "fiscal_year": "2022",
+   "page": 83,
+   "line": 26,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2023",
+   "page": 79,
+   "line": 27,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2022",
+   "page": 79,
+   "line": 27,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2023",
+   "page": 83,
+   "line": 24,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2022",
+   "page": 83,
+   "line": 24,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2023",
+   "page": 79,
+   "line": 12,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2022",
+   "page": 79,
+   "line": 12,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2023",
+   "page": 80,
+   "line": 13,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2022",
+   "page": 80,
+   "line": 13,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2023",
+   "page": 83,
+   "line": 35,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2022",
+   "page": 83,
+   "line": 35,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2023",
+   "page": 80,
+   "line": 14,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "FEDEX_2023_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2022",
+   "page": 80,
+   "line": 14,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "revenue",
+   "fiscal_year": "2022",
+   "page": 61,
+   "line": 10,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "revenue",
+   "fiscal_year": "2021",
+   "page": 61,
+   "line": 10,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "net_income",
+   "fiscal_year": "2022",
+   "page": 61,
+   "line": 27,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "net_income",
+   "fiscal_year": "2021",
+   "page": 61,
+   "line": 27,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "capex",
+   "fiscal_year": "2022",
+   "page": 64,
+   "line": 30,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "capex",
+   "fiscal_year": "2021",
+   "page": 64,
+   "line": 30,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2022",
+   "page": 60,
+   "line": 21,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2021",
+   "page": 60,
+   "line": 21,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2022",
+   "page": 64,
+   "line": 22,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2021",
+   "page": 64,
+   "line": 22,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2022",
+   "page": 60,
+   "line": 13,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2021",
+   "page": 60,
+   "line": 13,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2022",
+   "page": 60,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2021",
+   "page": 60,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2022",
+   "page": 38,
+   "line": 8,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2021",
+   "page": 38,
+   "line": 8,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2022",
+   "page": 60,
+   "line": 29,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "SALESFORCE_2023_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2021",
+   "page": 60,
+   "line": 29,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2019",
+   "page": 32,
+   "line": 4,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2018",
+   "page": 32,
+   "line": 4,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2019",
+   "page": 58,
+   "line": 25,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2018",
+   "page": 58,
+   "line": 25,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2019",
+   "page": 60,
+   "line": 7,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2018",
+   "page": 60,
+   "line": 7,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2019",
+   "page": 32,
+   "line": 12,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2018",
+   "page": 32,
+   "line": 12,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2019",
+   "page": 60,
+   "line": 7,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2018",
+   "page": 60,
+   "line": 7,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2019",
+   "page": 57,
+   "line": 8,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2018",
+   "page": 57,
+   "line": 8,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2019",
+   "page": 57,
+   "line": 21,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2018",
+   "page": 57,
+   "line": 21,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2019",
+   "page": 60,
+   "line": 15,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2018",
+   "page": 60,
+   "line": 15,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2019",
+   "page": 57,
+   "line": 23,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "MGMRESORTS_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2018",
+   "page": 57,
+   "line": 23,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2019",
+   "page": 43,
+   "line": 7,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2018",
+   "page": 43,
+   "line": 7,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2019",
+   "page": 43,
+   "line": 18,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2018",
+   "page": 43,
+   "line": 18,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2019",
+   "page": 45,
+   "line": 26,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2018",
+   "page": 45,
+   "line": 26,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2019",
+   "page": 46,
+   "line": 16,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2018",
+   "page": 46,
+   "line": 16,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2019",
+   "page": 45,
+   "line": 24,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2018",
+   "page": 45,
+   "line": 24,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2019",
+   "page": 46,
+   "line": 12,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2018",
+   "page": 46,
+   "line": 12,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2019",
+   "page": 46,
+   "line": 23,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2018",
+   "page": 46,
+   "line": 23,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2019",
+   "page": 61,
+   "line": 20,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2018",
+   "page": 61,
+   "line": 20,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2019",
+   "page": 46,
+   "line": 25,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "NETFLIX_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2018",
+   "page": 46,
+   "line": 25,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2019",
+   "page": 87,
+   "line": 7,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2018",
+   "page": 87,
+   "line": 7,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2019",
+   "page": 87,
+   "line": 26,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2018",
+   "page": 87,
+   "line": 26,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2019",
+   "page": 89,
+   "line": 25,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2018",
+   "page": 89,
+   "line": 25,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2019",
+   "page": 85,
+   "line": 27,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2018",
+   "page": 85,
+   "line": 27,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2019",
+   "page": 89,
+   "line": 23,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2018",
+   "page": 89,
+   "line": 23,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2019",
+   "page": 85,
+   "line": 18,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2018",
+   "page": 85,
+   "line": 18,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2019",
+   "page": 86,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2018",
+   "page": 86,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2019",
+   "page": 89,
+   "line": 40,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2018",
+   "page": 89,
+   "line": 40,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2019",
+   "page": 86,
+   "line": 15,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "AMERICANWATERWORKS_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2018",
+   "page": 86,
+   "line": 15,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2019",
+   "page": 53,
+   "line": 8,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2018",
+   "page": 53,
+   "line": 8,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2019",
+   "page": 53,
+   "line": 23,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2018",
+   "page": 53,
+   "line": 23,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2019",
+   "page": 56,
+   "line": 31,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2018",
+   "page": 56,
+   "line": 31,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2019",
+   "page": 55,
+   "line": 22,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2018",
+   "page": 55,
+   "line": 22,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2019",
+   "page": 56,
+   "line": 29,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2018",
+   "page": 56,
+   "line": 29,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2019",
+   "page": 55,
+   "line": 14,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2018",
+   "page": 55,
+   "line": 14,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2019",
+   "page": 55,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2018",
+   "page": 55,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2019",
+   "page": 56,
+   "line": 47,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2018",
+   "page": 56,
+   "line": 47,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2019",
+   "page": 55,
+   "line": 33,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "BOEING_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2018",
+   "page": 55,
+   "line": 33,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2019",
+   "page": 70,
+   "line": 5,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2018",
+   "page": 70,
+   "line": 5,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2019",
+   "page": 70,
+   "line": 20,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2018",
+   "page": 70,
+   "line": 20,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2019",
+   "page": 73,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2018",
+   "page": 73,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2019",
+   "page": 72,
+   "line": 20,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2018",
+   "page": 72,
+   "line": 20,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2019",
+   "page": 73,
+   "line": 26,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2018",
+   "page": 73,
+   "line": 26,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2019",
+   "page": 72,
+   "line": 12,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2018",
+   "page": 72,
+   "line": 12,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2019",
+   "page": 72,
+   "line": 26,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2018",
+   "page": 72,
+   "line": 26,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2019",
+   "page": 73,
+   "line": 42,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2018",
+   "page": 73,
+   "line": 42,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2019",
+   "page": 72,
+   "line": 27,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CORNING_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2018",
+   "page": 72,
+   "line": 27,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2019",
+   "page": 93,
+   "line": 10,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2018",
+   "page": 93,
+   "line": 10,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2019",
+   "page": 93,
+   "line": 27,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2018",
+   "page": 93,
+   "line": 27,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2019",
+   "page": 97,
+   "line": 17,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2018",
+   "page": 97,
+   "line": 17,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2019",
+   "page": 95,
+   "line": 19,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2018",
+   "page": 95,
+   "line": 19,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2019",
+   "page": 97,
+   "line": 13,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2018",
+   "page": 97,
+   "line": 13,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2019",
+   "page": 95,
+   "line": 11,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2018",
+   "page": 95,
+   "line": 11,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2019",
+   "page": 95,
+   "line": 30,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2018",
+   "page": 95,
+   "line": 30,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2019",
+   "page": 97,
+   "line": 29,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2018",
+   "page": 97,
+   "line": 29,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2019",
+   "page": 95,
+   "line": 32,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "CVSHEALTH_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2018",
+   "page": 95,
+   "line": 32,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2019",
+   "page": 75,
+   "line": 7,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2018",
+   "page": 75,
+   "line": 7,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2019",
+   "page": 75,
+   "line": 19,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2018",
+   "page": 75,
+   "line": 19,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2019",
+   "page": 77,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2018",
+   "page": 77,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2019",
+   "page": 79,
+   "line": 24,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2018",
+   "page": 79,
+   "line": 24,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2019",
+   "page": 77,
+   "line": 26,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2018",
+   "page": 77,
+   "line": 26,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2019",
+   "page": 79,
+   "line": 15,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2018",
+   "page": 79,
+   "line": 15,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2019",
+   "page": 79,
+   "line": 29,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2018",
+   "page": 79,
+   "line": 29,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2019",
+   "page": 77,
+   "line": 48,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2018",
+   "page": 77,
+   "line": 48,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2019",
+   "page": 79,
+   "line": 30,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "PEPSICO_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2018",
+   "page": 79,
+   "line": 30,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2019",
+   "page": 72,
+   "line": 7,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "revenue",
+   "fiscal_year": "2018",
+   "page": 72,
+   "line": 7,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2019",
+   "page": 72,
+   "line": 24,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "net_income",
+   "fiscal_year": "2018",
+   "page": 72,
+   "line": 24,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2019",
+   "page": 75,
+   "line": 23,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "capex",
+   "fiscal_year": "2018",
+   "page": 75,
+   "line": 23,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2019",
+   "page": 74,
+   "line": 20,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "total_assets",
+   "fiscal_year": "2018",
+   "page": 74,
+   "line": 20,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2019",
+   "page": 75,
+   "line": 21,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "operating_cash_flow",
+   "fiscal_year": "2018",
+   "page": 75,
+   "line": 21,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2019",
+   "page": 74,
+   "line": 10,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "total_current_assets",
+   "fiscal_year": "2018",
+   "page": 74,
+   "line": 10,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2019",
+   "page": 74,
+   "line": 27,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "total_current_liabilities",
+   "fiscal_year": "2018",
+   "page": 74,
+   "line": 27,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2019",
+   "page": 75,
+   "line": 34,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "dividends_paid",
+   "fiscal_year": "2018",
+   "page": 75,
+   "line": 34,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2019",
+   "page": 74,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  },
+  {
+   "doc": "VERIZON_2019_10K",
+   "metric": "long_term_debt",
+   "fiscal_year": "2018",
+   "page": 74,
+   "line": 28,
+   "quote_found": true,
+   "number_in_quote": true
+  }
+ ],
+ "pypdfium2_version": "5.3.0"
+}
