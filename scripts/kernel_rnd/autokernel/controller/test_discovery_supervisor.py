@@ -511,12 +511,25 @@ class DetachedCanaryTests(unittest.TestCase):
 
     def test_direct_validate_graph_reopens_byte_identically_from_root_closure(self):
         _skip_without_site_model(self)
+        # Validation resolves the sealed rocprofv3 interpreter strictly; a host
+        # without it cannot exercise this path.
+        if not F.evidence.ROCPROF_V3_PYTHON.is_file():
+            self.skipTest(
+                "pinned rocprofv3 interpreter is not on this host: "
+                f"{F.evidence.ROCPROF_V3_PYTHON}")
         bundle = Path(self.temporary.name) / "deployment"
         deployment = F.initialize_static_deployment_bundle(bundle)
         command = (
             str(Path(sys.executable).resolve()), "-B", "-m",
             F.__name__, "--deployment", str(deployment), "--validate-only")
-        environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+        # Run -m F.__name__ from the import root pytest resolved F under; the
+        # repository root alone does not make that dotted name importable.
+        import_root = Path(F.__file__).resolve().parents[
+            len(F.__name__.split(".")) - 1]
+        environment = {
+            **os.environ, "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONPATH": os.pathsep.join(filter(None, (
+                str(import_root), os.environ.get("PYTHONPATH"))))}
         direct_payloads = []
         for _ in range(2):
             result = subprocess.run(

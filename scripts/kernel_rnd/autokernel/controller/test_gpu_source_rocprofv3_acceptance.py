@@ -372,6 +372,9 @@ class RocprofV3GovernedMapsAcceptance(unittest.TestCase):
     """Bind the residency contract to both governed tg128 map captures."""
 
     DIAGNOSTICS = Path("/mnt/raid0/llm/autokernel/diagnostics")
+    FIXTURE_MODEL = Path(
+        "/mnt/raid0/llm/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/"
+        "Qwen2.5-Coder-0.5B-Q4_K_M.gguf")
     ARMS = (
         ("v13-rocprofv3-tg128-20260819", "candidate"),
         ("v13-rocprofv3-anchor-tg128-20260819", "anchor"),
@@ -397,9 +400,12 @@ class RocprofV3GovernedMapsAcceptance(unittest.TestCase):
 
     def test_governed_maps_complete_without_libpci_and_refuse_missing_required_dso(
             self) -> None:
-        if not F._SITE_MODEL.is_file():
-            self.skipTest(f"pinned site model is not on this host: {F._SITE_MODEL}")
-        model = F._SITE_MODEL.resolve(strict=True)
+        # The 2026-08-19 governed samples mapped this model. F._SITE_MODEL was
+        # later re-pinned (1.5B screening model), so binding the fixture to the
+        # live pin reports a missing resident model that the samples never had.
+        if not self.FIXTURE_MODEL.is_file():
+            self.skipTest(f"fixture model is not on this host: {self.FIXTURE_MODEL}")
+        model = self.FIXTURE_MODEL.resolve(strict=True)
         model_sha = self.file_sha(model)
         required = self.required_profiler_mappings()
         self.assertNotIn(str(F._ROCPROF_V3_PCI_LIB), required)
