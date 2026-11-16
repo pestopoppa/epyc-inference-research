@@ -47,12 +47,19 @@ def _wg_count(grid: int, wg: int) -> int:
     return -(-grid // wg) if wg else 0
 
 
+def kernel_key(name: str) -> str:
+    """Join key between a trace and code-object metadata: rocprofv3 6.2 -M names the kernel descriptor symbol
+    (``<mangled>.kd``); the amdhsa metadata ``.name`` omits the suffix (inf48-race2-fixtures r1: 0/7 joined)."""
+    name = name.strip()
+    return name[:-3] if name.endswith(".kd") else name
+
+
 def read_kernel_trace(path: str | Path, wanted: set[str] | None = None) -> dict[str, list[dict]]:
     """Unique launch-geometry tuples per kernel name (mangled when traced with -M), with dispatch counts."""
     agg: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     with open(path, newline="") as fh:
         for row in csv.DictReader(fh):
-            name = row.get("Kernel_Name", "")
+            name = kernel_key(row.get("Kernel_Name", ""))
             if wanted is not None and name not in wanted:
                 continue
             g = tuple(int(row["Grid_Size_" + a]) for a in "XYZ")
@@ -134,8 +141,9 @@ def bundle_entry(fixture_id: str, build: dict, geometry: dict[str, list[dict]], 
     kernels = sorted((build.get("isa_proof") or {}).get("kernels") or {})
     per = {}
     for k in kernels:
-        mb = (isa.get(k) or {}).get("sync", {}).get("s_barrier")
-        bb = (base_isa.get(k) or {}).get("sync", {}).get("s_barrier")
+        # _sync_counts omits zero counts: a kernel whose ISA was read but has no s_barrier counts 0, not unknown
+        mb = isa[k]["sync"].get("s_barrier", 0) if k in isa else None
+        bb = base_isa[k]["sync"].get("s_barrier", 0) if k in base_isa else None
         per[k] = {"launches": geometry.get(k, []), "isa": isa.get(k), "s_barrier_base": bb, "s_barrier_mutant": mb,
                   "barrier_dropped": bb is not None and mb is not None and mb < bb, "geometry": delta.get(k)}
     return {"fixture_id": fixture_id, "family": build.get("family"), "source_sha": build.get("source_sha"),

@@ -55,3 +55,30 @@ def test_store_barrier_drop_matches_build_proof(tmp_path):
         assert Path(mut[k]["disassembly"]).stat().st_size > 0
     e = rb.bundle_entry("R1-MMVQ-LDSDMA", b, {}, mut, base, {})
     assert all(v["barrier_dropped"] for v in e["kernels"].values()) and e["launched"] is False
+
+
+R1_TRACE = Path("/mnt/raid0/llm/tmp/inf48-race2-fixtures-20261116/out/trace/R1-MMVQ-LDSDMA-QPF.kernel_trace.csv.gz")
+
+
+def test_kernel_key_strips_kd_suffix(tmp_path):
+    assert rb.kernel_key("_ZL3fooPKv.kd") == "_ZL3fooPKv" and rb.kernel_key("_ZL3fooPKv") == "_ZL3fooPKv"
+    p = tmp_path / "t.csv"
+    p.write_text(HDR + _row("_Zk.kd", 0, 0, (64, 1, 1), (64, 1, 1)))
+    assert list(rb.read_kernel_trace(p, {"_Zk"})) == ["_Zk"]
+
+
+@pytest.mark.skipif(not R1_TRACE.exists() or not (STORE / "R1-MMVQ-LDSDMA/BUILD-OK.json").exists(), reason="r1 trace absent")
+def test_real_r1_trace_joins_build_proof_names(tmp_path):
+    import gzip, shutil
+    p = tmp_path / "t.csv"
+    with gzip.open(R1_TRACE, "rb") as fi, open(p, "wb") as fo:
+        shutil.copyfileobj(fi, fo)
+    ks = set(json.loads((STORE / "R1-MMVQ-LDSDMA/BUILD-OK.json").read_text())["isa_proof"]["kernels"])
+    g = rb.read_kernel_trace(p, ks)
+    assert g and not any(k.endswith(".kd") for k in g)
+
+
+def test_barrier_drop_to_zero_counts():
+    b = {"isa_proof": {"kernels": {"k": [1, 0, 2]}}}
+    e = rb.bundle_entry("X", b, {"k": [{"grid": [1, 1, 1]}]}, {"k": {"sync": {}}}, {"k": {"sync": {"s_barrier": 1}}}, {})
+    assert e["kernels"]["k"]["barrier_dropped"] is True and e["kernels"]["k"]["s_barrier_mutant"] == 0
