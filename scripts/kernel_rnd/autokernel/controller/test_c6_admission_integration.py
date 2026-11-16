@@ -14,6 +14,7 @@ from unittest.mock import patch
 from scripts.benchmark.run_autokernel_gpu_discovery import screen_effect
 
 from . import discovery_controller as D
+from . import test_gpu_source_evidence as TE
 from .test_discovery_controller import FakeCritic, Lease
 
 
@@ -449,6 +450,28 @@ class TestC6AdmissionIntegration(unittest.TestCase):
                 D.run_controller(
                     config, planner=Planner(), critic=FakeCritic([]),
                     screener=GatedScreens(root / "unused"), lease=Lease())
+
+    def test_admission_restart_refuses_recursive_native_sidecar_tamper(self):
+        # Ported from v27 descendant 32d48f3da: a receipt that still hashes
+        # cleanly must not reopen once a native sidecar inside its full
+        # evidence bundle has been altered.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle, _, _ = TE.GpuSourceEvidenceTests().produce(root)
+            c6_ref = bundle.correctness["body"]["c6_correctness"]
+            with patch.object(
+                    D.gpu_source_evidence, "load_gpu_source_evidence_bundle",
+                    side_effect=self.real_bundle_loader):
+                reopened = D._reopen_c6_admission_correctness(
+                    c6_ref, c6_ref["file_sha256"])
+                self.assertEqual(reopened, c6_ref)
+                sidecar = Path(c6_ref["body"]["sidecar"]["path"])
+                sidecar.write_bytes(sidecar.read_bytes() + b" ")
+                with self.assertRaisesRegex(
+                        D.DiscoveryControllerError,
+                        "recursively reopen its full evidence bundle"):
+                    D._reopen_c6_admission_correctness(
+                        c6_ref, c6_ref["file_sha256"])
 
     def test_roofline_carrier_tamper_and_unknown_gpu_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
