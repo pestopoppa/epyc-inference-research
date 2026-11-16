@@ -1,0 +1,178 @@
+{
+ "schema": "agg19_sql_rescore.v1",
+ "task": "AGG-1.9 DONE-WHEN 2",
+ "predeclared": "PREDECLARED_AGG19.md sha256 4eed298ac95022de532f0a30844ab6d7af684e261e7e1a3e4109ae749ad7917c",
+ "store": "/mnt/raid0/llm/tmp/agg112-arms-gpu-20261112-r2/out/store.sqlite",
+ "store_sha256": "59adb2a8940ee16c89fa4450e8d7824e32a3e2122fd7deb87aa3252189d0da93",
+ "canonical_rule": "canonical.v2:v1+attributable_net_income+thousands_unit (facts_canonical)",
+ "scorer": "agg18_miss_table.py sql_scores, tolerance 0.005",
+ "model_calls": 0,
+ "n": 14,
+ "v2_correct": 9,
+ "agg11_correct": 0,
+ "upper_bound": 14,
+ "per_question": [
+  {
+   "qid": "agg02",
+   "op": "argmin",
+   "expr": "revenue",
+   "gold": "American Water Works",
+   "agg11_rows": "[('Corning',)]",
+   "v2_rows": "[('Corning',)]",
+   "agg11_correct": false,
+   "v2_correct": false,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "agg03",
+   "op": "sum",
+   "expr": "revenue",
+   "gold": 2695933.44,
+   "agg11_rows": "[(2677995.254,)]",
+   "v2_rows": "[(2677995.254,)]",
+   "agg11_correct": false,
+   "v2_correct": false,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "agg08",
+   "op": "sum",
+   "expr": "net_income",
+   "gold": 348138.72,
+   "agg11_rows": "[(324404.055,)]",
+   "v2_rows": "[(345836.717,)]",
+   "agg11_correct": false,
+   "v2_correct": false,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "agg10",
+   "op": "sum",
+   "expr": "capex",
+   "gold": 163522.7,
+   "agg11_rows": "[(119841.629,)]",
+   "v2_rows": "[(161667.629,)]",
+   "agg11_correct": false,
+   "v2_correct": false,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "agg11",
+   "op": "count_gt",
+   "expr": "capex",
+   "gold": 5,
+   "agg11_rows": "[(3,)]",
+   "v2_rows": "[(5,)]",
+   "agg11_correct": false,
+   "v2_correct": true,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "agg18",
+   "op": "sum",
+   "expr": "dividends_paid",
+   "gold": 99077.75,
+   "agg11_rows": "[(82909.548,)]",
+   "v2_rows": "[(99494.548,)]",
+   "agg11_correct": false,
+   "v2_correct": true,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "p1_08",
+   "op": "count_lt",
+   "expr": "net_income",
+   "gold": 9,
+   "agg11_rows": "[(8,)]",
+   "v2_rows": "[(9,)]",
+   "agg11_correct": false,
+   "v2_correct": true,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "p1_19",
+   "op": "count_gt",
+   "expr": "capex",
+   "gold": 9,
+   "agg11_rows": "[(5,)]",
+   "v2_rows": "[(9,)]",
+   "agg11_correct": false,
+   "v2_correct": true,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "p1_20",
+   "op": "top3",
+   "expr": "capex",
+   "gold": [
+    "Amazon",
+    "Microsoft",
+    "Verizon"
+   ],
+   "agg11_rows": "[('Amazon',), ('Verizon',), ('PepsiCo',)]",
+   "v2_rows": "[('Amazon',), ('Microsoft',), ('Verizon',)]",
+   "agg11_correct": false,
+   "v2_correct": true,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "p1_24",
+   "op": "count_gt",
+   "expr": "total_assets",
+   "gold": 10,
+   "agg11_rows": "[(9,)]",
+   "v2_rows": "[(10,)]",
+   "agg11_correct": false,
+   "v2_correct": true,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "p1_25",
+   "op": "argmin",
+   "expr": "total_assets",
+   "gold": "eBay",
+   "agg11_rows": "[('Boeing',)]",
+   "v2_rows": "[('MGM Resorts',)]",
+   "agg11_correct": false,
+   "v2_correct": false,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "p1_33",
+   "op": "argmax",
+   "expr": "dividends_paid",
+   "gold": "Microsoft",
+   "agg11_rows": "[('Apple',)]",
+   "v2_rows": "[('Microsoft',)]",
+   "agg11_correct": false,
+   "v2_correct": true,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "p1_34",
+   "op": "count_gt",
+   "expr": "dividends_paid",
+   "gold": 7,
+   "agg11_rows": "[(6,)]",
+   "v2_rows": "[(7,)]",
+   "agg11_correct": false,
+   "v2_correct": true,
+   "gold_corrected_upper_bound": true
+  },
+  {
+   "qid": "p1_35",
+   "op": "top3",
+   "expr": "dividends_paid",
+   "gold": [
+    "Microsoft",
+    "Apple",
+    "Johnson & Johnson"
+   ],
+   "agg11_rows": "[('Apple', 14793.0), ('Johnson & Johnson', 11682.0), ('Boeing', 10998.0)]",
+   "v2_rows": "[('Microsoft', 18552.0), ('Apple', 14841.0), ('Johnson & Johnson', 11682.0)]",
+   "agg11_correct": false,
+   "v2_correct": true,
+   "gold_corrected_upper_bound": true
+  }
+ ]
+}
