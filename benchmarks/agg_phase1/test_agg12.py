@@ -110,7 +110,7 @@ class T(unittest.TestCase):
         self.assertEqual(c.execute("SELECT player FROM oolong_events WHERE kind='roll'").fetchone()[0], "Travis")
 
     def test_blocks_and_transcript(self):
-        text = "Matt plays the character DM.\nLaura plays the character Vex'ahlia.\n\n[START OF EPISODE]\nMatt: hi\nLaura: 12.\n\n[END OF EPISODE]\n"
+        text = "Intro [START OF EPISODE] and [END OF EPISODE] named.\nMatt plays the character DM.\nLaura plays the character Vex'ahlia.\n\n[START OF EPISODE]\nMatt: hi\nLaura: 12.\n\n[END OF EPISODE]\n"
         tr = R.parse_transcript(text)
         self.assertEqual(tr["lines"], [(1, "Matt: hi"), (2, "Laura: 12.")])
         self.assertEqual(R.characters_of(tr["mapping"]), {"DM": "Matt", "Vexahlia": "Laura"})

@@ -110,8 +110,10 @@ def extract_window(ds: Path, cwid: str) -> str:
 
 def parse_transcript(text: str) -> dict[str, Any]:
     """``{mapping: {player: character}, lines: [(n, text)]}``; n is the 1-based line number inside the episode."""
-    head, _, rest = text.partition("[START OF EPISODE]")
-    body, _, _ = rest.partition("[END OF EPISODE]")
+    s0, e0 = text.rfind("[START OF EPISODE]"), text.rfind("[END OF EPISODE]")   # the instruction header names both markers too: take the LAST pair
+    if s0 < 0 or e0 < s0:
+        raise ValueError("episode markers not found")
+    head, body = text[:s0], text[s0 + len("[START OF EPISODE]"):e0]
     mapping = {}
     for m in re.finditer(r"^(.+?) plays the character (.+?)\.?\s*$", head, re.M):
         mapping[m.group(1).strip()] = m.group(2).strip()
