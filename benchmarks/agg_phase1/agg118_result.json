@@ -1,0 +1,1478 @@
+{
+ "task": "AGG-1.18 value_in_quote.rounded.v1 (Q) and agg_pipeline.v4 (V4), offline replay (no model)",
+ "model_calls": 0,
+ "label": "IN-SAMPLE, POST-HOC (the 14 long_term_debt golds tuned AGG-1.17; BLOCK motivated the rule); regression check on all sets",
+ "orch_head": "88bba4fdb5df6a8f7175ba580678ca41c5e30fbd",
+ "orch_facts_typed_sha256": "c9437de6a8f5c4f63757c448b487db93c4985785e605e79f0180eb1e98b9e113",
+ "orch_pipeline_sha256": "1ae52d8c681dcc9b156332095f82d020c11a404db494afc5b10a1b1815848aca",
+ "inputs_sha256": {
+  "/mnt/raid0/llm/tmp/agg116b-replay-20261116/store.v3.sqlite": "f04db76e157a3b3fa40d211a1c2cea14f28c2fb7a013e7d3efb9f888e78e9857",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/seed/store_agg112r2.sqlite": "98f1aabfd89c4869f654a59dc8bbe758be6f2e3f2fdb3c8f59226139df4a6d7f",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/seed/agg112ingest_results.jsonl": "7200032339d09dfcd280f9000ba4f79bcc4317e98f1e972e60d59ecb80957e64",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/out/results.jsonl": "1ec9a62fe6114fa739d34e8c7c9a338487f3b230737ece39b45300b79128193e",
+  "/mnt/raid0/llm/tmp/agg113-ingest-v2-cpu-20261114-r2/out/results.jsonl": "342e40ab0ac7fa3d6138b57a2615d3f3f82e9b93835946253f2ec450b1005e64",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/out/store_agg13.sqlite": "b5d2abd2b3c4685761dd8e2245b6f4e441c3d03bc9bcd07cdaf687e6d28208ce",
+  "/mnt/raid0/llm/tmp/agg111s2-cpu-20261116/out/store_agg14.sqlite": "54206f934fbb50481d44ed7f831401e70df45858eacb155a3b9e34430efefdf1"
+ },
+ "l3_parity": {
+  "agg113": {
+   "kwargs": "v2+fy_end",
+   "stored_not_replayed": 0,
+   "replayed_not_stored": 0,
+   "excluded_docs": []
+  },
+  "r2": {
+   "kwargs": "v2",
+   "stored_not_replayed": 0,
+   "replayed_not_stored": 0,
+   "excluded_docs": []
+  },
+  "agg13": {
+   "kwargs": "v1",
+   "stored_not_replayed": 0,
+   "replayed_not_stored": 3573,
+   "excluded_docs": [
+    "3M_2022_10K",
+    "JOHNSON_JOHNSON_2022_10K",
+    "MICROSOFT_2022_10K"
+   ]
+  },
+  "agg14": {
+   "kwargs": "v1",
+   "stored_not_replayed": 0,
+   "replayed_not_stored": 0,
+   "excluded_docs": []
+  }
+ },
+ "before_v3": {
+  "agg113": {
+   "raw": 71,
+   "canonical": 67,
+   "raw14": 6,
+   "canonical14": 6
+  },
+  "r2": {
+   "raw": 208,
+   "canonical": 203
+  },
+  "agg13": {
+   "raw": 24,
+   "canonical": 22
+  },
+  "agg14": {
+   "raw": 24,
+   "canonical": 23
+  }
+ },
+ "arms": {
+  "Q": {
+   "sets": {
+    "76:raw": {
+     "n": 76,
+     "before": 71,
+     "after": 71,
+     "fixed": [],
+     "regressed": []
+    },
+    "76:canonical": {
+     "n": 76,
+     "before": 67,
+     "after": 67,
+     "fixed": [],
+     "regressed": []
+    },
+    "14:raw": {
+     "n": 14,
+     "before": 6,
+     "after": 7,
+     "fixed": [
+      "BLOCK_2022_10K|long_term_debt|2022"
+     ],
+     "regressed": []
+    },
+    "14:canonical": {
+     "n": 14,
+     "before": 6,
+     "after": 7,
+     "fixed": [
+      "BLOCK_2022_10K|long_term_debt|2022"
+     ],
+     "regressed": []
+    },
+    "211:raw": {
+     "n": 211,
+     "before": 208,
+     "after": 208,
+     "fixed": [],
+     "regressed": []
+    },
+    "211:canonical": {
+     "n": 211,
+     "before": 203,
+     "after": 203,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:raw": {
+     "n": 24,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:canonical": {
+     "n": 24,
+     "before": 22,
+     "after": 22,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:raw": {
+     "n": 25,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:canonical": {
+     "n": 25,
+     "before": 23,
+     "after": 23,
+     "fixed": [],
+     "regressed": []
+    }
+   },
+   "quote": {
+    "agg113": {
+     "replayed_not_stored": 0,
+     "rows_restored_by_rule": 3,
+     "restored": [
+      {
+       "plan": "BLOCK_2022_10K",
+       "doc_id": "BLOCK_2022_10K",
+       "field": "total_current_assets",
+       "period": "FY2022",
+       "value": 15623.41,
+       "unit": "USD_millions",
+       "declared_scale": "USD_thousands",
+       "quote": "Total current assets 15,623,405"
+      },
+      {
+       "plan": "BLOCK_2022_10K",
+       "doc_id": "BLOCK_2022_10K",
+       "field": "total_current_liabilities",
+       "period": "FY2022",
+       "value": 8434.52,
+       "unit": "USD_millions",
+       "declared_scale": "USD_thousands",
+       "quote": "Total current liabilities 8,434,516"
+      },
+      {
+       "plan": "BLOCK_2022_10K",
+       "doc_id": "BLOCK_2022_10K",
+       "field": "long_term_debt",
+       "period": "FY2022",
+       "value": 4109.83,
+       "unit": "USD_millions",
+       "declared_scale": "USD_thousands",
+       "quote": "Long-term debt (Note 15) 4,109,829"
+      }
+     ],
+     "facts_removed": 0,
+     "facts_added": 3,
+     "added": [
+      {
+       "doc_id": "BLOCK_2022_10K",
+       "field": "total_current_assets",
+       "period": "FY2022",
+       "value": 15623.41,
+       "unit": "USD_millions",
+       "quote": "Total current assets 15,623,405"
+      },
+      {
+       "doc_id": "BLOCK_2022_10K",
+       "field": "total_current_liabilities",
+       "period": "FY2022",
+       "value": 8434.52,
+       "unit": "USD_millions",
+       "quote": "Total current liabilities 8,434,516"
+      },
+      {
+       "doc_id": "BLOCK_2022_10K",
+       "field": "long_term_debt",
+       "period": "FY2022",
+       "value": 4109.83,
+       "unit": "USD_millions",
+       "quote": "Long-term debt (Note 15) 4,109,829"
+      }
+     ]
+    },
+    "r2": {
+     "replayed_not_stored": 0,
+     "rows_restored_by_rule": 0,
+     "restored": [],
+     "facts_removed": 0,
+     "facts_added": 0,
+     "added": []
+    },
+    "agg13": {
+     "replayed_not_stored": 0,
+     "rows_restored_by_rule": 0,
+     "restored": [],
+     "facts_removed": 0,
+     "facts_added": 0,
+     "added": []
+    },
+    "agg14": {
+     "replayed_not_stored": 0,
+     "rows_restored_by_rule": 0,
+     "restored": [],
+     "facts_removed": 0,
+     "facts_added": 0,
+     "added": []
+    }
+   },
+   "textrow": {},
+   "after_14_detail": {
+    "AMCOR_2022_10K|long_term_debt|2022": {
+     "raw_verdict": "HIT",
+     "canonical_value": 6340.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "AMCOR_2022_10K|long_term_debt|2021": {
+     "raw_verdict": "WRONG_VALUE",
+     "canonical_value": null,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "BESTBUY_2022_10K|long_term_debt|2022": {
+     "raw_verdict": "HIT",
+     "canonical_value": 1216.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "BESTBUY_2022_10K|long_term_debt|2021": {
+     "raw_verdict": "HIT",
+     "canonical_value": 1253.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "BLOCK_2022_10K|long_term_debt|2022": {
+     "raw_verdict": "HIT",
+     "canonical_value": 4109.83,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "BLOCK_2022_10K|long_term_debt|2021": {
+     "raw_verdict": "WRONG_VALUE",
+     "canonical_value": null,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "FOOTLOCKER_2023_10K|long_term_debt|2022": {
+     "raw_verdict": "NEAR_ROUNDED",
+     "canonical_value": 452.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "FOOTLOCKER_2023_10K|long_term_debt|2021": {
+     "raw_verdict": "PERIOD_LABEL",
+     "canonical_value": null,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "NIKE_2022_10K|long_term_debt|2022": {
+     "raw_verdict": "HIT",
+     "canonical_value": 8920.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "NIKE_2022_10K|long_term_debt|2021": {
+     "raw_verdict": "WRONG_VALUE",
+     "canonical_value": null,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "PG_E_2022_10K|long_term_debt|2022": {
+     "raw_verdict": "WRONG_VALUE",
+     "canonical_value": 4588.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "PG_E_2022_10K|long_term_debt|2021": {
+     "raw_verdict": "WRONG_VALUE",
+     "canonical_value": 4592.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "WALMART_2022_10K|long_term_debt|2022": {
+     "raw_verdict": "HIT",
+     "canonical_value": 34864.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "WALMART_2022_10K|long_term_debt|2021": {
+     "raw_verdict": "HIT",
+     "canonical_value": 41194.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    }
+   },
+   "regressions": [],
+   "fixed": [
+    "BLOCK_2022_10K|long_term_debt|2022"
+   ],
+   "rows_restored_by_rule": 3,
+   "replayed_not_stored": {
+    "agg113": 0,
+    "r2": 0,
+    "agg13": 0,
+    "agg14": 0
+   }
+  },
+  "V4": {
+   "sets": {
+    "76:raw": {
+     "n": 76,
+     "before": 71,
+     "after": 71,
+     "fixed": [],
+     "regressed": []
+    },
+    "76:canonical": {
+     "n": 76,
+     "before": 67,
+     "after": 69,
+     "fixed": [
+      "AMCOR_2022_10K|total_current_assets",
+      "AMCOR_2022_10K|total_current_liabilities"
+     ],
+     "regressed": []
+    },
+    "14:raw": {
+     "n": 14,
+     "before": 6,
+     "after": 14,
+     "fixed": [
+      "AMCOR_2022_10K|long_term_debt|2021",
+      "BLOCK_2022_10K|long_term_debt|2021",
+      "BLOCK_2022_10K|long_term_debt|2022",
+      "FOOTLOCKER_2023_10K|long_term_debt|2021",
+      "FOOTLOCKER_2023_10K|long_term_debt|2022",
+      "NIKE_2022_10K|long_term_debt|2021",
+      "PG_E_2022_10K|long_term_debt|2021",
+      "PG_E_2022_10K|long_term_debt|2022"
+     ],
+     "regressed": []
+    },
+    "14:canonical": {
+     "n": 14,
+     "before": 6,
+     "after": 14,
+     "fixed": [
+      "AMCOR_2022_10K|long_term_debt|2021",
+      "BLOCK_2022_10K|long_term_debt|2021",
+      "BLOCK_2022_10K|long_term_debt|2022",
+      "FOOTLOCKER_2023_10K|long_term_debt|2021",
+      "FOOTLOCKER_2023_10K|long_term_debt|2022",
+      "NIKE_2022_10K|long_term_debt|2021",
+      "PG_E_2022_10K|long_term_debt|2021",
+      "PG_E_2022_10K|long_term_debt|2022"
+     ],
+     "regressed": []
+    },
+    "211:raw": {
+     "n": 211,
+     "before": 208,
+     "after": 208,
+     "fixed": [],
+     "regressed": []
+    },
+    "211:canonical": {
+     "n": 211,
+     "before": 203,
+     "after": 204,
+     "fixed": [
+      "CORNING_2022_10K|revenue"
+     ],
+     "regressed": []
+    },
+    "49:agg13:raw": {
+     "n": 24,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg13:canonical": {
+     "n": 24,
+     "before": 22,
+     "after": 22,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:raw": {
+     "n": 25,
+     "before": 24,
+     "after": 24,
+     "fixed": [],
+     "regressed": []
+    },
+    "49:agg14:canonical": {
+     "n": 25,
+     "before": 23,
+     "after": 24,
+     "fixed": [
+      "ACTIVISIONBLIZZARD_2022_10K|long_term_debt|2022"
+     ],
+     "regressed": []
+    }
+   },
+   "quote": {
+    "agg113": {
+     "replayed_not_stored": 0,
+     "rows_restored_by_rule": 3,
+     "restored": [
+      {
+       "plan": "BLOCK_2022_10K",
+       "doc_id": "BLOCK_2022_10K",
+       "field": "total_current_assets",
+       "period": "FY2022",
+       "value": 15623.41,
+       "unit": "USD_millions",
+       "declared_scale": "USD_thousands",
+       "quote": "Total current assets 15,623,405"
+      },
+      {
+       "plan": "BLOCK_2022_10K",
+       "doc_id": "BLOCK_2022_10K",
+       "field": "total_current_liabilities",
+       "period": "FY2022",
+       "value": 8434.52,
+       "unit": "USD_millions",
+       "declared_scale": "USD_thousands",
+       "quote": "Total current liabilities 8,434,516"
+      },
+      {
+       "plan": "BLOCK_2022_10K",
+       "doc_id": "BLOCK_2022_10K",
+       "field": "long_term_debt",
+       "period": "FY2022",
+       "value": 4109.83,
+       "unit": "USD_millions",
+       "declared_scale": "USD_thousands",
+       "quote": "Long-term debt (Note 15) 4,109,829"
+      }
+     ],
+     "facts_removed": 0,
+     "facts_added": 3,
+     "added": [
+      {
+       "doc_id": "BLOCK_2022_10K",
+       "field": "total_current_assets",
+       "period": "FY2022",
+       "value": 15623.41,
+       "unit": "USD_millions",
+       "quote": "Total current assets 15,623,405"
+      },
+      {
+       "doc_id": "BLOCK_2022_10K",
+       "field": "total_current_liabilities",
+       "period": "FY2022",
+       "value": 8434.52,
+       "unit": "USD_millions",
+       "quote": "Total current liabilities 8,434,516"
+      },
+      {
+       "doc_id": "BLOCK_2022_10K",
+       "field": "long_term_debt",
+       "period": "FY2022",
+       "value": 4109.83,
+       "unit": "USD_millions",
+       "quote": "Long-term debt (Note 15) 4,109,829"
+      }
+     ]
+    },
+    "r2": {
+     "replayed_not_stored": 0,
+     "rows_restored_by_rule": 0,
+     "restored": [],
+     "facts_removed": 0,
+     "facts_added": 0,
+     "added": []
+    },
+    "agg13": {
+     "replayed_not_stored": 0,
+     "rows_restored_by_rule": 0,
+     "restored": [],
+     "facts_removed": 0,
+     "facts_added": 0,
+     "added": []
+    },
+    "agg14": {
+     "replayed_not_stored": 0,
+     "rows_restored_by_rule": 0,
+     "restored": [],
+     "facts_removed": 0,
+     "facts_added": 0,
+     "added": []
+    }
+   },
+   "textrow": {
+    "agg113": {
+     "removed": 552,
+     "added": 89,
+     "added_by_field_top": {
+      "long_term_debt": 18,
+      "operating_income": 18,
+      "revenue": 9,
+      "net_income": 9,
+      "reorganization_items_net_note_2": 9,
+      "wildfire_fund_expense": 6,
+      "eps": 3,
+      "operating_cash_flow": 3,
+      "total_current_liabilities": 2,
+      "current_portion_of_long_term_debt_note_15": 2,
+      "total_equity": 2,
+      "total_current_assets": 2
+     },
+     "ltd_added": [
+      {
+       "doc_id": "PG_E_2022_10K",
+       "period": "2021",
+       "value": 38225.0,
+       "unit": "USD_millions",
+       "page": 101,
+       "quote": "Long-term debt (includes $10.31 billion and $1.82 billion related to VIEs at respective dates) 47,742 38,225"
+      },
+      {
+       "doc_id": "FOOTLOCKER_2023_10K",
+       "period": "2022",
+       "value": 446.0,
+       "unit": "USD_millions",
+       "page": 37,
+       "quote": "Long-term debt and obligations under finance leases 446 451"
+      },
+      {
+       "doc_id": "NIKE_2022_10K",
+       "period": "2022",
+       "value": 8920.0,
+       "unit": "USD_millions",
+       "page": 74,
+       "quote": "TOTAL LONG-TERM DEBT $ 8,920 | $ 9,413"
+      },
+      {
+       "doc_id": "AMCOR_2022_10K",
+       "period": "2021",
+       "value": 370.0,
+       "unit": "USD_millions",
+       "page": 104,
+       "quote": "Long-term debt, less current portion 319 370"
+      },
+      {
+       "doc_id": "PG_E_2022_10K",
+       "period": "2022",
+       "value": 47742.0,
+       "unit": "USD_millions",
+       "page": 101,
+       "quote": "Long-term debt (includes $10.31 billion and $1.82 billion related to VIEs at respective dates) 47,742 38,225"
+      },
+      {
+       "doc_id": "AMCOR_2022_10K",
+       "period": "2022",
+       "value": 6340.0,
+       "unit": "USD_millions",
+       "page": 35,
+       "quote": "Long-term debt, less current portion 6,340 6,186"
+      },
+      {
+       "doc_id": "AMCOR_2022_10K",
+       "period": "2022",
+       "value": 319.0,
+       "unit": "USD_millions",
+       "page": 104,
+       "quote": "Long-term debt, less current portion 319 370"
+      },
+      {
+       "doc_id": "PG_E_2022_10K",
+       "period": "2021",
+       "value": 33632.0,
+       "unit": "USD_millions",
+       "page": 108,
+       "quote": "Long-term debt (includes $10.31 billion and $1.82 billion related to VIEs at respective dates) 43,155 33,632"
+      },
+      {
+       "doc_id": "BLOCK_2022_10K",
+       "period": "2021",
+       "value": 4559208.0,
+       "unit": "USD_thousands",
+       "page": 94,
+       "quote": "Long-term debt (Note 15) 4,109,829 4,559,208"
+      },
+      {
+       "doc_id": "PG_E_2022_10K",
+       "period": "2022",
+       "value": 43155.0,
+       "unit": "USD_millions",
+       "page": 108,
+       "quote": "Long-term debt (includes $10.31 billion and $1.82 billion related to VIEs at respective dates) 43,155 33,632"
+      },
+      {
+       "doc_id": "FOOTLOCKER_2023_10K",
+       "period": "2021",
+       "value": 451.0,
+       "unit": "USD_millions",
+       "page": 37,
+       "quote": "Long-term debt and obligations under finance leases 446 451"
+      },
+      {
+       "doc_id": "AMCOR_2022_10K",
+       "period": "2021",
+       "value": 6186.0,
+       "unit": "USD_millions",
+       "page": 35,
+       "quote": "Long-term debt, less current portion 6,340 6,186"
+      },
+      {
+       "doc_id": "NIKE_2022_10K",
+       "period": "2021",
+       "value": 9413.0,
+       "unit": "USD_millions",
+       "page": 74,
+       "quote": "TOTAL LONG-TERM DEBT $ 8,920 | $ 9,413"
+      },
+      {
+       "doc_id": "AMCOR_2022_10K",
+       "period": "2022",
+       "value": 6340.0,
+       "unit": "USD_millions",
+       "page": 51,
+       "quote": "Long-term debt, less current portion 6,340 6,186"
+      },
+      {
+       "doc_id": "NIKE_2022_10K",
+       "period": "2021",
+       "value": 9413.0,
+       "unit": "USD_millions",
+       "page": 60,
+       "quote": "Long-term debt 8,920 | 9,413"
+      },
+      {
+       "doc_id": "BLOCK_2022_10K",
+       "period": "2022",
+       "value": 4109829.0,
+       "unit": "USD_thousands",
+       "page": 94,
+       "quote": "Long-term debt (Note 15) 4,109,829 4,559,208"
+      },
+      {
+       "doc_id": "NIKE_2022_10K",
+       "period": "2022",
+       "value": 8920.0,
+       "unit": "USD_millions",
+       "page": 60,
+       "quote": "Long-term debt 8,920 | 9,413"
+      },
+      {
+       "doc_id": "AMCOR_2022_10K",
+       "period": "2021",
+       "value": 6186.0,
+       "unit": "USD_millions",
+       "page": 51,
+       "quote": "Long-term debt, less current portion 6,340 6,186"
+      }
+     ]
+    },
+    "r2": {
+     "removed": 796,
+     "added": 276,
+     "added_by_field_top": {
+      "net_income": 41,
+      "long_term_debt": 27,
+      "cash_and_equivalents": 12,
+      "revenue": 12,
+      "derivative_instruments_note_14": 8,
+      "eps": 6,
+      "balance_at_end_of_year": 6,
+      "net_income_attributable": 5,
+      "total_equity": 5,
+      "share_repurchase_liability_note_16": 4,
+      "customer_deposits_note_4": 4,
+      "deferred_taxes_on_income_note_8": 4
+     },
+     "ltd_added": [
+      {
+       "doc_id": "ACTIVISIONBLIZZARD_2022_10K",
+       "period": "2021",
+       "value": 3608.0,
+       "unit": "USD_millions",
+       "page": 67,
+       "quote": "Long-term debt, net 3,611 3,608"
+      },
+      {
+       "doc_id": "LOCKHEEDMARTIN_2022_10K",
+       "period": "2021",
+       "value": 11670.0,
+       "unit": "USD_millions",
+       "page": 86,
+       "quote": "Long-term debt, net $ 15,429 $ 11,670"
+      },
+      {
+       "doc_id": "BOEING_2022_10K",
+       "period": null,
+       "value": 5197.0,
+       "unit": "USD_millions",
+       "page": 45,
+       "quote": "Long-term debt (including current portion) $5,197 $52,338 $57,535"
+      },
+      {
+       "doc_id": "JPMORGAN_2022_10K",
+       "period": "2022",
+       "value": 295865.0,
+       "unit": "USD_millions",
+       "page": 163,
+       "quote": "Long-term debt (included $72,281 and $74,934 at fair value) 295,865 301,005"
+      },
+      {
+       "doc_id": "KRAFTHEINZ_2022_10K",
+       "period": "2022",
+       "value": 19233.0,
+       "unit": "USD_millions",
+       "page": 103,
+       "quote": "Long-term debt, excluding current portion $ 19,233 $ 21,061"
+      },
+      {
+       "doc_id": "KRAFTHEINZ_2022_10K",
+       "period": "2021",
+       "value": 21061.0,
+       "unit": "USD_millions",
+       "page": 103,
+       "quote": "Long-term debt, excluding current portion $ 19,233 $ 21,061"
+      },
+      {
+       "doc_id": "JOHNSON_JOHNSON_2022_10K",
+       "period": "2021",
+       "value": 29985.0,
+       "unit": "USD_millions",
+       "page": 46,
+       "quote": "Long-term debt (Note 7) 26,888 29,985"
+      },
+      {
+       "doc_id": "ACTIVISIONBLIZZARD_2022_10K",
+       "period": "2022",
+       "value": 3611.0,
+       "unit": "USD_millions",
+       "page": 67,
+       "quote": "Long-term debt, net 3,611 3,608"
+      },
+      {
+       "doc_id": "MGMRESORTS_2022_10K",
+       "period": "2021",
+       "value": 11770797.0,
+       "unit": "USD_thousands",
+       "page": 59,
+       "quote": "Long-term debt, net 7,432,817 11,770,797"
+      },
+      {
+       "doc_id": "COSTCO_2022_10K",
+       "period": "2021",
+       "value": 6692.0,
+       "unit": "unknown",
+       "page": 52,
+       "quote": "Long-term debt, excluding current portion $ 6,484 $ 6,692"
+      },
+      {
+       "doc_id": "MGMRESORTS_2022_10K",
+       "period": "2022",
+       "value": 7432817.0,
+       "unit": "USD_thousands",
+       "page": 59,
+       "quote": "Long-term debt, net 7,432,817 11,770,797"
+      },
+      {
+       "doc_id": "JOHNSON_JOHNSON_2022_10K",
+       "period": "2022",
+       "value": 26888.0,
+       "unit": "USD_millions",
+       "page": 46,
+       "quote": "Long-term debt (Note 7) 26,888 29,985"
+      },
+      {
+       "doc_id": "CORNING_2022_10K",
+       "period": "2021",
+       "value": 6989.0,
+       "unit": "USD_millions",
+       "page": 60,
+       "quote": "Long-term debt (Note 11) 6,687 6,989"
+      },
+      {
+       "doc_id": "LOCKHEEDMARTIN_2022_10K",
+       "period": "2022",
+       "value": 15429.0,
+       "unit": "USD_millions",
+       "page": 65,
+       "quote": "Long-term debt, net 15,429 11,670"
+      },
+      {
+       "doc_id": "BOEING_2022_10K",
+       "period": null,
+       "value": 52338.0,
+       "unit": "USD_millions",
+       "page": 45,
+       "quote": "Long-term debt (including current portion) $5,197 $52,338 $57,535"
+      },
+      {
+       "doc_id": "CORNING_2022_10K",
+       "period": "2022",
+       "value": 6687.0,
+       "unit": "USD_millions",
+       "page": 60,
+       "quote": "Long-term debt (Note 11) 6,687 6,989"
+      },
+      {
+       "doc_id": "COSTCO_2022_10K",
+       "period": "2022",
+       "value": 6484.0,
+       "unit": "unknown",
+       "page": 52,
+       "quote": "Long-term debt, excluding current portion $ 6,484 $ 6,692"
+      },
+      {
+       "doc_id": "JPMORGAN_2022_10K",
+       "period": null,
+       "value": 301005.0,
+       "unit": "USD_millions",
+       "page": 163,
+       "quote": "Long-term debt (included $72,281 and $74,934 at fair value) 295,865 301,005"
+      },
+      {
+       "doc_id": "COCACOLA_2022_10K",
+       "period": "2022",
+       "value": 36377.0,
+       "unit": "USD_millions",
+       "page": 91,
+       "quote": "Long-term debt $ 36,377 | $ 38,116"
+      },
+      {
+       "doc_id": "3M_2022_10K",
+       "period": "2022",
+       "value": 14001.0,
+       "unit": "USD_millions",
+       "page": 75,
+       "quote": "Long-term debt (excluding current portion) $ 14,001 $ 16,056"
+      },
+      {
+       "doc_id": "COSTCO_2022_10K",
+       "period": null,
+       "value": 6692.0,
+       "unit": "USD_millions",
+       "page": 38,
+       "quote": "Long-term debt, excluding current portion 6,484 6,692"
+      },
+      {
+       "doc_id": "3M_2022_10K",
+       "period": "2021",
+       "value": 16056.0,
+       "unit": "USD_millions",
+       "page": 75,
+       "quote": "Long-term debt (excluding current portion) $ 14,001 $ 16,056"
+      },
+      {
+       "doc_id": "COCACOLA_2022_10K",
+       "period": "2021",
+       "value": 38116.0,
+       "unit": "USD_millions",
+       "page": 91,
+       "quote": "Long-term debt $ 36,377 | $ 38,116"
+      },
+      {
+       "doc_id": "LOCKHEEDMARTIN_2022_10K",
+       "period": "2021",
+       "value": 11670.0,
+       "unit": "USD_millions",
+       "page": 65,
+       "quote": "Long-term debt, net 15,429 11,670"
+      },
+      {
+       "doc_id": "LOCKHEEDMARTIN_2022_10K",
+       "period": "2022",
+       "value": 15429.0,
+       "unit": "USD_millions",
+       "page": 86,
+       "quote": "Long-term debt, net $ 15,429 $ 11,670"
+      },
+      {
+       "doc_id": "BOEING_2022_10K",
+       "period": null,
+       "value": 57535.0,
+       "unit": "USD_millions",
+       "page": 45,
+       "quote": "Long-term debt (including current portion) $5,197 $52,338 $57,535"
+      },
+      {
+       "doc_id": "COSTCO_2022_10K",
+       "period": "2022",
+       "value": 6484.0,
+       "unit": "USD_millions",
+       "page": 38,
+       "quote": "Long-term debt, excluding current portion 6,484 6,692"
+      }
+     ]
+    },
+    "agg13": {
+     "removed": 720,
+     "added": 197,
+     "added_by_field_top": {
+      "long_term_debt": 23,
+      "net_income": 22,
+      "cash_and_equivalents": 12,
+      "revenue": 12,
+      "derivative_instruments_note_14": 8,
+      "balance_at_end_of_year": 6,
+      "net_income_attributable": 5,
+      "total_equity": 5,
+      "share_repurchase_liability_note_16": 4,
+      "customer_deposits_note_4": 4,
+      "deferred_revenue_note_4": 4,
+      "non_cash_consideration_transferred_for_aes_clean_energy_acquisitions_see_note_25": 3
+     },
+     "ltd_added": [
+      {
+       "doc_id": "ACTIVISIONBLIZZARD_2022_10K",
+       "period": "2021",
+       "value": 3608.0,
+       "unit": "USD_millions",
+       "page": 67,
+       "quote": "Long-term debt, net 3,611 3,608"
+      },
+      {
+       "doc_id": "LOCKHEEDMARTIN_2022_10K",
+       "period": "2021",
+       "value": 11670.0,
+       "unit": "USD_millions",
+       "page": 86,
+       "quote": "Long-term debt, net $ 15,429 $ 11,670"
+      },
+      {
+       "doc_id": "BOEING_2022_10K",
+       "period": null,
+       "value": 5197.0,
+       "unit": "USD_millions",
+       "page": 45,
+       "quote": "Long-term debt (including current portion) $5,197 $52,338 $57,535"
+      },
+      {
+       "doc_id": "JPMORGAN_2022_10K",
+       "period": null,
+       "value": 295865.0,
+       "unit": "USD_millions",
+       "page": 163,
+       "quote": "Long-term debt (included $72,281 and $74,934 at fair value) 295,865 301,005"
+      },
+      {
+       "doc_id": "KRAFTHEINZ_2022_10K",
+       "period": "2022",
+       "value": 19233.0,
+       "unit": "USD_millions",
+       "page": 103,
+       "quote": "Long-term debt, excluding current portion $ 19,233 $ 21,061"
+      },
+      {
+       "doc_id": "KRAFTHEINZ_2022_10K",
+       "period": "2021",
+       "value": 21061.0,
+       "unit": "USD_millions",
+       "page": 103,
+       "quote": "Long-term debt, excluding current portion $ 19,233 $ 21,061"
+      },
+      {
+       "doc_id": "ACTIVISIONBLIZZARD_2022_10K",
+       "period": "2022",
+       "value": 3611.0,
+       "unit": "USD_millions",
+       "page": 67,
+       "quote": "Long-term debt, net 3,611 3,608"
+      },
+      {
+       "doc_id": "MGMRESORTS_2022_10K",
+       "period": "2021",
+       "value": 11770797.0,
+       "unit": "USD_thousands",
+       "page": 59,
+       "quote": "Long-term debt, net 7,432,817 11,770,797"
+      },
+      {
+       "doc_id": "COSTCO_2022_10K",
+       "period": "2021",
+       "value": 6692.0,
+       "unit": "unknown",
+       "page": 52,
+       "quote": "Long-term debt, excluding current portion $ 6,484 $ 6,692"
+      },
+      {
+       "doc_id": "MGMRESORTS_2022_10K",
+       "period": "2022",
+       "value": 7432817.0,
+       "unit": "USD_thousands",
+       "page": 59,
+       "quote": "Long-term debt, net 7,432,817 11,770,797"
+      },
+      {
+       "doc_id": "CORNING_2022_10K",
+       "period": "2021",
+       "value": 6989.0,
+       "unit": "USD_millions",
+       "page": 60,
+       "quote": "Long-term debt (Note 11) 6,687 6,989"
+      },
+      {
+       "doc_id": "LOCKHEEDMARTIN_2022_10K",
+       "period": "2022",
+       "value": 15429.0,
+       "unit": "USD_millions",
+       "page": 65,
+       "quote": "Long-term debt, net 15,429 11,670"
+      },
+      {
+       "doc_id": "BOEING_2022_10K",
+       "period": null,
+       "value": 52338.0,
+       "unit": "USD_millions",
+       "page": 45,
+       "quote": "Long-term debt (including current portion) $5,197 $52,338 $57,535"
+      },
+      {
+       "doc_id": "CORNING_2022_10K",
+       "period": "2022",
+       "value": 6687.0,
+       "unit": "USD_millions",
+       "page": 60,
+       "quote": "Long-term debt (Note 11) 6,687 6,989"
+      },
+      {
+       "doc_id": "COSTCO_2022_10K",
+       "period": "2022",
+       "value": 6484.0,
+       "unit": "unknown",
+       "page": 52,
+       "quote": "Long-term debt, excluding current portion $ 6,484 $ 6,692"
+      },
+      {
+       "doc_id": "JPMORGAN_2022_10K",
+       "period": null,
+       "value": 301005.0,
+       "unit": "USD_millions",
+       "page": 163,
+       "quote": "Long-term debt (included $72,281 and $74,934 at fair value) 295,865 301,005"
+      },
+      {
+       "doc_id": "COCACOLA_2022_10K",
+       "period": "2022",
+       "value": 36377.0,
+       "unit": "USD_millions",
+       "page": 91,
+       "quote": "Long-term debt $ 36,377 | $ 38,116"
+      },
+      {
+       "doc_id": "COSTCO_2022_10K",
+       "period": null,
+       "value": 6692.0,
+       "unit": "USD_millions",
+       "page": 38,
+       "quote": "Long-term debt, excluding current portion 6,484 6,692"
+      },
+      {
+       "doc_id": "COCACOLA_2022_10K",
+       "period": "2021",
+       "value": 38116.0,
+       "unit": "USD_millions",
+       "page": 91,
+       "quote": "Long-term debt $ 36,377 | $ 38,116"
+      },
+      {
+       "doc_id": "LOCKHEEDMARTIN_2022_10K",
+       "period": "2021",
+       "value": 11670.0,
+       "unit": "USD_millions",
+       "page": 65,
+       "quote": "Long-term debt, net 15,429 11,670"
+      },
+      {
+       "doc_id": "LOCKHEEDMARTIN_2022_10K",
+       "period": "2022",
+       "value": 15429.0,
+       "unit": "USD_millions",
+       "page": 86,
+       "quote": "Long-term debt, net $ 15,429 $ 11,670"
+      },
+      {
+       "doc_id": "BOEING_2022_10K",
+       "period": null,
+       "value": 57535.0,
+       "unit": "USD_millions",
+       "page": 45,
+       "quote": "Long-term debt (including current portion) $5,197 $52,338 $57,535"
+      },
+      {
+       "doc_id": "COSTCO_2022_10K",
+       "period": null,
+       "value": 6484.0,
+       "unit": "USD_millions",
+       "page": 38,
+       "quote": "Long-term debt, excluding current portion 6,484 6,692"
+      }
+     ]
+    },
+    "agg14": {
+     "removed": 795,
+     "added": 275,
+     "added_by_field_top": {
+      "net_income": 40,
+      "long_term_debt": 27,
+      "cash_and_equivalents": 12,
+      "revenue": 12,
+      "derivative_instruments_note_14": 8,
+      "eps": 6,
+      "balance_at_end_of_year": 6,
+      "net_income_attributable": 5,
+      "total_equity": 5,
+      "share_repurchase_liability_note_16": 4,
+      "customer_deposits_note_4": 4,
+      "deferred_taxes_on_income_note_8": 4
+     },
+     "ltd_added": [
+      {
+       "doc_id": "ACTIVISIONBLIZZARD_2022_10K",
+       "period": "2021",
+       "value": 3608.0,
+       "unit": "USD_millions",
+       "page": 67,
+       "quote": "Long-term debt, net 3,611 3,608"
+      },
+      {
+       "doc_id": "LOCKHEEDMARTIN_2022_10K",
+       "period": "2021",
+       "value": 11670.0,
+       "unit": "USD_millions",
+       "page": 86,
+       "quote": "Long-term debt, net $ 15,429 $ 11,670"
+      },
+      {
+       "doc_id": "BOEING_2022_10K",
+       "period": null,
+       "value": 5197.0,
+       "unit": "USD_millions",
+       "page": 45,
+       "quote": "Long-term debt (including current portion) $5,197 $52,338 $57,535"
+      },
+      {
+       "doc_id": "JPMORGAN_2022_10K",
+       "period": null,
+       "value": 295865.0,
+       "unit": "USD_millions",
+       "page": 163,
+       "quote": "Long-term debt (included $72,281 and $74,934 at fair value) 295,865 301,005"
+      },
+      {
+       "doc_id": "KRAFTHEINZ_2022_10K",
+       "period": "2022",
+       "value": 19233.0,
+       "unit": "USD_millions",
+       "page": 103,
+       "quote": "Long-term debt, excluding current portion $ 19,233 $ 21,061"
+      },
+      {
+       "doc_id": "KRAFTHEINZ_2022_10K",
+       "period": "2021",
+       "value": 21061.0,
+       "unit": "USD_millions",
+       "page": 103,
+       "quote": "Long-term debt, excluding current portion $ 19,233 $ 21,061"
+      },
+      {
+       "doc_id": "JOHNSON_JOHNSON_2022_10K",
+       "period": "2021",
+       "value": 29985.0,
+       "unit": "USD_millions",
+       "page": 46,
+       "quote": "Long-term debt (Note 7) 26,888 29,985"
+      },
+      {
+       "doc_id": "ACTIVISIONBLIZZARD_2022_10K",
+       "period": "2022",
+       "value": 3611.0,
+       "unit": "USD_millions",
+       "page": 67,
+       "quote": "Long-term debt, net 3,611 3,608"
+      },
+      {
+       "doc_id": "MGMRESORTS_2022_10K",
+       "period": "2021",
+       "value": 11770797.0,
+       "unit": "USD_thousands",
+       "page": 59,
+       "quote": "Long-term debt, net 7,432,817 11,770,797"
+      },
+      {
+       "doc_id": "COSTCO_2022_10K",
+       "period": "2021",
+       "value": 6692.0,
+       "unit": "unknown",
+       "page": 52,
+       "quote": "Long-term debt, excluding current portion $ 6,484 $ 6,692"
+      },
+      {
+       "doc_id": "MGMRESORTS_2022_10K",
+       "period": "2022",
+       "value": 7432817.0,
+       "unit": "USD_thousands",
+       "page": 59,
+       "quote": "Long-term debt, net 7,432,817 11,770,797"
+      },
+      {
+       "doc_id": "JOHNSON_JOHNSON_2022_10K",
+       "period": "2022",
+       "value": 26888.0,
+       "unit": "USD_millions",
+       "page": 46,
+       "quote": "Long-term debt (Note 7) 26,888 29,985"
+      },
+      {
+       "doc_id": "CORNING_2022_10K",
+       "period": "2021",
+       "value": 6989.0,
+       "unit": "USD_millions",
+       "page": 60,
+       "quote": "Long-term debt (Note 11) 6,687 6,989"
+      },
+      {
+       "doc_id": "LOCKHEEDMARTIN_2022_10K",
+       "period": "2022",
+       "value": 15429.0,
+       "unit": "USD_millions",
+       "page": 65,
+       "quote": "Long-term debt, net 15,429 11,670"
+      },
+      {
+       "doc_id": "BOEING_2022_10K",
+       "period": null,
+       "value": 52338.0,
+       "unit": "USD_millions",
+       "page": 45,
+       "quote": "Long-term debt (including current portion) $5,197 $52,338 $57,535"
+      },
+      {
+       "doc_id": "CORNING_2022_10K",
+       "period": "2022",
+       "value": 6687.0,
+       "unit": "USD_millions",
+       "page": 60,
+       "quote": "Long-term debt (Note 11) 6,687 6,989"
+      },
+      {
+       "doc_id": "COSTCO_2022_10K",
+       "period": "2022",
+       "value": 6484.0,
+       "unit": "unknown",
+       "page": 52,
+       "quote": "Long-term debt, excluding current portion $ 6,484 $ 6,692"
+      },
+      {
+       "doc_id": "JPMORGAN_2022_10K",
+       "period": null,
+       "value": 301005.0,
+       "unit": "USD_millions",
+       "page": 163,
+       "quote": "Long-term debt (included $72,281 and $74,934 at fair value) 295,865 301,005"
+      },
+      {
+       "doc_id": "COCACOLA_2022_10K",
+       "period": "2022",
+       "value": 36377.0,
+       "unit": "USD_millions",
+       "page": 91,
+       "quote": "Long-term debt $ 36,377 | $ 38,116"
+      },
+      {
+       "doc_id": "3M_2022_10K",
+       "period": "2022",
+       "value": 14001.0,
+       "unit": "USD_millions",
+       "page": 75,
+       "quote": "Long-term debt (excluding current portion) $ 14,001 $ 16,056"
+      },
+      {
+       "doc_id": "COSTCO_2022_10K",
+       "period": null,
+       "value": 6692.0,
+       "unit": "USD_millions",
+       "page": 38,
+       "quote": "Long-term debt, excluding current portion 6,484 6,692"
+      },
+      {
+       "doc_id": "3M_2022_10K",
+       "period": "2021",
+       "value": 16056.0,
+       "unit": "USD_millions",
+       "page": 75,
+       "quote": "Long-term debt (excluding current portion) $ 14,001 $ 16,056"
+      },
+      {
+       "doc_id": "COCACOLA_2022_10K",
+       "period": "2021",
+       "value": 38116.0,
+       "unit": "USD_millions",
+       "page": 91,
+       "quote": "Long-term debt $ 36,377 | $ 38,116"
+      },
+      {
+       "doc_id": "LOCKHEEDMARTIN_2022_10K",
+       "period": "2021",
+       "value": 11670.0,
+       "unit": "USD_millions",
+       "page": 65,
+       "quote": "Long-term debt, net 15,429 11,670"
+      },
+      {
+       "doc_id": "LOCKHEEDMARTIN_2022_10K",
+       "period": "2022",
+       "value": 15429.0,
+       "unit": "USD_millions",
+       "page": 86,
+       "quote": "Long-term debt, net $ 15,429 $ 11,670"
+      },
+      {
+       "doc_id": "BOEING_2022_10K",
+       "period": null,
+       "value": 57535.0,
+       "unit": "USD_millions",
+       "page": 45,
+       "quote": "Long-term debt (including current portion) $5,197 $52,338 $57,535"
+      },
+      {
+       "doc_id": "COSTCO_2022_10K",
+       "period": null,
+       "value": 6484.0,
+       "unit": "USD_millions",
+       "page": 38,
+       "quote": "Long-term debt, excluding current portion 6,484 6,692"
+      }
+     ]
+    }
+   },
+   "after_14_detail": {
+    "AMCOR_2022_10K|long_term_debt|2022": {
+     "raw_verdict": "HIT",
+     "canonical_value": 6340.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "AMCOR_2022_10K|long_term_debt|2021": {
+     "raw_verdict": "HIT",
+     "canonical_value": 6186.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "BESTBUY_2022_10K|long_term_debt|2022": {
+     "raw_verdict": "HIT",
+     "canonical_value": 1216.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "BESTBUY_2022_10K|long_term_debt|2021": {
+     "raw_verdict": "HIT",
+     "canonical_value": 1253.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "BLOCK_2022_10K|long_term_debt|2022": {
+     "raw_verdict": "HIT",
+     "canonical_value": 4109.829,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "BLOCK_2022_10K|long_term_debt|2021": {
+     "raw_verdict": "HIT",
+     "canonical_value": 4559.2080000000005,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "FOOTLOCKER_2023_10K|long_term_debt|2022": {
+     "raw_verdict": "HIT",
+     "canonical_value": 446.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "FOOTLOCKER_2023_10K|long_term_debt|2021": {
+     "raw_verdict": "HIT",
+     "canonical_value": 451.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "NIKE_2022_10K|long_term_debt|2022": {
+     "raw_verdict": "HIT",
+     "canonical_value": 8920.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "NIKE_2022_10K|long_term_debt|2021": {
+     "raw_verdict": "HIT",
+     "canonical_value": 9413.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "PG_E_2022_10K|long_term_debt|2022": {
+     "raw_verdict": "HIT",
+     "canonical_value": 47742.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "PG_E_2022_10K|long_term_debt|2021": {
+     "raw_verdict": "HIT",
+     "canonical_value": 38225.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "WALMART_2022_10K|long_term_debt|2022": {
+     "raw_verdict": "HIT",
+     "canonical_value": 34864.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    },
+    "WALMART_2022_10K|long_term_debt|2021": {
+     "raw_verdict": "HIT",
+     "canonical_value": 41194.0,
+     "canonical_quote": "",
+     "canonical_page": null
+    }
+   },
+   "regressions": [],
+   "fixed": [
+    "ACTIVISIONBLIZZARD_2022_10K|long_term_debt|2022",
+    "AMCOR_2022_10K|long_term_debt|2021",
+    "AMCOR_2022_10K|total_current_assets",
+    "AMCOR_2022_10K|total_current_liabilities",
+    "BLOCK_2022_10K|long_term_debt|2021",
+    "BLOCK_2022_10K|long_term_debt|2022",
+    "CORNING_2022_10K|revenue",
+    "FOOTLOCKER_2023_10K|long_term_debt|2021",
+    "FOOTLOCKER_2023_10K|long_term_debt|2022",
+    "NIKE_2022_10K|long_term_debt|2021",
+    "PG_E_2022_10K|long_term_debt|2021",
+    "PG_E_2022_10K|long_term_debt|2022"
+   ],
+   "rows_restored_by_rule": 3,
+   "replayed_not_stored": {
+    "agg113": 0,
+    "r2": 0,
+    "agg13": 0,
+    "agg14": 0
+   }
+  }
+ },
+ "verdict": {
+  "Q": "0_regressions",
+  "V4": "0_regressions"
+ }
+}
