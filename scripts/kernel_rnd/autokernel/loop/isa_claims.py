@@ -103,6 +103,13 @@ def count_claims(insts: Iterable[Any], private_quads: set[int] | None = None) ->
     return counts
 
 
+# SQ_INSTS_LDS counts EVERY ds_* wave-instruction, including the ds_swizzle_b32 /
+# ds_bpermute_b32 of cross-lane reductions (row ak-gpu-signals-ctr-20261116: quantize_q8_1_1d
+# has 6 ds_swizzle and no ds_read/ds_write, yet lds_insts > 0). So lds_insts > 0 does not
+# prove LDS *staging* executed; lds_insts == 0 still proves it did not. Refute-only.
+REFUTE_ONLY = {"lds_staging"}
+
+
 def _witness(observation: Mapping[str, Any] | None, metric: str | None,
              kernels: Sequence[str]) -> str:
     if not observation or metric is None:
@@ -129,6 +136,8 @@ def judge(per_kernel: Mapping[str, Mapping[str, list[int]]], claims: Sequence[st
         else:
             w = _witness(observation, MECHANISMS[mech][1], present_in)
             status = {"executed": "EXECUTED", "zero": "NOT_EXECUTED"}.get(w, "STATIC_ONLY")
+            if status == "EXECUTED" and mech in REFUTE_ONLY:
+                status = "STATIC_ONLY"
         results[mech] = {"status": status, "present_in": present_in}
     refused = sorted(m for m, r in results.items() if r["status"] in ("ABSENT", "NOT_EXECUTED"))
     if not kernels:

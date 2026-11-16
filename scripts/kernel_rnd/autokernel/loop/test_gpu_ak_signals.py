@@ -214,6 +214,14 @@ class IsaClaims(unittest.TestCase):
         self.assertEqual((doc["verdict"], doc["claims"]["mfma"]["status"]),
                          ("ACCEPTED", "STATIC_ONLY"))
 
+    def test_lds_counter_only_refutes_staging(self):
+        per = {K: self._counts(("ds_write_b32", ""), ("ds_read_b32", ""))}
+        obs = _observation(passes=("lds",))
+        self.assertEqual(isa_claims.judge(per, ["lds_staging"], obs)["claims"]["lds_staging"]["status"],
+                         "STATIC_ONLY")   # lds_insts also counts ds_swizzle/bpermute
+        obs["kernels"][0]["metrics"]["lds_insts"] = 0.0
+        self.assertEqual(isa_claims.judge(per, ["lds_staging"], obs)["verdict"], "REFUSED")
+
     def test_lds_dma_vs_buffer_load_and_claims_from_text(self):
         c = self._counts(("buffer_load_dword", "v1, v0, s[8:11], 0 offen lds"))
         self.assertEqual((c["lds_dma"], c["buffer_load"]), ([1], [0]))
