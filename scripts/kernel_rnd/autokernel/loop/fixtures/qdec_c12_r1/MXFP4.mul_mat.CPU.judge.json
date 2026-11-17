@@ -1,0 +1,212 @@
+{
+ "schema": "epyc.autokernel.quant_codespace.v1.verdict",
+ "marker": "AK_QDEC_V1",
+ "c12": "457d5fc523ba5cc687a333a588c1dc15db9346f4",
+ "type": "MXFP4",
+ "leg": "mul_mat:CPU",
+ "mode": "identity",
+ "n_blocks": 520,
+ "n_elements": 16640,
+ "blocks_sha256": "49826989ab2f0bea5012a556aa1b2f7f7a0e88cca5a3e342895fc47fbd3fe76e",
+ "ulp_bound": 8,
+ "onehot": 127.0,
+ "mismatches": 360,
+ "classes": {
+  "nonfinite_reference_skipped": 96
+ },
+ "first": [
+  {
+   "block": 246,
+   "element": 1,
+   "ref": "0x7c400000",
+   "got": "0x7f800000",
+   "ref_value": 3.9876839873547476e+36,
+   "got_value": Infinity,
+   "codes": {
+    "q": 7,
+    "e": 246
+   }
+  },
+  {
+   "block": 246,
+   "element": 9,
+   "ref": "0xfc400000",
+   "got": "0xff800000",
+   "ref_value": -3.9876839873547476e+36,
+   "got_value": -Infinity,
+   "codes": {
+    "q": 15,
+    "e": 246
+   }
+  },
+  {
+   "block": 246,
+   "element": 17,
+   "ref": "0x7c400000",
+   "got": "0x7f800000",
+   "ref_value": 3.9876839873547476e+36,
+   "got_value": Infinity,
+   "codes": {
+    "q": 7,
+    "e": 246
+   }
+  },
+  {
+   "block": 246,
+   "element": 25,
+   "ref": "0xfc400000",
+   "got": "0xff800000",
+   "ref_value": -3.9876839873547476e+36,
+   "got_value": -Infinity,
+   "codes": {
+    "q": 15,
+    "e": 246
+   }
+  },
+  {
+   "block": 247,
+   "element": 0,
+   "ref": "0x7cc00000",
+   "got": "0x7f800000",
+   "ref_value": 7.975367974709495e+36,
+   "got_value": Infinity,
+   "codes": {
+    "q": 7,
+    "e": 247
+   }
+  },
+  {
+   "block": 247,
+   "element": 6,
+   "ref": "0xfc400000",
+   "got": "0xff800000",
+   "ref_value": -3.9876839873547476e+36,
+   "got_value": -Infinity,
+   "codes": {
+    "q": 13,
+    "e": 247
+   }
+  },
+  {
+   "block": 247,
+   "element": 7,
+   "ref": "0xfc800000",
+   "got": "0xff800000",
+   "ref_value": -5.316911983139664e+36,
+   "got_value": -Infinity,
+   "codes": {
+    "q": 14,
+    "e": 247
+   }
+  },
+  {
+   "block": 247,
+   "element": 8,
+   "ref": "0xfcc00000",
+   "got": "0xff800000",
+   "ref_value": -7.975367974709495e+36,
+   "got_value": -Infinity,
+   "codes": {
+    "q": 15,
+    "e": 247
+   }
+  },
+  {
+   "block": 247,
+   "element": 14,
+   "ref": "0x7c400000",
+   "got": "0x7f800000",
+   "ref_value": 3.9876839873547476e+36,
+   "got_value": Infinity,
+   "codes": {
+    "q": 5,
+    "e": 247
+   }
+  },
+  {
+   "block": 247,
+   "element": 15,
+   "ref": "0x7c800000",
+   "got": "0x7f800000",
+   "ref_value": 5.316911983139664e+36,
+   "got_value": Infinity,
+   "codes": {
+    "q": 6,
+    "e": 247
+   }
+  },
+  {
+   "block": 247,
+   "element": 16,
+   "ref": "0x7cc00000",
+   "got": "0x7f800000",
+   "ref_value": 7.975367974709495e+36,
+   "got_value": Infinity,
+   "codes": {
+    "q": 7,
+    "e": 247
+   }
+  },
+  {
+   "block": 247,
+   "element": 22,
+   "ref": "0xfc400000",
+   "got": "0xff800000",
+   "ref_value": -3.9876839873547476e+36,
+   "got_value": -Infinity,
+   "codes": {
+    "q": 13,
+    "e": 247
+   }
+  },
+  {
+   "block": 247,
+   "element": 23,
+   "ref": "0xfc800000",
+   "got": "0xff800000",
+   "ref_value": -5.316911983139664e+36,
+   "got_value": -Infinity,
+   "codes": {
+    "q": 14,
+    "e": 247
+   }
+  },
+  {
+   "block": 247,
+   "element": 24,
+   "ref": "0xfcc00000",
+   "got": "0xff800000",
+   "ref_value": -7.975367974709495e+36,
+   "got_value": -Infinity,
+   "codes": {
+    "q": 15,
+    "e": 247
+   }
+  },
+  {
+   "block": 247,
+   "element": 30,
+   "ref": "0x7c400000",
+   "got": "0x7f800000",
+   "ref_value": 3.9876839873547476e+36,
+   "got_value": Infinity,
+   "codes": {
+    "q": 5,
+    "e": 247
+   }
+  },
+  {
+   "block": 247,
+   "element": 31,
+   "ref": "0x7c800000",
+   "got": "0x7f800000",
+   "ref_value": 5.316911983139664e+36,
+   "got_value": Infinity,
+   "codes": {
+    "q": 6,
+    "e": 247
+   }
+  }
+ ],
+ "verdict": "fail"
+}

@@ -1,0 +1,212 @@
+{
+ "schema": "epyc.autokernel.quant_codespace.v1.verdict",
+ "marker": "AK_QDEC_V1",
+ "c12": "457d5fc523ba5cc687a333a588c1dc15db9346f4",
+ "type": "Q8_0",
+ "leg": "mul_mat:ROCm0",
+ "mode": "identity",
+ "n_blocks": 14672,
+ "n_elements": 469504,
+ "blocks_sha256": "3bbb40324c338ea122e8834590f8715fa4d80ddc7a7ae4ad2dde78731dfcef17",
+ "ulp_bound": 8,
+ "onehot": 127.0,
+ "mismatches": 380567,
+ "classes": {
+  "nonfinite_reference_skipped": 0
+ },
+ "first": [
+  {
+   "block": 265,
+   "element": 1,
+   "ref": "0x33800000",
+   "got": "0x00000000",
+   "ref_value": 5.960464477539063e-08,
+   "got_value": 0.0,
+   "codes": {
+    "q": 1,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 2,
+   "ref": "0x34000000",
+   "got": "0x00000000",
+   "ref_value": 1.1920928955078125e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 2,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 3,
+   "ref": "0x34400000",
+   "got": "0x00000000",
+   "ref_value": 1.7881393432617188e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 3,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 4,
+   "ref": "0x34800000",
+   "got": "0x00000000",
+   "ref_value": 2.384185791015625e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 4,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 5,
+   "ref": "0x34a00000",
+   "got": "0x00000000",
+   "ref_value": 2.980232238769531e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 5,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 6,
+   "ref": "0x34c00000",
+   "got": "0x00000000",
+   "ref_value": 3.5762786865234375e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 6,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 7,
+   "ref": "0x34e00000",
+   "got": "0x00000000",
+   "ref_value": 4.172325134277344e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 7,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 8,
+   "ref": "0x35000000",
+   "got": "0x00000000",
+   "ref_value": 4.76837158203125e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 8,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 9,
+   "ref": "0x35100000",
+   "got": "0x00000000",
+   "ref_value": 5.364418029785156e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 9,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 10,
+   "ref": "0x35200000",
+   "got": "0x00000000",
+   "ref_value": 5.960464477539062e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 10,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 11,
+   "ref": "0x35300000",
+   "got": "0x00000000",
+   "ref_value": 6.556510925292969e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 11,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 12,
+   "ref": "0x35400000",
+   "got": "0x00000000",
+   "ref_value": 7.152557373046875e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 12,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 13,
+   "ref": "0x35500000",
+   "got": "0x00000000",
+   "ref_value": 7.748603820800781e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 13,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 14,
+   "ref": "0x35600000",
+   "got": "0x00000000",
+   "ref_value": 8.344650268554688e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 14,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 15,
+   "ref": "0x35700000",
+   "got": "0x00000000",
+   "ref_value": 8.940696716308594e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 15,
+    "d": 1
+   }
+  },
+  {
+   "block": 265,
+   "element": 16,
+   "ref": "0x35800000",
+   "got": "0x00000000",
+   "ref_value": 9.5367431640625e-07,
+   "got_value": 0.0,
+   "codes": {
+    "q": 16,
+    "d": 1
+   }
+  }
+ ],
+ "verdict": "fail"
+}

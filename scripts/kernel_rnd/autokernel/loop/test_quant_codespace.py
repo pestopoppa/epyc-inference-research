@@ -268,7 +268,7 @@ class Judge(unittest.TestCase):
         r32 = ref.astype(np.float32)
         ok = np.where(r32 == 0, r32, np.nextafter(r32, np.float32(np.inf)))
         self.assertEqual(qc.judge(qt, b, ok, "mul_mat:CPU", mode="identity")["verdict"], "pass")
-        bad = ref.astype(np.float32).ravel().copy(); bad[777] += 1.0
+        bad = ref.astype(np.float32).ravel().copy(); bad[777] = bad[777] * 1.01 + 1.0   # outside every benign class
         self.assertEqual(qc.judge(qt, b, bad, "mul_mat:CPU", mode="identity")["verdict"], "fail")
 
     def test_chunked_judge_reports_global_block(self):

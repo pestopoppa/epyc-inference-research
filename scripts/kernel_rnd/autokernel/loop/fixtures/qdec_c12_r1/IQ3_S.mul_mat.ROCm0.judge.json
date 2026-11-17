@@ -1,0 +1,260 @@
+{
+ "schema": "epyc.autokernel.quant_codespace.v1.verdict",
+ "marker": "AK_QDEC_V1",
+ "c12": "457d5fc523ba5cc687a333a588c1dc15db9346f4",
+ "type": "IQ3_S",
+ "leg": "mul_mat:ROCm0",
+ "mode": "identity",
+ "n_blocks": 21209,
+ "n_elements": 5429504,
+ "blocks_sha256": "7c9027772c3ad5a147370b2b226fb62be4a7c46ed4ee61e827d95d37839ed57c",
+ "ulp_bound": 8,
+ "onehot": 127.0,
+ "mismatches": 4932804,
+ "classes": {
+  "nonfinite_reference_skipped": 0
+ },
+ "first": [
+  {
+   "block": 513,
+   "element": 2,
+   "ref": "0x3843c000",
+   "got": "0x00000000",
+   "ref_value": 4.667043685913086e-05,
+   "got_value": 0.0,
+   "codes": {
+    "s": 0,
+    "mag": 1,
+    "magv": 3,
+    "neg": 0,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 3,
+   "ref": "0x37828000",
+   "got": "0x00000000",
+   "ref_value": 1.5556812286376953e-05,
+   "got_value": 0.0,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 1,
+    "neg": 0,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 6,
+   "ref": "0x3843c000",
+   "got": "0x00000000",
+   "ref_value": 4.667043685913086e-05,
+   "got_value": 0.0,
+   "codes": {
+    "s": 0,
+    "mag": 1,
+    "magv": 3,
+    "neg": 0,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 7,
+   "ref": "0x37828000",
+   "got": "0x00000000",
+   "ref_value": 1.5556812286376953e-05,
+   "got_value": 0.0,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 1,
+    "neg": 0,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 10,
+   "ref": "0xb843c000",
+   "got": "0x00000000",
+   "ref_value": -4.667043685913086e-05,
+   "got_value": 0.0,
+   "codes": {
+    "s": 0,
+    "mag": 1,
+    "magv": 3,
+    "neg": 1,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 11,
+   "ref": "0xb7828000",
+   "got": "0x00000000",
+   "ref_value": -1.5556812286376953e-05,
+   "got_value": 0.0,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 1,
+    "neg": 1,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 14,
+   "ref": "0xb843c000",
+   "got": "0x00000000",
+   "ref_value": -4.667043685913086e-05,
+   "got_value": 0.0,
+   "codes": {
+    "s": 0,
+    "mag": 1,
+    "magv": 3,
+    "neg": 1,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 15,
+   "ref": "0xb7828000",
+   "got": "0x00000000",
+   "ref_value": -1.5556812286376953e-05,
+   "got_value": 0.0,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 1,
+    "neg": 1,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 16,
+   "ref": "0x3974b000",
+   "got": "0x3cf2d680",
+   "ref_value": 0.0002333521842956543,
+   "got_value": 0.02964329719543457,
+   "codes": {
+    "s": 0,
+    "mag": 7,
+    "magv": 15,
+    "neg": 0,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 17,
+   "ref": "0x3912d000",
+   "got": "0x3c919a80",
+   "ref_value": 0.00014001131057739258,
+   "got_value": 0.017773866653442383,
+   "codes": {
+    "s": 0,
+    "mag": 4,
+    "magv": 9,
+    "neg": 0,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 18,
+   "ref": "0x39337000",
+   "got": "0x3cb21900",
+   "ref_value": 0.00017112493515014648,
+   "got_value": 0.021740436553955078,
+   "codes": {
+    "s": 0,
+    "mag": 5,
+    "magv": 11,
+    "neg": 0,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 19,
+   "ref": "0x37828000",
+   "got": "0x00000000",
+   "ref_value": 1.5556812286376953e-05,
+   "got_value": 0.0,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 1,
+    "neg": 0,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 20,
+   "ref": "0x3974b000",
+   "got": "0x3cf2d680",
+   "ref_value": 0.0002333521842956543,
+   "got_value": 0.02964329719543457,
+   "codes": {
+    "s": 0,
+    "mag": 7,
+    "magv": 15,
+    "neg": 0,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 21,
+   "ref": "0x3912d000",
+   "got": "0x3c919a80",
+   "ref_value": 0.00014001131057739258,
+   "got_value": 0.017773866653442383,
+   "codes": {
+    "s": 0,
+    "mag": 4,
+    "magv": 9,
+    "neg": 0,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 22,
+   "ref": "0x39337000",
+   "got": "0x3cb21900",
+   "ref_value": 0.00017112493515014648,
+   "got_value": 0.021740436553955078,
+   "codes": {
+    "s": 0,
+    "mag": 5,
+    "magv": 11,
+    "neg": 0,
+    "d": 261
+   }
+  },
+  {
+   "block": 513,
+   "element": 23,
+   "ref": "0x37828000",
+   "got": "0x00000000",
+   "ref_value": 1.5556812286376953e-05,
+   "got_value": 0.0,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 1,
+    "neg": 0,
+    "d": 261
+   }
+  }
+ ],
+ "verdict": "fail"
+}

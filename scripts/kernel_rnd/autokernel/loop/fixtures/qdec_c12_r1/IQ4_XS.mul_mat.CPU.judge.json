@@ -1,0 +1,228 @@
+{
+ "schema": "epyc.autokernel.quant_codespace.v1.verdict",
+ "marker": "AK_QDEC_V1",
+ "c12": "457d5fc523ba5cc687a333a588c1dc15db9346f4",
+ "type": "IQ4_XS",
+ "leg": "mul_mat:CPU",
+ "mode": "identity",
+ "n_blocks": 17834,
+ "n_elements": 4565504,
+ "blocks_sha256": "958df67771afcb204d69b51f30825b50c92695e1412908b1e9a798471ea99a27",
+ "ulp_bound": 8,
+ "onehot": 127.0,
+ "mismatches": 237598,
+ "classes": {
+  "nonfinite_reference_skipped": 0
+ },
+ "first": [
+  {
+   "block": 66,
+   "element": 40,
+   "ref": "0xb8dce000",
+   "got": "0xbc5b2600",
+   "ref_value": -0.00010532140731811523,
+   "got_value": -0.01337575912475586,
+   "codes": {
+    "s": 1,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 66,
+   "element": 56,
+   "ref": "0xb8dce000",
+   "got": "0xbc5b2600",
+   "ref_value": -0.00010532140731811523,
+   "got_value": -0.01337575912475586,
+   "codes": {
+    "s": 1,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 66,
+   "element": 104,
+   "ref": "0xb8cea000",
+   "got": "0xbc4d0300",
+   "ref_value": -9.85264778137207e-05,
+   "got_value": -0.012512922286987305,
+   "codes": {
+    "s": 3,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 66,
+   "element": 120,
+   "ref": "0xb8cea000",
+   "got": "0xbc4d0300",
+   "ref_value": -9.85264778137207e-05,
+   "got_value": -0.012512922286987305,
+   "codes": {
+    "s": 3,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 66,
+   "element": 168,
+   "ref": "0xb8c06000",
+   "got": "0xbc3edf00",
+   "ref_value": -9.173154830932617e-05,
+   "got_value": -0.011649847030639648,
+   "codes": {
+    "s": 5,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 66,
+   "element": 184,
+   "ref": "0xb8c06000",
+   "got": "0xbc3edf00",
+   "ref_value": -9.173154830932617e-05,
+   "got_value": -0.011649847030639648,
+   "codes": {
+    "s": 5,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 66,
+   "element": 232,
+   "ref": "0xb8b22000",
+   "got": "0xbc30bc00",
+   "ref_value": -8.493661880493164e-05,
+   "got_value": -0.010787010192871094,
+   "codes": {
+    "s": 7,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 66,
+   "element": 248,
+   "ref": "0xb8b22000",
+   "got": "0xbc30bc00",
+   "ref_value": -8.493661880493164e-05,
+   "got_value": -0.010787010192871094,
+   "codes": {
+    "s": 7,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 67,
+   "element": 40,
+   "ref": "0xb8a3e000",
+   "got": "0xbc229800",
+   "ref_value": -7.814168930053711e-05,
+   "got_value": -0.009923934936523438,
+   "codes": {
+    "s": 9,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 67,
+   "element": 56,
+   "ref": "0xb8a3e000",
+   "got": "0xbc229800",
+   "ref_value": -7.814168930053711e-05,
+   "got_value": -0.009923934936523438,
+   "codes": {
+    "s": 9,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 67,
+   "element": 104,
+   "ref": "0xb895a000",
+   "got": "0xbc147500",
+   "ref_value": -7.134675979614258e-05,
+   "got_value": -0.009061098098754883,
+   "codes": {
+    "s": 11,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 67,
+   "element": 105,
+   "ref": "0xba732400",
+   "got": "0xbdf13dc0",
+   "ref_value": -0.0009275078773498535,
+   "got_value": -0.11779356002807617,
+   "codes": {
+    "s": 11,
+    "q": 9,
+    "d": 57
+   }
+  },
+  {
+   "block": 67,
+   "element": 120,
+   "ref": "0xb895a000",
+   "got": "0xbc147500",
+   "ref_value": -7.134675979614258e-05,
+   "got_value": -0.009061098098754883,
+   "codes": {
+    "s": 11,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 67,
+   "element": 121,
+   "ref": "0xba732400",
+   "got": "0xbdf13dc0",
+   "ref_value": -0.0009275078773498535,
+   "got_value": -0.11779356002807617,
+   "codes": {
+    "s": 11,
+    "q": 9,
+    "d": 57
+   }
+  },
+  {
+   "block": 67,
+   "element": 168,
+   "ref": "0xb8876000",
+   "got": "0xbc065100",
+   "ref_value": -6.455183029174805e-05,
+   "got_value": -0.008198022842407227,
+   "codes": {
+    "s": 13,
+    "q": 8,
+    "d": 57
+   }
+  },
+  {
+   "block": 67,
+   "element": 169,
+   "ref": "0xba5bfc00",
+   "got": "0xbdda4400",
+   "ref_value": -0.0008391737937927246,
+   "got_value": -0.10657501220703125,
+   "codes": {
+    "s": 13,
+    "q": 9,
+    "d": 57
+   }
+  }
+ ],
+ "verdict": "fail"
+}

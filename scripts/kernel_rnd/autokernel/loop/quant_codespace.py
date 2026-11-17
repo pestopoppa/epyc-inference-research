@@ -937,6 +937,46 @@ def _hex32(v: float) -> str:
     return f"0x{np.float32(v).view(np.uint32):08x}"
 
 
+#: MUL_MAT-identity leg error model (2026-11-17, from the first C12 row akx31-qdec-c12-gpu-20261117).
+#: The leg is NOT a decode leg: the activation is re-quantized to q8 and the kernels scale integer dot
+#: products by fp16 values, so bit-identity with onehot*ref is not a property any served kernel has.
+#: A mismatch is BENIGN only when it falls in one of these classes; anything else stays a failure:
+#:   fp16_scale_rounding  |got - onehot*ref| <= FP16_SCALE_REL * |onehot*ref| (the d*d8 / dmin*bsum products
+#:                        are formed or stored in half precision: 2077 -> 2076 at ROCm0, 4.8e-4 rel for Q4_K dmin)
+#:   ftz_subnormal_scale  got == 0 and the block scale is subnormal (fp16 d/dmin exponent field 0, MXFP4 e == 0):
+#:                        the GPU kernels flush subnormal scales to zero
+#:   int8_min_code        Q8_0 code -128: ggml's quantizer never emits it and the CPU int8 dot (abs/sign trick)
+#:                        negates it; a served GGUF containing -128 would hit this, so it is counted separately
+#:   onehot_overflow      onehot*ref exceeds float32 (MXFP4 e >= 246 times 127): an artefact of this probe
+FP16_SCALE_REL = 2.0 ** -10
+IDENTITY_CLASSES = ("fp16_scale_rounding", "ftz_subnormal_scale", "int8_min_code", "onehot_overflow")
+
+
+def classify_identity(ref, got, magnitude, onehot, *, d=None, dmin=None, e=None, q8=None):
+    """Return (bad_mask, class_counts) for the MUL_MAT-identity leg. bad = mismatches in NO benign class."""
+    ref = np.asarray(ref, dtype=np.float32); got = np.asarray(got, dtype=np.float32)
+    fin = np.isfinite(ref)
+    exp = ref.astype(np.float64) * onehot
+    g = got.astype(np.float64)
+    bound = IDENTITY_ULPS * 2.0 ** -24 * np.asarray(magnitude, dtype=np.float64) * onehot
+    with np.errstate(invalid="ignore", over="ignore"):
+        mis = fin & ~(np.abs(g - exp) <= bound)
+        overflow = mis & (np.abs(exp) > np.finfo(np.float32).max) & ~np.isfinite(g)
+        sub = np.zeros(ref.shape, dtype=bool)
+        for c in (d, dmin):
+            if c is not None:
+                sub |= (np.asarray(c, dtype=np.int64) & 0x7C00) == 0
+        if e is not None:
+            sub |= np.asarray(e, dtype=np.int64) == 0
+        ftz = mis & ~overflow & (g == 0) & (ref != 0) & sub
+        i8 = mis & ~overflow & ~ftz & (np.asarray(q8) == 128) if q8 is not None else np.zeros(ref.shape, dtype=bool)
+        rnd = mis & ~overflow & ~ftz & ~i8 & np.isfinite(g) & (np.abs(g - exp) <= FP16_SCALE_REL * np.abs(exp))
+    bad = mis & ~(overflow | ftz | i8 | rnd)
+    return bad, {"fp16_scale_rounding": int(rnd.sum()), "ftz_subnormal_scale": int(ftz.sum()),
+                 "int8_min_code": int(i8.sum()), "onehot_overflow": int(overflow.sum()),
+                 "identity_mismatch_total": int(mis.sum()), "unexplained": int(bad.sum())}
+
+
 def _judge_chunk(qt: QType, blocks: np.ndarray, got: np.ndarray, mode: str, onehot: float):
     f = qt.unpack(blocks); e = qt.elements(f)
     with np.errstate(over="ignore", invalid="ignore"):
@@ -951,11 +991,12 @@ def _judge_chunk(qt: QType, blocks: np.ndarray, got: np.ndarray, mode: str, oneh
                    "ftz_subnormal": int((bad & (np.abs(ref) < tiny) & (ref != 0) & (got == 0)).sum())}
     elif mode == "identity":
         fin = np.isfinite(ref)
-        exp = ref.astype(np.float64) * onehot
-        bound = IDENTITY_ULPS * 2.0 ** -24 * qt.magnitude(f, e).ravel() * onehot
-        with np.errstate(invalid="ignore"):
-            bad = fin & ~(np.abs(got.astype(np.float64) - exp) <= bound)
-        classes = {"nonfinite_reference_skipped": int((~fin).sum())}
+        n = len(blocks)
+        bc = lambda k: np.broadcast_to(f[k], (n, qt.qk)).ravel() if k in f else None
+        q8 = np.asarray(f["q"]).reshape(n, qt.qk).ravel() if qt.name == "Q8_0" else None   # raw byte; 128 == -128
+        bad, classes = classify_identity(ref, got, qt.magnitude(f, e).ravel(), onehot,
+                                         d=bc("d"), dmin=bc("dmin"), e=bc("e"), q8=q8)
+        classes["nonfinite_reference_skipped"] = int((~fin).sum())
     else:
         raise ValueError(f"unknown judge mode {mode}")
     return f, e, ref, bad, classes
@@ -965,9 +1006,10 @@ def judge(qt: QType, blocks, native: np.ndarray, leg: str, mode: str = "exact",
           onehot: float = ONEHOT, max_report: int = 16, chunk_blocks: int = 1 << 15) -> dict:
     """Compare native float32 output with the reference, chunk by chunk. mode="exact": bit-for-bit
     (to_float and GET_ROWS legs; NaN matches NaN, counted if the payload differs). mode="identity":
-    MUL_MAT(W, onehot*I) leg, |native - onehot*ref| must be within IDENTITY_ULPS float32 ulps of the
-    element's term magnitude (activations are re-quantized to q8, so this leg is a path-decode check,
-    not a bit-exact one)."""
+    MUL_MAT(W, onehot*I) leg: |native - onehot*ref| within IDENTITY_ULPS float32 ulps of the element's
+    term magnitude, or a mismatch in one of the declared benign classes (classify_identity); `mismatches`
+    counts only the unexplained ones, and every class is reported (activations are re-quantized to q8,
+    so this leg is a path check, not a bit-exact one)."""
     blocks = qt.blocks(blocks)
     got = np.asarray(native, dtype=np.float32).ravel()
     n_el = len(blocks) * qt.qk

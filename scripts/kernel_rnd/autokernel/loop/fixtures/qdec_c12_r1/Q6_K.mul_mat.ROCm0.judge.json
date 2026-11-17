@@ -1,0 +1,228 @@
+{
+ "schema": "epyc.autokernel.quant_codespace.v1.verdict",
+ "marker": "AK_QDEC_V1",
+ "c12": "457d5fc523ba5cc687a333a588c1dc15db9346f4",
+ "type": "Q6_K",
+ "leg": "mul_mat:ROCm0",
+ "mode": "identity",
+ "n_blocks": 216066,
+ "n_elements": 55312896,
+ "blocks_sha256": "52a119fb70117e351d89882799e3d5fbcaa1fd23e74a86aa64d78c884bddbc58",
+ "ulp_bound": 8,
+ "onehot": 127.0,
+ "mismatches": 49919687,
+ "classes": {
+  "nonfinite_reference_skipped": 0
+ },
+ "first": [
+  {
+   "block": 55,
+   "element": 200,
+   "ref": "0x4501d000",
+   "got": "0x4880bc80",
+   "ref_value": 2077.0,
+   "got_value": 263652.0,
+   "codes": {
+    "sc": 67,
+    "q": 63,
+    "d": 15360
+   }
+  },
+  {
+   "block": 55,
+   "element": 202,
+   "ref": "0xc501d000",
+   "got": "0xc880bc80",
+   "ref_value": -2077.0,
+   "got_value": -263652.0,
+   "codes": {
+    "sc": 67,
+    "q": 1,
+    "d": 15360
+   }
+  },
+  {
+   "block": 57,
+   "element": 198,
+   "ref": "0x4505b000",
+   "got": "0x4884b480",
+   "ref_value": 2139.0,
+   "got_value": 271780.0,
+   "codes": {
+    "sc": 69,
+    "q": 63,
+    "d": 15360
+   }
+  },
+  {
+   "block": 57,
+   "element": 200,
+   "ref": "0xc505b000",
+   "got": "0xc884b480",
+   "ref_value": -2139.0,
+   "got_value": -271780.0,
+   "codes": {
+    "sc": 69,
+    "q": 1,
+    "d": 15360
+   }
+  },
+  {
+   "block": 59,
+   "element": 132,
+   "ref": "0x4501d000",
+   "got": "0x4880bc80",
+   "ref_value": 2077.0,
+   "got_value": 263652.0,
+   "codes": {
+    "sc": 67,
+    "q": 63,
+    "d": 15360
+   }
+  },
+  {
+   "block": 59,
+   "element": 134,
+   "ref": "0xc501d000",
+   "got": "0xc880bc80",
+   "ref_value": -2077.0,
+   "got_value": -263652.0,
+   "codes": {
+    "sc": 67,
+    "q": 1,
+    "d": 15360
+   }
+  },
+  {
+   "block": 59,
+   "element": 194,
+   "ref": "0x4500b000",
+   "got": "0x487f7d00",
+   "ref_value": 2059.0,
+   "got_value": 261620.0,
+   "codes": {
+    "sc": 71,
+    "q": 61,
+    "d": 15360
+   }
+  },
+  {
+   "block": 59,
+   "element": 196,
+   "ref": "0x45099000",
+   "got": "0x48886d00",
+   "ref_value": 2201.0,
+   "got_value": 279400.0,
+   "codes": {
+    "sc": 71,
+    "q": 63,
+    "d": 15360
+   }
+  },
+  {
+   "block": 59,
+   "element": 198,
+   "ref": "0xc5099000",
+   "got": "0xc8886d00",
+   "ref_value": -2201.0,
+   "got_value": -279400.0,
+   "codes": {
+    "sc": 71,
+    "q": 1,
+    "d": 15360
+   }
+  },
+  {
+   "block": 59,
+   "element": 200,
+   "ref": "0xc500b000",
+   "got": "0xc87f7d00",
+   "ref_value": -2059.0,
+   "got_value": -261620.0,
+   "codes": {
+    "sc": 71,
+    "q": 3,
+    "d": 15360
+   }
+  },
+  {
+   "block": 61,
+   "element": 130,
+   "ref": "0x4505b000",
+   "got": "0x4884b480",
+   "ref_value": 2139.0,
+   "got_value": 271780.0,
+   "codes": {
+    "sc": 69,
+    "q": 63,
+    "d": 15360
+   }
+  },
+  {
+   "block": 61,
+   "element": 132,
+   "ref": "0xc505b000",
+   "got": "0xc884b480",
+   "ref_value": -2139.0,
+   "got_value": -271780.0,
+   "codes": {
+    "sc": 69,
+    "q": 1,
+    "d": 15360
+   }
+  },
+  {
+   "block": 61,
+   "element": 192,
+   "ref": "0x45045000",
+   "got": "0x48833780",
+   "ref_value": 2117.0,
+   "got_value": 268732.0,
+   "codes": {
+    "sc": 73,
+    "q": 61,
+    "d": 15360
+   }
+  },
+  {
+   "block": 61,
+   "element": 194,
+   "ref": "0x450d7000",
+   "got": "0x488c6500",
+   "ref_value": 2263.0,
+   "got_value": 287528.0,
+   "codes": {
+    "sc": 73,
+    "q": 63,
+    "d": 15360
+   }
+  },
+  {
+   "block": 61,
+   "element": 196,
+   "ref": "0xc50d7000",
+   "got": "0xc88c6500",
+   "ref_value": -2263.0,
+   "got_value": -287528.0,
+   "codes": {
+    "sc": 73,
+    "q": 1,
+    "d": 15360
+   }
+  },
+  {
+   "block": 61,
+   "element": 198,
+   "ref": "0xc5045000",
+   "got": "0xc8833780",
+   "ref_value": -2117.0,
+   "got_value": -268732.0,
+   "codes": {
+    "sc": 73,
+    "q": 3,
+    "d": 15360
+   }
+  }
+ ],
+ "verdict": "fail"
+}
