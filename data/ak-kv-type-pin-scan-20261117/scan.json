@@ -1,0 +1,86 @@
+[
+ {
+  "store": "/mnt/raid0/llm/autokernel/campaigns/ak-27b-gpu-verify-20261004/store/experiments.db",
+  "keeps": 0,
+  "kv_recorded": {},
+  "kv_absent_implicit_f16": 0,
+  "surfaces": {},
+  "record_column": "payload"
+ },
+ {
+  "store": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-b0ba1d427/experiments.db",
+  "keeps": 6,
+  "kv_recorded": {},
+  "kv_absent_implicit_f16": 6,
+  "surfaces": {
+   "runtime": 2,
+   "ggml/src/ggml-cpu/ggml-cpu.c": 3,
+   "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp": 1
+  },
+  "record_column": "payload"
+ },
+ {
+  "store": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store-run9d-cor-5a60152ae/experiments.db",
+  "keeps": 0,
+  "kv_recorded": {},
+  "kv_absent_implicit_f16": 0,
+  "surfaces": {},
+  "record_column": "payload"
+ },
+ {
+  "store": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/experiments.db",
+  "keeps": 22,
+  "kv_recorded": {},
+  "kv_absent_implicit_f16": 22,
+  "surfaces": {
+   "ggml/src/ggml-cpu/llamafile/sgemm.cpp": 10,
+   "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp": 4,
+   "runtime": 1,
+   "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp": 4,
+   "ggml/src/ggml-cpu/ops.cpp": 2,
+   "ggml/src/ggml-cpu/ggml-cpu.c": 1
+  },
+  "record_column": "payload"
+ },
+ {
+  "store": "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store-b0ba1d427/experiments.db",
+  "keeps": 10,
+  "kv_recorded": {},
+  "kv_absent_implicit_f16": 10,
+  "surfaces": {
+   "runtime": 1,
+   "ggml/src/ggml-cpu/ggml-cpu.c": 3,
+   "ggml/src/ggml-cpu/llamafile/sgemm.cpp": 4,
+   "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp": 1,
+   "ggml/src/ggml-cpu/iqk/iqk_gemm_iquants.cpp": 1
+  },
+  "record_column": "payload"
+ },
+ {
+  "store": "/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/store/experiments.db",
+  "keeps": 0,
+  "kv_recorded": {},
+  "kv_absent_implicit_f16": 0,
+  "surfaces": {},
+  "record_column": "payload"
+ },
+ {
+  "store": "/mnt/raid0/llm/autokernel/loop-memory/experiments.db",
+  "keeps": 32,
+  "kv_recorded": {},
+  "kv_absent_implicit_f16": 32,
+  "surfaces": {
+   "ggml/src/ggml-cuda/quantize.cu": 4,
+   "ggml/src/ggml-cuda/fattn.cu": 1,
+   "ggml/src/ggml-cuda/vecdotq.cuh": 7,
+   "ggml/src/ggml-cuda/quantize.cuh": 1,
+   "ggml/src/ggml-cuda/mmvq.cu": 13,
+   "ggml/src/ggml-cuda/rope.cu": 1,
+   "ggml/src/ggml-cuda/norm.cu": 2,
+   "ggml/src/ggml-cuda/ggml-cuda.cu": 1,
+   "ggml/src/ggml-cuda/mmq.cu CDNA2 Q4_K small-batch decode dispatch": 1,
+   "ggml/src/ggml-cuda/fattn-wmma-f16.cu dec-b8 flash-attention path": 1
+  },
+  "record_column": "payload"
+ }
+]

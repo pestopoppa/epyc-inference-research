@@ -30,4 +30,18 @@ paths of the original run.
 ## Results (2026-11-05/06)
 - 782/782 non-fp8 AITER gfx942 `.co` assemble to gfx90a (`rt_mismatch=0` round-trip).
 - GPU harness r3: exercised families pass (e.g. topksoftmax 34894 checks, 0 fail, max_abs 2.4e-7).
-- OPEN: `bf16gemm` with bf16 output is 1 ulp off the reference (fp32-out is clean); not yet root-caused.
+- `bf16gemm` with bf16 output: documented 1-ulp bound, not a retarget defect (AK-ASM-T1-BF16ULP, 2026-11-17).
+  - Observed (harness r2 `bf16gemm-bf16out`, shapes 16x1280x8192 / 128x1280x8192 / 256x1024x1024): `max_abs` 2.0 at
+    `ref_absmax` 360. That is exactly 1 bf16 ulp in [256, 512). 12.2% (bpreshuffle) and 12.5% (noshuffle) of 20480
+    elements differ, so the test's `ret` exceeds its 0.05 element-ratio tolerance. The fp32-output run of the SAME two
+    retargeted kernels passes with `ret` 0.0.
+  - The R7 rewrite's arithmetic is exact: `cas_round_check.py 200000` reports 0 mismatches between the emitted
+    bfe/add/cmp_u/or/cndmask rounding and exact rational round-to-nearest-even, including the special values (zeros,
+    max finite, inf, NaN). Denormal inputs are excluded because they depend on the MODE register.
+  - Cause: with bf16 output, every split-K partial is rounded to bf16 and then added atomically (one more rounding per
+    add), while the reference rounds the fp32 dot product once. Partial sums rounded twice drift by up to 1 ulp. This
+    follows from accumulating split-K in bf16, whatever the atomic implementation; fp32 output accumulates in fp32 and
+    rounds once, so it is clean.
+  - Bound and use: treat bf16-out split-K as "<= 1 bf16 ulp per element vs a single-rounded reference". Port and timing
+    decisions use the fp32-out family (`bf16gemm-fp32out`). Not yet run: a split-K=1 bf16-out control, which would show
+    0 mismatches if this cause is right. The harness `splitk-diag` unit was vacuous (no family check in its log).

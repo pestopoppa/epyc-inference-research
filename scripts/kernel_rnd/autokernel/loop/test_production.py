@@ -1008,7 +1008,8 @@ class TheCliIsThePromotionStep(unittest.TestCase):
         self.assertEqual(body["residency"], {"invocations": 40})
 
     def test_a_historical_argv_is_recorded_as_given(self):
-        legacy = bench.llama_bench_argv("<llama-bench>", MODEL, pp=0, tg=128)[:-2]
+        argv = bench.llama_bench_argv("<llama-bench>", MODEL, pp=0, tg=128)
+        legacy = argv[:argv.index("--autokernel-harden")]   # an unhardened historical argv
         self.assertEqual(self._main("--argv-json", json.dumps(legacy),
                                     "--argv-provenance", "bench.py @4ede0e03"), 0)
         body = json.loads((self.store / production.baseline_filename(self.frozen))
@@ -1221,7 +1222,9 @@ class AStaleOrMismatchedRecordFallsBackToThePairedAB(unittest.TestCase):
         self.assertIsNotNone(DASHBOARD_PAIRED_REASON.match(result.reason))
 
     def test_another_argv_is_another_instrument(self):
-        unhardened = _protocol(argv=_protocol()["argv"][:-2])
+        argv = _protocol()["argv"]
+        h = argv.index("--autokernel-harden")
+        unhardened = _protocol(argv=argv[:h] + argv[h + 2:])   # same KV pin, no hardening
         _record(self.store, protocol=unhardened)
         arms = _Arms()
         self._fell_back(_carry(self.store, arms), arms, "hardened")
@@ -1542,14 +1545,25 @@ class TheServingProbeIsItsOwnProtocolKind(unittest.TestCase):
         with self.assertRaises(ValueError):  # still not a llama-bench surface
             production.protocol(model=MODEL, surface="serving_ab_probe_tg256")
 
-    def test_protocol_argv_pins_kv_type_only_when_given(self):
+    def test_protocol_argv_always_pins_kv_type_v2(self):
         plain = production.protocol(model=MODEL, surface="tg128")
         pinned = production.protocol(model=MODEL, surface="tg128", kv_type="q8_0")
-        self.assertNotIn("-ctk", plain["argv"])
-        self.assertNotIn("kv_type", plain)
+        self.assertEqual(plain["kv_type"], "f16")
+        self.assertEqual(plain["argv_schema"], bench.BENCH_ARGV_SCHEMA)
+        self.assertEqual(plain["argv"][plain["argv"].index("-ctk") + 1], "f16")
         self.assertEqual(pinned["kv_type"], "q8_0")
         for flag in ("-ctk", "-ctv"):
             self.assertEqual(pinned["argv"][pinned["argv"].index(flag) + 1], "q8_0")
+
+    def test_v1_recorded_protocol_bridges_to_f16_and_refuses_q8_0(self):
+        v2 = production.protocol(model=MODEL, surface="tg128")
+        v1 = {k: v for k, v in v2.items() if k not in ("kv_type", "argv_schema")}
+        v1["argv"] = v2["argv"][:-4]                     # pre-v2: no -ctk, implicit f16
+        self.assertEqual(production.protocol_mismatch(v1, v2), [])
+        q8 = production.protocol(model=MODEL, surface="tg128", kv_type="q8_0")
+        differs = production.protocol_mismatch(v1, q8)
+        self.assertTrue(any(d.startswith("kv_type") for d in differs), differs)
+        self.assertTrue(any(d.startswith("argv") for d in differs), differs)
 
     def test_request_identity_by_manifest_or_digest(self):
         argv = WRITER["p_arm"]["protocol"]["argv"]

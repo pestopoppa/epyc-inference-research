@@ -84,7 +84,8 @@ def test_original_bench_actual_tiny_child_capture_preserves_refused_summary_and_
         assert json.loads(raw["stdout"]) == [{"n_prompt": 0, "n_gen": 128, "avg_ts": 21.25}]
         assert raw["argv"] == ["taskset", "-c", "184-191", "numactl", "--interleave=all",
             str(binary), "-m", "/unused-model", "-p", "0", "-n", "128", "-r", "9",
-            "-ngl", "99", "-fa", "1", "-o", "json", "--autokernel-harden", "77"]
+            "-ngl", "99", "-fa", "1", "-o", "json", "--autokernel-harden", "77",
+            "-ctk", "f16", "-ctv", "f16"]   # bench argv v2 (AK-BENCH-KV-TYPE-PIN): KV always pinned
         assert raw["returncode"] == 0 and raw["error"] is None and raw["shutdown_resolved"]
         assert raw["started_monotonic_s"] < raw["ended_monotonic_s"]
         assert raw["claim_open"] != raw["claim_close"]

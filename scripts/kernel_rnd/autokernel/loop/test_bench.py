@@ -592,11 +592,22 @@ class TheBootstrapFloorReproducesTheD8Row(unittest.TestCase):
 class KvTypePin(unittest.TestCase):
     MODEL = "/m/Qwen3.8-27B-Q8_0.gguf"
 
-    def test_argv_is_unchanged_without_a_kv_type_and_pins_both_flags_with_one(self):
+    def test_argv_v2_always_pins_kv_and_records_the_schema(self):
         plain = bench.llama_bench_argv("b", self.MODEL, pp=0, tg=128)
-        self.assertNotIn("-ctk", plain)
+        self.assertEqual(plain[-4:], ["-ctk", "f16", "-ctv", "f16"])
         pinned = bench.llama_bench_argv("b", self.MODEL, pp=0, tg=128, kv_type="q8_0")
-        self.assertEqual(pinned, plain + ["-ctk", "q8_0", "-ctv", "q8_0"])
+        self.assertEqual(pinned, plain[:-4] + ["-ctk", "q8_0", "-ctv", "q8_0"])
+        self.assertEqual(bench.argv_schema(pinned), bench.BENCH_ARGV_SCHEMA)
+        self.assertEqual(bench.argv_kv_type(pinned), "q8_0")
+        self.assertEqual(self._comparison().to_dict()["argv_schema"], bench.BENCH_ARGV_SCHEMA)
+
+    def test_v1_argv_is_readable_and_bridges_only_to_f16(self):
+        v1 = bench.llama_bench_argv("b", self.MODEL, pp=0, tg=128)[:-4]   # the pre-v2 identity
+        self.assertEqual(bench.argv_schema(v1), bench.BENCH_ARGV_SCHEMA_V1)
+        self.assertEqual(bench.argv_kv_type(v1), "f16")
+        self.assertEqual(bench.normalize_argv(v1), bench.llama_bench_argv("b", self.MODEL, pp=0, tg=128))
+        self.assertNotEqual(bench.normalize_argv(v1),
+                            bench.llama_bench_argv("b", self.MODEL, pp=0, tg=128, kv_type="q8_0"))
 
     def _comparison(self, **kw):
         return bench.Comparison("tg128", [100.0] * 5, [110.0] * 5, 0.1, "m", 5, 1.0, {}, **kw)

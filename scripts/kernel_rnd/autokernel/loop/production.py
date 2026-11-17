@@ -413,8 +413,8 @@ def protocol(*, model: Path | str, surface: str, reps: int = 9,
     argv = (list(argv) if argv is not None else
             bench.llama_bench_argv("<llama-bench>", model, pp=pp, tg=tg, reps=reps,
                                    ubatch=ubatch, kv_type=kv_type))
-    extra = {"kv_type": kv_type} if kv_type else {}
-    return {**extra, "kind": PROTOCOL_KIND_LLAMA_BENCH,
+    return {"kv_type": bench.argv_kv_type(argv), "argv_schema": bench.argv_schema(argv),
+            "kind": PROTOCOL_KIND_LLAMA_BENCH,
             "harness": "llama-bench", "model": str(model), "surface": surface,
             "pp": pp, "tg": tg, "ubatch": ubatch, "reps": reps,
             "warmup_launches": warmup_launches, "sample_unit": bench.FLOOR_UNIT,
@@ -449,6 +449,25 @@ def protocol_mismatch(recorded: Mapping[str, Any], current: Mapping[str, Any]) -
     if protocol_kind(recorded) != protocol_kind(current):
         return [f"kind (recorded {protocol_kind(recorded)!r}, "
                 f"now {protocol_kind(current)!r})"]
+    if protocol_kind(current) == PROTOCOL_KIND_LLAMA_BENCH:
+        # AK-BENCH-KV-TYPE-PIN: compare argv across the v1/v2 identity change through the
+        # one exact bridge (bench.normalize_argv), and compare the KV type explicitly, so a
+        # v1 record (no `-ctk`, implicit f16) never stands in for a q8_0 measurement.
+        out = []
+        for key in match_keys(current):
+            r, c = recorded.get(key), current.get(key)
+            if key == "argv" and isinstance(r, list) and isinstance(c, list):
+                if bench.normalize_argv(r) != bench.normalize_argv(c):
+                    out.append(f"argv (recorded {r!r}, now {c!r})")
+            elif r != c:
+                out.append(f"{key} (recorded {r!r}, now {c!r})")
+        rk = recorded.get("kv_type") or (bench.argv_kv_type(recorded["argv"])
+                                          if isinstance(recorded.get("argv"), list) else bench.KV_DEFAULT)
+        ck = current.get("kv_type") or (bench.argv_kv_type(current["argv"])
+                                         if isinstance(current.get("argv"), list) else bench.KV_DEFAULT)
+        if rk != ck:
+            out.append(f"kv_type (recorded {rk!r}, now {ck!r})")
+        return out
     return [f"{key} (recorded {recorded.get(key)!r}, now {current.get(key)!r})"
             for key in match_keys(current) if recorded.get(key) != current.get(key)]
 

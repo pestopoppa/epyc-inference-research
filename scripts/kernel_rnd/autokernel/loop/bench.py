@@ -96,6 +96,17 @@ MEASURED_FLOOR_N = 20
 #: was exactly a q8_0-specific lever read as a regression on f16 KV.
 KV_DEFAULT = "f16"
 
+#: The measured-argv identity of `llama_bench_argv` (AK-BENCH-KV-TYPE-PIN, 2026-11-17).
+#: v1: `-ctk/-ctv` present only when a caller passed `kv_type`; otherwise absent, so the cell
+#:     ran llama-bench's implicit default (KV_DEFAULT).
+#: v2: `-ctk K -ctv K` are ALWAYS present (K = kv_type or KV_DEFAULT), so the KV type is part
+#:     of the argv a record carries and never has to be inferred.
+#: Every v2 record states `argv_schema`. A record without the field is v1. A v1 argv is
+#: readable and comparable only through `normalize_argv`, which makes the implicit default
+#: explicit; it never matches a v2 argv of a different KV type.
+BENCH_ARGV_SCHEMA_V1 = "epyc.autokernel.bench_argv.v1"
+BENCH_ARGV_SCHEMA = "epyc.autokernel.bench_argv.v2"
+
 SURFACES = {"pp512": (512, 0, None), "tg128": (0, 128, None),
             "dec-b2": (512, 0, 2), "dec-b4": (512, 0, 4), "dec-b8": (512, 0, 8)}
 
@@ -222,7 +233,7 @@ class Comparison:
         row = {
             "surface": self.surface, "model": self.model, "effect": self.effect,
             "kv_type": self.kv_type, "recipe_kv_type": self.recipe_kv_type,
-            "kv_mismatch": self.kv_mismatch,
+            "kv_mismatch": self.kv_mismatch, "argv_schema": BENCH_ARGV_SCHEMA,
             "effect_pct": self.effect * 100.0, "estimator": self.estimator,
             "pairs": self.pairs, "noise_floor_pct": self.noise_floor_pct,
             # Both units, stated: `floor_rows` admits only a FLOOR_UNIT floor, so they
@@ -296,15 +307,39 @@ def llama_bench_argv(binary: Path | str, model: Path | str, *, pp: int, tg: int,
     unpaired comparison across two instruments. `hardening_seed` defaults to a
     placeholder for exactly that use; `run_once` always passes a real seed.
 
-    `kv_type` None adds no flag, so the argv of every existing cell and floor is
-    byte-unchanged (and runs `KV_DEFAULT`); a value pins both `-ctk` and `-ctv`.
+    `-ctk`/`-ctv` are always pinned (BENCH_ARGV_SCHEMA v2): `kv_type` None pins
+    KV_DEFAULT, which is what the v1 argv (no flag) ran implicitly. Use `normalize_argv` to
+    compare a stored v1 argv against this one.
     """
     return (["taskset", "-c", CPU_LIST, "numactl", "--interleave=all",
              str(binary), "-m", str(model), "-p", str(pp), "-n", str(tg),
              "-r", str(reps), "-ngl", "99", "-fa", "1", "-o", "json",
              "--autokernel-harden", str(hardening_seed)]
             + (["-b", str(ubatch), "-ub", str(ubatch)] if ubatch else [])
-            + (["-ctk", kv_type, "-ctv", kv_type] if kv_type else []))
+            + ["-ctk", kv_type or KV_DEFAULT, "-ctv", kv_type or KV_DEFAULT])
+
+
+def argv_schema(argv) -> str:
+    """BENCH_ARGV_SCHEMA for an argv that pins `-ctk`, else the v1 schema (implicit KV)."""
+    return BENCH_ARGV_SCHEMA if "-ctk" in [str(a) for a in argv] else BENCH_ARGV_SCHEMA_V1
+
+
+def argv_kv_type(argv) -> str:
+    """The KV type an argv runs: its `-ctk` value, or KV_DEFAULT for an argv without one."""
+    items = [str(a) for a in argv]
+    return items[items.index("-ctk") + 1] if "-ctk" in items else KV_DEFAULT
+
+
+def normalize_argv(argv) -> list[str]:
+    """A v1 argv rewritten to its v2 form (explicit `-ctk/-ctv KV_DEFAULT`); a v2 argv as is.
+
+    This is the ONLY bridge between the two identities. It is exact because llama-bench's
+    KV default is f16 (the v1 cell ran `-ctk f16 -ctv f16` implicitly), and it can never make
+    a v1 (f16) argv equal to a v2 argv of another KV type."""
+    items = [str(a) for a in argv]
+    if "-ctk" in items:
+        return items
+    return items + ["-ctk", KV_DEFAULT, "-ctv", KV_DEFAULT]
 
 
 def _launch(argv, *, timeout: float, env, sampler) -> subprocess.CompletedProcess:
@@ -527,7 +562,7 @@ class Measurement:
 
     def to_dict(self) -> dict:
         return {"surface": self.surface, "model": self.model, "launches": self.launches,
-                "kv_type": self.kv_type,
+                "kv_type": self.kv_type, "argv_schema": BENCH_ARGV_SCHEMA,
                 "samples": self.samples, "sample_unit": FLOOR_UNIT,
                 "estimator": "median", "median": st.median(self.samples),
                 "drift_pct": self.drift_pct, "trend_rho": trend_rho(self.samples),

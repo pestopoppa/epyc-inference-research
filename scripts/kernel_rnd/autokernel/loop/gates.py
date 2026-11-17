@@ -4455,6 +4455,10 @@ class KldThresholds:
             return None
 
 
+#: The KV type graph_kld_argv pins on purpose (op-level numerics oracle, recipe-independent).
+GRAPH_KLD_KV_TYPE = "f16"
+
+
 def graph_kld_argv(perplexity: str, *, model: str, corpus: str, base_logits: str,
                    mode: str, chunks: int = 16, ctx: int = 4096,
                    extra: "tuple[str, ...]" = ()) -> list[str]:
@@ -4463,7 +4467,7 @@ def graph_kld_argv(perplexity: str, *, model: str, corpus: str, base_logits: str
     if mode not in ("base", "kld"):
         raise ValueError(f"mode must be 'base' or 'kld', got {mode!r}")
     argv = [perplexity, "-m", model, "-f", corpus, "-c", str(ctx), "--chunks", str(chunks),
-            "-b", str(ctx), "-ub", "512", "-fa", "on", "-ctk", "f16", "-ctv", "f16",
+            "-b", str(ctx), "-ub", "512", "-fa", "on", "-ctk", GRAPH_KLD_KV_TYPE, "-ctv", GRAPH_KLD_KV_TYPE,
             "--kl-divergence-base", base_logits, *extra]
     if mode == "kld":
         argv.append("--kl-divergence")
@@ -4513,7 +4517,9 @@ def graph_kld_gate(changed_paths, *, thresholds: "KldThresholds | None",
     llama-perplexity text) and return the verdict."""
     if not touches_graph_fusion(changed_paths):
         return None
-    return graph_kld_verdict(parse_graph_kld(run_kld()), thresholds)
+    # AK-BENCH-KV-TYPE-PIN: graph_kld_argv deliberately runs f16 KV (a graph-level numerics
+    # oracle that speaks for no serving recipe); the measured record names it.
+    return graph_kld_verdict({**parse_graph_kld(run_kld()), "kv_type": GRAPH_KLD_KV_TYPE}, thresholds)
 
 
 GRAPH_KLD_TIMEOUT_S = 3600
