@@ -134,21 +134,22 @@ class GuardedArena:
 RECEIPT_PREFIX = "AK_GUARD_BANDS_V1 "
 
 
-def parse_receipts(text: str) -> list[dict[str, Any]]:
+def parse_receipts(text: str, *, prefix: str = RECEIPT_PREFIX) -> list[dict[str, Any]]:
     """The receipts a guard-banded `test-backend-ops` run (AKX_GUARD_BANDS=1) printed,
     one per case, from its stderr/stdout. The prefix is found ANYWHERE in the text: in a
     combined log the receipt lands mid-line after `CASE(vars): `. Each JSON object is
     decoded from where its prefix ends, so several receipts on one line are all returned.
-    Prefixes followed by JSON that does not parse are skipped."""
+    Prefixes followed by JSON that does not parse are skipped. `prefix` lets another
+    receipt family (AKX-ALL-31.EDGE's edge and bounds receipts) reuse this parser."""
     import json
     decoder = json.JSONDecoder()
     out = []
     i = 0
     while True:
-        j = text.find(RECEIPT_PREFIX, i)
+        j = text.find(prefix, i)
         if j < 0:
             break
-        start = j + len(RECEIPT_PREFIX)
+        start = j + len(prefix)
         try:
             obj, end = decoder.raw_decode(text, start)
         except ValueError:

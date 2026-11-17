@@ -2796,7 +2796,10 @@ def _numerics_chain(passed: "Verdict", output: str) -> "Verdict":
     """AKX-ALL-31: a passing op verdict stands unless the opt-in numerics chain refuses it.
 
     Off (the default, `AK_NUMERICS_GATES` unset): `passed` is returned unchanged. On: the
-    planted controls must go red first, the run must carry an `AK_NUMERICS_V1` receipt, and
+    planted controls must go red first, the run must carry an `AK_NUMERICS_V1` receipt, the
+    AKX-ALL-31.EDGE receipts must sit within their calibrated bounds with every seeded-defect
+    twin red (`numerics_edge.chain_verdicts`; only when a bounds file is configured or edge
+    receipts were printed), and
     any `AK_GUARD_BANDS_V1` receipts it printed must be intact. A control failure or a
     missing or malformed receipt is the instrument's fault (`oracle_unavailable`), never
     evidence about the patch; a class or exactness mismatch or a touched band is
@@ -2820,6 +2823,15 @@ def _numerics_chain(passed: "Verdict", output: str) -> "Verdict":
         if not verdict.passed:
             gate = ("oracle_unavailable" if verdict.reason.startswith(
                 ("numerics_receipt_", "accumulator_inputs_lack_power")) else "correctness")
+            return Verdict(gate, False, f"{verdict.gate}: {verdict.reason}", verdict.detail,
+                           case_records=passed.case_records)
+    # AKX-ALL-31.EDGE: edge-value families + per-element max-abs beside NMSE. In play only when
+    # AK_NUMERICS_EDGE_BOUNDS names a calibration or the run printed AK_NUMERICS_EDGE_V1 receipts.
+    from . import numerics_edge
+    for verdict in numerics_edge.chain_verdicts(output):
+        if not verdict.passed:
+            gate = ("oracle_unavailable" if verdict.reason.startswith(numerics_edge.ORACLE_PREFIXES)
+                    else "correctness")
             return Verdict(gate, False, f"{verdict.gate}: {verdict.reason}", verdict.detail,
                            case_records=passed.case_records)
     for receipt in guard_bands.parse_receipts(output):
