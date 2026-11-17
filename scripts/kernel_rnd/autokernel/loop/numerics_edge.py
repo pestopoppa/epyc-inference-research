@@ -452,6 +452,10 @@ def calibrate(records: Sequence[Mapping[str, Any]], *, factor: float = DEFAULT_F
     want_seeds = sorted(int(s) for s in seeds)
     bounds: dict[str, dict] = {}
     excluded: dict[str, str] = {}
+    # AKX-ALL-31.EDGE-HIP-NONFINITE: an anchor that goes non-finite on finite inputs cannot give a
+    # bound, but the key is NOT dropped -- the candidate is still judged there on "no new non-finite"
+    # (per seed, its non-finite count may not exceed the anchor's).
+    nonfinite_watch: dict[str, dict] = {}
     for key in keys:
         missing = [(s, v) for s in want_seeds for v in VARIANTS if (key, s, v) not in idx]
         if missing:
@@ -466,8 +470,11 @@ def calibrate(records: Sequence[Mapping[str, Any]], *, factor: float = DEFAULT_F
             raise ValueError(f"{key}: support differs across seeds {supported}")
         nonfin = [s for s, r in zip(want_seeds, inc) if int(r.get("nonfinite", 0)) > 0]
         if nonfin:
-            excluded[key] = (f"anchor_nonfinite: seeds {nonfin} -- the ANCHOR produces non-finite outputs "
-                             "on finite inputs here (a finding to file, not a bound)")
+            nonfinite_watch[key] = {
+                "anchor_nonfinite_seeds": nonfin,
+                "anchor_nonfinite": {str(s): int(r.get("nonfinite", 0)) for s, r in zip(want_seeds, inc)},
+                "finding": "the ANCHOR produces non-finite outputs on finite inputs here (a finding to "
+                           "file); judged on the candidate as no-new-non-finite, not bounded"}
             continue
         nmse_max = max(_num(r["nmse"]) for r in inc)
         maxabs_max = max(_num(r["max_abs"]) for r in inc)
@@ -498,7 +505,8 @@ def calibrate(records: Sequence[Mapping[str, Any]], *, factor: float = DEFAULT_F
             problems.append(f"family {fam} has no discriminating key (every key excluded)")
     return {"schema": BOUNDS_SCHEMA, "gen": GEN_SCHEME, "backend": backends[0], "anchor": anchor,
             "factor": factor, "seeds": want_seeds, "maxabs_floor_rel": MAXABS_FLOOR_REL,
-            "ok": not problems, "problems": problems, "bounds": bounds, "excluded": excluded}
+            "ok": not problems, "problems": problems, "bounds": bounds, "excluded": excluded,
+            "nonfinite_watch": nonfinite_watch}
 
 
 def bounds_text(bounds: Mapping[str, Any]) -> str:
@@ -535,17 +543,19 @@ def edge_verdicts(records: Sequence[Mapping[str, Any]], bounds: Mapping[str, Any
     idx = _index(recs)
     seeds = [int(s) for s in bounds.get("seeds") or ()]
     need = [(k, s, v) for k in sorted(table) for s in seeds for v in VARIANTS]
-    missing = [n for n in need if n not in idx]
+    watch: Mapping[str, Mapping[str, Any]] = bounds.get("nonfinite_watch") or {}
+    watch_need = [(k, s, "incumbent") for k in sorted(watch) for s in seeds]
+    missing = [n for n in need + watch_need if n not in idx]
     if missing:
         k, s, v = missing[0]
         return [gates.Verdict(GATE_EDGE, False, f"numerics_edge_receipt_missing: {len(missing)} of {len(need)} "
                               f"receipt(s), e.g. {k} seed {s} {v}; absence is not a pass")]
     cache: dict = {}
-    bad = [n for n in need if not probe_ok(idx[n], cache)]
+    bad = [n for n in need + watch_need if not probe_ok(idx[n], cache)]
     if bad:
         return [gates.Verdict(GATE_EDGE, False, f"numerics_edge_receipt_input_mismatch: {len(bad)} receipt(s), "
                               f"e.g. {bad[0][0]} seed {bad[0][1]}: the inputs are not {GEN_SCHEME}'s")]
-    unsupported = [n for n in need if not idx[n].get("supported", True)]
+    unsupported = [n for n in need + watch_need if not idx[n].get("supported", True)]
     if unsupported:
         return [gates.Verdict(GATE_EDGE, False, f"numerics_edge_receipt_unsupported: {unsupported[0][0]} is "
                               "calibrated but the candidate backend reports it unsupported")]
@@ -577,12 +587,22 @@ def edge_verdicts(records: Sequence[Mapping[str, Any]], bounds: Mapping[str, Any
                         f"{r.get('arg_row')} col {r.get('arg_col')} (nmse {nmse:.3e}, bound {b['nmse_bound']:.3e})")
         if not nmse <= b["nmse_bound"]:
             viol.append(f"numerics_edge_nmse: {where}: nmse {nmse:.3e} > bound {b['nmse_bound']:.3e}")
+    for k, s, _v in watch_need:
+        try:
+            got = int(idx[(k, s, "incumbent")].get("nonfinite", 0))
+            allowed = int((watch[k].get("anchor_nonfinite") or {}).get(str(s), 0))
+        except (TypeError, ValueError, AttributeError):
+            return [twins, gates.Verdict(GATE_EDGE, False, "numerics_edge_receipt_malformed")]
+        if got > allowed:
+            viol.append(f"numerics_edge_new_nonfinite: {k} seed {s}: {got} non-finite output(s) > the anchor's "
+                        f"{allowed} on finite inputs (anchor-non-finite key, judged on no new non-finite)")
     if viol:
         return [twins, gates.Verdict(GATE_EDGE, False, viol[0] + (f" (+{len(viol) - 1} more)" if len(viol) > 1 else ""),
                                      "\n".join(viol[:16]))]
     excl = bounds.get("excluded") or {}
     return [twins, gates.Verdict(GATE_EDGE, True, f"{len(table)} key(s) x {len(seeds)} seed(s) within the anchor's "
-                                 f"NMSE and per-element max-abs bounds; {len(excl)} key(s) excluded at calibration")]
+                                 f"NMSE and per-element max-abs bounds; {len(watch)} anchor-non-finite key(s) with "
+                                 f"no new non-finite; {len(excl)} key(s) excluded at calibration")]
 
 
 # --- host self-test (the chain's instrument check) ---------------------------------------------
@@ -603,8 +623,9 @@ def controls_gate() -> gates.Verdict:
         cases = control_cases()
         anchor = [r for c in cases for r in host_receipts(c, host_kernel_q8)]
         bounds = calibrate(anchor, anchor="host_q8")
-        if not bounds["ok"] or bounds["excluded"]:
-            problems.append(f"host calibration not clean: {bounds['problems']} {list(bounds['excluded'].items())[:2]}")
+        if not bounds["ok"] or bounds["excluded"] or bounds["nonfinite_watch"]:
+            problems.append(f"host calibration not clean: {bounds['problems']} {list(bounds['excluded'].items())[:2]} "
+                            f"{sorted(bounds['nonfinite_watch'])[:2]}")
         vs = edge_verdicts(anchor, bounds)
         if not all(v.passed for v in vs):
             problems.append("clean host anchor failed: " + "; ".join(v.reason for v in vs if not v.passed))

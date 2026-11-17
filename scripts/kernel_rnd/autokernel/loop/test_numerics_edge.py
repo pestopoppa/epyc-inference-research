@@ -162,9 +162,23 @@ class Gate(unittest.TestCase):
         nonfin = [dict(r, nonfinite=3) if r["variant"] == "incumbent" and r["family"] == "near_f16_max"
                   and r["op"] == "MUL_MAT" and r["n"] == 1 else r for r in self.anchor]
         b = ne.calibrate(nonfin)
-        bad = [k for k in b["excluded"] if b["excluded"][k].startswith("anchor_nonfinite")]
-        self.assertEqual(bad, ["MUL_MAT|f32|128|256|1|1|1|near_f16_max"])
+        key = "MUL_MAT|f32|128|256|1|1|1|near_f16_max"
+        # anchor non-finite: not bounded, not excluded -- watched for "no new non-finite" on the candidate
+        self.assertEqual(sorted(b["nonfinite_watch"]), [key])
+        self.assertNotIn(key, b["excluded"])
+        self.assertNotIn(key, b["bounds"])
+        self.assertEqual(b["nonfinite_watch"][key]["anchor_nonfinite"]["1"], 3)
         self.assertTrue(b["ok"])
+        # the candidate is still judged there: same count passes, fixed (0) passes, more fails, absent fails
+        self.assertTrue(all(v.passed for v in ne.edge_verdicts(nonfin, b)))
+        self.assertTrue(all(v.passed for v in ne.edge_verdicts(self.anchor, b)))
+        worse = [dict(r, nonfinite=4) if ne.key_of(r) == key and r["variant"] == "incumbent" and r["seed"] == 2
+                 else r for r in nonfin]
+        vs = ne.edge_verdicts(worse, b)
+        self.assertFalse(vs[-1].passed)
+        self.assertIn("numerics_edge_new_nonfinite", vs[-1].reason)
+        gone = [r for r in nonfin if not (ne.key_of(r) == key and r["variant"] == "incumbent" and r["seed"] == 3)]
+        self.assertTrue(ne.edge_verdicts(gone, b)[0].reason.startswith("numerics_edge_receipt_missing"))
         # a family with every key excluded refuses the calibration
         flat = [dict(r, max_abs=0.0) if r["family"] == "tile_const" and r["variant"] != "incumbent" else r
                 for r in self.anchor]

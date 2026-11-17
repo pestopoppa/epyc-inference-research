@@ -241,6 +241,43 @@ class GcnGym(unittest.TestCase):
         with self.assertRaises(gcn_gym.PatchRefused):
             gcn_gym.apply_patch(self.SRC, "no hunks\n")
 
+    def test_isa_claims_gate_wiring(self):
+        """C5-ISA-1 at the candidate build: refuse only refuted claims; STATIC_ONLY passes."""
+        def checker(statuses):
+            def check(binary, regex, claims, archive=None, observation=None):
+                return {"verdict": "x", "claims": {m: {"status": statuses[m]} for m in claims}}
+            return check
+        b = Path("/nonexistent/libggml-hip.so")
+        ok = gcn_gym.isa_claims_gate(b, K, ["mfma", "lds_staging"], environ={},
+                                     checker=checker({"mfma": "EXECUTED", "lds_staging": "STATIC_ONLY"}))
+        self.assertEqual((ok["status"], ok["passed"], ok["mode"]), ("ACCEPTED", True, "enforce"))
+        bad = gcn_gym.isa_claims_gate(b, K, ["mfma", "dot"], environ={},
+                                      checker=checker({"mfma": "NOT_EXECUTED", "dot": "ABSENT"}))
+        self.assertEqual((bad["status"], bad["passed"], bad["refuted"]), ("REFUTED", False, ["dot", "mfma"]))
+        adv = gcn_gym.isa_claims_gate(b, K, ["dot"], environ={gcn_gym.ISA_CLAIMS_ENV: "advisory"},
+                                      checker=checker({"dot": "ABSENT"}))
+        self.assertEqual((adv["status"], adv["passed"]), ("REFUTED", True))
+        none = gcn_gym.isa_claims_gate(b, K, [], environ={}, checker=None)
+        self.assertEqual((none["status"], none["passed"]), ("NO_CLAIMS", True))
+
+        def boom(*a, **k):
+            raise subprocess.CalledProcessError(1, ["llvm-objdump"])
+        err = gcn_gym.isa_claims_gate(b, K, ["mfma"], environ={}, checker=boom)
+        self.assertEqual((err["status"], err["passed"]), ("UNCHECKED", True))
+        # a claim the checker did not report is treated as ABSENT (refuted), never as a pass
+        missing = gcn_gym.isa_claims_gate(b, K, ["mfma"], environ={},
+                                          checker=lambda *a, **k: {"claims": {}})
+        self.assertEqual(missing["refuted"], ["mfma"])
+        # the real judge: no touched kernel -> every claim ABSENT -> refused
+        real = gcn_gym.isa_claims_gate(b, K, ["mfma"], environ={},
+                                       checker=lambda bin_, rx, cl, archive=None, observation=None:
+                                       isa_claims.judge({}, cl, observation))
+        self.assertFalse(real["passed"])
+        # combined accept gate: audit diff rc AND claims
+        self.assertTrue(gcn_gym.accept_gate(0, ok)["accepted"])
+        self.assertEqual(gcn_gym.accept_gate(0, bad)["reasons"], ["isa_claims_refuted:dot,mfma"])
+        self.assertEqual(gcn_gym.accept_gate(1, ok)["reasons"], ["isa_audit_diff_rc=1"])
+
     def test_decision_rule(self):
         R = gcn_gym.RunResult
         win = R(True, [0.90, 0.91], [1.00, 1.01])

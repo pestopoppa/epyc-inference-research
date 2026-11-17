@@ -15,6 +15,13 @@ Pipeline per agent edit:
 3. ``static_gate`` -- ``gfx90a_isa_audit.py diff`` of the candidate code object vs the
    hipcc incumbent must exit 0 (and, once RVP-RACE-2 M2 lands, its verdict must not be
    a finding).
+4. ``isa_claims_gate`` (C5-ISA-1) -- beside the audit diff, the candidate's touched
+   kernels are archived and every mechanism it claims (``isa_claims``) is checked in the
+   ISA. ``accept_gate`` combines the two. Default ENFORCE, fail-closed only on a REFUTED
+   claim (``ABSENT`` in the ISA, or ``NOT_EXECUTED`` per the counter witness); a
+   ``STATIC_ONLY`` claim (present, execution unproven) is allowed, no claim is a pass, and
+   a checker error is recorded as ``UNCHECKED`` without refusing.
+   ``AK_ISA_CLAIMS_GATE=advisory`` (or ``0``/``off``) records the verdict without refusing.
 
 Decision rule (handoff C5-ISA-2, per target, 3 runs at a fixed token budget): open an
 ISA-rung arm if >=1 run reaches >=1.05x kernel speed at the served prefill shape,
@@ -26,7 +33,8 @@ import re
 import statistics
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+import os
+from typing import Any, Callable, Mapping, Sequence
 
 ROCM_LLVM = Path("/opt/rocm/llvm/bin")
 SPEEDUP_FLOOR = 1.05
@@ -105,6 +113,58 @@ def static_gate_argv(incumbent_json: Path, candidate_json: Path, *, families: st
     audit = audit or Path(__file__).resolve().parents[2] / "gfx90a_isa_audit.py"
     return ["python3", str(audit), "diff", str(incumbent_json), str(candidate_json),
             "--families", families]
+
+
+ISA_CLAIMS_ENV = "AK_ISA_CLAIMS_GATE"
+_ADVISORY = {"0", "off", "advisory", "false", "no"}
+REFUTED = ("ABSENT", "NOT_EXECUTED")
+
+
+def isa_claims_mode(environ: Mapping[str, str] | None = None) -> str:
+    v = (os.environ if environ is None else environ).get(ISA_CLAIMS_ENV, "").strip().lower()
+    return "advisory" if v in _ADVISORY else "enforce"
+
+
+def isa_claims_gate(candidate_binary: Path, kernel_regex: str, claims: Sequence[str], *,
+                    archive: Path | None = None, observation: Mapping[str, Any] | None = None,
+                    checker: Callable[..., Mapping[str, Any]] | None = None,
+                    environ: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """C5-ISA-1 at the candidate build: archive the touched kernels' ISA and check the claims.
+
+    Refuses (``passed`` False, enforce mode) only when a claimed mechanism is refuted:
+    ``ABSENT`` from every touched kernel or ``NOT_EXECUTED`` per the counter witness. A
+    kernel regex matching nothing makes every claim ABSENT, so it refuses too."""
+    from . import isa_claims  # noqa: PLC0415 -- keeps gcn_gym importable without the audit
+    mode = isa_claims_mode(environ)
+    claims = sorted(set(claims))
+    if not claims:
+        return {"gate": "isa_claims", "mode": mode, "status": "NO_CLAIMS", "passed": True,
+                "refuted": [], "doc": None}
+    check = checker or isa_claims.archive_and_check
+    try:
+        doc = dict(check(candidate_binary, kernel_regex, claims, archive=archive,
+                         observation=observation))
+    except Exception as exc:  # noqa: BLE001 -- subprocess failures from llvm-objdump; never a refutation
+        return {"gate": "isa_claims", "mode": mode, "status": "UNCHECKED", "passed": True,
+                "refuted": [], "error": f"{type(exc).__name__}: {exc}", "doc": None}
+    statuses = {m: (doc.get("claims") or {}).get(m, {}).get("status", "ABSENT") for m in claims}
+    refuted = sorted(m for m, st in statuses.items() if st in REFUTED)
+    status = "REFUTED" if refuted else "ACCEPTED"
+    return {"gate": "isa_claims", "mode": mode, "status": status,
+            "passed": not (refuted and mode == "enforce"), "refuted": refuted,
+            "statuses": statuses, "doc": doc}
+
+
+def accept_gate(static_gate_rc: int, isa_claims_result: Mapping[str, Any]) -> dict[str, Any]:
+    """The candidate build's accept decision: the audit diff (``static_gate_argv``) must exit 0
+    AND the C5-ISA-1 claims gate must pass."""
+    reasons = []
+    if static_gate_rc != 0:
+        reasons.append(f"isa_audit_diff_rc={static_gate_rc}")
+    if not isa_claims_result.get("passed", False):
+        reasons.append("isa_claims_refuted:" + ",".join(isa_claims_result.get("refuted") or []))
+    return {"accepted": not reasons, "reasons": reasons,
+            "isa_audit_diff_rc": static_gate_rc, "isa_claims": isa_claims_result.get("status")}
 
 
 @dataclass(frozen=True)
