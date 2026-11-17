@@ -2653,7 +2653,7 @@ server_mode:
     mmproj_sha256: 1cc0e44fbdc8c6bcaf1db5ab927e3f52fb9b92a65e0f1ff3fec6862c63c79ed5
     device: cpu
     tier: warm   # aux service, started by `start` (optional: true); see PACKAGE NO-1 for the residency choice
-    serving_recipe: "-np 1 -c 8192 -t 24 --flash-attn on --device none -ngl 0 (production-consolidated-v10 CPU kernel store)"
+    serving_recipe: "-np 4 -c 32768 -t 24 --flash-attn on --device none -ngl 0 (production-consolidated-v10 CPU kernel store; 4 x the validated 8192-token slot, pages OCRed 4 at a time, probe 1.24x with cache_prompt off and byte-identical output 2026-11-17)"
     evidence:
       verdict: PASS
       result: artifacts/compute/pip04-holdout-lighton-20261116/result.json
