@@ -1,0 +1,54 @@
+{
+ "mode": "final",
+ "rule": "needs_ocr -> LightOnOCR-2-1B else LiteParse",
+ "B": 10000,
+ "seed": 20261116,
+ "flags_source": "row1 routing.jsonl",
+ "n_flagged_considered": 226,
+ "n_paired_scored": 226,
+ "n_censored": 0,
+ "stratum_diff": {
+  "mean": 0.26697699718783924,
+  "lb95_one_sided": 0.2469181221642627,
+  "ub95_one_sided": 0.28726140899474617,
+  "ci95_two_sided": [
+   0.24314401040847056,
+   0.2913259261947138
+  ]
+ },
+ "stratum_lighton_mean": 0.5883607652659928,
+ "stratum_liteparse_mean": 0.3213837680781533,
+ "wins": 209,
+ "losses": 17,
+ "ties": 0,
+ "stratum_by_variant": {
+  "original": {
+   "n": 16,
+   "mean_diff": 0.05164215244103214
+  },
+  "rasterized": {
+   "n": 210,
+   "mean_diff": 0.2833834615495007
+  }
+ },
+ "primary": {
+  "metric": "paired stratum diff (LightOnOCR - LiteParse, needs_ocr docs), one-sided CI95 lower bound",
+  "lb95_one_sided": 0.2469181221642627,
+  "verdict": "PASS"
+ },
+ "secondary": {
+  "metric": "full-set policy diff (policy - always-LiteParse); unrouted or censored docs contribute 0",
+  "n_docs": 300,
+  "always_liteparse_mean": 0.37659154347154344,
+  "mean": 0.2011226712148388,
+  "lb95_one_sided": 0.18210845979524973,
+  "ub95_one_sided": 0.2200998625995952,
+  "ci95_two_sided": [
+   0.1783524732190574,
+   0.22388763320319843
+  ]
+ },
+ "flag_mismatch_row1_vs_row2": [],
+ "caveat": "the rasterised stratum is SYNTHETIC-SCAN (150-200 dpi render + noise + skew), not real scans; needs_ocr on rasterised docs is true by construction (no text layer); the verdict generalises to real scans only as far as the synthetic degradation is representative",
+ "predeclared_sha256": "1957a9c4487b2202a7ad3519051cbdf61a2e8dfe08ad5dcb3a1989d46757e407"
+}

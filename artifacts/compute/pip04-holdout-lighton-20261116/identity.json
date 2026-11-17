@@ -1,0 +1,8 @@
+{
+ "LightOnOCR-2-1B-bbox-F16.gguf": "7e2234e1d6f44ac41f086a5a7f654be7802ba5e363095b8b7a2abe69dacbf431",
+ "LightOnOCR-2-1B-bbox-mmproj-F16.gguf": "1cc0e44fbdc8c6bcaf1db5ab927e3f52fb9b92a65e0f1ff3fec6862c63c79ed5",
+ "arm": "lighton",
+ "kernel_realpath": "/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin/llama-server",
+ "llama_server_version": "built with GNU 15.2.0 for Linux x86_64",
+ "ts": "2026-11-16T21:50:10Z"
+}

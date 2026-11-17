@@ -2632,6 +2632,40 @@ server_mode:
       - "2026-01-24: Increased timeout from 120s to 300s - complex pages with figures can take 24-30s each"
       - "Use server-side /v1/document/pdf endpoint for PDFs - client-side per-page requests add HTTP overhead"
 
+  # STACKCHG-OCR-LIGHTON-20261117 (operator-approved intent 2026-11-17): PDF OCR
+  # route target. A stack-managed aux service (epyc-orchestrator
+  # orchestration/launch_manifest.yaml aux_services.ocr_pdf_lighton), not a NUMA
+  # llama role: like document_formalizer it is not compiled into the lean registry.
+  ocr_pdf_lighton:
+    url: http://localhost:9003
+    port: 9003
+    description: >-
+      LightOnOCR-2-1B-bbox F16 on the production CPU kernel store llama-server; the
+      needs_ocr arm of the orchestrator PDF router (ORCHESTRATOR_PDF_ROUTE_LIGHTON=1:
+      needs_ocr -> this server, else LiteParse). Independent of document_formalizer (:9001).
+    model: LightOnOCR-2-1B-bbox-F16.gguf
+    mmproj: LightOnOCR-2-1B-bbox-mmproj-F16.gguf
+    model_type: gguf_vlm
+    huggingface_id: lightonai/LightOnOCR-2-1B-bbox
+    model_path: /mnt/raid0/llm/models/LightOnOCR-2-1B-bbox-F16.gguf
+    mmproj_path: /mnt/raid0/llm/models/LightOnOCR-2-1B-bbox-mmproj-F16.gguf
+    model_sha256: 7e2234e1d6f44ac41f086a5a7f654be7802ba5e363095b8b7a2abe69dacbf431
+    mmproj_sha256: 1cc0e44fbdc8c6bcaf1db5ab927e3f52fb9b92a65e0f1ff3fec6862c63c79ed5
+    device: cpu
+    tier: warm   # aux service, started by `start` (optional: true); see PACKAGE NO-1 for the residency choice
+    serving_recipe: "-np 1 -c 8192 -t 24 --flash-attn on --device none -ngl 0 (production-consolidated-v10 CPU kernel store)"
+    evidence:
+      verdict: PASS
+      result: artifacts/compute/pip04-holdout-lighton-20261116/result.json
+      filing: artifacts/compute/pip04-holdout-lighton-20261116/verdict.json
+      row: pip04-holdout-lighton-ocr-20261116-r2
+      scratch_origin: copied 2026-11-17 from the row scratch dir; sha256 in SHA256SUMS
+      summary: >-
+        Held-out arXiv corpus (300 docs, 226 needs_ocr): paired stratum diff
+        LightOnOCR - LiteParse mean +0.267, one-sided LB95 +0.247 (wins 209 / losses 17);
+        full-set policy diff +0.201 (LB95 +0.182). Rasterised stratum is synthetic-scan.
+        Latency ~45-127 s/doc on one CPU quarter (24 threads).
+
   # Multi-vector retrieval — dual containers (Phase 4)
   # Code and docs use separate models optimized for each content type.
   # Embeddings are model-specific and cannot be mixed across containers.

@@ -1,0 +1,46 @@
+{
+ "$schema": "epyc.filed.verdict.v1",
+ "agent_verdict": {
+  "answer": "PASS: route needs_ocr -> LightOnOCR confirmed on held-out (LB95 +0.247)",
+  "rationale": "Row 2 (LightOnOCR arm, 226/226 ok). Predeclared held-out confirmation (PREDECLARED_ROUTE_HOLDOUT sha 1957a9c4, score_holdout.py sha 0cd26ace): rule needs_ocr->LightOnOCR else LiteParse. needs_ocr stratum n=226 (210 synthetic-scan + 16 born-digital), 0 censored, flags identical across rows. Paired diff LightOnOCR-LiteParse mean +0.267, one-sided CI95 LB +0.247 (two-sided [+0.243,+0.291]); 209 wins/17 losses. Born-digital flagged subset n=16 mean +0.052; rasterised +0.283. Secondary full-set policy diff +0.201 [+0.178,+0.224]. PRIMARY PASS. Caveat: synthetic scans, arXiv domain. Interim look at 113 was SKIPPED (scoring rc=1 inside the row), no early stop taken.",
+  "verdict": "pass"
+ },
+ "answer": "PASS: route needs_ocr -> LightOnOCR confirmed on held-out (LB95 +0.247)",
+ "at": "2026-11-17T02:25:34+00:00",
+ "compute_burned": true,
+ "dry_run": false,
+ "end_line": "rc=0 time=2026-11-17T02:17:00Z reason=complete",
+ "end_record": "/mnt/raid0/llm/tmp/compute-flags/grants/pip04-holdout-lighton-ocr-20261116-r2.ended",
+ "filed_at": "2026-11-17T02:25:34+00:00",
+ "filed_by": "agent",
+ "handoff_task": "knowledge-pipelines.md:2572",
+ "id": "pip04-holdout-lighton-ocr-20261116-r2",
+ "machine_checkable": false,
+ "manifest": "/mnt/raid0/llm/tmp/compute-flags/ready/pip04-holdout-lighton-ocr-20261116-r2.json",
+ "native_result_path": "/mnt/raid0/llm/tmp/pip04-holdout-lighton-ocr-20261116-r2/out/results.jsonl",
+ "outcome_class": "SCIENCE-VERDICT",
+ "owner": "autopilot-backlog-session",
+ "phase": "filing",
+ "rc": 0,
+ "reason": "Row 2 (LightOnOCR arm, 226/226 ok). Predeclared held-out confirmation (PREDECLARED_ROUTE_HOLDOUT sha 1957a9c4, score_holdout.py sha 0cd26ace): rule needs_ocr->LightOnOCR else LiteParse. needs_ocr stratum n=226 (210 synthetic-scan + 16 born-digital), 0 censored, flags identical across rows. Paired diff LightOnOCR-LiteParse mean +0.267, one-sided CI95 LB +0.247 (two-sided [+0.243,+0.291]); 209 wins/17 losses. Born-digital flagged subset n=16 mean +0.052; rasterised +0.283. Secondary full-set policy diff +0.201 [+0.178,+0.224]. PRIMARY PASS. Caveat: synthetic scans, arXiv domain. Interim look at 113 was SKIPPED (scoring rc=1 inside the row), no early stop taken.",
+ "result_exists": true,
+ "result_format": "jsonl",
+ "result_path": "/mnt/raid0/llm/tmp/pip04-holdout-lighton-ocr-20261116-r2/out/results.jsonl",
+ "root_cause_family": null,
+ "row": "pip04-holdout-lighton-ocr-20261116-r2",
+ "row_verdict": "pass",
+ "rule": "QUESTION: does routing needs_ocr docs to LightOnOCR-2-1B (instead of LiteParse) beat always-LiteParse on a held-out arXiv-LaTeX-GT corpus (300 docs, 210 expected needs_ocr by the build-time proxy, ~419 pages)? THIS ROW produces the LightOnOCR arm on the needs_ocr docs only (needs_ocr recomputed per doc with the frozen legacy_router feature code + real pdftotext, resumable, fixed sha256(stem) order); per-doc scores (upstream NID/TEDS/MHS evaluator, higher=better, overall = their mean) are kept in out/evaluation-final.json. Expected effect vs sample size: observed post-hoc stratum diff 0.0688 (SD 0.198, n=43); n_ocr >= 53 detects it, >= 206 detects half of it. PRIMARY: paired stratum diff one-sided CI95 lower bound > 0 -> PASS (computed by the scoring script, not by this row). The rasterised stratum is SYNTHETIC-SCAN (caveat in the predeclaration). STOP RULES (PREDECLARED_ROUTE_HOLDOUT.md): STOP-ON-ANSWER when all needs_ocr docs are scored (final score -> out/evaluation-final.json, COMPLETE; verdict by the zero-compute scoring script /mnt/raid0/llm/tmp/pip04-holdout-score-20261116/score_holdout.py). STOP-ON-FUTILITY (futility-only, gate-class, never an early PASS): looks at n//4 and n//2 flagged docs; infra rule failed-final >= half of docs done stops INCONCLUSIVE-FUTILE; statistical look at 50%: paired stratum diff (LightOnOCR - LiteParse), one-sided CI95 UPPER bound < 0 (B=10000, seed 20261116) -> FUTILE (skipped, not blocking, if the LiteParse arm is not yet present). Failed docs are censored, never scored zero. Cap 1.5x estimate.",
+ "source": "grant",
+ "tokens": {
+  "available": false,
+  "owner_slug": "autopilot-backlog-session",
+  "reason": "no rollout tokens attributed to the owner session today"
+ },
+ "values": {},
+ "verdict": {
+  "kind": "science",
+  "native_result_sha256": "6650b91bd8f3590ae1693922b86b7e2fca5ac36f127b006e0ccb964b19ee7996",
+  "result": "pass",
+  "status": "filed"
+ }
+}
