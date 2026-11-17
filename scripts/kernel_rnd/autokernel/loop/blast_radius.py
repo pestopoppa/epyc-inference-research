@@ -7,6 +7,10 @@ T0 or T1 witness; UNKNOWN always decides as TOUCHED. Pinned by the AKX-P1d contr
 """
 from __future__ import annotations
 
+import hashlib
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence
 
@@ -136,6 +140,10 @@ def screen_keep(fp: FP.PatchFootprint, workloads: Sequence[WorkloadRecord], *, k
         raise ValueError(f"no census freshness key for: {', '.join(missing)}")
     rows = [classify(fp, w, keep_id=keep_id, census_freshness_key=census_freshness_keys[w.workload_id],
                      created_at=created_at, tool_versions=tool_versions) for w in workloads]
+    return _assemble(keep_id, rows)
+
+
+def _assemble(keep_id: str, rows: list[dict]) -> tuple[dict, list[dict]]:
     rows.sort(key=lambda row: row["workload_id"])
     by_class = lambda name: [r["workload_id"] for r in rows if r["classification"] == name]
     screen: dict[str, Any] = {"schema": KS.SCREEN_SCHEMA, "keep_id": keep_id,
@@ -145,3 +153,94 @@ def screen_keep(fp: FP.PatchFootprint, workloads: Sequence[WorkloadRecord], *, k
                               "unknown_ids": by_class("UNKNOWN")}
     screen["screen_digest"] = KS._digest(screen)
     return screen, rows
+
+
+# --- production keep path (AKX-P1e wiring) ----------------------------------------------
+#: A workload with no census record has no resolved census: UNKNOWN, which decides as
+#: TOUCHED -- exactly the pre-P1e behaviour where every workload row is required.
+ABSENT_CENSUS = "census_absent"
+
+
+def _resolved_workloads(resolved_targets: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for target in resolved_targets or ():
+        sig = target.get("workload_signature") if isinstance(target, Mapping) else None
+        for wid in (target.get("target_ids") or ()) if isinstance(sig, str) else ():
+            if isinstance(wid, str) and wid:
+                out[wid] = sig
+    return out
+
+
+def record_keep_screen(store_root: Path | str, *, keep_id: str,
+                       resolved_targets: Sequence[Mapping[str, Any]], campaign_id: str,
+                       manifest_digest: str, manifest_path: str,
+                       footprint: Optional[FP.PatchFootprint],
+                       censuses: Mapping[str, tuple] | None = None,
+                       observed_at: str | None = None) -> Path:
+    """Classify a real keep against the resolved roster and publish its screen record.
+
+    ``censuses`` maps workload_id -> ``(WorkloadRecord, census_freshness_key)``; a missing
+    entry is an unobserved census (UNKNOWN). No footprint -> every row UNKNOWN. An empty
+    footprint refuses (`FootprintError`), as the P1d fixtures define."""
+    workloads = _resolved_workloads(resolved_targets)
+    if not workloads:
+        raise ValueError("no resolved campaign workload set to bind the screen to")
+    stamp = observed_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    censuses = censuses or {}
+    records, keys = [], {}
+    for wid in sorted(workloads):
+        record, key = censuses.get(wid) or (WorkloadRecord(
+            wid, "unknown", frozenset(), census_observed=False), f"{ABSENT_CENSUS}:{wid}")
+        records.append(record)
+        keys[wid] = key
+    if footprint is None:
+        rows = [{"schema": KS.ROW_SCHEMA, "keep_id": keep_id, "parent": None, "child": None,
+                 "workload_id": w.workload_id, "census_freshness_key": keys[w.workload_id],
+                 "footprint_sha256": None, "touched_detail": {}, "tool_versions": {},
+                 "created_at": stamp, "witnesses": None, "tier": None,
+                 "classification": "UNKNOWN", "decision_class": "TOUCHED",
+                 "unknown_reason": "footprint_unavailable"} for w in records]
+        screen, rows = _assemble(keep_id, rows)
+    else:
+        screen, rows = screen_keep(footprint, records, keep_id=keep_id,
+                                   census_freshness_keys=keys, created_at=stamp)
+    source = Path(manifest_path).resolve()
+    return KS.write_record(
+        store_root, keep_id=keep_id, campaign_id=campaign_id,
+        campaign_manifest_sha256=manifest_digest, source_path=str(source),
+        source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+        workload_signatures=workloads, observed_at=stamp, screen=screen, rows=rows)
+
+
+def footprint_for_commit(repo: Path, child: str) -> Optional[FP.PatchFootprint]:
+    """Best-effort static footprint of ``child`` against its first parent; None if absent."""
+    import subprocess
+    try:
+        git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True,
+                                        capture_output=True, text=True).stdout
+        parent = git("rev-parse", f"{child}^").strip()
+        return FP.produce_patch_footprint(source_tree=str(repo), parent=parent, child=child,
+                                          diff_text=git("diff", parent, child),
+                                          compile_commands=[], depfiles={})
+    except (OSError, subprocess.CalledProcessError, FP.FootprintError, ValueError):
+        return None
+
+
+def record_keep_best_effort(store_root: Path, repo: Path, *, keep_id: str, child: str,
+                            resolved_campaign: Any, manifest_path: str | None,
+                            censuses: Mapping[str, tuple] | None = None) -> Optional[Path]:
+    """The loop's keep hook. Observe-only: a screen failure never un-keeps; with no
+    record, `keep_screen.project` already reports every workload UNKNOWN (TOUCHED)."""
+    if resolved_campaign is None or not manifest_path:
+        return None
+    try:
+        return record_keep_screen(
+            store_root, keep_id=keep_id,
+            resolved_targets=[t.to_dict() for t in resolved_campaign.targets],
+            campaign_id=resolved_campaign.campaign_id,
+            manifest_digest=resolved_campaign.manifest_digest, manifest_path=manifest_path,
+            footprint=footprint_for_commit(repo, child), censuses=censuses)
+    except Exception as exc:  # noqa: BLE001 -- observe-only, logged loudly
+        print(f"akx       keep screen for {keep_id} not recorded "
+              f"({type(exc).__name__}: {exc})", file=sys.stderr)
+        return None

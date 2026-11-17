@@ -104,7 +104,7 @@ from . import tail_timing
 from . import actor_opencode_config
 from . import belief_context, planner_only
 from . import actor_passthrough
-from . import cross_target, kernel_coverage
+from . import cross_target, kernel_coverage, blast_radius
 from . import gpu_counter_signals
 from . import longctx
 from . import floor_registry
@@ -7606,6 +7606,10 @@ def _main(argv: list[str] | None = None) -> int:
             # serving floor, spend the one serving gate that can advance the champion of record.
             with keep_stage("accumulate_after_keep"):
                 accumulate_after_keep(hypothesis.mechanism_id)
+            with keep_stage("akx_keep_screen"):  # AKX-P1e; no census -> all UNKNOWN
+                blast_radius.record_keep_best_effort(
+                    args.store, args.worktree, keep_id=hypothesis.mechanism_id, child=head,
+                    resolved_campaign=resolved_campaign, manifest_path=args.resolved_campaign)
             if lane_binding is not None and cpu_launch is not None:
                 with keep_stage("fold_check_held"):
                     fold_check_held(worker)
