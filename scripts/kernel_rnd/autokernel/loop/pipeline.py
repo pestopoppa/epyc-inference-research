@@ -310,7 +310,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              make_author_panel: Callable[[Worker], Any] | None = None,
              record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None,
              next_resume: Callable[[Worker, str], Any] | None = None,
-             begin_author_custody=None, finish_author_custody=None
+             begin_author_custody=None, finish_author_custody=None,
+             make_exact_judge: Callable[[Worker], Any] | None = None
              ) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
@@ -529,7 +530,12 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     **({"finish_author_custody": lambda ticket, h, failure:
                         finish_author_custody(worker, ticket, h, failure)}
                        if finish_author_custody is not None else {}),
-                    iteration_scope=iteration_scope)
+                    iteration_scope=iteration_scope,
+                    # INF06-EXACT-LANE: inert for candidates without lane "exact"
+                    # (`exact_lane.lane_gate` passes them to `gate` untouched).
+                    exact_judge=(make_exact_judge(worker)
+                                 if make_exact_judge is not None else None),
+                    exact_on_mismatch="reject")
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.

@@ -176,3 +176,112 @@ def test_iterate_wires_lane_gate():
     src = inspect.getsource(_loop.iterate)
     assert "exact_lane.lane_gate(gate, exact_judge" in src
     assert inspect.signature(_loop.iterate).parameters["exact_judge"].default is None
+
+
+# ---- driver wiring: run_pool constructs and passes the exact judge ---------------
+
+from pathlib import Path as _Path  # noqa: E402
+
+from . import pipeline as _pipeline  # noqa: E402
+
+
+_CFG = {"incumbent_store": "/stores/inc", "model": "/m/t.gguf", "draft": "/m/d.gguf",
+        "prompts": {"p0": "hello", "p1": "world"}, "port": 18999, "n_predict": 40}
+
+
+class _FakeCapture:
+    def __init__(self, diverge_store=None):
+        self.calls, self.diverge_store = [], diverge_store
+
+    def __call__(self, argv, env, port, body, log_path=None):
+        store = next(a for a in argv if a.endswith("/bin/llama-server")).rsplit("/bin/", 1)[0]
+        self.calls.append((store, "--spec-draft-model" in argv, port))
+        toks = list(range(40))
+        if store == self.diverge_store:
+            toks[5] = -1
+        return toks
+
+
+def _worker(tmp_path):
+    return _pipeline.Worker("w0", tmp_path / "wt", tmp_path / "build")
+
+
+def test_make_exact_judge_captures_every_cell_fresh(tmp_path):
+    cap = _FakeCapture()
+    worker = _worker(tmp_path)
+    v = el.make_exact_judge(_CFG, capture=cap)(worker)(_hyp(lane="exact"), ())
+    assert v.passed and v.cells == 4
+    assert len(cap.calls) == 8                      # 2 prompts x 2 arms x 2 sides
+    assert {c[0] for c in cap.calls} == {"/stores/inc", str(worker.build_dir)}
+    assert sum(c[1] for c in cap.calls) == 4        # drafted cells carry the draft model
+
+
+def test_make_exact_judge_fails_on_candidate_divergence(tmp_path):
+    worker = _worker(tmp_path)
+    cap = _FakeCapture(diverge_store=str(worker.build_dir))
+    v = el.make_exact_judge(_CFG, capture=cap)(worker)(_hyp(lane="exact"), ())
+    assert not v.passed and v.first_divergence["index"] == 5
+
+
+def test_load_config_requires_fields(tmp_path):
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps({"model": "x"}))
+    with pytest.raises(el.LaneError):
+        el.load_config(p)
+    p.write_text(json.dumps(_CFG))
+    assert el.load_config(p)["port"] == 18999
+
+
+def test_run_pool_passes_exact_judge(tmp_path, monkeypatch):
+    seen = []
+
+    def fake_iterate(**kw):
+        seen.append(kw)
+        raise _loop.RunAborted("stop after one draw")
+
+    monkeypatch.setattr(_pipeline.loop_mod, "iterate", fake_iterate)
+    cap = _FakeCapture()
+    make = el.make_exact_judge(_CFG, capture=cap)
+    worker = _worker(tmp_path)
+    try:
+        _pipeline.run_pool(
+            workers=[worker], make_planner=lambda w: None, make_critic=lambda w: None,
+            build_context=dict, make_gate=lambda w: (lambda h, p: (True, [])),
+            make_measure=lambda w: (lambda h, p: None), commit=lambda *a: "c",
+            champion_head=lambda: "h", reset_to_champion=lambda w: "h",
+            record=lambda o: None, record_abandoned=lambda w, c: None, iterations=1,
+            make_exact_judge=make)
+    except Exception:
+        pass
+    assert seen, "run_pool never reached loop.iterate"
+    kw = seen[0]
+    assert kw["exact_on_mismatch"] == "reject"
+    judge = kw["exact_judge"]
+    assert callable(judge) and judge(_hyp(lane="exact"), ()).passed
+    assert cap.calls and {c[0] for c in cap.calls} == {"/stores/inc", str(worker.build_dir)}
+    # inert for a candidate without a lane: the lane gate never calls the judge
+    before = len(cap.calls)
+    gate_result = (True, [])
+    assert el.lane_gate(lambda h, p: gate_result, judge)(_hyp(), ()) is gate_result
+    assert len(cap.calls) == before
+
+
+def test_run_pool_without_config_passes_no_judge(tmp_path, monkeypatch):
+    seen = []
+
+    def fake_iterate(**kw):
+        seen.append(kw)
+        raise _loop.RunAborted("stop")
+
+    monkeypatch.setattr(_pipeline.loop_mod, "iterate", fake_iterate)
+    try:
+        _pipeline.run_pool(
+            workers=[_worker(tmp_path)], make_planner=lambda w: None,
+            make_critic=lambda w: None, build_context=dict,
+            make_gate=lambda w: (lambda h, p: (True, [])),
+            make_measure=lambda w: (lambda h, p: None), commit=lambda *a: "c",
+            champion_head=lambda: "h", reset_to_champion=lambda w: "h",
+            record=lambda o: None, record_abandoned=lambda w, c: None, iterations=1)
+    except Exception:
+        pass
+    assert seen and seen[0]["exact_judge"] is None

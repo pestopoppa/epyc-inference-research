@@ -98,7 +98,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
-from . import keep_timing
+from . import exact_lane, keep_timing
 from . import floor_selfcheck
 from . import tail_timing
 from . import actor_opencode_config
@@ -3124,6 +3124,10 @@ def _main(argv: list[str] | None = None) -> int:
                              "a local ~17 t/s planner running --auto at high needs more -- "
                              "measured 2026-09-24: two consecutive 30-min kills at step ~80, "
                              "zero proposals")
+    parser.add_argument("--exact-lane-config", type=Path, default=None,
+                        help="INF06-EXACT-LANE: JSON naming the incumbent store, model, "
+                             "draft, fixed prompts and port; enables the exact-lane token-ID "
+                             "judge for candidates declaring lane \"exact\" (others unchanged)")
     parser.add_argument("--workers", type=int, default=pipeline.DEFAULT_WORKERS,
                         help="concurrent lanes (default: the measured tail-saturation "
                              "point; see pipeline.DEFAULT_WORKERS)")
@@ -7931,7 +7935,10 @@ def _main(argv: list[str] | None = None) -> int:
             **({"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(
                     gpu_profile_observation, getattr(hypothesis, "target_symbol", None))}
                if direct_launch and not cpu_launch else {}),
-            **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}))
+            **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}),
+            **({"make_exact_judge": exact_lane.make_exact_judge(
+                    exact_lane.load_config(args.exact_lane_config))}
+               if getattr(args, "exact_lane_config", None) else {}))
 
     claim_started = None
     original_claims = []

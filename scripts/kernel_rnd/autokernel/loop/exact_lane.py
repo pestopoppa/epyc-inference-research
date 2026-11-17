@@ -269,6 +269,79 @@ def cells(prompts: Iterable[str], arms: Sequence[str] = ARMS):
     return [(p, a) for p in prompts for a in arms]
 
 
+def load_config(path) -> dict:
+    """Campaign exact-lane config (JSON). Required: incumbent_store, model, draft,
+    prompts {id: text}, port. Optional: n_predict (64), seed (1), min_tokens (64),
+    threads (4), cpus (taskset list), draft_max (8), log_dir."""
+    with open(path) as f:
+        cfg = json.load(f)
+    missing = [k for k in ("incumbent_store", "model", "draft", "prompts", "port")
+               if not cfg.get(k)]
+    if missing:
+        raise LaneError(f"exact-lane config missing {missing}")
+    if not isinstance(cfg["prompts"], dict):
+        raise LaneError("exact-lane config prompts must be {id: text}")
+    return cfg
+
+
+def server_argv(cfg: Mapping, store: str, arm: str) -> tuple[list[str], dict]:
+    """llama-server argv + env for one cell (CPU, one slot, no warmup, own store)."""
+    nth = str(int(cfg.get("threads", 4)))
+    argv = [f"{store}/bin/llama-server", "-m", cfg["model"], "-t", nth, "-tb", nth,
+            "-ngl", "0", "-c", "2048", "-np", "1", "--port", str(cfg["port"]),
+            "--host", "127.0.0.1", "--no-warmup"]
+    if cfg.get("cpus"):
+        argv = ["taskset", "-c", str(cfg["cpus"]), *argv]
+    if arm == "drafted":
+        argv += ["--spec-type", "draft-simple", "--spec-draft-model", cfg["draft"],
+                 "--spec-draft-ngl", "0", "--spec-draft-n-max", str(int(cfg.get("draft_max", 8))),
+                 "--spec-draft-n-min", "1", "--spec-draft-threads", nth,
+                 "--spec-draft-threads-batch", nth]
+    env = {"PATH": "/usr/bin:/bin", "HOME": os.environ.get("HOME", "/tmp"),
+           "LD_LIBRARY_PATH": f"{store}/bin", "OMP_NUM_THREADS": nth,
+           "HIP_VISIBLE_DEVICES": ""}
+    if os.environ.get("FILLER_ID"):
+        env["FILLER_ID"] = os.environ["FILLER_ID"]
+    return argv, env
+
+
+def make_exact_judge(cfg: Mapping, *, capture=serve_one):
+    """`make_exact_judge(worker) -> judge(hypothesis, paths) -> ExactVerdict`, for
+    `pipeline.run_pool(make_exact_judge=...)`.
+
+    The judge captures every prompt x {plain, drafted} cell for the incumbent store and
+    for the worker's candidate build (`worker.build_dir`), each in a fresh server process
+    (`capture`, default `serve_one`), then decides with `judge_streams`. It is only ever
+    called for hypotheses declaring lane "exact" (`lane_gate`); other candidates never
+    reach it."""
+    prompts = dict(cfg["prompts"])
+    n_predict = int(cfg.get("n_predict", 64))
+    seed = int(cfg.get("seed", 1))
+    min_tokens = int(cfg.get("min_tokens", n_predict))
+
+    def for_worker(worker):
+        candidate_store = str(worker.build_dir)
+
+        def judge(hypothesis, paths) -> ExactVerdict:
+            streams = {"incumbent": {}, "candidate": {}}
+            for pid, text in prompts.items():
+                body = request_body(text, n_predict=n_predict, seed=seed)
+                for arm in ARMS:
+                    for side, store in (("incumbent", cfg["incumbent_store"]),
+                                        ("candidate", candidate_store)):
+                        argv, env = server_argv(cfg, store, arm)
+                        log = (f"{cfg['log_dir']}/{side}-{arm}-{pid}.log"
+                               if cfg.get("log_dir") else None)
+                        streams[side][(pid, arm)] = capture(argv, env, int(cfg["port"]),
+                                                            body, log_path=log)
+            return judge_streams(streams["incumbent"], streams["candidate"], list(prompts),
+                                 min_tokens=min_tokens)
+
+        return judge
+
+    return for_worker
+
+
 __all__ = ["LANES", "DEFAULT_LANE", "ARMS", "LANE_GATES", "LaneError", "ExactVerdict",
            "candidate_lane", "gate_plan", "judge_streams", "route_after", "request_body",
            "serve_one", "cells"]
