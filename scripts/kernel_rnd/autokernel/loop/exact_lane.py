@@ -164,6 +164,51 @@ def route_after(candidate: Mapping | None, verdict: ExactVerdict | None, *,
     return "quality_eval" if on_mismatch == "tolerance" else "reject"
 
 
+def hypothesis_lane(hypothesis) -> str:
+    """The lane of a loop `Hypothesis` (attribute, may be absent/empty)."""
+    return candidate_lane({"lane": getattr(hypothesis, "lane", "") or None})
+
+
+def lane_gate(gate, exact_judge=None, *, on_mismatch: str = "reject"):
+    """Wrap the loop's injected correctness/quality `gate(hypothesis, paths)` with lane dispatch.
+
+    * tolerance (absent lane): the ORIGINAL `gate` is called with the same arguments and its
+      result returned as-is -- today's path, unchanged.
+    * exact: `exact_judge(hypothesis, paths) -> ExactVerdict` runs INSTEAD of the quality
+      gate. PASS -> (True, [exact_token_identity verdict]) and the loop proceeds straight
+      to the A/B measurement. FAIL (or no judge configured, or the judge raising) ->
+      (False, [refusal]) i.e. reject; with ``on_mismatch="tolerance"`` the candidate is
+      instead re-routed through the original quality gate, with the exact refusal
+      recorded first. Never a silent pass."""
+    if on_mismatch not in ON_MISMATCH:
+        raise LaneError(f"on_mismatch must be one of {ON_MISMATCH}")
+
+    def dispatch(hypothesis, paths):
+        if hypothesis_lane(hypothesis) == "tolerance":
+            return gate(hypothesis, paths)
+        from .gates import Verdict
+        if exact_judge is None:
+            verdict = ExactVerdict("fail", "exact lane declared but no exact judge configured")
+        else:
+            try:
+                verdict = exact_judge(hypothesis, paths)
+            except Exception as exc:  # a harness fault is never a pass
+                verdict = ExactVerdict("fail", f"exact judge failed: {type(exc).__name__}: {exc}")
+        ok = isinstance(verdict, ExactVerdict) and verdict.passed
+        record = Verdict("exact_token_identity", ok,
+                         verdict.reason if isinstance(verdict, ExactVerdict) else "no verdict",
+                         json.dumps(verdict.as_dict()) if isinstance(verdict, ExactVerdict) else "")
+        nxt = route_after({"lane": "exact"}, verdict if ok else None, on_mismatch=on_mismatch)
+        if nxt == "speed_abba":
+            return True, [record]
+        if nxt == "quality_eval":
+            passed, verdicts = gate(hypothesis, paths)
+            return passed, [record, *verdicts]
+        return False, [record]
+
+    return dispatch
+
+
 # ---------------------------------------------------------------- capture (runtime) --
 
 def request_body(prompt: str, *, n_predict: int, seed: int) -> bytes:

@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from . import belief_context, bench, gates, history_fields, integrity, reflexion, runtime_identity
-from . import same_state_stop
+from . import exact_lane, same_state_stop
 
 HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
@@ -470,6 +470,11 @@ class Hypothesis:
     seeded_against: Any = None
     belief_premises: tuple[str, ...] = ()
     preseed_id: str = ""
+    #: INF06-EXACT-LANE (`exact_lane`): "" (absent) or "tolerance" = today's route
+    #: (correctness/quality gate, then speed); "exact" = token-ID identity gate instead of
+    #: the quality gate. Declared by the author, verified by the exact judge. Omitted from
+    #: `to_dict` unless set, so every existing row keeps its shape.
+    lane: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "relies_on_claims", tuple(self.relies_on_claims or ()))
@@ -497,6 +502,8 @@ class Hypothesis:
             row["seeded_against"] = self.seeded_against
             row["belief_premises"] = list(self.belief_premises)
             row["preseed_id"] = self.preseed_id
+        if self.lane:
+            row["lane"] = self.lane
         return row
 
 
@@ -1093,7 +1100,8 @@ def iterate(*, planner: Planner, critic: Critic,
             next_resume: Callable[[], Any] | None = None,
             author_lane: tuple[Path, str] | None = None,
             iteration_scope=None,
-            author_panel=None, begin_author_custody=None, finish_author_custody=None
+            author_panel=None, begin_author_custody=None, finish_author_custody=None,
+            exact_judge=None, exact_on_mismatch: str = "reject"
             ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
@@ -1237,6 +1245,9 @@ def iterate(*, planner: Planner, critic: Critic,
         _mark_belief(outcome, progress)
         return outcome
 
+    # INF06-EXACT-LANE: lane-aware dispatch. A hypothesis without a lane (or "tolerance")
+    # reaches the injected `gate` unchanged; only lane "exact" is re-routed.
+    gate = exact_lane.lane_gate(gate, exact_judge, on_mismatch=exact_on_mismatch)
     try:
         return observed(_iterate(planner=planner, critic=critic, working=working,
                         hypothesis_reasons=hypothesis_reasons, measure=measure,

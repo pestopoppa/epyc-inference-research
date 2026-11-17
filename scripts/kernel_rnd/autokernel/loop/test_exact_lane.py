@@ -93,3 +93,86 @@ def test_request_body_is_greedy_fixed_seed_ignore_eos():
     assert b["temperature"] == 0 and b["top_k"] == 1 and b["seed"] == 1
     assert b["ignore_eos"] is True and b["return_tokens"] is True
     assert b["cache_prompt"] is False
+
+
+# ---- loop dispatch wiring (lane_gate in loop.iterate) ----------------------------
+
+from . import gates as _gates  # noqa: E402
+from . import loop as _loop  # noqa: E402
+
+
+def _hyp(**kw):
+    return _loop.Hypothesis(mechanism_id="m", statement="s", falsifier="f",
+                            target_surface="cpu", target_symbol="x", **kw)
+
+
+class _Gate:
+    def __init__(self, result):
+        self.result, self.calls = result, []
+
+    def __call__(self, hypothesis, paths):
+        self.calls.append((hypothesis, paths))
+        return self.result
+
+
+def test_tolerance_dispatch_is_unchanged():
+    result = (False, [_gates.Verdict("compile", False, "boom")])
+    gate = _Gate(result)
+    judge_calls = []
+    d = el.lane_gate(gate, lambda h, p: judge_calls.append(1))
+    for h in (_hyp(), _hyp(lane="tolerance")):
+        out = d(h, ("a.cpp",))
+        assert out is result                      # the very same object, untouched
+    assert [c[1] for c in gate.calls] == [("a.cpp",), ("a.cpp",)]
+    assert judge_calls == []
+
+
+def test_absent_lane_keeps_hypothesis_row_shape():
+    import json as _json
+    row = _hyp().to_dict()
+    assert "lane" not in row
+    assert _json.dumps(row, sort_keys=True) == _json.dumps(
+        {"mechanism_id": "m", "statement": "s", "falsifier": "f",
+         "target_surface": "cpu", "target_symbol": "x"}, sort_keys=True)
+    assert _hyp(lane="exact").to_dict()["lane"] == "exact"
+
+
+def test_exact_pass_skips_quality_gate():
+    gate = _Gate((True, []))
+    ok = el.judge_streams(streams(), streams(), PROMPTS)
+    passed, verdicts = el.lane_gate(gate, lambda h, p: ok)(_hyp(lane="exact"), ("a",))
+    assert passed and gate.calls == []
+    assert [v.gate for v in verdicts] == ["exact_token_identity"]
+
+
+def test_exact_fail_rejects_without_quality_gate():
+    gate = _Gate((True, []))
+    bad = el.judge_streams(streams(), streams(base=1), PROMPTS)
+    passed, verdicts = el.lane_gate(gate, lambda h, p: bad)(_hyp(lane="exact"), ("a",))
+    assert not passed and gate.calls == []
+    assert verdicts[0].gate == "exact_token_identity" and not verdicts[0].passed
+
+
+def test_exact_fail_reroute_to_tolerance_runs_quality_gate():
+    q = _gates.Verdict("quality", True, "")
+    gate = _Gate((True, [q]))
+    bad = el.judge_streams(streams(), streams(base=1), PROMPTS)
+    passed, verdicts = el.lane_gate(gate, lambda h, p: bad, on_mismatch="tolerance")(
+        _hyp(lane="exact"), ("a",))
+    assert passed and len(gate.calls) == 1 and verdicts[-1] is q
+    assert not verdicts[0].passed
+
+
+@pytest.mark.parametrize("judge", [None, lambda h, p: (_ for _ in ()).throw(RuntimeError("x")),
+                                   lambda h, p: "PASS"])
+def test_exact_without_valid_verdict_rejects(judge):
+    gate = _Gate((True, []))
+    passed, _ = el.lane_gate(gate, judge)(_hyp(lane="exact"), ())
+    assert not passed and gate.calls == []
+
+
+def test_iterate_wires_lane_gate():
+    import inspect
+    src = inspect.getsource(_loop.iterate)
+    assert "exact_lane.lane_gate(gate, exact_judge" in src
+    assert inspect.signature(_loop.iterate).parameters["exact_judge"].default is None
