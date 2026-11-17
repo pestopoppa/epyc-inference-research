@@ -28,6 +28,7 @@ Or:
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import signal
@@ -1328,6 +1329,104 @@ def _minimal_event(receipt_id: str) -> dict:
         "supersedes": [],
         "created_at": "2026-08-03T10:45:00+00:00",
     }
+
+
+_GRANT_CHILD = r"""
+import json, os, sys
+sys.path.insert(0, sys.argv[1])
+from autokernel.resource import device_claim as dc
+out = {}
+try:
+    c = dc.acquire_device_claim(sys.argv[2], purpose="grant-test", campaign_id="ak-grant",
+                                journal=dc.ClaimJournal(sys.argv[3]), timeout_s=0,
+                                lock_root=sys.argv[4])
+    out["ok"] = True
+    out["grant_holder"] = getattr(c, "grant_holder", None)
+    c.release()
+    out["released"] = not c.held
+except dc.DeviceClaimTimeout as exc:
+    out["ok"] = False
+    out["error"] = str(exc)
+print(json.dumps(out))
+"""
+
+_HOLDER_CHILD = r"""
+import fcntl, sys, time
+fd = open(sys.argv[1], "a+")
+fcntl.flock(fd, fcntl.LOCK_EX)
+print("held", flush=True)
+time.sleep(30)
+"""
+
+
+class TestGrantHeldLock(_ClaimTestBase):
+    """A granted filler job may lease the device its own ancestor already locked."""
+
+    def _hold_in_this_process(self):
+        path = dc.device_lock_path(DEVICE, self.lock_root)
+        fh = open(path, "a+")
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self.addCleanup(fh.close)
+        return path
+
+    def _run_child(self, env_extra, drop=()):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("FILLER_ID", "FILLER_NEEDGPU", *drop)}
+        env.update(env_extra)
+        res = subprocess.run(
+            [sys.executable, "-c", _GRANT_CHILD, _KERNEL_RND, DEVICE,
+             str(self.journal_path), str(self.lock_root)],
+            env=env, capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        return json.loads(res.stdout.strip().splitlines()[-1])
+
+    def _lock_free(self, path):
+        return dc._probe_lock_free(path)
+
+    def test_ancestor_holder_with_env_is_granted_and_release_keeps_lock(self):
+        path = self._hold_in_this_process()
+        out = self._run_child({"FILLER_ID": "row-42", "FILLER_NEEDGPU": "1"})
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(out["grant_holder"], "grant:row-42")
+        self.assertTrue(out["released"])
+        self.assertTrue(path.exists())
+        self.assertIs(self._lock_free(path), False, "grant release dropped the lock")
+        kinds = [r.get("kind") for r in self.journal.read_all()]
+        self.assertIn(dc.KIND_ACQUIRED, kinds)
+        self.assertIn(dc.KIND_RELEASED, kinds)
+
+    def test_env_set_but_unrelated_holder_is_refused(self):
+        path = dc.device_lock_path(DEVICE, self.lock_root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        holder = subprocess.Popen([sys.executable, "-c", _HOLDER_CHILD, str(path)],
+                                  stdout=subprocess.PIPE, text=True)
+        self._children.append((holder, self.tmp))
+        self.assertEqual(holder.stdout.readline().strip(), "held")
+        holder.stdout.close()
+        out = self._run_child({"FILLER_ID": "row-42", "FILLER_NEEDGPU": "1"})
+        self.assertFalse(out["ok"], out)
+        self.assertIn("could not acquire device", out["error"])
+
+    def test_env_unset_with_ancestor_holder_is_refused(self):
+        self._hold_in_this_process()
+        out = self._run_child({})
+        self.assertFalse(out["ok"], out)
+        self.assertIn("could not acquire device", out["error"])
+
+    def test_needgpu_false_is_refused(self):
+        self._hold_in_this_process()
+        out = self._run_child({"FILLER_ID": "row-42", "FILLER_NEEDGPU": "0"})
+        self.assertFalse(out["ok"], out)
+
+    def test_proc_locks_parser(self):
+        key = "00:2c:66645245"
+        text = ("107: FLOCK  ADVISORY  WRITE 4182855 00:2c:66645245 0 EOF\n"
+                "107: -> FLOCK  ADVISORY  WRITE 99 00:2c:66645245 0 EOF\n"
+                "108: FLOCK  ADVISORY  READ 77 00:2c:66645245 0 EOF\n"
+                "109: POSIX  ADVISORY  WRITE 55 00:2c:66645245 0 EOF\n"
+                "lock:\t1: FLOCK  ADVISORY  WRITE 12 00:2c:66645245 0 EOF\n")
+        self.assertEqual(dc._flock_write_pids(text, key), {4182855, 12})
 
 
 if __name__ == "__main__":

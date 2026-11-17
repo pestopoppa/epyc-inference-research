@@ -1261,6 +1261,14 @@ def acquire_device_claim(
                 last_wait_reason = disposition.reason
             else:
                 last_wait_reason = "the device lock is held by another process"
+                grant_id = _grant_holds_lock(lock_path)
+                if grant_id is not None:
+                    return _acquire_under_grant(
+                        grant_id=grant_id, device_id=device_id, lock_path=lock_path,
+                        revoke_file=revoke_file, holder=holder, purpose=purpose,
+                        campaign_id=campaign_id, max_hold_s=max_hold_s,
+                        journal=journal, attempts=attempts,
+                    )
         finally:
             if not keep_fd:
                 _unlock_and_close(fd)
@@ -1272,6 +1280,209 @@ def acquire_device_claim(
                 f"{last_wait_reason}. Current holder: {_holder_note(lock_path)}"
             )
         time.sleep(poll_s)
+
+
+# =============================================================================
+# Grant-held lock recognition
+# =============================================================================
+#
+# A compute-filler launcher (rowflow `filler_run15.sh`) takes the device flock
+# for a whole GPU grant in the job's PARENT shell (`exec 9>LOCK; flock 9`) and
+# then runs the job with FILLER_ID / FILLER_NEEDGPU exported. A claim inside that
+# job cannot take the flock (a different open file description), so without
+# this it can never lease the GPU its own grant already owns.
+#
+# The env vars alone NEVER bypass the lock. The device counts as ours only when
+# the flock is PROVABLY held by this process or one of its ancestors:
+#   * /proc/locks: a FLOCK WRITE on the lock file's dev:inode whose pid is in our
+#     ancestor chain; or
+#   * /proc/<ancestor>/fdinfo/<fd>: an fd of an ancestor opened on that same
+#     dev:inode whose fdinfo lists a FLOCK WRITE lock (fdinfo lists only locks
+#     owned by THAT open file description).
+# The second path is required in practice: `flock 9` is a short-lived child, and
+# /proc/locks reports ITS pid (dead by the time the job runs), not the shell's.
+
+_GRANT_HOLDER_PREFIX = "grant:"
+
+
+def _truthy_env(value: Optional[str]) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _ancestor_pids(pid: Optional[int] = None) -> list[int]:
+    """`pid` (default: self) and every ancestor up to (excluding) pid 0."""
+    chain: list[int] = []
+    cur = os.getpid() if pid is None else pid
+    while cur > 0 and cur not in chain:
+        chain.append(cur)
+        try:
+            with open(f"/proc/{cur}/stat", "rb") as fh:
+                raw = fh.read().decode("utf-8", "replace")
+            cur = int(raw[raw.rindex(")") + 2:].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return chain
+
+
+def _lock_key(st: os.stat_result) -> str:
+    # Matches the kernel's "%02x:%02x:%lu" (MAJOR(s_dev), MINOR(s_dev), i_ino).
+    return f"{os.major(st.st_dev):02x}:{os.minor(st.st_dev):02x}:{st.st_ino}"
+
+
+def _flock_write_pids(text: str, key: str) -> set[int]:
+    pids: set[int] = set()
+    for line in text.splitlines():
+        if "->" in line:  # a blocked waiter, not a holder
+            continue
+        parts = line.replace("lock:", "", 1).split()
+        # "<n>: FLOCK ADVISORY WRITE <pid> <maj:min:ino> <start> <end>"
+        if len(parts) >= 6 and parts[1] == "FLOCK" and parts[3] == "WRITE" and parts[5] == key:
+            try:
+                pids.add(int(parts[4]))
+            except ValueError:
+                pass
+    return pids
+
+
+def _ancestor_holds_flock(lock_path: Path, ancestors: list[int]) -> bool:
+    try:
+        st = os.stat(lock_path)
+    except OSError:
+        return False
+    key = _lock_key(st)
+    try:
+        with open("/proc/locks", "r") as fh:
+            if _flock_write_pids(fh.read(), key) & set(ancestors):
+                return True
+    except OSError:
+        pass
+    for pid in ancestors:
+        fd_dir = f"/proc/{pid}/fd"
+        try:
+            fds = os.listdir(fd_dir)
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                fst = os.stat(f"{fd_dir}/{fd}")
+                if (fst.st_dev, fst.st_ino) != (st.st_dev, st.st_ino):
+                    continue
+                with open(f"/proc/{pid}/fdinfo/{fd}", "r") as fh:
+                    if _flock_write_pids(fh.read(), key):
+                        return True
+            except OSError:
+                continue
+    return False
+
+
+def _grant_holds_lock(lock_path: Path) -> Optional[str]:
+    """FILLER_ID if our own grant (self or an ancestor) holds the flock, else None.
+
+    Both conditions are mandatory: the env names the grant, /proc proves it.
+    """
+    filler_id = (os.environ.get("FILLER_ID") or "").strip()
+    if not filler_id or not _truthy_env(os.environ.get("FILLER_NEEDGPU")):
+        return None
+    if not _ancestor_holds_flock(lock_path, _ancestor_pids()):
+        return None
+    return filler_id
+
+
+class GrantDeviceClaim(DeviceClaim):
+    """A claim satisfied by a flock our own grant (an ancestor) already holds.
+
+    It owns NO descriptor: release journals and marks released, but never
+    unlocks, truncates, writes or unlinks the lock file — the grant releases the
+    device when the grant ends. The payload lives in memory and in the journal
+    only; the on-disk payload belongs to whoever took the flock.
+    """
+
+    def __init__(self, *, lock_path: Path, revoke_path: Path,
+                 payload: dict, journal: Any) -> None:
+        super().__init__(fd=-1, lock_path=lock_path, revoke_path=revoke_path,
+                         payload=payload, journal=journal)
+
+    @property
+    def grant_holder(self) -> str:
+        return self._payload["grant_holder"]
+
+    def acknowledge_revocation(self) -> dict:
+        self._assert_held()
+        record = self.revocation()
+        if record is None:
+            raise DeviceClaimError(
+                f"no revocation is outstanding for claim {self.claim_id}"
+            )
+        if not self._payload.get("revocation_acknowledged_at"):
+            acknowledged_at = _utc_now_iso()
+            self._payload = dict(self._payload)
+            self._payload["state"] = STATE_DRAINING
+            self._payload["revocation_acknowledged_at"] = acknowledged_at
+            self._payload["revocation_id"] = record.get("revocation_id")
+            self._journal.append(KIND_REVOCATION_ACKNOWLEDGED, self.device_id, {
+                "claim_id": self.claim_id,
+                "revocation_id": record.get("revocation_id"),
+                "acknowledged_at": acknowledged_at,
+                "requested_at": record.get("requested_at"),
+                "grant_holder": self.grant_holder,
+            })
+        return record
+
+    def release(self) -> ClaimReceipt:
+        if not self._released:
+            released_at = _utc_now_iso()
+            pending: Optional[dict] = None
+            pending_error: Optional[str] = None
+            try:
+                pending = self.revocation()
+            except DeviceClaimUnreadable as exc:
+                pending_error = str(exc)
+            self._released = True
+            self._final_receipt = _receipt_from_payload(
+                self._payload, self._lock_path, released_at=released_at
+            )
+            self._release_context = {
+                "released_at": released_at,
+                "pending": pending,
+                "pending_error": pending_error,
+                "clear_error": None,
+                "acknowledged": bool(self._payload.get("revocation_acknowledged_at")),
+            }
+        self._journal_release()
+        assert self._final_receipt is not None
+        return self._final_receipt
+
+
+def _acquire_under_grant(*, grant_id: str, device_id: str, lock_path: Path,
+                         revoke_file: Path, holder: dict, purpose: str,
+                         campaign_id: str, max_hold_s: Optional[float],
+                         journal: Any, attempts: int) -> GrantDeviceClaim:
+    expires_at = None if max_hold_s is None else _utc_now_iso(time.time() + max_hold_s)
+    payload = {
+        "schema": DEVICE_CLAIM_SCHEMA,
+        "claim_id": _new_id(_CLAIM_ID_PREFIX),
+        "device_id": device_id,
+        "state": STATE_HELD,
+        "holder": holder,
+        "grant_holder": f"{_GRANT_HOLDER_PREFIX}{grant_id}",
+        "purpose": purpose,
+        "campaign_id": campaign_id,
+        "acquired_at": _utc_now_iso(),
+        "expires_at": expires_at,
+        "reclaimed_from": None,
+        "revocation_acknowledged_at": None,
+        "revocation_id": None,
+    }
+    claim = GrantDeviceClaim(lock_path=lock_path, revoke_path=revoke_file,
+                             payload=payload, journal=journal)
+    journal.append(KIND_ACQUIRED, device_id, {
+        "claim_id": payload["claim_id"],
+        "receipt": claim.receipt().to_dict(),
+        "attempts": attempts,
+        "reclaimed": False,
+        "grant_holder": payload["grant_holder"],
+    })
+    return claim
 
 
 def _holder_note(lock_path: Path) -> str:
