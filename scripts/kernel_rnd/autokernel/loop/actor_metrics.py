@@ -740,6 +740,12 @@ def _summary(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
         "store_errors": sum(1 for r in rows if r.get("failure_class") == OPENCODE_STORE_ERROR),
         "output_capped_empty": sum(1 for r in rows
                                    if r.get("failure_class") == OUTPUT_CAPPED_EMPTY),
+        # OAB-34: the cap-hit rate per role, in the one place the report already groups by role.
+        "output_capped_empty_rate": (sum(1 for r in rows
+                                         if r.get("failure_class") == OUTPUT_CAPPED_EMPTY)
+                                     / len(rows)) if rows else None,
+        "output_capped_steps_total": sum(
+            v for v in (_totals_of(r, "output_capped_steps") for r in rows) if v is not None),
         **_scout_summary(rows),
     }
 
