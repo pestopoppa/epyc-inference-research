@@ -126,6 +126,7 @@ class NoSeededLeverContradictsASeededNegative(unittest.TestCase):
     CONFLICTS = {
         "KV-quant": "akm-hist-kv-quant-long-ctx",
         "async weight prefetch": "akm-hist-q8-prefetch",
+        "GGML_HIP_FA_VEC_LONGCTX_PB": "akm-c8-fa-vec-longctx-pb",
     }
 
     def test_a_lever_a_negative_refutes_is_marked_closed(self):

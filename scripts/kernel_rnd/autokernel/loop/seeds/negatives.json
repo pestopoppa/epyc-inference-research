@@ -103,7 +103,7 @@
    "target_surface": "ggml/src/ggml-cuda/mmq-q8-wvsk.cu (q8wv_mul_mat)",
    "target_symbol": "GGML_HIP_Q8_WVSK_PREFETCH (commit c1160517e, unpushed)",
    "effect_fraction": -0.047,
-   "reason": "MEASURED NO_KEEP_FUTILITY on c1160517e (store gpu-20261109-c1160517e-c10q8wvpf), base C9, MI210, 27B Q8_0, q8_0 KV, llama-bench -p 9 -n 0 -d 8192 -r 8. On/off pairs 0.956, 0.920, 0.953 (higher=better; median -4.7%); witness present on every on arm; secondaries and np4 not run. Mechanism of the loss NOT diagnosed (candidates: L2 eviction, extra touch traffic). It does not test the no-overlap diagnosis directly because the touch adds traffic. Evidence /mnt/raid0/llm/tmp/c10-q8wvpf-ab-20261109/out/RESULT.json. Epoch C9 d210f85c2 family, not this file's historical epoch."
+   "reason": "MEASURED NO_KEEP_FUTILITY on c1160517e (store gpu-20261109-c1160517e-c10q8wvpf), base C9, MI210, 27B Q8_0, q8_0 KV, llama-bench -p 9 -n 0 -d 8192 -r 8. On/off pairs 0.956, 0.920, 0.953 (higher=better; median -4.7%); witness present on every on arm; secondaries and np4 not run. Mechanism of the loss NOT diagnosed (candidates: L2 eviction, extra touch traffic). It does not test the no-overlap diagnosis directly because the touch adds traffic. Source: evidence /mnt/raid0/llm/tmp/c10-q8wvpf-ab-20261109/out/RESULT.json. Epoch C9 d210f85c2 family, not this file's historical epoch."
   },
   {
    "status": "measured_null",
@@ -113,7 +113,7 @@
    "target_surface": "ggml/src/ggml-cuda/mmq-q8-wvsk.cu (q8wv_mul_mat)",
    "target_symbol": "q8wv two-load-set variant (prefetch-attempt.patch, no store)",
    "effect_fraction": null,
-   "reason": "ISA-GATE STOP, no runtime measurement, so no effect size exists. Measured from compiled ISA: a second live set reaches 128 VGPRs with scratch on every shape (M=8 87->128, 180 B scratch; M=10 95->128, 236 B); single-set control 89/97 VGPRs, 0 scratch; five variants also spilled. Inferred, not measured: the speed estimate 1.05-1.10x of kernel time at d8192 (timing model T = 14.1 us + B/1033 GB/s, fits C8 traces within 6-12%). Untried: partial prefetch (YT=2), fewer waves. Evidence /mnt/raid0/llm/tmp/c10-q8wv-diag-20261109/, patch /mnt/raid0/llm/tmp/c10-q8wvpf-20261109/prefetch-attempt.patch."
+   "reason": "ISA-GATE STOP, no runtime measurement, so no effect size exists. Measured from compiled ISA: a second live set reaches 128 VGPRs with scratch on every shape (M=8 87->128, 180 B scratch; M=10 95->128, 236 B); single-set control 89/97 VGPRs, 0 scratch; five variants also spilled. Inferred, not measured: the speed estimate 1.05-1.10x of kernel time at d8192 (timing model T = 14.1 us + B/1033 GB/s, fits C8 traces within 6-12%). Untried: partial prefetch (YT=2), fewer waves. Source: evidence /mnt/raid0/llm/tmp/c10-q8wv-diag-20261109/, patch /mnt/raid0/llm/tmp/c10-q8wvpf-20261109/prefetch-attempt.patch."
   },
   {
    "status": "measured_null",
@@ -123,7 +123,7 @@
    "target_surface": "ggml/src/ggml-cuda/mmq-q8-wvsk.cu",
    "target_symbol": "GGML_HIP_Q8_WVSK_WIDE (commit b9931dc0c, unpushed)",
    "effect_fraction": -0.257,
-   "reason": "MEASURED NO_KEEP_FUTILITY on b9931dc0c (store gpu-20261109-b9931dc0c-c9v36mmq), MI210, 27B Q8_0, llama-bench v36 d8192. On/off 0.743, 0.749, 0.739 (median -25.7%). Why q8wv loses at M=36 was NOT diagnosed. Do not assume wider batches help q8wv. Evidence /mnt/raid0/llm/tmp/c9-v36mmq-ab-20261109/out/RESULT.json."
+   "reason": "MEASURED NO_KEEP_FUTILITY on b9931dc0c (store gpu-20261109-b9931dc0c-c9v36mmq), MI210, 27B Q8_0, llama-bench v36 d8192. On/off 0.743, 0.749, 0.739 (median -25.7%). Why q8wv loses at M=36 was NOT diagnosed. Do not assume wider batches help q8wv. Source: evidence /mnt/raid0/llm/tmp/c9-v36mmq-ab-20261109/out/RESULT.json."
   },
   {
    "status": "measured_null",
@@ -133,7 +133,7 @@
    "target_surface": "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp (MoE path)",
    "target_symbol": "GGML_IQK_IQ4NL_MOE (commit be7595f80, unpushed)",
    "effect_fraction": -0.0651,
-   "reason": "MEASURED FUTILE, n=1 by stop rule, on be7595f80 (Q38FN UD-IQ4_XS, CPU q0): pp512 155.4 -> 145.3 t/s, ratio 0.935; pp2048 and tg64 not run. Premise error: these tensors already run AVX2 iq4_nl_8x8_q8_0 CPU_REPACK (the profiler labels both paths iq4_nl), so a new kernel must beat repack, not the native dot (it is 1.84x vs native per dot). Inferred, not measured: DS41-1017 MXFP4 experts have the same repack shape, so a port must beat repack first. Evidence /mnt/raid0/llm/tmp/c9-iq4nl-ab-20261108/out/RESULT.json."
+   "reason": "MEASURED FUTILE, n=1 by stop rule, on be7595f80 (Q38FN UD-IQ4_XS, CPU q0): pp512 155.4 -> 145.3 t/s, ratio 0.935; pp2048 and tg64 not run. Premise error: these tensors already run AVX2 iq4_nl_8x8_q8_0 CPU_REPACK (the profiler labels both paths iq4_nl), so a new kernel must beat repack, not the native dot (it is 1.84x vs native per dot). Inferred, not measured: DS41-1017 MXFP4 experts have the same repack shape, so a port must beat repack first. Source: evidence /mnt/raid0/llm/tmp/c9-iq4nl-ab-20261108/out/RESULT.json."
   },
   {
    "status": "measured_null",
@@ -143,7 +143,7 @@
    "target_surface": "src/models/dflash.cpp + common/speculative.cpp (draft-dspine spec type)",
    "target_symbol": "draft-dspine (branch llama.cpp-experimental-c9-dspine-20261108, tuned 01ca8760d)",
    "effect_fraction": -0.093,
-   "reason": "MEASURED NOT_OUTPERFORMS (stopped on futility), 27B Q8_0, q8_0 KV, np1, Q8_0 drafter. n7 0.907x M1 / 0.970x LongHealth; n15 0.815x / 1.045x, 0 garbage. The n15 LongHealth +4.5% is one first-pass number with no noise estimate. Tune row: best arm Q8_0 n7 0.915x DFlash2 n7. Q8_0 beat BF16 1.33/1.25/1.21x at n7/n11/n15, so no BF16 rerun. Dynamic verification and ReplaySSM were not ported. Evidence /mnt/raid0/llm/tmp/dspine-b16-vs-dflash2-20261108/out/RESULT.json."
+   "reason": "MEASURED NOT_OUTPERFORMS (stopped on futility), 27B Q8_0, q8_0 KV, np1, Q8_0 drafter. n7 0.907x M1 / 0.970x LongHealth; n15 0.815x / 1.045x, 0 garbage. The n15 LongHealth +4.5% is one first-pass number with no noise estimate. Tune row: best arm Q8_0 n7 0.915x DFlash2 n7. Q8_0 beat BF16 1.33/1.25/1.21x at n7/n11/n15, so no BF16 rerun. Dynamic verification and ReplaySSM were not ported. Source: evidence /mnt/raid0/llm/tmp/dspine-b16-vs-dflash2-20261108/out/RESULT.json."
   },
   {
    "status": "measured_null",
@@ -153,7 +153,7 @@
    "target_surface": "common/speculative.cpp + ggml-cuda verify path (DF2 tree port)",
    "target_symbol": "llama.cpp-experimental-c10-dftree-20261109 @ 84934b297 (unpushed)",
    "effect_fraction": null,
-   "reason": "PREMISE MEASURED, TREE NOT MEASURED, no effect size. C9 d210f85c2 store, 27B Q8_0, q8_0 KV, MI210, flat chain batches rows 8..16 (not a true tree-masked verify): s = 2.39 ms/row (95% CI 2.26-2.51) at d512, 2 repeats, pass value 0.5; d32768 2.29 ms/row but CI -0.78..5.36, unresolved. Row verdict FUTILE_CLOSE_HYBRID_TREE_PORT. Inferred: net at B=8 needs tau_ratio about 1.17 for the 1.05 bar against an estimated +2-8%. Tree port code ran only 12/12 synthetic replay tests. Reopen if s falls below 0.5 ms or a top-512 trained head (T2) fires. Evidence /mnt/raid0/llm/tmp/c10-verify-slope-20261109/out/RESULT.json."
+   "reason": "PREMISE MEASURED, TREE NOT MEASURED, no effect size. C9 d210f85c2 store, 27B Q8_0, q8_0 KV, MI210, flat chain batches rows 8..16 (not a true tree-masked verify): s = 2.39 ms/row (95% CI 2.26-2.51) at d512, 2 repeats, pass value 0.5; d32768 2.29 ms/row but CI -0.78..5.36, unresolved. Row verdict FUTILE_CLOSE_HYBRID_TREE_PORT. Inferred: net at B=8 needs tau_ratio about 1.17 for the 1.05 bar against an estimated +2-8%. Tree port code ran only 12/12 synthetic replay tests. Reopen if s falls below 0.5 ms or a top-512 trained head (T2) fires. Source: evidence /mnt/raid0/llm/tmp/c10-verify-slope-20261109/out/RESULT.json."
   },
   {
    "status": "measured_null",
@@ -163,7 +163,7 @@
    "target_surface": "runtime (thread count, one CPU quarter)",
    "target_symbol": "n_threads 48 vs 24",
    "effect_fraction": -0.0075,
-   "reason": "MEASURED no gain, 2 valid reps per cell, C8 profiling store (source 1bda248e3), Q38FN UD-IQ4_XS, one quarter, llama-bench. 48T vs 24T wall ms: pp2048 13487 vs 13386; tg64 75.7 vs 76.6; pp512 4240 vs 3239 but its 48T reps differ by 52%, so that cell shows only no gain, not a size. Barrier-and-wait 19.4/9.0/9.9% at 48T vs 7.3/6.5/10.6% at 24T. 96 threads not measured. Not the same claim as the earlier load-thread keep (runtime-arm-load-threads-48), which concerns the loader team. Evidence /mnt/raid0/llm/tmp/c9-headroom-cpu-48t-20261109/out/RESULT.json."
+   "reason": "MEASURED no gain, 2 valid reps per cell, C8 profiling store (source 1bda248e3), Q38FN UD-IQ4_XS, one quarter, llama-bench. 48T vs 24T wall ms: pp2048 13487 vs 13386; tg64 75.7 vs 76.6; pp512 4240 vs 3239 but its 48T reps differ by 52%, so that cell shows only no gain, not a size. Barrier-and-wait 19.4/9.0/9.9% at 48T vs 7.3/6.5/10.6% at 24T. 96 threads not measured. Not the same claim as the earlier load-thread keep (runtime-arm-load-threads-48), which concerns the loader team. Source: evidence /mnt/raid0/llm/tmp/c9-headroom-cpu-48t-20261109/out/RESULT.json."
   },
   {
    "status": "measured_null",
@@ -173,7 +173,47 @@
    "target_surface": "ggml/src/ggml-cuda/fattn-gqa-verify.cu (gv_fattn_kernel split heuristic)",
    "target_symbol": "gv_fattn split multiple 1x/4x/8x (diag store 422a07b77)",
    "effect_fraction": -0.058,
-   "reason": "MEASURED, row verdict INCONCLUSIVE only because the 4x/8x debug witnesses are missing (their times did change). d131072 gv ratio 1x/4x/8x = 1.014/0.942/0.899 on 27B, 1.055/0.953/0.854 on A3B: more splits are slower. Counters: SQ_WAIT_ANY 74%/72% of wave cycles (includes barriers), MFMA busy about 1%, LDS-full 0. Evidence /mnt/raid0/llm/tmp/c9-fa-diag-20261109/out/RESULT.json."
+   "reason": "MEASURED, row verdict INCONCLUSIVE only because the 4x/8x debug witnesses are missing (their times did change). d131072 gv ratio 1x/4x/8x = 1.014/0.942/0.899 on 27B, 1.055/0.953/0.854 on A3B: more splits are slower. Counters: SQ_WAIT_ANY 74%/72% of wave cycles (includes barriers), MFMA busy about 1%, LDS-full 0. Source: evidence /mnt/raid0/llm/tmp/c9-fa-diag-20261109/out/RESULT.json."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c8-fa-vec-longctx-pb",
+   "statement": "More KV splits / workgroups per head for the n_q=1 flash_attn_ext_vec<256> at n_kv >= 32k lifts no-draft long-context decode.",
+   "falsifier": "no-draft decode d128k < 1.10x or d32k < 1.05x vs base.",
+   "target_surface": "ggml/src/ggml-cuda/fattn-vec.cuh (flash_attn_ext_vec<256> parallel_blocks at long context)",
+   "target_symbol": "GGML_HIP_FA_VEC_LONGCTX_PB",
+   "effect_fraction": -0.05,
+   "reason": "MEASURED REJECTED in r2: 0.95x @32k, 0.90x @128k; default-off in e1d9ba2f6. Regime: Qwen3.8-27B Q8_0 + DFlash2, np4 unified KV. Source: root handoffs/active/kernel-champion-and-promotion.md C8-1-LCATTN (row c8-lcattn-gate-20261107-r2)."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c13-favec-combine-tail-split",
+   "statement": "Splitting the FA combine tails (flash_attn_combine_results, gv_merge_kernel) into more blocks lifts 27B decode at depth.",
+   "falsifier": "FA op time gain < +2% at kv64k.",
+   "target_surface": "ggml/src/ggml-cuda/fattn-common.cuh (flash_attn_combine_results) + fattn-gqa-verify.cu (gv_merge_kernel)",
+   "target_symbol": "combine-tail split S=2/4/8 (branch a01b44adc)",
+   "effect_fraction": -0.01,
+   "reason": "MEASURED FUTILITY: op-level FA time knob off vs S=8 kv32k 318.7->302.1 us (-5%), kv64k 581.1->575.4 (-1%), kv128k 1118.7->1145.7 (+2% slower); nb8 within +-1.5%; correctness clean. The main vec/gv kernels already fill the GPU (>=95% of a wave). Source: root handoffs/active/rocm-kernel-authoring.md INF48-FAVEC-TAIL (row inf48-favec-tail-c13-20261117)."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c14-paired-gate-up-launch",
+   "statement": "Pairing gate and up mul_mat launches (and their activation quantize) removes > 2% of 27B decode on MI210 or CPU.",
+   "falsifier": "combined gate/up launch + quantize overhead <= 2% of decode.",
+   "target_surface": "ggml/src/ggml-cuda/mmvq.cu (gate+up MMVQ) + ggml/src/ggml-cpu/ggml-cpu.c (MUL_MAT gate/up)",
+   "target_symbol": "gate/up paired launch",
+   "effect_fraction": -0.0,
+   "reason": "MEASURED NO_CANDIDATE on both devices. GPU: gate+up is ALREADY one fused launch (mul_mat_vec_q<Q8_0,...,true,true>, 29.3% of decode, 0 us gap); FFN quantize ~0.87%. CPU: upper bound 1.52% @0 / 1.25% @8192 (< 2%), quantize 0.48%. Source: root handoffs/active/rocm-kernel-authoring.md INF48-GATEUP-PROBE (row inf48-gateup-cpu-prof-20261118, research f834d3d24)."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c13-mmvq-q8-b4-rows",
+   "statement": "rows_per_cuda_block 2 for dense Q8_0 MMVQ at ncols_dst==4 removes the A3B n=3->4 verify step.",
+   "falsifier": "n=4 time ratio knob/base >= 0.97.",
+   "target_surface": "ggml/src/ggml-cuda/mmvq.cu (calc_rows_per_block, ncols_dst==4)",
+   "target_symbol": "GGML_HIP_MMVQ_Q8_B4_ROWS",
+   "effect_fraction": -0.012,
+   "reason": "MEASURED FUTILITY: ratio 0.988 at n=4 (not the cause). The step is the F32/BF16 router leaving MMVF at ne11>3 on CDNA; fixed by GGML_HIP_MMVF_CDNA_MAX_NE11 (79650eeab, KEEP). Source: root handoffs/active/rocm-kernel-authoring.md RKA-A3B-N4-STEP (row rka-a3b-n4-step-gpu-20261118)."
   }
  ]
 }

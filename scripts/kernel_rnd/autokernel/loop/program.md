@@ -1005,6 +1005,14 @@ identity cannot be established is compared on its full epoch only.
 - Spec-verify timing: CAFE-2 r1 T(5)/T(1)=1.72 with interval 0.25-3.18 at loadavg ~46 is INCONCLUSIVE (noise), not a verify-cost estimate; the expert-union census (8.0/17.9/34.4 unique experts per layer at 1/5/9 rows, E=256, K=8) is valid.
 - DF2-13 warm/cold divergence at token 33 is UNCLASSIFIED (n=1 pair); do not read it as a cache-reuse correctness defect or as a near-tie.
 
+**Added 2026-11-18, harvest #10 (`[belief: cc]`; epoch C14 `eee3da838`, the operator-promoted champion; production stays v10):**
+
+- **Champion is C14 `eee3da838`** (C13 + INF48 FA fix). Next composite C16 `13d6fc150` (FAROWS ON, CPU split-KV ON, MMVF CDNA cap knob, q8_1 exact-sum v2, LIGHTNING_INDEXER fix, #30408). Closed and live levers with receipts: `seeds/hypotheses/13-ak-harvest-c14-20261118.md` and `negatives.json`.
+- **Correctness gate for Q38FN (operator 2026-11-18, 27B-anchored):** a numerics-changing candidate passes iff dense Qwen3.8-27B Q8_0 shows KLD <= 0.003 and |dPPL| <= 0.5% for the same change AND Q38FN shows |dPPL| <= 0.5% and top-1 >= 93%. The fixed KLD <= 0.01 gate no longer applies to Q38FN. **GPU amendment: on the GPU the 27B clause decides**; Q38FN GPU PPL/KLD is reported, not gating.
+- **Noise you must calibrate against:** Q38FN MoE routing amplifies rounding-level changes ~45x (Q38FN ~0.025 KLD where the dense 27B reads ~0.0006). Q38FN GPU A/A: KLD 0.0248-0.0267, PPL spread ~1.4%. GPU greedy A/A prefix agreement is only 0.33-0.78 (no single culprit; fusion and atomics near-ties), so a GPU greedy-identity clause must be A/A-relative, never absolute.
+- **Instrument facts:** rocprofv3 is `/opt/rocm/bin/rocprofv3` (not on PATH). `test-backend-ops` q8_0 MUL_MAT with n > 128 runs hipBLAS on CDNA, not MMQ: capture/trace/replay cases use n <= 128. On CDNA the F32/BF16 MMVF route stops at ne11 <= 3 by default (the A3B n=3->4 step); the default-off `GGML_HIP_MMVF_CDNA_MAX_NE11` raises it, KEEP at 8 columns. CPU FA skips -INF mask cells before the K dot / V accumulate, so a bytes model that charges full n_kv K/V traffic for Q38FN overstates it ~16x at 32k.
+- **CPU timing placement:** CPU speed rows book q0-q2 (0-71) and pin servers to q1+q2 (24-71); never a whole-host quiet window (it idles the MI210). A gpu-q3 grant is 16 CPUs (88-95,184-191).
+
 ## Launching a live loop through the keeper
 
 Learned from `ak-fulltest-c9-20261109` r1-r5 (2026-11-09); r5 is the first run to clear every startup check. Requires an operator exception while OP-AK-HOLD stands.
