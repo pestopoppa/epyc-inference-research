@@ -2,6 +2,7 @@
 """Hermetic lifecycle tests; mock containment is not real cgroup evidence."""
 from __future__ import annotations
 
+import json
 import copy
 import ctypes
 from contextlib import contextmanager
@@ -1240,4 +1241,113 @@ def test_crash_immediately_after_popen_before_attach_stays_unresolved():
         container._owned.clear()
         if container.path.exists():
             container.path.rmdir()
+        harness.close()
+
+
+# --- AKU-07j: durable provider-held cost record between terminal and result ---
+
+def _recovery_engine(harness):
+    return lifecycle.WorkerLifecycle(
+        binding=harness.binding, runtime=harness.runtime,
+        event_sink=lambda row: harness.events.append(dict(row)),
+        provider=harness.provider,
+        admission_fence=lambda *_args: lifecycle.StageAdmission(True, "recovery"),
+        binding_fence=lambda _binding: True,
+        runtime_fence=lambda _request, _now_: lifecycle.RuntimeDirective(
+            "continue", "recovery"), wall_clock=_now)
+
+
+def _receipt_harness():
+    harness = Harness()
+    provider = ReceiptProvider(harness.path / "containers")
+    harness.provider = provider
+    harness.engine.provider = provider
+    return harness
+
+
+def test_held_receipt_is_durable_between_terminal_and_result_and_projects():
+    harness = _receipt_harness()
+    try:
+        terminal = harness.engine.run_stage(harness.request("pass"))
+        names = [row["event"] for row in harness.events]
+        i = names.index("OWNED_HELD_RECEIPT_RETAINED")
+        assert names[i - 1] == "OWNED_TERMINAL"
+        assert names[i + 1] == "WORKER_RESULT_ACCEPTED"
+        projection = lifecycle.project_events(harness.events)
+        row = projection.held_receipts[terminal.worker_id]
+        live = harness.engine.trusted_held_claim_receipt(terminal)
+        assert json.loads(json.dumps(row["data"]["receipt"], default=dict)) == live.to_dict()
+        assert projection.terminal[terminal.worker_id]["event"] == "WORKER_RESULT_ACCEPTED"
+    finally:
+        harness.close()
+
+
+def test_legacy_stream_without_held_record_projects_unchanged():
+    harness = Harness()
+    try:
+        harness.engine.run_stage(harness.request("pass"))
+        assert all(row["event"] != "OWNED_HELD_RECEIPT_RETAINED" for row in harness.events)
+        assert dict(lifecycle.project_events(harness.events).held_receipts) == {}
+    finally:
+        harness.close()
+
+
+@pytest.mark.parametrize("phase", ["OWNED_TERMINAL", "OWNED_HELD_RECEIPT_RETAINED"])
+def test_crash_before_result_restarts_into_one_stale_with_durable_held_cost(phase):
+    harness = _receipt_harness()
+    fired = False
+
+    def crash(current):
+        nonlocal fired
+        if current == phase and not fired:
+            fired = True
+            raise lifecycle.SimulatedCrash(current)
+
+    harness.engine.fault_hook = crash
+    try:
+        with pytest.raises(lifecycle.SimulatedCrash):
+            harness.engine.run_stage(harness.request("pass"))
+        before = len(harness.events)
+        held_rows = [r for r in harness.events if r["event"] == "OWNED_HELD_RECEIPT_RETAINED"]
+        assert bool(held_rows) == (phase == "OWNED_HELD_RECEIPT_RETAINED")
+        recovery = _recovery_engine(harness)
+        terminal = recovery.reconcile(harness.events)
+        assert terminal is not None and terminal.accepted is False
+        added = [r["event"] for r in harness.events[before:]]
+        assert added == ["WORKER_RESULT_STALE"]
+        assert not any(r["event"] == "OWNED_LAUNCH_INTENT" for r in harness.events[before:])
+        if held_rows:
+            restored = recovery.trusted_held_claim_receipt(terminal)
+            assert restored.to_dict() == held_rows[0]["data"]["receipt"]
+        else:
+            with pytest.raises(lifecycle.WaitingAuthority, match="unavailable"):
+                recovery.trusted_held_claim_receipt(terminal)
+        # replay is idempotent: the stream is now terminal, nothing to reconcile
+        assert _recovery_engine(harness).reconcile(harness.events) is None
+        assert len(lifecycle.project_events(harness.events).terminal) == 1
+    finally:
+        harness.close()
+
+
+def test_held_record_validator_is_closed_and_binds_receipt_interval():
+    harness = _receipt_harness()
+    try:
+        harness.engine.run_stage(harness.request("pass"))
+        row = next(r for r in harness.events if r["event"] == "OWNED_HELD_RECEIPT_RETAINED")
+        lifecycle.validate_event(row)
+        for mutate in (
+            lambda d: d.update(extra=1),
+            lambda d: d.update(schema="other"),
+            lambda d: d.update(held_ended_at=d["held_ended_at"] + 1.0),
+            lambda d: d["receipt"].update(ownership_generation=0),
+        ):
+            bad = json.loads(json.dumps(row))
+            mutate(bad["data"])
+            with pytest.raises(lifecycle.LifecycleRefused):
+                lifecycle.validate_event(bad)
+        # held record is only legal directly after OWNED_TERMINAL
+        stream = [r for r in harness.events if r["event"] != "OWNED_TERMINAL"]
+        with pytest.raises(lifecycle.LifecycleRefused, match="transition"):
+            lifecycle.project_events(stream)
+    finally:
         harness.close()

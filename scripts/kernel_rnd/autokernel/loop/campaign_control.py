@@ -4335,6 +4335,8 @@ class CampaignController:
                 "OWNED_EXEC_RELEASED": "executing",
                 "WORKER_STAGE": "executing",
                 "WORKER_RESULT_RETAINED": "result_retained",
+                "OWNED_TERMINAL": "terminal_pending_result",
+                "OWNED_HELD_RECEIPT_RETAINED": "terminal_pending_result",
                 "OWNED_TEARDOWN_STARTED": "tearing_down",
                 "OWNED_TEARDOWN_FAILED": "teardown_failed",
                 "WORKER_UNRESOLVED": "unresolved",

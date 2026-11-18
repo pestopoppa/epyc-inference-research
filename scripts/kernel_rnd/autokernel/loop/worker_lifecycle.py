@@ -39,6 +39,7 @@ EVENT_SCHEMA = "epyc.autokernel.worker_lifecycle_event.v1"
 ACQUISITION_SCHEMA = "epyc.autokernel.worker_acquisition_transition.v1"
 ACTIVE_OBSERVATION_CLAIM_SCHEMA = "epyc.autokernel.active_observation_claim.v1"
 RESULT_SCHEMA = "epyc.autokernel.worker_terminal_result.v1"
+HELD_RECEIPT_SCHEMA = "epyc.autokernel.worker_held_receipt.v1"
 COMMAND_TRANSITION_SCHEMA = "epyc.autokernel.campaign_command_transition.v2"
 COMMAND_RESULT_SCHEMA = "epyc.autokernel.campaign_command_result.v2"
 COMMAND_RESULT_FIELDS = frozenset({
@@ -54,8 +55,8 @@ EVENTS = frozenset({
     "OWNED_DESCENDANT_CAPTURED",
     "OWNED_EXEC_RELEASE_INTENT", "OWNED_EXEC_RELEASED", "WORKER_STAGE",
     "WORKER_RESULT_RETAINED", "OWNED_TEARDOWN_STARTED", "OWNED_TEARDOWN_FAILED",
-    "OWNED_TERMINAL", "WORKER_RESULT_ACCEPTED", "WORKER_RESULT_STALE",
-    "WORKER_UNRESOLVED",
+    "OWNED_TERMINAL", "OWNED_HELD_RECEIPT_RETAINED", "WORKER_RESULT_ACCEPTED",
+    "WORKER_RESULT_STALE", "WORKER_UNRESOLVED",
 })
 _SECRET_MARKERS = (
     "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL", "PRIVATE_KEY",
@@ -538,6 +539,9 @@ class LifecycleProjection:
     worker_generations: Mapping[str, int]
     active: Mapping[str, Mapping[str, Any]]
     terminal: Mapping[str, Mapping[str, Any]]
+    # AKU-07j: durable provider-held cost records keyed by worker_id; empty for
+    # lifecycles that never emitted OWNED_HELD_RECEIPT_RETAINED (legacy v1 streams).
+    held_receipts: Mapping[str, Mapping[str, Any]] = types.MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -581,6 +585,7 @@ def project_events(events: Sequence[Mapping[str, Any]]) -> LifecycleProjection:
     latest: dict[str, dict[str, Any]] = {}
     terminal: dict[str, dict[str, Any]] = {}
     ownership_terminal: set[str] = set()
+    held_receipts: dict[str, dict[str, Any]] = {}
     descendants: dict[tuple[str, str, str, str], Mapping[str, Any]] = {}
     last_new_generation: int | None = None
     allowed = {
@@ -598,9 +603,11 @@ def project_events(events: Sequence[Mapping[str, Any]]) -> LifecycleProjection:
             "WORKER_RESULT_STALE",
         },
         "OWNED_TERMINAL": {"OWNED_TEARDOWN_STARTED"},
+        "OWNED_HELD_RECEIPT_RETAINED": {"OWNED_TERMINAL"},
         "OWNED_TEARDOWN_FAILED": {"OWNED_TEARDOWN_STARTED"},
-        "WORKER_RESULT_ACCEPTED": {"OWNED_TERMINAL"},
-        "WORKER_RESULT_STALE": {"OWNED_TERMINAL", "OWNED_TEARDOWN_FAILED"},
+        "WORKER_RESULT_ACCEPTED": {"OWNED_TERMINAL", "OWNED_HELD_RECEIPT_RETAINED"},
+        "WORKER_RESULT_STALE": {"OWNED_TERMINAL", "OWNED_HELD_RECEIPT_RETAINED",
+                                "OWNED_TEARDOWN_FAILED"},
         "WORKER_UNRESOLVED": set(EVENTS),
     }
     for supplied in events:
@@ -641,6 +648,8 @@ def project_events(events: Sequence[Mapping[str, Any]]) -> LifecycleProjection:
         latest[worker] = row
         if event == "OWNED_TERMINAL":
             ownership_terminal.add(worker)
+        if event == "OWNED_HELD_RECEIPT_RETAINED":
+            held_receipts[worker] = row
         if event in {"WORKER_RESULT_ACCEPTED", "WORKER_RESULT_STALE"} \
                 and worker in ownership_terminal:
             terminal[worker] = row
@@ -649,7 +658,9 @@ def project_events(events: Sequence[Mapping[str, Any]]) -> LifecycleProjection:
     frozen_terminal = {worker: _freeze_json(row) for worker, row in terminal.items()}
     return LifecycleProjection(
         len(events), types.MappingProxyType(dict(generations)),
-        types.MappingProxyType(active), types.MappingProxyType(frozen_terminal))
+        types.MappingProxyType(active), types.MappingProxyType(frozen_terminal),
+        types.MappingProxyType({worker: _freeze_json(row)
+                                for worker, row in held_receipts.items()}))
 
 
 def process_identity(pid: int) -> ProcessIdentity:
@@ -828,6 +839,23 @@ def _validate_event_data(event: str, supplied: Mapping[str, Any]) -> dict[str, A
             if (data[name] is not None and
                     (not isinstance(data[name], int) or isinstance(data[name], bool))):
                 raise LifecycleRefused(f"{name} is invalid")
+        return data
+    if event == "OWNED_HELD_RECEIPT_RETAINED":
+        from .scheduling import HeldClaimReceipt, SchedulingRefused
+        data = _exact_data(supplied, {"schema", "clock_domain", "held_started_at",
+                                     "held_ended_at", "receipt"}, event)
+        if data["schema"] != HELD_RECEIPT_SCHEMA:
+            raise LifecycleRefused("held receipt record schema is invalid")
+        _text(data["clock_domain"], "clock_domain")
+        start = _finite(data["held_started_at"], "held_started_at")
+        end = _finite(data["held_ended_at"], "held_ended_at")
+        try:
+            parsed = HeldClaimReceipt.from_dict(data["receipt"])
+        except (SchedulingRefused, TypeError, ValueError) as exc:
+            raise LifecycleRefused(f"held receipt record is malformed: {exc}") from exc
+        if end <= start or parsed.started_at != start or parsed.ended_at != end:
+            raise LifecycleRefused("held receipt record interval differs from receipt")
+        data["receipt"] = parsed.to_dict()
         return data
     if event == "OWNED_TEARDOWN_STARTED":
         data = _exact_data(supplied, {"termination_deadline", "clock_domain"}, event)
@@ -1826,6 +1854,18 @@ class WorkerLifecycle:
             request.lineage_id, request.stage_id, grant.grant_id, grant.generation,
             container_id, result["return_code"] if result is not None else None,
             retained_digest, accepted, reason)
+        if held_receipt is not None:
+            # AKU-07j: the provider-held cost is made durable after the exact
+            # terminal proof and before the final result event, so a crash in
+            # between restarts into one deterministic stale settlement.
+            self._emit("OWNED_HELD_RECEIPT_RETAINED", worker_id=worker_id,
+                       worker_generation=generation, request=request, grant=grant,
+                       container_id=container_id,
+                       data={"schema": HELD_RECEIPT_SCHEMA,
+                             "clock_domain": held_receipt.clock_domain,
+                             "held_started_at": held_receipt.held_started_at,
+                             "held_ended_at": held_receipt.held_ended_at,
+                             "receipt": held_receipt.receipt.to_dict()})
         event = "WORKER_RESULT_ACCEPTED" if accepted else "WORKER_RESULT_STALE"
         stdout_identity = self._stdout_identity(worker_id, generation)
         stdout_proof = None if result is None else {
@@ -2341,6 +2381,9 @@ class WorkerLifecycle:
         old_grant = GrantReceipt(
             intent["grant_id"], intent["grant_generation"],
             intent["data"]["provider_deadline"], intent["data"]["clock_domain"])
+        if rows[-1]["event"] in {"OWNED_TERMINAL", "OWNED_HELD_RECEIPT_RETAINED"}:
+            return self._settle_terminal_without_result(
+                rows, intent, request, old_grant, event_binding)
         deadline = self.monotonic() + request.teardown_seconds
         if self.provider is None:
             self._ownership_unresolved = True
@@ -2444,6 +2487,47 @@ class WorkerLifecycle:
         self._ownership_unresolved = not cleanup_ok
         return terminal
 
+    def _settle_terminal_without_result(
+            self, rows: Sequence[Mapping[str, Any]], intent: Mapping[str, Any],
+            request: StageRequest, grant: GrantReceipt,
+            event_binding: CampaignBinding) -> TerminalWorker:
+        """Crash after OWNED_TERMINAL (and maybe the held receipt) but before the
+        result event: emit exactly one stale result and restore the durable held
+        cost. The provider is never re-acquired and no stage is repeated."""
+        terminal_row = next(row for row in reversed(rows)
+                            if row["event"] == "OWNED_TERMINAL")
+        if not all(terminal_row["data"].values()):
+            self._ownership_unresolved = True
+            raise ContainmentFailure("terminal proof is incomplete; operator reconciliation")
+        worker_id = intent["worker_id"]
+        generation = intent["worker_generation"]
+        held_row = next((row for row in rows
+                         if row["event"] == "OWNED_HELD_RECEIPT_RETAINED"), None)
+        retained = next((row for row in rows if row["event"] == "WORKER_RESULT_RETAINED"), None)
+        result_digest = retained["data"]["result_digest"] if retained else None
+        return_code = retained["data"]["return_code"] if retained else None
+        reason = "recovered old/uncertain worker result is diagnostic only"
+        terminal = TerminalWorker(
+            worker_id, generation, request.request_id, request.plan_digest,
+            request.lineage_id, request.stage_id, grant.grant_id, grant.generation,
+            intent["container_id"], return_code, result_digest, False, reason)
+        self._emit("WORKER_RESULT_STALE", worker_id=worker_id,
+                   worker_generation=generation, request=request, grant=grant,
+                   container_id=intent["container_id"],
+                   data={"result_digest": result_digest, "accepted": False,
+                         "reason": reason}, event_binding=event_binding)
+        self._register_terminal(terminal, event_binding)
+        if held_row is not None:
+            data = held_row["data"]
+            self._held_receipts[(worker_id, generation)] = TrustedHeldClaimReceipt(
+                request.request_id, request.plan_digest, worker_id, generation,
+                grant.grant_id, grant.generation, intent["container_id"],
+                data["clock_domain"], data["held_started_at"], data["held_ended_at"],
+                data["receipt"])
+        self._active = False
+        self._ownership_unresolved = False
+        return terminal
+
     def planned_serving_guard(self, *_args: Any, **_kwargs: Any):
         # PlannedServing's measurement callback executes in the caller process.
         # This lifecycle encloses a separate child, so claiming that callback is
@@ -2462,7 +2546,7 @@ __all__ = ["ACQUISITION_SCHEMA", "ACTIVE_OBSERVATION_CLAIM_SCHEMA",
            "ProcessIdentity", "ProspectiveAcquisitionIdentity", "RecoveryInspection",
            "RESULT_SCHEMA", "RuntimeDirective", "SimulatedCrash", "StageAdmission",
            "StageRequest", "TerminalWorker", "TrustedGrantProvider",
-           "TrustedHeldClaimReceipt",
+           "TrustedHeldClaimReceipt", "HELD_RECEIPT_SCHEMA",
            "WaitingAuthority", "WorkerLifecycle", "process_identity", "same_process",
            "monotonic_clock_domain", "project_acquisitions", "project_events",
            "prospective_identity_from_transition", "prospective_request_digest",
