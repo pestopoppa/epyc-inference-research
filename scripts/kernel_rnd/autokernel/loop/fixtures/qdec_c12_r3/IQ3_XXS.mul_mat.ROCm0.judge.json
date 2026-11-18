@@ -1,0 +1,266 @@
+{
+ "schema": "epyc.autokernel.quant_codespace.v1.verdict",
+ "marker": "AK_QDEC_V1",
+ "c12": "457d5fc523ba5cc687a333a588c1dc15db9346f4",
+ "type": "IQ3_XXS",
+ "leg": "mul_mat:ROCm0",
+ "mode": "identity",
+ "n_blocks": 293,
+ "n_elements": 75008,
+ "blocks_sha256": "6ef96e06b793b4789ab01ffdcf4e85a157fe31dfaa56a1f4ec89f7b3a9282c39",
+ "ulp_bound": 8,
+ "onehot": 127.0,
+ "mismatches": 1024,
+ "classes": {
+  "fp16_scale_rounding": 2036,
+  "ftz_subnormal_scale": 1040,
+  "int8_min_code": 0,
+  "onehot_overflow": 0,
+  "identity_mismatch_total": 4100,
+  "unexplained": 1024,
+  "nonfinite_reference_skipped": 0
+ },
+ "first": [
+  {
+   "block": 277,
+   "element": 0,
+   "ref": "0x492fea00",
+   "got": "0xffc00000",
+   "ref_value": 720544.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 5,
+    "magv": 44,
+    "neg": 0,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 1,
+   "ref": "0x489fec00",
+   "got": "0xffc00000",
+   "ref_value": 327520.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 2,
+    "magv": 20,
+    "neg": 0,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 2,
+   "ref": "0x483fe800",
+   "got": "0xffc00000",
+   "ref_value": 196512.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 1,
+    "magv": 12,
+    "neg": 0,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 3,
+   "ref": "0x477fe000",
+   "got": "0xffc00000",
+   "ref_value": 65504.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 4,
+    "neg": 0,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 4,
+   "ref": "0x492fea00",
+   "got": "0xffc00000",
+   "ref_value": 720544.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 5,
+    "magv": 44,
+    "neg": 0,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 5,
+   "ref": "0x489fec00",
+   "got": "0xffc00000",
+   "ref_value": 327520.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 2,
+    "magv": 20,
+    "neg": 0,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 6,
+   "ref": "0x483fe800",
+   "got": "0xffc00000",
+   "ref_value": 196512.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 1,
+    "magv": 12,
+    "neg": 0,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 7,
+   "ref": "0x477fe000",
+   "got": "0xffc00000",
+   "ref_value": 65504.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 4,
+    "neg": 0,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 8,
+   "ref": "0xc92fea00",
+   "got": "0xffc00000",
+   "ref_value": -720544.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 5,
+    "magv": 44,
+    "neg": 1,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 9,
+   "ref": "0xc89fec00",
+   "got": "0xffc00000",
+   "ref_value": -327520.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 2,
+    "magv": 20,
+    "neg": 1,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 10,
+   "ref": "0xc83fe800",
+   "got": "0xffc00000",
+   "ref_value": -196512.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 1,
+    "magv": 12,
+    "neg": 1,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 11,
+   "ref": "0xc77fe000",
+   "got": "0xffc00000",
+   "ref_value": -65504.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 4,
+    "neg": 1,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 12,
+   "ref": "0xc92fea00",
+   "got": "0xffc00000",
+   "ref_value": -720544.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 5,
+    "magv": 44,
+    "neg": 1,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 13,
+   "ref": "0xc89fec00",
+   "got": "0xffc00000",
+   "ref_value": -327520.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 2,
+    "magv": 20,
+    "neg": 1,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 14,
+   "ref": "0xc83fe800",
+   "got": "0xffc00000",
+   "ref_value": -196512.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 1,
+    "magv": 12,
+    "neg": 1,
+    "d": 31743
+   }
+  },
+  {
+   "block": 277,
+   "element": 15,
+   "ref": "0xc77fe000",
+   "got": "0xffc00000",
+   "ref_value": -65504.0,
+   "got_value": NaN,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 4,
+    "neg": 1,
+    "d": 31743
+   }
+  }
+ ],
+ "verdict": "fail"
+}

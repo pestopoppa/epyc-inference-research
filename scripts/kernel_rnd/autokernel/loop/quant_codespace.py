@@ -948,36 +948,86 @@ def _hex32(v: float) -> str:
 #:   int8_min_code        Q8_0 code -128: ggml's quantizer never emits it and the CPU int8 dot (abs/sign trick)
 #:                        negates it; a served GGUF containing -128 would hit this, so it is counted separately
 #:   onehot_overflow      onehot*ref exceeds float32 (MXFP4 e >= 246 times 127): an artefact of this probe
+#: r3 amendments (2026-11-18, akx31-qdec-c12-gpu-20261117-r3):
+#:   fp16_scale_rounding  is now relative to the element's TERM magnitude (onehot * magnitude, e.g.
+#:                        |d*sc*q| + |dmin*m| for Q4_K), not to the result: cancellation between the two
+#:                        Q4_K terms made a 2^-10 rounding of a term look like a large relative error
+#:   ftz_output_subnormal got == 0 and the decoded value is float32-subnormal (0 < |ref| < FLT_MIN): the GPU
+#:                        flushes the subnormal dequantized operand (MXFP4 e = 1) before the onehot scale
+#:   fp16_ftz_operand     GPU leg only: got == 0 and |ref| < 2^-14 (fp16 min normal): the GPU forms the
+#:                        dequantized operand in half precision with fp16 denormals flushed (MXFP4 e <= 113
+#:                        at small codes, r3); bounded absolute error < 2^-14 * onehot per element
+#: Declared OUT-OF-DOMAIN (not benign; the verdict says "out_of_domain", never "pass"):
+#:   fp16_intermediate_overflow  GPU leg only: got is NaN/inf where the fp16 scale is 0x7BFF (65504, the
+#:                        fp16 maximum) or |ref| or |onehot*ref| > 65504, i.e. a half-precision intermediate
+#:                        overflowed; no served GGUF carries such a scale (harvested d / e are far below).
+#:                        A non-finite element in the same 256-element MUL_MAT row as such an element is in
+#:                        this class too (its inf partial poisons the row's other outputs via 0 * inf)
 FP16_SCALE_REL = 2.0 ** -10
-IDENTITY_CLASSES = ("fp16_scale_rounding", "ftz_subnormal_scale", "int8_min_code", "onehot_overflow")
+FP16_MAX = 65504.0
+FP16_MIN_NORMAL = 2.0 ** -14
+IDENTITY_CLASSES = ("fp16_scale_rounding", "ftz_subnormal_scale", "ftz_output_subnormal", "int8_min_code",
+                    "onehot_overflow", "fp16_ftz_operand")
+OUT_OF_DOMAIN_CLASSES = ("fp16_intermediate_overflow",)
 
 
-def classify_identity(ref, got, magnitude, onehot, *, d=None, dmin=None, e=None, q8=None):
-    """Return (bad_mask, class_counts) for the MUL_MAT-identity leg. bad = mismatches in NO benign class."""
+QDEC_ROW = 256   # test-akx-qdec: elements per MUL_MAT row (QK=32 types carry 8 blocks per row)
+
+
+def classify_identity(ref, got, magnitude, onehot, *, d=None, dmin=None, e=None, q8=None, gpu=False, row=None):
+    """Return (bad_mask, class_counts) for the MUL_MAT-identity leg. bad = mismatches in NO benign or
+    out-of-domain class. class_counts also carries max_abs_err / max_rel_err (|got - onehot*ref|, absolute
+    and relative to onehot*magnitude) over the finite mismatches and over the unexplained ones."""
     ref = np.asarray(ref, dtype=np.float32); got = np.asarray(got, dtype=np.float32)
     fin = np.isfinite(ref)
     exp = ref.astype(np.float64) * onehot
     g = got.astype(np.float64)
-    bound = IDENTITY_ULPS * 2.0 ** -24 * np.asarray(magnitude, dtype=np.float64) * onehot
-    with np.errstate(invalid="ignore", over="ignore"):
-        mis = fin & ~(np.abs(g - exp) <= bound)
+    mag = np.asarray(magnitude, dtype=np.float64) * onehot
+    bound = IDENTITY_ULPS * 2.0 ** -24 * mag
+    zeros = np.zeros(ref.shape, dtype=bool)
+    with np.errstate(invalid="ignore", over="ignore", divide="ignore"):
+        err = np.abs(g - exp)
+        mis = fin & ~(err <= bound)
         overflow = mis & (np.abs(exp) > np.finfo(np.float32).max) & ~np.isfinite(g)
-        sub = np.zeros(ref.shape, dtype=bool)
+        sub = zeros.copy()
         for c in (d, dmin):
             if c is not None:
                 sub |= (np.asarray(c, dtype=np.int64) & 0x7C00) == 0
         if e is not None:
             sub |= np.asarray(e, dtype=np.int64) == 0
         ftz = mis & ~overflow & (g == 0) & (ref != 0) & sub
-        i8 = mis & ~overflow & ~ftz & (np.asarray(q8) == 128) if q8 is not None else np.zeros(ref.shape, dtype=bool)
-        rnd = mis & ~overflow & ~ftz & ~i8 & np.isfinite(g) & (np.abs(g - exp) <= FP16_SCALE_REL * np.abs(exp))
-    bad = mis & ~(overflow | ftz | i8 | rnd)
+        ftz_out = mis & ~overflow & ~ftz & (g == 0) & (ref != 0) & (np.abs(ref) < np.finfo(np.float32).tiny)
+        i8 = mis & ~overflow & ~ftz & ~ftz_out & (np.asarray(q8) == 128) if q8 is not None else zeros
+        rnd = mis & ~overflow & ~ftz & ~ftz_out & ~i8 & np.isfinite(g) & (err <= FP16_SCALE_REL * mag)
+        if gpu:
+            big = (np.abs(ref.astype(np.float64)) > FP16_MAX) | (np.abs(exp) > FP16_MAX)
+            for c in (d, dmin):
+                if c is not None:
+                    big |= (np.asarray(c, dtype=np.int64) & 0xFFFF) == 0x7BFF
+            if row and ref.size % row == 0:
+                # a NaN/inf partial of an overflowed element poisons the rest of its MUL_MAT row (0 * inf)
+                big |= np.repeat((big & fin).reshape(-1, row).any(1), row)
+            ood = mis & ~overflow & ~np.isfinite(g) & big
+            ftz16 = mis & ~overflow & ~ftz & ~ftz_out & ~i8 & ~rnd & ~ood & (g == 0) & \
+                (np.abs(ref.astype(np.float64)) < FP16_MIN_NORMAL)
+        else:
+            ood = ftz16 = zeros
+        bad = mis & ~(overflow | ftz | ftz_out | i8 | rnd | ood | ftz16)
+        rel = err / np.where(mag > 0, mag, np.nan)
+
+    def mx(a, m):
+        v = a[m & np.isfinite(a)]
+        return float(v.max()) if v.size else 0.0
     return bad, {"fp16_scale_rounding": int(rnd.sum()), "ftz_subnormal_scale": int(ftz.sum()),
-                 "int8_min_code": int(i8.sum()), "onehot_overflow": int(overflow.sum()),
-                 "identity_mismatch_total": int(mis.sum()), "unexplained": int(bad.sum())}
+                 "ftz_output_subnormal": int(ftz_out.sum()), "int8_min_code": int(i8.sum()),
+                 "onehot_overflow": int(overflow.sum()), "fp16_ftz_operand": int(ftz16.sum()),
+                 "fp16_intermediate_overflow": int(ood.sum()),
+                 "identity_mismatch_total": int(mis.sum()), "unexplained": int(bad.sum()),
+                 "max_abs_err": mx(err, mis), "max_rel_err": mx(rel, mis),
+                 "max_abs_err_unexplained": mx(err, bad), "max_rel_err_unexplained": mx(rel, bad)}
 
 
-def _judge_chunk(qt: QType, blocks: np.ndarray, got: np.ndarray, mode: str, onehot: float):
+def _judge_chunk(qt: QType, blocks: np.ndarray, got: np.ndarray, mode: str, onehot: float, gpu: bool = False):
     f = qt.unpack(blocks); e = qt.elements(f)
     with np.errstate(over="ignore", invalid="ignore"):
         ref = qt.value(f, e).astype(np.float32).ravel()
@@ -995,7 +1045,7 @@ def _judge_chunk(qt: QType, blocks: np.ndarray, got: np.ndarray, mode: str, oneh
         bc = lambda k: np.broadcast_to(f[k], (n, qt.qk)).ravel() if k in f else None
         q8 = np.asarray(f["q"]).reshape(n, qt.qk).ravel() if qt.name == "Q8_0" else None   # raw byte; 128 == -128
         bad, classes = classify_identity(ref, got, qt.magnitude(f, e).ravel(), onehot,
-                                         d=bc("d"), dmin=bc("dmin"), e=bc("e"), q8=q8)
+                                         d=bc("d"), dmin=bc("dmin"), e=bc("e"), q8=q8, gpu=gpu, row=QDEC_ROW)
         classes["nonfinite_reference_skipped"] = int((~fin).sum())
     else:
         raise ValueError(f"unknown judge mode {mode}")
@@ -1020,12 +1070,16 @@ def judge(qt: QType, blocks, native: np.ndarray, leg: str, mode: str = "exact",
         res.update(ulp_bound=IDENTITY_ULPS, onehot=onehot)
     if got.size != n_el:
         return {**res, "verdict": "invalid", "reason": f"native has {got.size} floats, expected {n_el}"}
-    total, classes, first = 0, {}, []
+    gpu = mode == "identity" and not leg.endswith(":CPU")
+    total, classes, first, max_err = 0, {}, [], {}
     for c0 in range(0, len(blocks), chunk_blocks):
         cb = blocks[c0:c0 + chunk_blocks]
-        f, e, ref, bad, cls = _judge_chunk(qt, cb, got[c0 * qt.qk:(c0 + len(cb)) * qt.qk], mode, onehot)
+        f, e, ref, bad, cls = _judge_chunk(qt, cb, got[c0 * qt.qk:(c0 + len(cb)) * qt.qk], mode, onehot, gpu)
         for k, v in cls.items():
-            classes[k] = classes.get(k, 0) + v
+            if k.startswith("max_"):
+                max_err[k[4:]] = max(max_err.get(k[4:], 0.0), v)
+            else:
+                classes[k] = classes.get(k, 0) + v
         idx = np.nonzero(bad)[0]
         total += int(idx.size)
         for i in idx[:max(0, max_report - len(first))]:
@@ -1035,8 +1089,12 @@ def judge(qt: QType, blocks, native: np.ndarray, leg: str, mode: str = "exact",
             g = got[c0 * qt.qk + int(i)]
             first.append({"block": c0 + blk, "element": el, "ref": _hex32(ref[i]), "got": _hex32(g),
                           "ref_value": float(ref[i]), "got_value": float(g), "codes": codes})
+    ood = sum(classes.get(k, 0) for k in OUT_OF_DOMAIN_CLASSES)
+    if mode == "identity":
+        res["max_err"] = max_err
+        res["out_of_domain"] = ood
     return {**res, "mismatches": total, "classes": classes, "first": first,
-            "verdict": "pass" if total == 0 else "fail"}
+            "verdict": "fail" if total else ("out_of_domain" if ood else "pass")}
 
 
 def receipts(text: str) -> list[dict]:
@@ -1157,8 +1215,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         res = judge(qt, Path(a.blocks).read_bytes(), native, a.leg, a.mode, a.onehot)
         if a.out:
             Path(a.out).write_text(json.dumps(res, indent=1) + "\n")
-        print(json.dumps({k: res.get(k) for k in ("type", "leg", "mode", "verdict", "mismatches")}))
-        return 0 if res["verdict"] == "pass" else 1
+        print(json.dumps({k: res.get(k) for k in ("type", "leg", "mode", "verdict", "mismatches", "out_of_domain",
+                                                  "max_err")}))
+        return {"pass": 0, "out_of_domain": 3}.get(res["verdict"], 1)   # out-of-domain is never a silent pass
     return 2
 
 

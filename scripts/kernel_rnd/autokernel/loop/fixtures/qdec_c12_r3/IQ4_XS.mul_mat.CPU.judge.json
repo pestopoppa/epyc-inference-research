@@ -1,0 +1,25 @@
+{
+ "schema": "epyc.autokernel.quant_codespace.v1.verdict",
+ "marker": "AK_QDEC_V1",
+ "c12": "457d5fc523ba5cc687a333a588c1dc15db9346f4",
+ "type": "IQ4_XS",
+ "leg": "mul_mat:CPU",
+ "mode": "identity",
+ "n_blocks": 17834,
+ "n_elements": 4565504,
+ "blocks_sha256": "958df67771afcb204d69b51f30825b50c92695e1412908b1e9a798471ea99a27",
+ "ulp_bound": 8,
+ "onehot": 127.0,
+ "mismatches": 0,
+ "classes": {
+  "fp16_scale_rounding": 237598,
+  "ftz_subnormal_scale": 0,
+  "int8_min_code": 0,
+  "onehot_overflow": 0,
+  "identity_mismatch_total": 237598,
+  "unexplained": 0,
+  "nonfinite_reference_skipped": 0
+ },
+ "first": [],
+ "verdict": "pass"
+}

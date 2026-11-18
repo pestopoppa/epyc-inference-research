@@ -1,0 +1,234 @@
+{
+ "schema": "epyc.autokernel.quant_codespace.v1.verdict",
+ "marker": "AK_QDEC_V1",
+ "c12": "457d5fc523ba5cc687a333a588c1dc15db9346f4",
+ "type": "Q6_K",
+ "leg": "mul_mat:CPU",
+ "mode": "identity",
+ "n_blocks": 216066,
+ "n_elements": 55312896,
+ "blocks_sha256": "52a119fb70117e351d89882799e3d5fbcaa1fd23e74a86aa64d78c884bddbc58",
+ "ulp_bound": 8,
+ "onehot": 127.0,
+ "mismatches": 46762945,
+ "classes": {
+  "fp16_scale_rounding": 7033392,
+  "ftz_subnormal_scale": 0,
+  "int8_min_code": 0,
+  "onehot_overflow": 0,
+  "identity_mismatch_total": 53796337,
+  "unexplained": 46762945,
+  "nonfinite_reference_skipped": 0
+ },
+ "first": [
+  {
+   "block": 0,
+   "element": 18,
+   "ref": "0xc1600000",
+   "got": "0xc4ddfc88",
+   "ref_value": -14.0,
+   "got_value": -1775.8916015625,
+   "codes": {
+    "sc": 1,
+    "q": 18,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 19,
+   "ref": "0xc1500000",
+   "got": "0xc4cdfcc8",
+   "ref_value": -13.0,
+   "got_value": -1647.8994140625,
+   "codes": {
+    "sc": 1,
+    "q": 19,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 20,
+   "ref": "0xc1400000",
+   "got": "0xc4bdfd08",
+   "ref_value": -12.0,
+   "got_value": -1519.9072265625,
+   "codes": {
+    "sc": 1,
+    "q": 20,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 21,
+   "ref": "0xc1300000",
+   "got": "0xc4adfd48",
+   "ref_value": -11.0,
+   "got_value": -1391.9150390625,
+   "codes": {
+    "sc": 1,
+    "q": 21,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 22,
+   "ref": "0xc1200000",
+   "got": "0xc49dfd88",
+   "ref_value": -10.0,
+   "got_value": -1263.9228515625,
+   "codes": {
+    "sc": 1,
+    "q": 22,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 23,
+   "ref": "0xc1100000",
+   "got": "0xc48dfdc8",
+   "ref_value": -9.0,
+   "got_value": -1135.9306640625,
+   "codes": {
+    "sc": 1,
+    "q": 23,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 24,
+   "ref": "0xc1000000",
+   "got": "0xc47ffc00",
+   "ref_value": -8.0,
+   "got_value": -1023.9375,
+   "codes": {
+    "sc": 1,
+    "q": 24,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 25,
+   "ref": "0xc0e00000",
+   "got": "0xc45ffc80",
+   "ref_value": -7.0,
+   "got_value": -895.9453125,
+   "codes": {
+    "sc": 1,
+    "q": 25,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 26,
+   "ref": "0xc0c00000",
+   "got": "0xc43ffd00",
+   "ref_value": -6.0,
+   "got_value": -767.953125,
+   "codes": {
+    "sc": 1,
+    "q": 26,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 27,
+   "ref": "0xc0a00000",
+   "got": "0xc41ffd80",
+   "ref_value": -5.0,
+   "got_value": -639.9609375,
+   "codes": {
+    "sc": 1,
+    "q": 27,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 28,
+   "ref": "0xc0800000",
+   "got": "0xc3fffc00",
+   "ref_value": -4.0,
+   "got_value": -511.96875,
+   "codes": {
+    "sc": 1,
+    "q": 28,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 29,
+   "ref": "0xc0400000",
+   "got": "0xc3bffd00",
+   "ref_value": -3.0,
+   "got_value": -383.9765625,
+   "codes": {
+    "sc": 1,
+    "q": 29,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 30,
+   "ref": "0xc0000000",
+   "got": "0xc37ffc00",
+   "ref_value": -2.0,
+   "got_value": -255.984375,
+   "codes": {
+    "sc": 1,
+    "q": 30,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 31,
+   "ref": "0xbf800000",
+   "got": "0xc2fffc00",
+   "ref_value": -1.0,
+   "got_value": -127.9921875,
+   "codes": {
+    "sc": 1,
+    "q": 31,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 33,
+   "ref": "0x40000000",
+   "got": "0x438b86c0",
+   "ref_value": 2.0,
+   "got_value": 279.052734375,
+   "codes": {
+    "sc": 2,
+    "q": 33,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 34,
+   "ref": "0x40800000",
+   "got": "0x43e88b40",
+   "ref_value": 4.0,
+   "got_value": 465.087890625,
+   "codes": {
+    "sc": 2,
+    "q": 34,
+    "d": 15360
+   }
+  }
+ ],
+ "verdict": "fail"
+}

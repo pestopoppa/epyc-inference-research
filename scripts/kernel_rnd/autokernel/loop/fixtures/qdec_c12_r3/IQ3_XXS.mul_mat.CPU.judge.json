@@ -1,0 +1,266 @@
+{
+ "schema": "epyc.autokernel.quant_codespace.v1.verdict",
+ "marker": "AK_QDEC_V1",
+ "c12": "457d5fc523ba5cc687a333a588c1dc15db9346f4",
+ "type": "IQ3_XXS",
+ "leg": "mul_mat:CPU",
+ "mode": "identity",
+ "n_blocks": 293,
+ "n_elements": 75008,
+ "blocks_sha256": "6ef96e06b793b4789ab01ffdcf4e85a157fe31dfaa56a1f4ec89f7b3a9282c39",
+ "ulp_bound": 8,
+ "onehot": 127.0,
+ "mismatches": 28096,
+ "classes": {
+  "fp16_scale_rounding": 92,
+  "ftz_subnormal_scale": 0,
+  "int8_min_code": 0,
+  "onehot_overflow": 0,
+  "identity_mismatch_total": 28188,
+  "unexplained": 28096,
+  "nonfinite_reference_skipped": 0
+ },
+ "first": [
+  {
+   "block": 0,
+   "element": 9,
+   "ref": "0x3f800000",
+   "got": "0x431ec000",
+   "ref_value": 1.0,
+   "got_value": 158.75,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 4,
+    "neg": 0,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 18,
+   "ref": "0x3f800000",
+   "got": "0x431ec000",
+   "ref_value": 1.0,
+   "got_value": 158.75,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 4,
+    "neg": 0,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 25,
+   "ref": "0xc0a00000",
+   "got": "0xc416d000",
+   "ref_value": -5.0,
+   "got_value": -603.25,
+   "codes": {
+    "s": 0,
+    "mag": 2,
+    "magv": 20,
+    "neg": 1,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 26,
+   "ref": "0x3f800000",
+   "got": "0x431ec000",
+   "ref_value": 1.0,
+   "got_value": 158.75,
+   "codes": {
+    "s": 0,
+    "mag": 0,
+    "magv": 4,
+    "neg": 0,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 35,
+   "ref": "0x40400000",
+   "got": "0x43ee2000",
+   "ref_value": 3.0,
+   "got_value": 476.25,
+   "codes": {
+    "s": 1,
+    "mag": 0,
+    "magv": 4,
+    "neg": 0,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 41,
+   "ref": "0x423a0000",
+   "got": "0x45bb8600",
+   "ref_value": 46.5,
+   "got_value": 6000.75,
+   "codes": {
+    "s": 1,
+    "mag": 7,
+    "magv": 62,
+    "neg": 0,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 43,
+   "ref": "0x40400000",
+   "got": "0x43ee2000",
+   "ref_value": 3.0,
+   "got_value": 476.25,
+   "codes": {
+    "s": 1,
+    "mag": 0,
+    "magv": 4,
+    "neg": 0,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 50,
+   "ref": "0xc1100000",
+   "got": "0xc482f800",
+   "ref_value": -9.0,
+   "got_value": -1047.75,
+   "codes": {
+    "s": 1,
+    "mag": 1,
+    "magv": 12,
+    "neg": 1,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 51,
+   "ref": "0x40400000",
+   "got": "0x43ee2000",
+   "ref_value": 3.0,
+   "got_value": 476.25,
+   "codes": {
+    "s": 1,
+    "mag": 0,
+    "magv": 4,
+    "neg": 0,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 57,
+   "ref": "0xc1100000",
+   "got": "0xc482f800",
+   "ref_value": -9.0,
+   "got_value": -1047.75,
+   "codes": {
+    "s": 1,
+    "mag": 1,
+    "magv": 12,
+    "neg": 1,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 58,
+   "ref": "0xc1100000",
+   "got": "0xc482f800",
+   "ref_value": -9.0,
+   "got_value": -1047.75,
+   "codes": {
+    "s": 1,
+    "mag": 1,
+    "magv": 12,
+    "neg": 1,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 59,
+   "ref": "0x40400000",
+   "got": "0x43ee2000",
+   "ref_value": 3.0,
+   "got_value": 476.25,
+   "codes": {
+    "s": 1,
+    "mag": 0,
+    "magv": 4,
+    "neg": 0,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 73,
+   "ref": "0x420c0000",
+   "got": "0x458fde00",
+   "ref_value": 35.0,
+   "got_value": 4603.75,
+   "codes": {
+    "s": 2,
+    "mag": 3,
+    "magv": 28,
+    "neg": 0,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 82,
+   "ref": "0x41700000",
+   "got": "0x4500fc00",
+   "ref_value": 15.0,
+   "got_value": 2063.75,
+   "codes": {
+    "s": 2,
+    "mag": 1,
+    "magv": 12,
+    "neg": 0,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 89,
+   "ref": "0xc29b0000",
+   "got": "0xc6174f00",
+   "ref_value": -77.5,
+   "got_value": -9683.75,
+   "codes": {
+    "s": 2,
+    "mag": 7,
+    "magv": 62,
+    "neg": 1,
+    "d": 15360
+   }
+  },
+  {
+   "block": 0,
+   "element": 90,
+   "ref": "0x41700000",
+   "got": "0x4500fc00",
+   "ref_value": 15.0,
+   "got_value": 2063.75,
+   "codes": {
+    "s": 2,
+    "mag": 1,
+    "magv": 12,
+    "neg": 0,
+    "d": 15360
+   }
+  }
+ ],
+ "verdict": "fail"
+}
