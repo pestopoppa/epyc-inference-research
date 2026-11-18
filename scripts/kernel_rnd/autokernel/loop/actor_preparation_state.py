@@ -10,6 +10,10 @@ from typing import Any, Mapping, Sequence
 INTENT_SCHEMA = "epyc.autokernel.actor_preparation_intent.v1"
 FINISH_SCHEMA = "epyc.autokernel.actor_preparation_finish.v1"
 PROFILE_SCHEMA = "epyc.autokernel.target_profile_verified.v1"
+# AKU-06i additive successor semantics.  v1 stays byte-exact and keeps its refusal of a
+# second distinct PROFILE_VERIFIED per target; v2 names its predecessor and settlement.
+PROFILE_REQUEST_V2_SCHEMA = "epyc.autokernel.target_profile_request.v2"
+PROFILE_V2_SCHEMA = "epyc.autokernel.target_profile_verified.v2"
 BUDGET_KEYS = frozenset({
     "actor_calls_per_target", "patch_repairs_per_target",
     "provider_seconds_per_target", "resource_failures_per_target",
@@ -90,6 +94,53 @@ _PROFILE = {
     "profile_content", "artifact_identity", "loaded_identity", "measurement_carrier",
     "clock_domain", "verifier_ref", "verified_at", "valid_until", "occurred_at",
 }
+_SUCCESSOR_JOINS = {"generation", "predecessor_profile_digest",
+                    "predecessor_request_digest", "predecessor_settlement_digest"}
+_PROFILE_V2 = _PROFILE | _SUCCESSOR_JOINS
+_PROFILE_REQUEST_V2 = {
+    "schema", "event", "campaign_id", "config_generation", "config_digest",
+    "supervisor_id", "supervisor_incarnation", "control_revision",
+    "target_revision_digest", "profile_request", "profile_request_digest",
+    "template_digest", "attempt_cap", "clock_domain", "requested_at", "occurred_at",
+} | _SUCCESSOR_JOINS
+
+
+def _validate_successor_joins(row: Mapping[str, Any]) -> None:
+    generation = row["generation"]
+    if isinstance(generation, bool) or not isinstance(generation, int) or generation < 2:
+        raise ActorStateRefused("successor generation must be an integer >= 2")
+    for name in ("predecessor_profile_digest", "predecessor_request_digest",
+                 "predecessor_settlement_digest"):
+        _sha(row[name], name)
+
+
+def _validate_request_v2(row: dict[str, Any]) -> dict[str, Any]:
+    if set(row) != _PROFILE_REQUEST_V2 or row.get("schema") != PROFILE_REQUEST_V2_SCHEMA:
+        raise ActorStateRefused("profile request fields/schema differ")
+    for name in ("campaign_id", "supervisor_id", "clock_domain", "occurred_at"):
+        _text(row[name], name)
+    for name in ("config_generation", "supervisor_incarnation"):
+        _positive_int(row[name], name)
+    if (isinstance(row["control_revision"], bool)
+            or not isinstance(row["control_revision"], int)
+            or row["control_revision"] < 0):
+        raise ActorStateRefused("control_revision must be a nonnegative integer")
+    for name in ("config_digest", "target_revision_digest", "profile_request_digest",
+                 "template_digest"):
+        _sha(row[name], name)
+    _finite(row["requested_at"], "requested_at")
+    _validate_successor_joins(row)
+    cap = _positive_int(row["attempt_cap"], "attempt_cap")
+    if row["generation"] > cap:
+        raise ActorStateRefused("request generation exceeds the attempt cap")
+    request = row["profile_request"]
+    if not isinstance(request, Mapping) or not request:
+        raise ActorStateRefused("profile_request must be a nonempty object")
+    if digest(request) != row["profile_request_digest"]:
+        raise ActorStateRefused("profile request digest differs")
+    if row["profile_request_digest"] == row["predecessor_request_digest"]:
+        raise ActorStateRefused("successor request must differ from its predecessor")
+    return row
 
 
 def validate_event(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -97,6 +148,16 @@ def validate_event(value: Mapping[str, Any]) -> dict[str, Any]:
         raise ActorStateRefused("actor event must be an object")
     row = dict(value)
     event = row.get("event")
+    if event == "PROFILE_REQUEST":
+        return _validate_request_v2(row)
+    if event == "PROFILE_VERIFIED" and row.get("schema") == PROFILE_V2_SCHEMA:
+        if set(row) != _PROFILE_V2:
+            raise ActorStateRefused("actor event fields/schema differ")
+        _validate_successor_joins(row)
+        base = {k: v for k, v in row.items() if k not in _SUCCESSOR_JOINS}
+        base["schema"] = PROFILE_SCHEMA
+        validate_event(base)
+        return row
     expected = (_INTENT if event == "INTENT" else _FINISH if event == "FINISH"
                 else _PROFILE if event == "PROFILE_VERIFIED" else set())
     schema = (INTENT_SCHEMA if event == "INTENT" else FINISH_SCHEMA
@@ -186,6 +247,10 @@ class ActorPreparationProjection:
         default_factory=lambda: {key: 0.0 for key in BUDGET_KEYS})
     availability: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     profiles: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    # AKU-06i: open (selected, unconsumed) successor request per target, and the
+    # generation of the current profile per target (1 for a legacy v1 profile).
+    profile_requests: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    profile_generations: Mapping[str, int] = field(default_factory=dict)
 
 
 def project_events(events: Sequence[Mapping[str, Any]]) -> ActorPreparationProjection:
@@ -195,14 +260,45 @@ def project_events(events: Sequence[Mapping[str, Any]]) -> ActorPreparationProje
     spent = {key: 0.0 for key in BUDGET_KEYS}
     availability: dict[str, dict[str, Any]] = {}
     profiles: dict[str, dict[str, Any]] = {}
+    requests: dict[str, dict[str, Any]] = {}
+    generations: dict[str, int] = {}
+    seen_requests: set[str] = set()
     for value in events:
         row = validate_event(value)
+        if row["event"] == "PROFILE_REQUEST":
+            target = row["target_revision_digest"]
+            prior = profiles.get(target)
+            _join_successor(row, prior, generations.get(target, 1))
+            if target in requests:
+                raise ActorStateRefused("target already has an open successor request")
+            if row["profile_request_digest"] in seen_requests:
+                raise ActorStateRefused("successor request digest was already used")
+            seen_requests.add(row["profile_request_digest"])
+            requests[target] = row
+            continue
+        if row["event"] == "PROFILE_VERIFIED" and row["schema"] == PROFILE_V2_SCHEMA:
+            target = row["target_revision_digest"]
+            prior = profiles.get(target)
+            request = requests.get(target)
+            _join_successor(row, prior, generations.get(target, 1))
+            if request is None:
+                raise ActorStateRefused("successor profile lacks its selected request")
+            for name in ("profile_request_digest", "profile_request", "generation",
+                         "predecessor_profile_digest", "predecessor_request_digest",
+                         "predecessor_settlement_digest"):
+                if row[name] != request[name]:
+                    raise ActorStateRefused(f"successor profile {name} differs from request")
+            profiles[target] = row
+            generations[target] = row["generation"]
+            del requests[target]
+            continue
         if row["event"] == "PROFILE_VERIFIED":
             target = row["target_revision_digest"]
             prior = profiles.get(target)
             if prior is not None and prior != row:
                 raise ActorStateRefused("target profile is replaced without a new owner epoch")
             profiles[target] = row
+            generations.setdefault(target, 1)
             continue
         reservation = row["reservation_id"]
         if row["event"] == "INTENT":
@@ -230,9 +326,25 @@ def project_events(events: Sequence[Mapping[str, Any]]) -> ActorPreparationProje
             key: row[key] for key in ("failure_class", "consecutive_failures",
                                       "last_success", "retry_after", "reset_at",
                                       "next_eligible_at", "clock_domain")}
-    return ActorPreparationProjection(pending, finished, reserved, spent, availability, profiles)
+    return ActorPreparationProjection(pending, finished, reserved, spent, availability,
+                                      profiles, requests, generations)
+
+
+def _join_successor(row: Mapping[str, Any], prior: Mapping[str, Any] | None,
+                    generation: int) -> None:
+    """Bind a v2 request/profile to the exact settled predecessor (generation + 1)."""
+    if prior is None:
+        raise ActorStateRefused("successor has no settled predecessor profile")
+    if row["generation"] != generation + 1:
+        raise ActorStateRefused("successor generation is not predecessor + 1")
+    if (row["predecessor_profile_digest"] != prior["target_profile_digest"]
+            or row["predecessor_request_digest"] != prior["profile_request_digest"]):
+        raise ActorStateRefused("successor does not join the exact predecessor")
+    if row["target_revision_digest"] != prior["target_revision_digest"]:
+        raise ActorStateRefused("successor target differs from predecessor")
 
 
 __all__ = ["ActorPreparationProjection", "ActorStateRefused", "BUDGET_KEYS",
-           "FINISH_SCHEMA", "INTENT_SCHEMA", "PROFILE_SCHEMA", "digest", "project_events",
+           "FINISH_SCHEMA", "INTENT_SCHEMA", "PROFILE_SCHEMA",
+           "PROFILE_REQUEST_V2_SCHEMA", "PROFILE_V2_SCHEMA", "digest", "project_events",
            "validate_event"]

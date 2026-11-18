@@ -1842,6 +1842,19 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
                                           "candidate", "comparator", "loo_plans",
                                           "loo_results"},
                 }[operation]
+                if operation == "integrate" and "enrollment" in operation_payload:
+                    # AKU-10i: opt-in versioned enrollment INTENT; legacy shape unchanged.
+                    operation_fields = operation_fields | {"enrollment"}
+                    if __package__:
+                        from .loop import build_enrollment as _enroll
+                    else:
+                        from autokernel.loop import build_enrollment as _enroll
+                    try:
+                        if _enroll.validate_record(
+                                operation_payload["enrollment"])["event"] != "INTENT":
+                            out.append("data.operation_payload.enrollment: must be INTENT")
+                    except _enroll.EnrollmentRefused as exc:
+                        out.append(f"data.operation_payload.enrollment: {exc}")
                 if set(operation_payload) != operation_fields:
                     out.append(
                         f"data.operation_payload: {operation} fields differ from "
@@ -1868,7 +1881,7 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             else:
                 allowed_object_kinds = {
                     "manifest", "row-set", "batch", "row-state", "loo-plan",
-                    "loo-result", "state",
+                    "loo-result", "state", "enrollment",
                 }
                 for index, item in enumerate(objects):
                     if (not isinstance(item, Mapping)
@@ -1940,7 +1953,7 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             else:
                 allowed_object_kinds = {
                     "manifest", "row-set", "batch", "row-state", "loo-plan",
-                    "loo-result", "state",
+                    "loo-result", "state", "enrollment",
                 }
                 for index, item in enumerate(objects):
                     if (not isinstance(item, Mapping)
@@ -2001,6 +2014,18 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             result = data.get("result")
             result_fields = {"state_digest", "integration_tip", "validated_candidate",
                              "gate_due", "validation_debt"}
+            if (operation == "integrate" and isinstance(result, Mapping)
+                    and "enrollment" in result):
+                # AKU-10i: opt-in enrollment pointer; legacy result shape unchanged.
+                result_fields = result_fields | {"enrollment"}
+                pointer = result["enrollment"]
+                if (not isinstance(pointer, Mapping)
+                        or set(pointer) != {"enrollment_id", "intent_digest"}
+                        or not isinstance(pointer.get("enrollment_id"), str)
+                        or not pointer["enrollment_id"]
+                        or not isinstance(pointer.get("intent_digest"), str)
+                        or not _SHA256_RE.match(pointer["intent_digest"])):
+                    out.append("data.result.enrollment: invalid pointer")
             if not isinstance(result, Mapping) or set(result) != result_fields:
                 out.append("data.result: required mapping")
             else:

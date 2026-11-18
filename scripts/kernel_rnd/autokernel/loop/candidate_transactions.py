@@ -20,6 +20,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from .. import journal as journal_module
 from . import candidate_manifest as cm
+from . import build_enrollment
 from . import campaign_control as campaign_control_module
 from . import kernel_mutation_guard
 from . import measurement_capture as mc
@@ -415,12 +416,21 @@ class CandidateTransactions:
 
     def integrate(self, *, request_id: str, previous: cm.CandidateManifest,
                   candidate: cm.CandidateManifest,
-                  threshold_signal: bool = False) -> dict[str, Any]:
+                  threshold_signal: bool = False,
+                  enrollment: Mapping[str, Any] | None = None) -> dict[str, Any]:
         previous, candidate = previous.validated(), candidate.validated()
         payload = {"previous": previous.to_dict(), "candidate": candidate.to_dict(),
                    "threshold_signal": threshold_signal,
                    "integration_request_id": _text(
                        request_id, "candidate transaction request id")}
+        if enrollment is not None:
+            # Opt-in only: ordinary integrations keep their exact legacy payload.
+            try:
+                payload["enrollment"] = copy.deepcopy(dict(
+                    build_enrollment.bind_to_integration(
+                        enrollment, request_id=request_id, candidate=candidate)))
+            except build_enrollment.EnrollmentRefused as exc:
+                raise CandidateTransactionError(f"build enrollment refused: {exc}") from exc
         return self._execute("integrate", request_id, payload, candidate.sources)
 
     def start_batch(self, *, request_id: str, batch: cm.ValidationBatch,
@@ -633,7 +643,20 @@ class CandidateTransactions:
                 request_id=_text(payload["integration_request_id"],
                                  "integration request id"),
                 threshold_signal=payload["threshold_signal"])
-            return next_state, {**self._result(next_state), "gate_due": due}
+            result = {**self._result(next_state), "gate_due": due}
+            if "enrollment" in payload:
+                try:
+                    intent = build_enrollment.bind_to_integration(
+                        payload["enrollment"],
+                        request_id=payload["integration_request_id"],
+                        candidate=cm.CandidateManifest.from_dict(payload["candidate"]))
+                except build_enrollment.EnrollmentRefused as exc:
+                    raise CandidateTransactionError(
+                        f"build enrollment refused: {exc}") from exc
+                result["enrollment"] = {
+                    "enrollment_id": intent["enrollment_id"],
+                    "intent_digest": build_enrollment.digest(intent)}
+            return next_state, result
         if operation == "start_batch":
             next_state = cm.start_batch(
                 state, cm.ValidationBatch.from_dict(payload["batch"]),
@@ -898,7 +921,7 @@ class CandidateTransactions:
 
     def _write_immutable(self, kind: str, value: Mapping[str, Any]) -> str:
         if kind not in {"manifest", "row-set", "batch", "row-state", "loo-plan",
-                        "loo-result", "state"}:
+                        "loo-result", "state", "enrollment"}:
             raise CandidateTransactionError(f"unknown candidate object kind {kind!r}")
         try:
             store = mc.ArtifactStore(self._object_root())
@@ -940,6 +963,8 @@ class CandidateTransactions:
                                       ("manifest", "candidate"),
                                       ("manifest", "comparator"))}[operation]
         documents = [(kind, payload[key]) for kind, key in keys]
+        if operation == "integrate" and "enrollment" in payload:
+            documents.append(("enrollment", payload["enrollment"]))
         if operation == "advance_validated":
             documents.extend(("loo-plan", value) for value in payload["loo_plans"].values())
             documents.extend(("loo-result", value)

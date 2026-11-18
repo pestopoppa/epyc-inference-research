@@ -3872,7 +3872,9 @@ class CampaignController:
         try:
             entry = self._journal.append(
                 journal_module.KIND_ACTOR_PREPARATION, validated,
-                record_id=(validated["reservation_id"]
+                record_id=(validated["profile_request_digest"]
+                           if validated["event"] == "PROFILE_REQUEST"
+                           else validated["reservation_id"]
                            if validated["event"] != "PROFILE_VERIFIED"
                            else validated["target_profile_digest"]))
             self._verify_journal_layout(self.store / "journal")

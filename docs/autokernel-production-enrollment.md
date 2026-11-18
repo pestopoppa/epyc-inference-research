@@ -69,3 +69,16 @@ shapes even when Campaign v1 cannot enroll them. Nonproduction dry resolution re
 The export's production labels, source revisions, declared
 NUMA prefix and pre-eviction requirement confer no grant, placement, residency,
 contention, statistical, deployment or promotion authority.
+
+## Prospective build enrollment (AKU-10i, validator and journal record)
+
+`loop/build_enrollment.py` defines versioned `INTENT`/`ACTIVATED` records
+(`epyc.autokernel.build_enrollment_{intent,activated}.v1`): verified BuildIdentity, recipe
+snapshot digest, retained source refs (bound to the build source set) and
+source/build/evaluation expiry. `CandidateTransactions.integrate(..., enrollment=...)` is
+opt-in; the INTENT is journaled in the candidate-transaction intent (recovered by Journal
+native payload validation) and persisted as an immutable `enrollment` object before the
+commit. Ordinary integrations keep their exact legacy payload/result. Expiry is reported
+as status only: no disposition, inferred rejection, backfill or deletion-policy change.
+The producer that mints INTENT from a real source/build execution and writes ACTIVATED
+from closed evaluation/worker/held-cost evidence is not wired yet.

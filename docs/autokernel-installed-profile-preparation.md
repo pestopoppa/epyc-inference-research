@@ -94,3 +94,19 @@ original held-cost issuance cannot be recreated on restart. Bounded autonomous
 refresh-generation issuance is a separate required continuation, not completed
 by safe fixed-request exhaustion. Existing profile and validation belief-source
 carriers remain the write-side route; this connector creates no new grading rule.
+
+## Versioned refresh generations (AKU-06i, validator and pure selection)
+
+`actor_preparation_state` adds, additively, a `PROFILE_REQUEST` event
+(`epyc.autokernel.target_profile_request.v2`) and a `PROFILE_VERIFIED` successor
+(`epyc.autokernel.target_profile_verified.v2`). Both name the generation (>= 2), the
+exact predecessor profile and request digests and the predecessor settlement digest;
+projection requires generation = predecessor + 1, the request to precede its profile,
+and every join to match. v1 profiles keep their refusal of a second distinct
+`PROFILE_VERIFIED` per target. `loop/profile_refresh.py` derives the request from the
+installed template, the settled predecessor and the attempt cap (`not_due`, `derived`,
+`reuse_open_request`, `exhausted`); an open recorded request is always reused after
+restart, and a different boot clock domain counts the profile as stale (no cross-boot
+validity), bounded by the cap. Not yet wired: the driver does not call `select_refresh`,
+so the connector still reports the fixed-request debt above; no hardware or production
+profile run is claimed.
