@@ -253,6 +253,26 @@ def _key(workspace: Path) -> str:
     return str(Path(workspace).absolute())
 
 
+_SCOUTS_OFF = frozenset({"", "0", "false", "off", "no", "none"})
+
+
+def _scouts_from_env(raw: str | None) -> int:
+    """`AK_ORCHESTRATOR_SCOUTS` -> scout count (OAB-17 R2). Off-words and an integral
+    float ("3.0") are accepted; any other non-integer fails closed with the contract
+    named, never a bare int() traceback. A truthy word is refused: it names no count."""
+    text = (raw or "").strip().lower()
+    if text in _SCOUTS_OFF:
+        return 0
+    try:
+        value = float(text)
+        if not value.is_integer():
+            raise ValueError(text)
+    except ValueError as exc:
+        raise ValueError(f"{SCOUTS_ENV} must be an integer 0..{SCOUTS_MAX} "
+                         f"(or false/off/no for none), got {raw!r}") from exc
+    return max(0, min(SCOUTS_MAX, int(value)))
+
+
 def orchestrator_backend(model: str, effort: str, *, timeout_s: int | None = None) -> OrchestratorBackend:
     """`orch:<role|auto>` -> an `OrchestratorBackend`. The orchestrator root and URL
     are read from `AK_ORCHESTRATOR_ROOT` / `AK_ORCHESTRATOR_URL` at construction, so a
@@ -263,10 +283,7 @@ def orchestrator_backend(model: str, effort: str, *, timeout_s: int | None = Non
     if not _ROLE_TOKEN.match(role):
         raise ValueError(f"orchestrator role must be 'auto' or a role name, got {role!r}")
     root = os.environ.get(ORCHESTRATOR_ROOT_ENV) or DEFAULT_ORCHESTRATOR_ROOT
-    try:
-        scouts_max = max(0, min(SCOUTS_MAX, int(os.environ.get(SCOUTS_ENV) or 0)))
-    except ValueError as exc:
-        raise ValueError(f"{SCOUTS_ENV} must be an integer 0..{SCOUTS_MAX}") from exc
+    scouts_max = _scouts_from_env(os.environ.get(SCOUTS_ENV))
     scout_role = os.environ.get(SCOUT_ROLE_ENV) or None
     if scout_role is not None and not _ROLE_TOKEN.match(scout_role):
         raise ValueError(f"{SCOUT_ROLE_ENV} must be a role name, got {scout_role!r}")

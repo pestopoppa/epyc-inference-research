@@ -602,3 +602,19 @@ class CliKnobs(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --- OAB-17 R2: AK_ORCHESTRATOR_SCOUTS parsing ------------------------------------
+
+def test_scouts_env_accepts_off_words_and_integral_floats_and_refuses_junk():
+    import pytest
+    from autokernel.loop import actor_orchestrator as ao
+    for raw in (None, "", "0", "false", "OFF", "no", "none"):
+        assert ao._scouts_from_env(raw) == 0
+    assert ao._scouts_from_env("3") == 3
+    assert ao._scouts_from_env("3.0") == 3
+    assert ao._scouts_from_env("99") == ao.SCOUTS_MAX
+    assert ao._scouts_from_env("-2") == 0
+    for bad in ("true", "3.5", "many"):
+        with pytest.raises(ValueError, match="AK_ORCHESTRATOR_SCOUTS"):
+            ao._scouts_from_env(bad)
