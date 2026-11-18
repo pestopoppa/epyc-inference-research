@@ -1,0 +1,15 @@
+Testing 1 devices
+
+Backend 1/1: CPU
+  Device description: AMD EPYC 9655 96-Core Processor
+  Device memory: 1160618 MB (1160618 MB free)
+
+  MUL_MAT(type_a=q6_K,type_b=f32,m=256,n=64,k=1024,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1): [1;32mOK[0m
+  MUL_MAT(type_a=q6_K,type_b=f32,m=256,n=256,k=1024,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1): [1;32mOK[0m
+  1211/1212 tests passed
+
+Failing tests:
+  MUL_MAT(type_a=q6_K,type_b=f32,m=256,n=63,k=1024,bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1,max_nmse=1e-07)
+  Backend CPU: [1;31mFAIL[0m
+0/1 backends passed
+[1;31mFAIL[0m
