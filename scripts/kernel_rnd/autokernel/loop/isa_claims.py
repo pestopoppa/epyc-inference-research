@@ -269,6 +269,7 @@ def candidate_check(resolve: Callable[[Any, Sequence[str]], Any], mode: str, *,
         if target is None:
             return None
         binary, archive = target
+        archive = Path(archive) if archive is not None else None
         regex, claims = kernel_regex_for(hypothesis), hypothesis_claims(hypothesis)
         env = {gcn_gym.ISA_CLAIMS_ENV: "advisory" if mode == "advisory" else "enforce"}
         if claims:

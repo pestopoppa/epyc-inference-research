@@ -64,6 +64,17 @@ class CandidateCheck(unittest.TestCase):
             self.assertTrue(a.passed)
             self.assertIn("REFUTED", a.reason)
 
+    def test_string_paths_from_resolver_are_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            au = isa_claims.audit()
+            check = isa_claims.candidate_check(lambda h, p: (tmp + "/lib.so", tmp + "/arch"), "enforce")
+            with mock.patch.object(au, "load_code_objects", return_value=[b"CO"]), \
+                 mock.patch.object(au, "_run", return_value=ASM), \
+                 mock.patch.object(au, "file_sha256", return_value="ab" * 32):
+                v = check(hyp(), [])
+            self.assertTrue(v.passed, v.reason)
+            self.assertNotIn("UNCHECKED", v.reason)
+
     def test_no_claims_archives_without_refusing(self):
         with tempfile.TemporaryDirectory() as tmp:
             v = run_check(hyp("reduces register pressure"), "enforce", tmp)
