@@ -193,3 +193,52 @@ def test_cpu_profile_record_carries_anchor(tmp_path):
         "schema": po.NODE_PROFILE_SCHEMA, "cache_key": {"anchor_commit": "c" * 40},
         "section": {"status": "observed"}}))
     assert po.load_profile(prof, cpu=True)["node_profile"]["anchor_commit"] == "c" * 40
+
+
+def _counters(tmp_path: Path) -> Path:
+    from . import gpu_counter_signals as gcs
+    path = tmp_path / "ctr.json"
+    path.write_text(json.dumps({"schema": gcs.SCHEMA, "status": "present",
+                                "counter_set_sha256": gcs.counter_set_sha256(),
+                                "kernels": [{"kernel": "k", "metrics": {"mfma_busy_pct": 1.0}}]}))
+    return path
+
+
+def test_gpu_counters_reach_the_planner_context(tmp_path):
+    _tree(tmp_path)
+    prof = tmp_path / "p.json"
+    prof.write_text(json.dumps([{"signature": "k"}]))
+    hypo = loop.Hypothesis("m", "s", "f", "ggml/src/ggml-cuda/a.cu", "sym")
+    code, made = _run(tmp_path, hypo, profile=prof, gpu_counters=_counters(tmp_path))
+    assert code == 0 and made[0].context["gpu_counters"]["status"] == "present"
+    report = json.loads((tmp_path / "out" / po.REPORT_NAME).read_text())
+    assert report["gpu_counters"]["status"] == "present"
+
+
+def test_control_arm_has_no_counters(tmp_path):
+    _tree(tmp_path)
+    prof = tmp_path / "p.json"
+    prof.write_text(json.dumps([{"signature": "k"}]))
+    code, made = _run(tmp_path, loop.Abstain("x"), profile=prof)
+    assert code == 0 and "gpu_counters" not in made[0].context
+    assert json.loads((tmp_path / "out" / po.REPORT_NAME).read_text())["gpu_counters"] is None
+
+
+def test_mismatched_counters_refused(tmp_path):
+    _tree(tmp_path)
+    prof = tmp_path / "p.json"
+    prof.write_text(json.dumps([{"signature": "k"}]))
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"schema": "other"}))
+    code, made = _run(tmp_path, None, profile=prof, gpu_counters=bad)
+    assert code == 2 and not made
+
+
+def test_no_author_records_proposal_without_authoring(tmp_path):
+    _tree(tmp_path)
+    prof = tmp_path / "p.json"
+    prof.write_text(json.dumps([{"signature": "k"}]))
+    hypo = loop.Hypothesis("m", "s", "f", "ggml/src/ggml-cuda/a.cu", "sym")
+    code, made = _run(tmp_path, hypo, profile=prof, planner_only_no_author=True)
+    assert code == 0 and made[0].authored == 0
+    assert json.loads((tmp_path / "out" / po.REPORT_NAME).read_text())["status"] == "proposed"

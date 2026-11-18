@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from ..controller import inbox, workload_contract
-from . import actors, belief_context, loop
+from . import actors, belief_context, gpu_counter_signals, loop
 
 REPORT_NAME = "planner-only-report.json"
 SCHEMA = "epyc.autokernel.planner_only_report.v1"
@@ -56,6 +56,9 @@ def add_arguments(parser) -> None:
     parser.add_argument("--planner-surface", default=None,
                         help="--planner-only with --cpu-serving-launch: the serving surface "
                              "label, e.g. serving:<recipe>")
+    parser.add_argument("--planner-only-no-author", action="store_true",
+                        help="--planner-only: record the planner turn and skip the authoring "
+                             "step (a planner A/B scores hypotheses, not diffs)")
 
 
 def load_profile(path: Path, *, cpu: bool = False) -> dict[str, Any]:
@@ -89,6 +92,20 @@ def load_profile(path: Path, *, cpu: bool = False) -> dict[str, Any]:
         raise Refused(f"profile {path} has no hotspot rows: pass --profile with a captured "
                       "profile, or a --store whose loop-status.json holds `hotspots`")
     return profile
+
+
+def load_counters(args, *, cpu: bool) -> dict[str, Any] | None:
+    """RVP-CTR-1 treatment arm: the `--gpu-counters` observation the full loop renders on a GPU
+    target, or None (control arm). Refused on a CPU target or an unreadable/mismatched file."""
+    path = getattr(args, "gpu_counters", None)
+    if not path:
+        return None
+    if cpu:
+        raise Refused("--gpu-counters applies to a GPU target only")
+    try:
+        return gpu_counter_signals.load_observation(Path(path))
+    except (OSError, ValueError) as exc:
+        raise Refused(f"no usable --gpu-counters at {path}: {exc}") from exc
 
 
 def anchor_mismatch(profile: Mapping[str, Any], source_commit: str) -> str | None:
@@ -212,6 +229,7 @@ def run(args, *, seat_common: Mapping[str, Any],
                                        CPU_SOURCE_DIR if cpu else GPU_SOURCE_DIR)
         profile_path = Path(args.profile or Path(args.store) / "loop-status.json")
         profile = load_profile(profile_path, cpu=cpu)
+        counters = load_counters(args, cpu=cpu)
     except Refused as exc:
         print(f"planner-only REFUSED: {exc}", file=sys.stderr)
         return 2
@@ -240,6 +258,7 @@ def run(args, *, seat_common: Mapping[str, Any],
         "actor_provenance": {"planner": backend.describe()},
         "actor_read_roots": [str(out.resolve()), *([str(store), str(store.parent)] if cpu else [])],
         **profile,
+        **({"gpu_counters": counters} if counters else {}),
         "current_regime": {"model": {"path": str(args.model)}, "quant": census.quant_label,
                            "backend": "cpu" if cpu else "gpu",
                            "measurement_surface": args.planner_surface if cpu else args.surface},
@@ -257,7 +276,9 @@ def run(args, *, seat_common: Mapping[str, Any],
     result, author, status, detail, code = None, None, "abstained", "", 0
     try:
         result = planner.propose(context)
-        if isinstance(result, loop.Hypothesis):
+        if isinstance(result, loop.Hypothesis) and getattr(args, "planner_only_no_author", False):
+            status = "proposed"
+        elif isinstance(result, loop.Hypothesis):
             status = "authored"
             author = planner.author(result, context)
             if isinstance(author, loop.Abstain):
@@ -270,6 +291,9 @@ def run(args, *, seat_common: Mapping[str, Any],
     report = _report(planner, result, status=status, source_commit=source_commit,
                      profile_ref=str(profile_path), author=author, detail=detail)
     report["profile_anchor_mismatch"] = mismatch
+    report["gpu_counters"] = ({"path": str(args.gpu_counters),
+                               "counter_set_sha256": counters.get("counter_set_sha256"),
+                               "status": counters.get("status")} if counters else None)
     (out / REPORT_NAME).write_text(json.dumps(report, indent=2, default=str) + "\n",
                                    encoding="utf-8")
     print(f"planner-only {status}: report {out / REPORT_NAME}; stopped before build")
