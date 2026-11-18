@@ -390,7 +390,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           next_resume=None, begin_author_custody=None, finish_author_custody=None,
           author_sandbox: bool = False,
           cpu_window=None, tail_priority=None, on_tail_ready=None,
-          make_exact_judge=None) -> PoolResult:
+          make_exact_judge=None, make_isa_check=None) -> PoolResult:
     """Run `iterations` iterations across `workers` lanes and report the accounting.
 
     Everything device-shaped is still injected; this only binds the git side and the
@@ -458,7 +458,9 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
             **({"finish_author_custody": finish_author_custody}
                if finish_author_custody is not None else {}),
             **({"make_exact_judge": make_exact_judge}
-               if make_exact_judge is not None else {}))
+               if make_exact_judge is not None else {}),
+            **({"make_isa_check": make_isa_check}
+               if make_isa_check is not None else {}))
     clock.close()
     return PoolResult(outcomes=outcomes, phase_seconds=clock.totals(),
                       wall_seconds=time.monotonic() - started,

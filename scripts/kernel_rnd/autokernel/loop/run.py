@@ -105,7 +105,7 @@ from . import actor_opencode_config
 from . import belief_context, planner_only
 from . import actor_passthrough
 from . import cross_target, kernel_coverage, blast_radius
-from . import gpu_counter_signals
+from . import gpu_counter_signals, isa_claims
 from . import longctx
 from . import floor_registry
 from . import epoch_aliases
@@ -3128,6 +3128,12 @@ def _main(argv: list[str] | None = None) -> int:
                         help="INF06-EXACT-LANE: JSON naming the incumbent store, model, "
                              "draft, fixed prompts and port; enables the exact-lane token-ID "
                              "judge for candidates declaring lane \"exact\" (others unchanged)")
+    parser.add_argument("--isa-claims-gate", choices=isa_claims.GATE_MODES, default="off",
+                        help="C5-ISA-1: archive every GPU candidate's AMDGCN ISA (touched "
+                             "kernels of the built libggml-hip.so) under <out>/isa-claims/ "
+                             "and check the mechanisms its statement/falsifier claims "
+                             "(mfma, lds_staging, ...). advisory records only; enforce "
+                             "refuses an ABSENT/NOT_EXECUTED claim. Default: off (unchanged)")
     parser.add_argument("--workers", type=int, default=pipeline.DEFAULT_WORKERS,
                         help="concurrent lanes (default: the measured tail-saturation "
                              "point; see pipeline.DEFAULT_WORKERS)")
@@ -7937,7 +7943,9 @@ def _main(argv: list[str] | None = None) -> int:
                if direct_launch and not cpu_launch else {}),
             **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}),
             **({"make_exact_judge": _exact_judge_factory(args)}
-               if getattr(args, "exact_lane_config", None) else {}))
+               if getattr(args, "exact_lane_config", None) else {}),
+            **({"make_isa_check": _isa_check_factory(args)}
+               if getattr(args, "isa_claims_gate", "off") != "off" else {}))
 
     claim_started = None
     original_claims = []
@@ -9010,6 +9018,26 @@ def _exact_judge_factory(args):
         cpu_campaign=getattr(args, "cpu_serving_launch", None) is not None,
         gpu_campaign=getattr(args, "gpu_serving_launch", None) is not None)
     return exact_lane.make_exact_judge(exact_lane.load_config(args.exact_lane_config))
+
+def _isa_check_factory(args):
+    """C5-ISA-1: per-worker ISA archive + claims check for a GPU campaign; refused for CPU."""
+    if getattr(args, "cpu_serving_launch", None) is not None:
+        raise SystemExit("--isa-claims-gate checks AMDGCN ISA and applies to GPU campaigns only")
+    root = Path(args.out) if args.out else None
+
+    def make(worker):
+        def resolve(hypothesis, paths):
+            lib = noop_build.find_hip_library(worker.build_dir)
+            if lib is None:
+                return None
+            if root is None:
+                return lib, None
+            name = "".join(c if c.isalnum() or c in "-_." else "_"
+                           for c in (hypothesis.mechanism_id or "candidate"))
+            return lib, root / "isa-claims" / name
+        return isa_claims.candidate_check(resolve, args.isa_claims_gate)
+    return make
+
 
 def main(argv: list[str] | None = None) -> int:
     from . import lane_watchdog, serial_run

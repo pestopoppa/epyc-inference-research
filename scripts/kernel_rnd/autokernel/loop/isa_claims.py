@@ -188,6 +188,91 @@ def archive_and_check(binary: Path, kernel_regex: str, claims: Sequence[str], *,
     return doc
 
 
+# ---------------------------------------------------------------- loop call site --
+
+#: ``--isa-claims-gate`` values. ``off`` (the default) wires nothing: the loop is byte-for-byte
+#: today's. ``advisory`` archives the candidate ISA and records the claim verdict without
+#: refusing; ``enforce`` also refuses a candidate whose claimed mechanism is ABSENT /
+#: NOT_EXECUTED.
+GATE_MODES = ("off", "advisory", "enforce")
+
+
+def hypothesis_claims(hypothesis: Any) -> list[str]:
+    """Mechanisms a hypothesis names in its own statement/falsifier text."""
+    return claims_from_text(getattr(hypothesis, "statement", "") or "",
+                            getattr(hypothesis, "falsifier", "") or "")
+
+
+def kernel_regex_for(hypothesis: Any) -> str:
+    """Touched-kernel regex: the hypothesis' target symbol (matched inside mangled names);
+    ``.`` (every kernel in the library) when it names none."""
+    sym = (getattr(hypothesis, "target_symbol", "") or "").strip()
+    return re.escape(sym) if sym else "."
+
+
+def candidate_check(resolve: Callable[[Any, Sequence[str]], Any], mode: str, *,
+                    checker: Callable[..., Mapping[str, Any]] | None = None
+                    ) -> Callable[[Any, Sequence[str]], Any]:
+    """Build ``check(hypothesis, paths) -> gates.Verdict | None`` for ``wrap_gate``.
+
+    ``resolve(hypothesis, paths) -> (binary, archive_dir) | None`` names the built candidate
+    library and where its ISA goes (None: nothing to check, e.g. no library was built).
+    Always archives the touched kernels' ISA; refuses (enforce only) a refuted claim."""
+    if mode not in GATE_MODES or mode == "off":
+        raise ValueError("isa claims check mode must be 'advisory' or 'enforce'")
+    from . import gates, gcn_gym  # noqa: PLC0415
+
+    def check(hypothesis, paths):
+        target = resolve(hypothesis, paths)
+        if target is None:
+            return None
+        binary, archive = target
+        regex, claims = kernel_regex_for(hypothesis), hypothesis_claims(hypothesis)
+        env = {gcn_gym.ISA_CLAIMS_ENV: "advisory" if mode == "advisory" else "enforce"}
+        if claims:
+            res = gcn_gym.isa_claims_gate(Path(binary), regex, claims, archive=archive,
+                                          checker=checker, environ=env)
+        else:  # nothing claimed: still archive, nothing to refute
+            res = gcn_gym.isa_claims_gate(Path(binary), regex, [], environ=env)
+            try:
+                (checker or archive_and_check)(Path(binary), regex, [], archive=archive)
+            except Exception as exc:  # noqa: BLE001 -- archiving never refuses
+                res = {**res, "status": "UNCHECKED", "error": f"{type(exc).__name__}: {exc}"}
+        detail = json.dumps({k: v for k, v in res.items() if k != "doc"}, sort_keys=True)
+        reason = (f"isa_claims {res['status']} ({mode}); refuted={res.get('refuted') or []}"
+                  if not res["passed"] else f"isa_claims {res['status']} ({mode})")
+        return gates.Verdict("isa_claims", bool(res["passed"]), reason, detail)
+
+    return check
+
+
+def wrap_gate(gate, check):
+    """Compose the C5-ISA-1 check after the loop's ``gate(hypothesis, paths)``.
+
+    ``check is None`` returns ``gate`` itself (default-off: zero change). Otherwise the
+    original gate runs first and its refusal is returned untouched; only a candidate that
+    PASSED it is archived/checked, and the isa_claims verdict is appended. A harness fault
+    in ``check`` is never a refutation and never a silent loss of the gate result."""
+    if check is None:
+        return gate
+    from .gates import Verdict  # noqa: PLC0415
+
+    def dispatch(hypothesis, paths):
+        passed, verdicts = gate(hypothesis, paths)
+        if not passed:
+            return passed, verdicts
+        try:
+            verdict = check(hypothesis, paths)
+        except Exception as exc:  # noqa: BLE001
+            verdict = Verdict("isa_claims", True,
+                              f"isa_claims UNCHECKED: {type(exc).__name__}: {exc}")
+        if verdict is None:
+            return passed, verdicts
+        return bool(verdict.passed), [*verdicts, verdict]
+
+    return dispatch
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     import argparse
     ap = argparse.ArgumentParser(description="C5-ISA-1 claimed-instruction gate")
