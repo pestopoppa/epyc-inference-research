@@ -3134,6 +3134,12 @@ def _main(argv: list[str] | None = None) -> int:
                              "and check the mechanisms its statement/falsifier claims "
                              "(mfma, lds_staging, ...). advisory records only; enforce "
                              "refuses an ABSENT/NOT_EXECUTED claim. Default: off (unchanged)")
+    parser.add_argument("--isa-claims-counter-command", type=Path, default=None,
+                        help="C5-ISA-1 execution witness: JSON list (argv template; "
+                             "{build_dir} and {lib} are substituted) of the candidate's own "
+                             "short GPU workload, run under rocprofv3 for the alu and lds "
+                             "counter passes so claims resolve to EXECUTED / NOT_EXECUTED. "
+                             "Omit: claims stay STATIC_ONLY. Needs --isa-claims-gate.")
     parser.add_argument("--workers", type=int, default=pipeline.DEFAULT_WORKERS,
                         help="concurrent lanes (default: the measured tail-saturation "
                              "point; see pipeline.DEFAULT_WORKERS)")
@@ -9035,7 +9041,25 @@ def _isa_check_factory(args):
             name = "".join(c if c.isalnum() or c in "-_." else "_"
                            for c in (hypothesis.mechanism_id or "candidate"))
             return lib, root / "isa-claims" / name
-        return isa_claims.candidate_check(resolve, args.isa_claims_gate)
+        observe = None
+        if getattr(args, "isa_claims_counter_command", None):
+            template = json.loads(Path(args.isa_claims_counter_command).read_text())
+            if not (isinstance(template, list) and template
+                    and all(isinstance(t, str) for t in template)):
+                raise SystemExit("--isa-claims-counter-command must be a non-empty JSON list of strings")
+
+            def observe(hypothesis, binary):
+                build = Path(worker.build_dir)
+                argv = [t.format(build_dir=str(build), lib=str(binary)) for t in template]
+                env = dict(os.environ)
+                # this tree's own ggml first (three-ggml-generations hazard)
+                env["LD_LIBRARY_PATH"] = ":".join(
+                    p for p in (str(build / "bin"), env.get("LD_LIBRARY_PATH", "")) if p)
+                name = "".join(c if c.isalnum() or c in "-_." else "_"
+                               for c in (hypothesis.mechanism_id or "candidate"))
+                return isa_claims.capture_observation(
+                    argv, (root or build) / "isa-claims" / name / "counters", env=env)
+        return isa_claims.candidate_check(resolve, args.isa_claims_gate, observe=observe)
     return make
 
 

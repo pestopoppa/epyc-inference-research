@@ -210,14 +210,56 @@ def kernel_regex_for(hypothesis: Any) -> str:
     return re.escape(sym) if sym else "."
 
 
+#: Counter passes that carry the execution witnesses (``mfma_insts`` / ``lds_insts``).
+WITNESS_PASSES = ("alu", "lds")
+
+
+def capture_observation(command: Sequence[str], out_dir: Path, *,
+                        env: Mapping[str, str] | None = None, timeout: float = 900.0,
+                        runner: Callable[..., Any] | None = None) -> dict[str, Any] | None:
+    """Run ``command`` (the candidate's own workload) once per witness pass under
+    rocprofv3 and fold the counter CSVs into a ``gpu_counter_signals`` observation.
+
+    Returns None (witness not captured -> claims stay STATIC_ONLY, never refused) when
+    a pass exits non-zero or writes no counter CSV. ``runner`` is ``subprocess.run``
+    unless injected; nothing here builds anything."""
+    import subprocess  # noqa: PLC0415
+    from . import gpu_counter_signals as gcs  # noqa: PLC0415
+    run = runner or subprocess.run
+    out_dir.mkdir(parents=True, exist_ok=True)
+    texts: dict[str, str] = {}
+    source: dict[str, str] = {}
+    for name in WITNESS_PASSES:
+        (out_dir / f"{name}.pmc.txt").write_text(gcs.pass_input(name))
+        argv = gcs.pass_argv(name, out_dir, list(command))
+        proc = run(argv, env=dict(env) if env is not None else None, timeout=timeout,
+                   capture_output=True, text=True)
+        if getattr(proc, "returncode", 1) != 0:
+            return None
+        csvs = sorted((out_dir / name).rglob("*counter_collection.csv"))
+        if not csvs:
+            return None
+        data = csvs[0].read_bytes()
+        texts[name] = data.decode()
+        source[name] = hashlib.sha256(data).hexdigest()
+    obs = gcs.build_observation(texts, top=10_000, source=source)
+    return obs if obs.get("status") == "present" else None
+
+
 def candidate_check(resolve: Callable[[Any, Sequence[str]], Any], mode: str, *,
-                    checker: Callable[..., Mapping[str, Any]] | None = None
+                    checker: Callable[..., Mapping[str, Any]] | None = None,
+                    observe: Callable[[Any, Path], Mapping[str, Any] | None] | None = None
                     ) -> Callable[[Any, Sequence[str]], Any]:
     """Build ``check(hypothesis, paths) -> gates.Verdict | None`` for ``wrap_gate``.
 
     ``resolve(hypothesis, paths) -> (binary, archive_dir) | None`` names the built candidate
     library and where its ISA goes (None: nothing to check, e.g. no library was built).
-    Always archives the touched kernels' ISA; refuses (enforce only) a refuted claim."""
+    Always archives the touched kernels' ISA; refuses (enforce only) a refuted claim.
+
+    ``observe(hypothesis, binary) -> gpu_counter_signals observation | None`` supplies the
+    CANDIDATE's executed-instruction counters (never the anchor's: an anchor with no MFMA
+    would falsely refute a candidate that adds one). Called only when claims exist; an
+    error or None leaves the claims STATIC_ONLY."""
     if mode not in GATE_MODES or mode == "off":
         raise ValueError("isa claims check mode must be 'advisory' or 'enforce'")
     from . import gates, gcn_gym  # noqa: PLC0415
@@ -230,8 +272,15 @@ def candidate_check(resolve: Callable[[Any, Sequence[str]], Any], mode: str, *,
         regex, claims = kernel_regex_for(hypothesis), hypothesis_claims(hypothesis)
         env = {gcn_gym.ISA_CLAIMS_ENV: "advisory" if mode == "advisory" else "enforce"}
         if claims:
+            obs = None
+            if observe is not None:
+                try:
+                    obs = observe(hypothesis, Path(binary))
+                except Exception:  # noqa: BLE001 -- a missing witness is never a refutation
+                    obs = None
             res = gcn_gym.isa_claims_gate(Path(binary), regex, claims, archive=archive,
-                                          checker=checker, environ=env)
+                                          observation=obs, checker=checker, environ=env)
+            res = {**res, "witness": "captured" if obs else "not_captured"}
         else:  # nothing claimed: still archive, nothing to refute
             res = gcn_gym.isa_claims_gate(Path(binary), regex, [], environ=env)
             try:

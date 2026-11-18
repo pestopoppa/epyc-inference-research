@@ -33,10 +33,10 @@ def hyp(statement="uses MFMA with LDS staging", symbol=K):
                       target_surface="s", target_symbol=symbol)
 
 
-def run_check(h, mode, tmp, asm=ASM):
+def run_check(h, mode, tmp, asm=ASM, observe=None):
     au = isa_claims.audit()
     resolve = lambda hh, paths: (Path(tmp) / "libggml-hip.so", Path(tmp) / "arch")  # noqa: E731
-    check = isa_claims.candidate_check(resolve, mode)
+    check = isa_claims.candidate_check(resolve, mode, observe=observe)
     with mock.patch.object(au, "load_code_objects", return_value=[b"CO"]), \
          mock.patch.object(au, "_run", return_value=asm), \
          mock.patch.object(au, "file_sha256", return_value="ab" * 32):
@@ -77,6 +77,84 @@ class CandidateCheck(unittest.TestCase):
     def test_off_is_not_a_check_mode(self):
         with self.assertRaises(ValueError):
             isa_claims.candidate_check(lambda h, p: None, "off")
+
+
+HEADER = "Dispatch_Id,Kernel_Name,Counter_Name,Counter_Value\n"
+
+
+def counter_csv(**values):
+    return HEADER + "".join(f"1,{K},{n},{v}\n" for n, v in values.items())
+
+
+def fake_runner(mfma, lds, rc=0, write=True):
+    """Stands in for subprocess.run: writes the pass CSV rocprofv3 would."""
+    def run(argv, **kw):
+        d = Path(argv[argv.index("-d") + 1])
+        name = argv[argv.index("-o") + 1]
+        if write:
+            d.mkdir(parents=True, exist_ok=True)
+            body = (counter_csv(SQ_INSTS_MFMA=mfma, GRBM_GUI_ACTIVE=10) if name == "alu"
+                    else counter_csv(SQ_INSTS_LDS=lds, GRBM_GUI_ACTIVE=10))
+            (d / f"{name}_counter_collection.csv").write_text(body)
+        return mock.Mock(returncode=rc)
+    return run
+
+
+class CounterWitness(unittest.TestCase):
+    def capture(self, tmp, **kw):
+        return isa_claims.capture_observation(["wl"], Path(tmp) / "c", runner=fake_runner(**kw))
+
+    def test_capture_builds_observation_with_both_witnesses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            obs = self.capture(tmp, mfma=64, lds=0)
+            row = next(r for r in obs["kernels"] if r["kernel"] == K)
+            self.assertEqual((row["metrics"]["mfma_insts"], row["metrics"]["lds_insts"]), (64.0, 0.0))
+
+    def test_capture_failure_is_no_witness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(self.capture(tmp, mfma=1, lds=1, rc=1))
+            self.assertIsNone(self.capture(tmp, mfma=1, lds=1, write=False))
+
+    def test_executed_claim_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            obs = self.capture(tmp, mfma=64, lds=9)
+            v = run_check(hyp(), "enforce", tmp, observe=lambda h, b: obs)
+            self.assertTrue(v.passed)
+            d = json.loads(v.detail)
+            self.assertEqual(d["statuses"]["mfma"], "EXECUTED")
+            self.assertEqual(d["witness"], "captured")
+
+    def test_zero_counter_refutes_in_enforce_not_advisory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            obs = self.capture(tmp, mfma=0, lds=9)   # MFMA in ISA, never executed
+            v = run_check(hyp(), "enforce", tmp, observe=lambda h, b: obs)
+            self.assertFalse(v.passed)
+            self.assertEqual(json.loads(v.detail)["statuses"]["mfma"], "NOT_EXECUTED")
+            self.assertTrue(run_check(hyp(), "advisory", tmp, observe=lambda h, b: obs).passed)
+
+    def test_lds_counter_is_refute_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            obs = self.capture(tmp, mfma=64, lds=9)
+            d = json.loads(run_check(hyp(), "enforce", tmp, observe=lambda h, b: obs).detail)
+            self.assertEqual(d["statuses"]["lds_staging"], "STATIC_ONLY")
+
+    def test_missing_or_failing_witness_stays_static_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            def boom(h, b):
+                raise RuntimeError("rocprof died")
+            for obs in (lambda h, b: None, boom):
+                v = run_check(hyp(), "enforce", tmp, observe=obs)
+                self.assertTrue(v.passed)
+                d = json.loads(v.detail)
+                self.assertEqual((d["statuses"]["mfma"], d["witness"]), ("STATIC_ONLY", "not_captured"))
+
+    def test_kernel_not_in_counter_run_stays_static_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            obs = self.capture(tmp, mfma=0, lds=0)
+            for r in obs["kernels"]:
+                r["kernel"] = "_Z_other"
+            v = run_check(hyp(), "enforce", tmp, observe=lambda h, b: obs)
+            self.assertTrue(v.passed)
 
 
 class WrapGate(unittest.TestCase):
