@@ -1250,6 +1250,28 @@ def _status_payload(runtime_root: Path) -> dict[str, Any]:
         root.close()
 
 
+# A detached tmux session inherits the tmux *server* environment, not the
+# launching process's.  A row harness that relocates nested resource claims
+# (ORCHESTRATOR_TMP_DIR) or is attributed by the keeper (FILLER_ID) would lose
+# those bindings silently, so the controller's own device claim would collide
+# with the harness's physical GPU exclusion (c6-admission-live-proof-r6).
+# Only this fixed allowlist is forwarded; nothing here enters the sealed spec.
+FORWARDED_LAUNCHER_ENV = ("ORCHESTRATOR_TMP_DIR", "FILLER_ID", "WS58_REGIONS")
+
+
+def _forwarded_launcher_env(environ: Mapping[str, str] | None = None) -> tuple[str, ...]:
+    source = os.environ if environ is None else environ
+    forwarded = []
+    for name in FORWARDED_LAUNCHER_ENV:
+        value = source.get(name)
+        if value is None:
+            continue
+        if "\0" in value or "\n" in value:
+            raise SupervisorError(f"forwarded launcher variable {name} is malformed")
+        forwarded.append(f"{name}={value}")
+    return tuple(forwarded)
+
+
 def start_detached(spec: LaunchSpec, *, start_timeout: float = 20.0) -> dict[str, Any]:
     root = _runtime(spec.runtime_root)
     try:
@@ -1266,6 +1288,7 @@ def start_detached(spec: LaunchSpec, *, start_timeout: float = 20.0) -> dict[str
         "env",
         "PYTHONDONTWRITEBYTECODE=1",
         f"PYTHONPATH={closure}",
+        *_forwarded_launcher_env(),
         str(spec.body["python"]),
         "-B",
         "-m",
