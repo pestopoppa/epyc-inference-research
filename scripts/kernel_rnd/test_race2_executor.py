@@ -111,3 +111,10 @@ def test_decide_bar():
     assert d["undetected"] == ["F0"] and d["sensitivity"] == "6/7"
     d = rx.decide(fx, ctl[:2] + [_rec("slow", "CLEAN", 601)])
     assert not d["checks"]["within_time_budget"]
+
+
+def test_loop_with_unwaited_smem_and_ds_converges():
+    # s_load and ds_read issued every iteration with no lgkmcnt(0) inside the loop must still reach a fixpoint
+    r = run(S("s_load_dword s0, s[4:5], 0x0", "ds_read_b32 v2, v0", "s_cbranch_scc1 65533", "s_waitcnt lgkmcnt(0)",
+              "s_endpgm"))
+    assert r["verdict"] == "CLEAN"

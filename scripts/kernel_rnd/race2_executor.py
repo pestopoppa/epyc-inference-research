@@ -37,7 +37,8 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 SCHEMA = "epyc.race2.executor.v1"
-MAX_VISITS_PER_INST = 64
+MAX_VISITS_PER_INST = 256
+LGKM_MAX = 15                     # gfx9 lgkmcnt is 4 bits: a longer queue cannot be resolved exactly anyway
 DEFAULT_TIME_BUDGET_S = 600.0     # M1: <=10 min per kernel instance on one core
 
 _IGNORED_DS = re.compile(r"^ds_(bpermute|permute|swizzle|nop)")
@@ -201,14 +202,18 @@ def analyze(insts: Sequence[Inst], *, time_budget_s: float = DEFAULT_TIME_BUDGET
             elif i.op == "s_barrier":
                 st = (frozenset(e for e in window if not e[2]), q, nsm, exact, apend)
             elif _SMEM.match(i.op):
-                st = (window, q, nsm + 1, exact, apend)
+                st = (window, q, min(nsm + 1, LGKM_MAX + 1), exact, apend)
             elif i.op.startswith("ds_"):
                 if k is not None:
                     for (y, ky, _d) in window:
                         if y != n and _conflict(ky, k):
                             findings.add((y, n, ky, k))
                     window = window | {(n, k, False)}
-                st = (window, q + (n,), nsm, exact, apend)
+                q2 = q + (n,)
+                if len(q2) > LGKM_MAX or n in q:      # loop-carried or overflowing queue: keep the set, drop the order
+                    st = (window, tuple(sorted(set(q2))), nsm, False, apend)
+                else:
+                    st = (window, q2, nsm, exact, apend)
             elif k == "AW":
                 for (y, ky, _d) in window:
                     if y != n and _conflict(ky, k):
