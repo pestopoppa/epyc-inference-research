@@ -98,7 +98,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
-from . import exact_lane, keep_timing
+from . import exact_lane, keep_timing, variance_keep
 from . import floor_selfcheck
 from . import tail_timing
 from . import actor_opencode_config
@@ -2808,6 +2808,12 @@ def _main(argv: list[str] | None = None) -> int:
                         help="R23-44: run the serving gate once the accumulator's compounded "
                              "bench gain over the champion of record reaches this multiple of "
                              "the serving floor (operator: 2-3x; default 2.5)")
+    parser.add_argument("--variance-input", type=Path, default=None,
+                        help="U3-SEED/S3-AKU-04 (OP-AKU-U3): JSON epyc.autokernel.variance_input.v1 "
+                             "of paired session units. When given, each kept row records the "
+                             "variance_keep verdict and the (effect, spread) point and applies "
+                             "keep_frontier.retain; additive, never changes the keep decision. "
+                             "Absent (default): behaviour unchanged")
     parser.add_argument("--accumulate-bench-every-keeps", type=int,
                         default=accumulate.ACCUMULATE_BENCH_EVERY_KEEPS,
                         help="re-measure champion-of-record vs accumulator tip on every Nth "
@@ -5973,6 +5979,7 @@ def _main(argv: list[str] | None = None) -> int:
     #: attached to that keep's `kept` row. Observability only, never control flow.
     keep_timer: list[keep_timing.KeepTimer | None] = [None]
     keep_timing_by_head: dict[str, dict] = {}
+    variance_keep_by_head: dict[str, dict] = {}
 
     def keep_stage(name: str, **identity):
         timer = keep_timer[0]
@@ -7055,6 +7062,8 @@ def _main(argv: list[str] | None = None) -> int:
             attempt = attempt_with_codegen(outcome, codegen_by_head)
             if outcome.status == "kept" and outcome.champion_head in keep_timing_by_head:
                 attempt[keep_timing.FIELD] = keep_timing_by_head.pop(outcome.champion_head)
+            if outcome.status == "kept" and outcome.champion_head in variance_keep_by_head:
+                attempt.update(variance_keep_by_head.pop(outcome.champion_head))
             if isinstance(getattr(outcome, tail_timing.ATTR, None), dict):
                 attempt[tail_timing.FIELD] = getattr(outcome, tail_timing.ATTR)
             if outcome.hypothesis is not None:
@@ -7634,6 +7643,9 @@ def _main(argv: list[str] | None = None) -> int:
             if lane_binding is not None and cpu_launch is not None:
                 with keep_stage("fold_check_held"):
                     fold_check_held(worker)
+            if getattr(args, "variance_input", None) is not None:
+                variance_keep_by_head[head] = variance_keep.keep_record_fields(
+                    args.variance_input, args.store / "keep-frontier.json")
             if keep_timer[0] is not None:
                 keep_timing_by_head[head] = keep_timer[0].to_dict()
                 keep_timer[0] = None
