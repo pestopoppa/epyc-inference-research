@@ -1,0 +1,21 @@
+{
+ "schema": "epyc.autokernel.exact_lane_config.v1",
+ "backend": "cpu",
+ "incumbent_store": "/mnt/raid0/llm/kernels/builds/cpu-20261117-bda43aa17-c13",
+ "incumbent_source_sha": "bda43aa17c11b671e0e203e7eb7bf4f1303bc273",
+ "model": "/mnt/raid0/llm/models/MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M.gguf",
+ "model_sha256": "43d77b25b7f1f3d59990fc3d1fa01dd3f24c94bb83c11589d3d157062c966989",
+ "draft": "/mnt/raid0/llm/models/Qwen_Qwen3-0.6B-Q8_0.gguf",
+ "draft_sha256": "c159d1518f16bc42533d9a09f034eb598b670341adc2b08b9a9751614aea71eb",
+ "prompts": {
+  "p0": "The three main differences between a mutex and a semaphore in operating systems are",
+  "p1": "Write a Python function that merges two sorted lists into one sorted list without using sort():\n\ndef merge(a, b):\n",
+  "p2": "Question: Why is the sky blue during the day and red at sunset?\nAnswer: The sky appears blue because"
+ },
+ "port": 18791,
+ "n_predict": 64,
+ "seed": 1,
+ "min_tokens": 64,
+ "draft_max": 8,
+ "provenance": "INF06-EXACT-LANE; prompts/models as re-gate row ak-inf06-exact-regate-c12lb49-20261117 (PASS); incumbent = champion C13 CPU store"
+}

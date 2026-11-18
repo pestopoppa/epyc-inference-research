@@ -269,6 +269,37 @@ def cells(prompts: Iterable[str], arms: Sequence[str] = ARMS):
     return [(p, a) for p in prompts for a in arms]
 
 
+#: The in-repo CPU campaign config (champion C13 CPU store as incumbent). The lane is
+#: CPU-only for now: identical GPU runs diverge (C10-GPU-GREEDY-AA-DIVERGENCE, NOT_LOCALIZED),
+#: so token-ID identity cannot be a GPU gate yet.
+DEFAULT_CPU_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "exact_lane_cpu_c13.json")
+EXACT_LANE_FLAG = "--exact-lane-config"
+
+
+def refuse_for_gpu(*, cpu_campaign: bool, gpu_campaign: bool) -> None:
+    """The exact lane is CPU-only: refuse it for any GPU (or mixed / non-CPU) campaign."""
+    if gpu_campaign or not cpu_campaign:
+        raise LaneError("the exact lane is CPU-only (GPU greedy runs are not self-identical: "
+                        "C10-GPU-GREEDY-AA-DIVERGENCE); refusing --exact-lane-config for a "
+                        "non-CPU campaign")
+
+
+def with_exact_lane(argv: Sequence[str], *, config=None) -> list[str]:
+    """Child argv for the serial launcher: a CPU campaign (`--cpu-serving-launch`) gets
+    `--exact-lane-config` (the in-repo default unless one is given); a GPU campaign that
+    names one is refused; a GPU campaign without one is returned unchanged."""
+    argv = list(argv)
+    cpu = "--cpu-serving-launch" in argv
+    gpu = "--gpu-serving-launch" in argv
+    if EXACT_LANE_FLAG in argv:
+        refuse_for_gpu(cpu_campaign=cpu, gpu_campaign=gpu)
+        return argv
+    if cpu and not gpu:
+        return [*argv, EXACT_LANE_FLAG, str(config or DEFAULT_CPU_CONFIG)]
+    return argv
+
+
 def load_config(path) -> dict:
     """Campaign exact-lane config (JSON). Required: incumbent_store, model, draft,
     prompts {id: text}, port. Optional: n_predict (64), seed (1), min_tokens (64),
@@ -279,6 +310,8 @@ def load_config(path) -> dict:
                if not cfg.get(k)]
     if missing:
         raise LaneError(f"exact-lane config missing {missing}")
+    if cfg.get("backend", "cpu") != "cpu":
+        raise LaneError("exact-lane config backend must be cpu (the lane is CPU-only)")
     if not isinstance(cfg["prompts"], dict):
         raise LaneError("exact-lane config prompts must be {id: text}")
     return cfg
@@ -286,7 +319,11 @@ def load_config(path) -> dict:
 
 def server_argv(cfg: Mapping, store: str, arm: str) -> tuple[list[str], dict]:
     """llama-server argv + env for one cell (CPU, one slot, no warmup, own store)."""
-    nth = str(int(cfg.get("threads", 4)))
+    if cfg.get("threads"):
+        nth = str(int(cfg["threads"]))
+    else:  # the campaign's own CPU set (physical cores first), never the whole host
+        aff = sorted(os.sched_getaffinity(0))
+        nth = str(len([c for c in aff if c < 96]) or len(aff))
     argv = [f"{store}/bin/llama-server", "-m", cfg["model"], "-t", nth, "-tb", nth,
             "-ngl", "0", "-c", "2048", "-np", "1", "--port", str(cfg["port"]),
             "--host", "127.0.0.1", "--no-warmup"]

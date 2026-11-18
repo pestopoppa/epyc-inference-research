@@ -7936,8 +7936,7 @@ def _main(argv: list[str] | None = None) -> int:
                     gpu_profile_observation, getattr(hypothesis, "target_symbol", None))}
                if direct_launch and not cpu_launch else {}),
             **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}),
-            **({"make_exact_judge": exact_lane.make_exact_judge(
-                    exact_lane.load_config(args.exact_lane_config))}
+            **({"make_exact_judge": _exact_judge_factory(args)}
                if getattr(args, "exact_lane_config", None) else {}))
 
     claim_started = None
@@ -9002,6 +9001,15 @@ def _main(argv: list[str] | None = None) -> int:
         print(f"\nwrote {args.out / 'loop-run.json'}")
     return 0
 
+
+
+
+def _exact_judge_factory(args):
+    """INF06-EXACT-LANE: the exact judge for a CPU campaign; refused for a GPU campaign."""
+    exact_lane.refuse_for_gpu(
+        cpu_campaign=getattr(args, "cpu_serving_launch", None) is not None,
+        gpu_campaign=getattr(args, "gpu_serving_launch", None) is not None)
+    return exact_lane.make_exact_judge(exact_lane.load_config(args.exact_lane_config))
 
 def main(argv: list[str] | None = None) -> int:
     from . import lane_watchdog, serial_run

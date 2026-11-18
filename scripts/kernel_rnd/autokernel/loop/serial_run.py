@@ -52,7 +52,7 @@ _CHANGING_FLAGS = frozenset({*ANCHOR_EPOCH_FLAGS, *FLOOR_REGISTRY_FLAGS, *FLOOR_
                             "--cpu-confirm-from", "--source-anchor-continuation",
                             "--source-anchor-sha256", "--runtime-recipe-reference",
                             "--runtime-recovery-reference", "--validate-source-continuation",
-                            "--validate-source-loo"})
+                            "--validate-source-loo", "--exact-lane-config"})
 _BOOLEAN_FLAGS = frozenset({*FLOOR_REGISTRY_SWITCHES, "--dry-run", "--validate-source-continuation",
                             "--validate-source-loo"})
 _CONTINUATION_FIELDS = {"schema", "terminal", "input_argv", "input_argv_sha256", "binding",
@@ -1285,7 +1285,12 @@ def _scheduled_batch_refusal(*, batch_iterations, explicit_manifest, targets):
 
 
 def _child_command(argv):
-    return [sys.executable, "-m", "scripts.kernel_rnd.autokernel.loop.run", *argv]
+    # INF06-EXACT-LANE: CPU campaigns run with the exact-lane judge (in-repo C13 config
+    # unless the argv names one); a GPU campaign naming one is refused. Added to the CHILD
+    # command only, so input bindings / continuation lineage are unchanged.
+    from . import exact_lane
+    return [sys.executable, "-m", "scripts.kernel_rnd.autokernel.loop.run",
+            *exact_lane.with_exact_lane(argv)]
 
 
 def _current_run_pointer(root: Path) -> Path | None:

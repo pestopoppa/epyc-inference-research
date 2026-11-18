@@ -285,3 +285,59 @@ def test_run_pool_without_config_passes_no_judge(tmp_path, monkeypatch):
     except Exception:
         pass
     assert seen and seen[0]["exact_judge"] is None
+
+
+# ---- live CPU campaign wiring (serial launcher + in-repo config) -----------------
+
+from . import serial_run as _serial_run  # noqa: E402
+
+
+def test_default_cpu_config_is_valid_and_c13():
+    cfg = el.load_config(el.DEFAULT_CPU_CONFIG)
+    assert cfg["backend"] == "cpu"
+    assert cfg["incumbent_store"].endswith("cpu-20261117-bda43aa17-c13")
+    assert set(cfg["prompts"]) == {"p0", "p1", "p2"} and cfg["n_predict"] == 64
+
+
+def test_serial_launcher_adds_config_for_cpu_campaign():
+    cmd = _serial_run._child_command(["--cpu-serving-launch", "/x.json", "--iterations", "1"])
+    i = cmd.index("--exact-lane-config")
+    assert cmd[i + 1] == el.DEFAULT_CPU_CONFIG
+
+
+def test_serial_launcher_keeps_explicit_config():
+    cmd = _serial_run._child_command(["--cpu-serving-launch", "/x.json",
+                                      "--exact-lane-config", "/other.json"])
+    assert cmd.count("--exact-lane-config") == 1 and "/other.json" in cmd
+
+
+def test_serial_launcher_gpu_campaign_unchanged_without_config():
+    argv = ["--gpu-serving-launch", "/g.json", "--iterations", "1"]
+    assert _serial_run._child_command(argv)[-len(argv):] == argv
+    assert "--exact-lane-config" not in _serial_run._child_command(argv)
+
+
+def test_serial_launcher_refuses_config_for_gpu_campaign():
+    with pytest.raises(el.LaneError):
+        _serial_run._child_command(["--gpu-serving-launch", "/g.json",
+                                    "--exact-lane-config", el.DEFAULT_CPU_CONFIG])
+
+
+def test_run_factory_refuses_gpu_campaign():
+    from types import SimpleNamespace
+    from . import run as _run
+    with pytest.raises(el.LaneError):
+        _run._exact_judge_factory(SimpleNamespace(
+            gpu_serving_launch="/g.json", cpu_serving_launch=None,
+            exact_lane_config=el.DEFAULT_CPU_CONFIG))
+    make = _run._exact_judge_factory(SimpleNamespace(
+        gpu_serving_launch=None, cpu_serving_launch="/c.json",
+        exact_lane_config=el.DEFAULT_CPU_CONFIG))
+    assert callable(make)
+
+
+def test_gpu_backend_config_refused(tmp_path):
+    p = tmp_path / "g.json"
+    p.write_text(json.dumps({**_CFG, "backend": "gpu"}))
+    with pytest.raises(el.LaneError):
+        el.load_config(p)
