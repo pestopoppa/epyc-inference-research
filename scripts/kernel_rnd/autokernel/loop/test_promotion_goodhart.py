@@ -58,3 +58,26 @@ def test_counts_keeps_whose_loo_arm_is_at_least_as_fast_on_any_surface():
 def test_malformed_input_refuses(arms):
     with pytest.raises(ValueError):
         gc.count_goodharted(arms, full_bundle=FULL)
+
+
+def test_promotion_record_carries_goodharted_count_beside_unchanged_gain():
+    arms = [A("k1", 0.03, serving=101.0, rebaselined=80.0), A("k2", 0.02, serving=90.0, rebaselined=80.0)]
+    g = gc.count_goodharted(arms, full_bundle=FULL)
+    kw = dict(launches=[L("h1", 0.10)], deciding_pair_ids=["d1"], production_commit=C, recipe_hash=H)
+    base = pe.compound_from_heldout(**kw)
+    rec = pe.compound_from_heldout(**kw, goodhart=g)
+    assert base["goodharted_count"] is None and base["goodhart"] is None   # not measured, never 0
+    assert rec["goodharted_count"] == 1 and rec["goodhart"]["goodharted_keep_ids"] == ["k1"]
+    assert rec["compounded_gain"] == base["compounded_gain"]
+
+
+@pytest.mark.parametrize("bad", [
+    {}, {"schema": "x"},
+    {"schema": gc.SCHEMA, "goodharted_count": 2, "keeps": 1, "goodharted_keep_ids": ["a", "b"]},
+    {"schema": gc.SCHEMA, "goodharted_count": 1, "keeps": 2, "goodharted_keep_ids": []},
+    {"schema": gc.SCHEMA, "goodharted_count": True, "keeps": 2, "goodharted_keep_ids": ["a"]},
+])
+def test_promotion_record_refuses_malformed_goodhart(bad):
+    with pytest.raises(pe.PromotionEvidenceRefusal, match="goodhart"):
+        pe.compound_from_heldout(launches=[L("h1")], deciding_pair_ids=["d"], production_commit=C,
+                                 recipe_hash=H, goodhart=bad)

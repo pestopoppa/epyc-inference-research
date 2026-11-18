@@ -14,6 +14,8 @@ import math
 import re
 from typing import Mapping, Sequence
 
+from . import goodhart_count
+
 SCHEMA = "epyc.autokernel.promotion_evidence.v1"
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _HASH = re.compile(r"^[0-9a-f]{64}$")
@@ -24,7 +26,8 @@ class PromotionEvidenceRefusal(ValueError):
 
 
 def compound_from_heldout(*, launches: Sequence[Mapping], deciding_pair_ids: Sequence[str],
-                          production_commit: str, recipe_hash: str, min_launches: int = 1) -> dict:
+                          production_commit: str, recipe_hash: str, min_launches: int = 1,
+                          goodhart: Mapping | None = None) -> dict:
     """Compounded gain over held-out launches.
 
     Each launch: {"pair_id": str, "effect": float (candidate/production - 1),
@@ -32,7 +35,19 @@ def compound_from_heldout(*, launches: Sequence[Mapping], deciding_pair_ids: Seq
     minus one. Refuses on any overlap with `deciding_pair_ids`, a duplicate launch pair,
     a launch pinned to a different production binary/recipe, a non-finite effect, or
     fewer than `min_launches` launches.
+
+    S3-AKU-13: `goodhart` is the `goodhart_count.count_goodharted` result for the same
+    bundle's leave-one-out arms. When given it is validated and recorded under the
+    additive `goodharted_count`/`goodhart` fields; it never changes the gain. When
+    omitted the record carries `goodharted_count: None` (not measured), never 0.
     """
+    if goodhart is not None:
+        if (not isinstance(goodhart, Mapping) or goodhart.get("schema") != goodhart_count.SCHEMA
+                or type(goodhart.get("goodharted_count")) is not int
+                or type(goodhart.get("keeps")) is not int
+                or not 0 <= goodhart["goodharted_count"] <= goodhart["keeps"]
+                or len(goodhart.get("goodharted_keep_ids") or ()) != goodhart["goodharted_count"]):
+            raise PromotionEvidenceRefusal("goodhart count is not a valid goodhart_count.v1 result")
     if not _COMMIT.match(str(production_commit)) or not _HASH.match(str(recipe_hash)):
         raise PromotionEvidenceRefusal("production binary must be pinned by 40-hex commit and 64-hex recipe hash")
     if not deciding_pair_ids:
@@ -58,4 +73,6 @@ def compound_from_heldout(*, launches: Sequence[Mapping], deciding_pair_ids: Seq
         gain *= 1.0 + e
     return {"schema": SCHEMA, "production_commit": production_commit, "recipe_hash": recipe_hash,
             "heldout_pair_ids": ids, "deciding_pair_ids": sorted(deciding),
-            "launches": len(ids), "compounded_gain": gain - 1.0}
+            "launches": len(ids), "compounded_gain": gain - 1.0,
+            "goodharted_count": None if goodhart is None else goodhart["goodharted_count"],
+            "goodhart": None if goodhart is None else dict(goodhart)}
