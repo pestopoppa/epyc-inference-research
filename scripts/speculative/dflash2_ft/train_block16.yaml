@@ -1,0 +1,66 @@
+# DF2-BLOCK16 trainer config: Qwen3.8-27B DFlash2 drafter, block 8 -> 16, warm-started from the z-lab weights.
+# Read by train_df2.py (reference/fallback trainer). The `automodel:` section maps the same choices onto
+# NeMo Automodel train_dflash2 @1667095; its key names are UNVERIFIED against that commit (the recipe is not on
+# this host and nothing may be downloaded) and must be checked when the operator-approved venv exists.
+#
+# Initialisation decision (positions 8-15): NOTHING NEW TO INITIALISE. A DFlash2 drafter has no per-position
+# parameters: the block is [anchor, MASK x (B-1)] where MASK is the target's shared token_embd row 248070,
+# position enters only via NeoX RoPE (base 1e7), the in-block conv is a kernel-2 shift and the selector
+# codebooks are token-indexed (df2_model.py docstring; src/models/dflash.cpp @ eee3da838). So all 81 tensors
+# load unchanged and only dflash_config.block_size goes 8 -> 16. Two behavioural risks are handled here
+# instead of by init: (1) slots 8-15 are untrained -> they get most of the curriculum mass after a short
+# mixed phase; (2) slots 1-7 attend non-causally to 8 extra MASK rows, which perturbs the block-8 operating
+# point -> the curriculum keeps 20-50 % of steps at B=8 and the eval keeps X=7 as the paired baseline.
+# Phase E0 of the pilot measures the untrained extrapolation (block_size rewritten, weights untouched) for free.
+
+model:
+  init_dir: /mnt/raid0/llm/tmp/df2-block16-train-20261118/work/init-hf   # gguf_to_hf.py BF16 GGUF --block-size 16
+  synthetic_config: null
+  random_init_seed: null
+
+frozen:
+  synthetic: false
+  target_gguf: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf   # token_embd + output, dequantized; = what serving uses
+
+data:
+  root: /mnt/raid0/llm/tmp/df2-block16-train-20261118/work/dump   # df2-feat-v1 shards (df2_feature_dump replay)
+  glob: shard-*
+
+train:
+  device: cuda              # ROCm torch exposes HIP as cuda
+  dtype: bf16               # bf16 weights; AdamW states in the param dtype (see automodel: for fp32 master)
+  seed: 20261118
+  block_size: 16            # written into dflash_config.block_size of the output
+  block_curriculum:         # sampled per optimizer step
+    - {until_frac: 0.15, sizes: [8, 16], probs: [0.5, 0.5]}
+    - {until_frac: 1.00, sizes: [8, 16], probs: [0.2, 0.8]}
+  loss_gamma: 7.0           # weight exp(-(j-1)/gamma) on slot j; 7 for block 16 [inferred from the DFlash v1 paper's decay; re-check]
+  gamma_scales_with_block: true   # B=8 steps use gamma 3.5
+  objective: ce             # ce = arm H (hard labels, sampled tokens); kl = arm K (needs dump --final)
+  selector_weight: 0.1      # selector CE over the top-16 candidates, teacher-forced predecessor [unverified vs upstream]
+  lr: 3.0e-5                # warm-start fine-tune, not from-scratch
+  warmup_steps: 200
+  cosine: true
+  betas: [0.9, 0.95]
+  weight_decay: 0.01
+  grad_clip: 1.0
+  anchors_per_record: 64    # packed anchor blocks per record (one attention call)
+  max_rows: 4096            # crop: last 4096 rows of a record (2048 prefix window + completion)
+  grad_accum: 4
+  steps: 15600              # ~= 4M completion tokens / 64 anchors / 4 accum, one pass over anchor positions
+  total_steps: 15600        # global cosine/curriculum length when training shard-by-shard (rolling <=60 GB shards)
+  resume_from: null         # previous shard's output dir (weights via model.init_dir + optimizer.pt + state.json)
+  log_every: 50
+
+output:
+  dir: /mnt/raid0/llm/tmp/df2-block16-train-20261118/work/train-out
+
+automodel:                  # same intent for NeMo Automodel train_dflash2 @1667095 -- KEY NAMES UNVERIFIED
+  recipe: train_dflash2
+  commit: 1667095
+  attn_implementation: sdpa
+  model.pretrained_model_name_or_path: ${model.init_dir}
+  model.dflash_config.block_size: 16
+  dataset: offline_features  # adapter = train_df2.iter_batches over df2-feat-v1 shards; target NOT loaded
+  optimizer: {name: adamw, lr: 3.0e-5, betas: [0.9, 0.95], weight_decay: 0.01, master_weights: fp32}
+  loss: {position_decay_gamma: 7.0, selector_weight: 0.1}
