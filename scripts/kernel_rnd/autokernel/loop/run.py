@@ -7794,7 +7794,7 @@ def _main(argv: list[str] | None = None) -> int:
             if screen_confirmation:
                 return cpu_screen.RetainedPlanner(screen_confirmation, worker, screen_prepared["launch"])
             ordinary = actors.AgentPlanner(workspace=worker.worktree, backend=lane_backend(worker),
-                                           timeout_s=args.actor_timeout_s,
+                                           timeout_s=args.actor_timeout_s, default_budgets=True,
                                            should_stop=should_stop,
                                            belief_context=args.actor_belief_context,
                                            belief_root=args.belief_root_repo,
@@ -7866,6 +7866,7 @@ def _main(argv: list[str] | None = None) -> int:
                 return actors.AgentPlanner(
                     workspace=Path(workspace), backend=planner_backend,
                     timeout_s=args.actor_timeout_s, should_stop=member_stop,
+                    default_budgets=True,
                     # A member that hits the hard timeout spent its budget: never
                     # retried in-round (operator 2026-09-27, DS41 run 10j).
                     retry_timeouts=False,
@@ -7914,6 +7915,7 @@ def _main(argv: list[str] | None = None) -> int:
                 if screen_confirmation else actors.AgentCritic(
                     workspace=worker.worktree, backend=critic_backend,
                     timeout_s=args.actor_timeout_s, should_stop=should_stop,
+                    default_budgets=True,
                     seat=actors.ActorSeat(bounded=False, **_actor_knobs(args),
                                           **_actor_limits(args), **sandbox_seat,
                                           serving_f1=_actor_serving(args)["serving_f1"]))),

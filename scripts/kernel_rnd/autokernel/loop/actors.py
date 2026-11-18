@@ -51,7 +51,7 @@ from typing import Any, Callable, Mapping, Sequence
 import uuid
 
 from ..custody import append_rows, sync_path as _sync_path
-from . import actor_metrics, belief_context, gpu_counter_signals, history_fields, hotspots, integrity, procguard, scratch
+from . import actor_metrics, belief_context, call_budget, gpu_counter_signals, history_fields, hotspots, integrity, procguard, scratch
 from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
                    Review, RunAborted)
 
@@ -953,6 +953,15 @@ def _fenced_actor_capture(fn):
                 _sync_path(scratch._marker_path("dir", directory))
                 _sync_path(directory.parent)
     return guarded
+
+
+def _default_budget_kw(backend: Backend, role: str, timeout_s: float,
+                       configured: float) -> dict[str, Any]:
+    """OAB-32: the `budget_s` kwarg for one call: the configured budget unchanged, else
+    the default under `timeout_s`; refuses a local backend that would run unbounded."""
+    wall = call_budget.effective_wall_s(configured, timeout_s)
+    call_budget.require_bounded(backend.kind, role, wall)
+    return {"budget_s": wall} if wall else {}
 
 
 @_fenced_actor_capture
@@ -3703,6 +3712,8 @@ class AgentPlanner:
     timeout_s: int = DEFAULT_TIMEOUT_S
     transient_streak: int = 0
     seat: ActorSeat | None = None
+    #: OAB-32: apply `call_budget` defaults (a wall budget on every call). Off = historical.
+    default_budgets: bool = False
     #: The loop's stop predicate (STOP file or SIGTERM/SIGINT). When set, an in-flight
     #: actor is TERM'd on stop and never retried (DS41-C22).
     should_stop: Callable[[], bool] | None = None
@@ -3885,7 +3896,14 @@ class AgentPlanner:
         return prompt + "\n\n" + author_action_rule(repo)
 
     def _budget_kw(self, role: str) -> dict[str, Any]:
-        """OAB-23: the per-call wall budget for `role` (opencode only; none when 0)."""
+        """OAB-23: the per-call wall budget for `role` (opencode only; none when 0).
+        OAB-32 (`default_budgets`): every role and kind gets the default under the hard
+        timeout, and a local backend with no bound is refused."""
+        if self.default_budgets:
+            return _default_budget_kw(self.backend, role, self.timeout_s,
+                                      self.seat.budget_for(role)
+                                      if self.seat is not None and self.backend.kind == "opencode"
+                                      else 0)
         if self.seat is None or self.backend.kind != "opencode":
             return {}
         budget = self.seat.budget_for(role)
@@ -4455,6 +4473,8 @@ class AgentCritic:
     #: Only the OAB-10/11 knobs apply (trim_instructions / trim_tools / lane_guard); the
     #: critic is always the plain, read-only (no `--auto`) opencode seat.
     seat: ActorSeat | None = None
+    #: OAB-32: apply `call_budget` defaults (a wall budget on every call). Off = historical.
+    default_budgets: bool = False
 
     @_in_call_scope("critic")
     def _review(self, subject: str, grounds: str,
@@ -4465,10 +4485,13 @@ class AgentCritic:
             prompt = _lane_block("critic", Path(self.workspace), context) + "\n\n" + prompt
         env = _seat_call(self.seat, self.backend, "critic", Path(self.workspace), context)
         stop_kw = {} if self.should_stop is None else {"should_stop": self.should_stop}
+        budget_kw = (_default_budget_kw(self.backend, "critic", self.timeout_s, 0)
+                     if self.default_budgets else {})
         raw, _ = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend,
-                               read_only=True, schema=REVIEW_SCHEMA, env=env, **stop_kw),
+                               read_only=True, schema=REVIEW_SCHEMA, env=env, **stop_kw,
+                               **budget_kw),
             should_stop=self.should_stop)
         body = _parse_reply(raw, schema=REVIEW_SCHEMA, backend=self.backend, workspace=self.workspace)
         if not isinstance(body.get("accepted"), bool):
