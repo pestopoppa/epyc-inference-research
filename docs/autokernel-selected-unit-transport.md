@@ -71,3 +71,16 @@ exclusion witnesses stay unknown and the capture stays diagnostic. This is not
 native BIND acceptance, six-witness A2 qualification, nomination, or recovery of
 lost held authority. No kernel build, model inference, or production operation is
 performed by these tests.
+
+## Per-unit intent and first-issue permit records (AKU-04f, additive v2)
+
+`loop/a2_unit_permit.py` adds the closed `epyc.autokernel.a2_unit_record.v2` chain
+(INTENT, PERMIT_ISSUED, LAUNCHED, NOT_ACQUIRED, TERMINAL valid/invalid/diagnostic) for one
+original unit of the unchanged full plan. The permit is one-shot and first-issue for the
+current owner incarnation; a replayed intent or foreign-incarnation permit never authorizes
+a launch, and a replayed non-terminal state is UNKNOWN, not absence. Only a durable
+NOT_ACQUIRED from the permit's owner permits a retry, which preserves the exact
+execution/plan/frame/range/unit/producer identity. A diagnostic terminal is final and
+claims nothing scientific. The v1 `a2_execution_state` events and validator are unchanged;
+these records are not wired into the journal or a live launch (tests use labelled synthetic
+data only).
