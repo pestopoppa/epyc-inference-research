@@ -91,6 +91,19 @@ def read_records(path: str | Path) -> dict[tuple, dict]:
     return dict(out)
 
 
+def read_skipped(path: str | Path) -> dict[str, list[str]]:
+    """Kernel names the shim saw but did not select: {"no_match": [...], "no_argtable": [...]} (sorted, unique)."""
+    out: dict[str, set] = {"no_match": set(), "no_argtable": set()}
+    for line in Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if "skipped" in r:
+            out.setdefault(r.get("why", "?"), set()).add(r["skipped"])
+    return {k: sorted(v) for k, v in out.items()}
+
+
 def build_plan(rec: Mapping, meta: Mapping, co: str | Path, blob_dir: str | Path | None, *, seed: int = 1) -> dict:
     """Driver plan for one dumped launch. blob_dir=None -> deterministic fill instead of the captured inputs."""
     m = meta.get(rec["k"])

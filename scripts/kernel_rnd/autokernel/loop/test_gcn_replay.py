@@ -94,10 +94,12 @@ def test_read_records_splits_dumped_and_timed(tmp_path):
     timed = [{"id": i, "k": K, "grid": [4, 2, 1], "block": [256, 1, 1], "shmem": 0, "timed": True, "ms": 0.1 * i,
               "launch_rc": 0} for i in range(1, 4)]
     bad = dict(timed[0], ms=-1.0)
-    p.write_text("\n".join(json.dumps(x) for x in [rec] + timed + [bad]) + "\n{\"torn")
+    skip = [{"skipped": "_Z6quantize", "why": "no_match"}, {"skipped": K, "why": "no_argtable"}]
+    p.write_text("\n".join(json.dumps(x) for x in [rec] + timed + [bad] + skip) + "\n{\"torn")
     r = gr.read_records(p)
     key = (K, (4, 2, 1), (256, 1, 1), 0)
-    assert len(r[key]["dumped"]) == 1 and r[key]["ms"] == pytest.approx([0.1, 0.2, 0.3])
+    assert len(r[key]["dumped"]) == 1 and r[key]["ms"] == pytest.approx([0.1, 0.2, 0.3]) and len(r) == 1
+    assert gr.read_skipped(p) == {"no_match": ["_Z6quantize"], "no_argtable": [K]}
 
 
 def test_build_plan_patches_pointers_and_renders(tmp_path):

@@ -19,7 +19,14 @@
  *       GCN_CAPTURE_MATCH     ERE on the mangled kernel name                                            required
  *       GCN_CAPTURE_DUMPS     dumped launches per key (default 2)
  *       GCN_CAPTURE_TIMED     timed launches per key (default 200)
- *       GCN_CAPTURE_MAXBYTES  largest allocation dumped (default 1 GiB; a larger one marks the record "dump_skipped") */
+ *       GCN_CAPTURE_MAXBYTES  largest allocation dumped (default 1 GiB; a larger one marks the record "dump_skipped")
+ *       GCN_CAPTURE_REPEAT    in-situ re-launches timed right after each DUMPED launch (default 0). test-mode suites launch
+ *                             a case once, so this is how they get in-situ timings: the same kernel, args and buffers are
+ *                             launched again after the .post dump (the dump is of the FIRST launch). Only valid for kernels
+ *                             whose output does not depend on its own previous output (MMQ, FA: overwrite, no accumulate);
+ *                             a test-backend-ops failure after repeats is the tell-tale.
+ * Diagnostics: the first launch of every kernel NOT selected (name does not match, or matches but is missing from the arg
+ * table) writes one {"skipped": name, "why": "no_match"|"no_argtable"} line, so a run that captures nothing says what ran. */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <pthread.h>
@@ -37,7 +44,9 @@ typedef struct { char *name; unsigned seg; int n; unsigned off[MAXA], sz[MAXA]; 
 typedef struct { const char *name; unsigned g[3], b[3]; size_t sh; unsigned dumps, timed; } keyent;
 static kent tab[MAXK]; static int ntab = -1; static keyent keys[MAXKEYS]; static int nkeys;
 static FILE *out; static const char *dir; static regex_t re; static int have_re;
-static unsigned maxdumps = 2, maxtimed = 200; static size_t maxbytes = (size_t)1 << 30; static unsigned long recid;
+static unsigned maxdumps = 2, maxtimed = 200, repeat = 0;
+#define MAXSKIP 8192
+static const void *skipped[MAXSKIP]; static int nskip; static size_t maxbytes = (size_t)1 << 30; static unsigned long recid;
 static hipEvent_t ev0, ev1; static int have_ev;
 static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
 typedef hipError_t (*launch_fn)(const void *, dim3, dim3, void **, size_t, hipStream_t);
@@ -51,6 +60,7 @@ static void init(void) {
   if (d) maxdumps = (unsigned)strtoul(d, NULL, 10);
   if (ti) maxtimed = (unsigned)strtoul(ti, NULL, 10);
   if (mb) maxbytes = (size_t)strtoull(mb, NULL, 10);
+  const char *rp = getenv("GCN_CAPTURE_REPEAT"); if (rp) repeat = (unsigned)strtoul(rp, NULL, 10);
   if (m && !regcomp(&re, m, REG_EXTENDED | REG_NOSUB)) have_re = 1;
   if (o && dir && have_re) out = fopen(o, "a");
   FILE *f = t ? fopen(t, "r") : NULL;
@@ -102,6 +112,25 @@ static int dump(void *base, size_t sz, unsigned long id, int j, const char *tag)
   free(h); return rc;
 }
 
+static void timed_launch(const void *fn, dim3 grid, dim3 block, void **args, size_t shmem, hipStream_t stream,
+                         const char *name, hipError_t *rr) {
+  if (!have_ev) have_ev = hipEventCreate(&ev0) == hipSuccess && hipEventCreate(&ev1) == hipSuccess;
+  float ms = -1.f;
+  (void)hipEventRecord(ev0, stream);
+  hipError_t r = real_launch(fn, grid, block, args, shmem, stream);
+  (void)hipEventRecord(ev1, stream);
+  if (hipEventSynchronize(ev1) != hipSuccess || hipEventElapsedTime(&ms, ev0, ev1) != hipSuccess) ms = -1.f;
+  head(name, grid, block, shmem); recid++;
+  fprintf(out, ",\"timed\":true,\"ms\":%.6f,\"launch_rc\":%d}\n", ms, (int)r); fflush(out);
+  *rr = r;
+}
+
+static void note_skip(const void *fn, const char *name, const char *why) {
+  for (int i = 0; i < nskip; i++) if (skipped[i] == fn) return;
+  if (nskip < MAXSKIP) skipped[nskip++] = fn;
+  fprintf(out, "{\"skipped\":\"%s\",\"why\":\"%s\"}\n", name ? name : "?", why); fflush(out);
+}
+
 static hipError_t dumped_launch(const void *fn, dim3 g, dim3 b, void **args, size_t sh, hipStream_t s, const char *name,
                                 kent *e) {
   void *bases[MAXA]; size_t sizes[MAXA]; int na = 0; int pa[MAXA]; unsigned long long pd[MAXA]; unsigned po[MAXA]; int np = 0;
@@ -143,22 +172,22 @@ hipError_t hipLaunchKernel(const void *fn, dim3 grid, dim3 block, void **args, s
   const char *name = out ? hipKernelNameRefByPtr(fn, stream) : NULL;
   hipStreamCaptureStatus cs = hipStreamCaptureStatusNone;
   if (name && (hipStreamIsCapturing(stream, &cs) != hipSuccess || cs != hipStreamCaptureStatusNone)) name = NULL;
-  kent *e = (name && !regexec(&re, name, 0, NULL, 0)) ? find(name) : NULL;
+  int matched = name && !regexec(&re, name, 0, NULL, 0);
+  kent *e = matched ? find(name) : NULL;
+  if (out && name && !e) note_skip(fn, name, matched ? "no_argtable" : "no_match");
   keyent *k = e ? key(name, grid, block, shmem) : NULL;
   hipError_t r;
   if (k && k->dumps < maxdumps) {
     k->dumps++;
     r = dumped_launch(fn, grid, block, args, shmem, stream, name, e);
+    for (unsigned i = 0; i < repeat && k->timed < maxtimed && r == hipSuccess; i++) {
+      hipError_t r2; k->timed++;
+      timed_launch(fn, grid, block, args, shmem, stream, name, &r2);
+      if (r2 != hipSuccess) break;
+    }
   } else if (k && k->timed < maxtimed) {
     k->timed++;
-    if (!have_ev) have_ev = hipEventCreate(&ev0) == hipSuccess && hipEventCreate(&ev1) == hipSuccess;
-    float ms = -1.f;
-    (void)hipEventRecord(ev0, stream);
-    r = real_launch(fn, grid, block, args, shmem, stream);
-    (void)hipEventRecord(ev1, stream);
-    if (hipEventSynchronize(ev1) != hipSuccess || hipEventElapsedTime(&ms, ev0, ev1) != hipSuccess) ms = -1.f;
-    head(name, grid, block, shmem); recid++;
-    fprintf(out, ",\"timed\":true,\"ms\":%.6f,\"launch_rc\":%d}\n", ms, (int)r); fflush(out);
+    timed_launch(fn, grid, block, args, shmem, stream, name, &r);
   } else {
     r = real_launch(fn, grid, block, args, shmem, stream);
   }
