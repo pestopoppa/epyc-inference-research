@@ -517,13 +517,14 @@ def sync_from_champion(bound, *, repo: Path, champion_tree: Path, branch: str) -
     return rows
 
 
-def eligible(bound, *, repo: Path) -> list[dict]:
+def eligible(bound, *, repo: Path, retained: Iterable[str] | None = None) -> list[dict]:
     """Other lanes' held series ready for THIS lane's fold-check, in peer order.
 
     A series is a lane's held commits: its working branch minus the champion, by patch
     id. It is eligible when every target-only keep in it has a gating keep in it, no
     keep in it is a refused gate, and this lane has not yet checked it at the origin's
-    current head."""
+    current head. ``retained`` (AKX-PARETO-RETAIN: patch ids on the Pareto front) puts any
+    series holding one first and marks it ``pareto_retained``."""
     if not bound.champion_branch:
         return []
     rows = read(bound)
@@ -551,6 +552,11 @@ def eligible(bound, *, repo: Path) -> list[dict]:
         out.append({"origin_lane": origin, "origin_target": peer.entry.target_id,
                     "origin_branch": branch, "origin_head": head, "commits": series,
                     "series_patches": patches, "pending": pending})
+    if retained is not None:
+        front = set(retained)
+        for item in out:
+            item["pareto_retained"] = bool(front & set(item["series_patches"]))
+        out.sort(key=lambda item: not item["pareto_retained"])
     return out
 
 
