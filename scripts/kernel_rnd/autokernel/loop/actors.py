@@ -3965,7 +3965,8 @@ class AgentPlanner:
             return text, None
         return bundle.index, bundle
 
-    def _sealed(self, prompt: str, bundle, env: dict[str, str] | None) -> dict[str, str] | None:
+    def _sealed(self, prompt: str, bundle, env: dict[str, str] | None,
+                role: str) -> dict[str, str] | None:
         """Bind a variable-mode bundle to the exact prompt and name the arm on the call
         record (`seat.arm` is free text in VB-AK-SEAT: `plain+ctx-variable`). An
         orchestrator bundle is staged for the backend's argv, keyed by the prompt it
@@ -3975,7 +3976,7 @@ class AgentPlanner:
         from . import actor_context
         if isinstance(bundle, actor_context.OrchestratorBundle):
             from . import actor_orchestrator
-            bundle.seal(prompt)
+            bundle.seal(prompt, role=role)
             actor_orchestrator.stage_bundle(Path(self.workspace), prompt, bundle.payload)
             arm = (env or {}).get(SEAT_ENV_ARM) or "orch"
             return {**(env or {}), SEAT_ENV_ARM: arm + actor_context.ORCH_ARM_SUFFIX}
@@ -4026,7 +4027,7 @@ class AgentPlanner:
             prompt = prompt + "\n\n" + ANSWER_JSON_FIRST_RULE
         prompt = self._guarded("planner", prompt, context)
         backend, env = self._seated("planner", context)
-        env = self._sealed(prompt, bundle, env)
+        env = self._sealed(prompt, bundle, env, "planner")
         env = {**(env or {}), BELIEF_ENV: belief_context.metrics_summary(belief)}
         try:
             result, declared = self._proposal_from_agent(prompt, backend, env, context,
@@ -4379,7 +4380,7 @@ class AgentPlanner:
         prompt = self._guarded("author", prompt, context)
         backend, env = self._seated("author", context)
         env = self._sandboxed(env, context)
-        env = self._sealed(prompt, bundle, env)
+        env = self._sealed(prompt, bundle, env, "author")
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=backend,

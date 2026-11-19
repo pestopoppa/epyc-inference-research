@@ -81,6 +81,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import threading
 import time
 from typing import Any, Mapping
@@ -114,6 +115,69 @@ TIMEOUT_MARGIN_S = 90
 #: Sibling of the worker tree, never inside it (a file inside rides into the diff).
 SIDECAR_DIR = "actor-orchestrator"
 PROVENANCE_SCHEMA = "epyc.autokernel.orchestrator_call.v1"
+
+#: OAB-17-R4 retention. The provenance sidecar is EVIDENCE: `collect` binds it into the
+#: call's metrics row by path + sha256 (`sidecar`), so a later audit/replay may re-read
+#: and re-verify it; it cannot be deleted when the call ends. It is therefore swept at
+#: the start of each `argv`: a file is removed only when it is outside the newest
+#: `KEEP` AND older than `DAYS`. Defaults: 200 files (several full loop runs of
+#: ~1 planner + 1 author + critic calls per iteration) and 14 days (spans a
+#: audit-and-refile cycle). `DAYS=0` drops the age guard (count only); `KEEP=0` with
+#: `DAYS=0` removes all but in-flight files. Non-integers fail closed to the default.
+SIDECAR_KEEP_ENV = "AK_ORCHESTRATOR_SIDECAR_KEEP"
+SIDECAR_DAYS_ENV = "AK_ORCHESTRATOR_SIDECAR_DAYS"
+SIDECAR_KEEP_DEFAULT = 200
+SIDECAR_DAYS_DEFAULT = 14
+#: The module's OWN provenance name (`argv`: `<UTC stamp>-<12 hex>.provenance.json`);
+#: nothing else in SIDECAR_DIR ever matches, so a foreign file is never a candidate.
+_PROVENANCE_NAME = re.compile(r"^\d{8}T\d{6}-[0-9a-f]{12}\.provenance\.json$")
+
+
+def _env_nonneg_int(name: str, default: int) -> int:
+    try:
+        value = int((os.environ.get(name) or "").strip())
+    except ValueError:
+        return default
+    return value if value >= 0 else default
+
+
+def sweep_sidecars(call_dir: Path, *, keep: int | None = None, days: float | None = None,
+                   now: float | None = None) -> list[str]:
+    """Unlink this module's own old provenance sidecars in `call_dir` (one level, no
+    recursion). Candidates are regular files (lstat; a symlink, directory or any
+    other type is never touched) whose name matches `_PROVENANCE_NAME`. Kept: the
+    newest `keep` by mtime, any younger than `days`, and any path still pending a
+    `collect`. Returns the removed names. Never raises."""
+    keep = _env_nonneg_int(SIDECAR_KEEP_ENV, SIDECAR_KEEP_DEFAULT) if keep is None else keep
+    days = (_env_nonneg_int(SIDECAR_DAYS_ENV, SIDECAR_DAYS_DEFAULT) if days is None else days)
+    cutoff = (time.time() if now is None else now) - days * 86400
+    with _PENDING_LOCK:
+        pending = {p.name for p in _PENDING.values()}
+    found: list[tuple[float, str]] = []
+    try:
+        with os.scandir(call_dir) as entries:
+            for entry in entries:
+                if not _PROVENANCE_NAME.match(entry.name) or entry.name in pending:
+                    continue
+                try:
+                    st = entry.stat(follow_symlinks=False)
+                except OSError:
+                    continue
+                if stat.S_ISREG(st.st_mode):
+                    found.append((st.st_mtime, entry.name))
+    except OSError:
+        return []
+    found.sort(reverse=True)  # newest first; name breaks mtime ties deterministically
+    removed: list[str] = []
+    for mtime, name in found[keep:]:
+        if days and mtime >= cutoff:
+            continue
+        try:
+            os.unlink(Path(call_dir) / name)
+            removed.append(name)
+        except OSError:
+            pass
+    return removed
 
 #: OAB-8 knobs (read in `orchestrator_backend`). 0 / unset = no scouts (default).
 SCOUTS_ENV = "AK_ORCHESTRATOR_SCOUTS"
@@ -201,6 +265,7 @@ class OrchestratorBackend(Backend):
         edit = (not read_only) and schema is actors.PATHS_SCHEMA
         call_dir = Path(workspace).parent / SIDECAR_DIR
         call_dir.mkdir(parents=True, exist_ok=True)
+        sweep_sidecars(call_dir)
         stem = f"{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}-{uuid.uuid4().hex[:12]}"
         # EVIDENCE: the provenance sidecar is bound by digest into the call's metrics
         # row (`collect` -> `sidecar`) and stays. The request INPUTS below (schema,
