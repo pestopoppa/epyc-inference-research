@@ -238,6 +238,39 @@ GFX90A_ROCM62_V10_RECIPE = BuildRecipe(
 )
 
 
+# AKX-ALL-14 (operator 2026-11-19): the C14 champion GPU store was built from a recipe that was only
+# DERIVED afterwards (receipt row akx-all14-gpu-build-receipt-c14-20261119).  This registers that
+# derivation as a first-class recipe: the v10 named flags plus the six C14 flags, values read from
+# the store's own BUILD-IDENTITY.json configure_argv.  The name, per-flag reasons and notes below
+# are byte-identical to the receipt job's construction so `sha256()` equals the digest the receipt
+# bound (name and notes are part of the digest -- do not edit them casually; add a new recipe).
+_C14_STORE_NAME = "gpu-20261118-eee3da838-c14"
+_C14_SOURCE_SHA = "eee3da838e3c8306a856f2c72c4b04048fded698"
+_C14_EXTRAS = (
+    ("GGML_HIP_FA_ASM_GFX90A", "ON", "C14 fa-fold feature"),
+    ("GGML_HIP_CK_FMHA_HD256", "ON", "C14 CK FMHA hd256 feature"),
+    ("GGML_HIP_TOPK_ASM_GFX90A", "ON", "C14 top-k asm feature"),
+    ("GGML_IQK_Q8_0_PREFILL", "ON", "C14 iqk Q8_0 prefill feature"),
+    ("GGML_IQK_Q8_0_PREFILL_MIN_ROWS", "32", "C14 iqk Q8_0 prefill threshold"),
+    ("LLAMA_LLGUIDANCE", "ON", "llguidance matcher"),
+)
+
+GFX90A_ROCM62_C14 = BuildRecipe(
+    name=GFX90A_ROCM62_V10_RECIPE.name + "+c14-" + _C14_SOURCE_SHA[:9],
+    production_reference_is_verifiable=False,
+    notes=(f"Champion C14 GPU store {_C14_STORE_NAME}: the {GFX90A_ROCM62_V10_RECIPE.name} named flags "
+           f"(verified equal in the store's configure_argv; mismatches=[]) plus {len(_C14_EXTRAS)} C14 "
+           f"flags read from BUILD-IDENTITY.json configure_argv. Source {_C14_SOURCE_SHA}."),
+    flags=tuple(GFX90A_ROCM62_V10_RECIPE.flags) + tuple(
+        Flag(n, v, None, reason=f"{w}; not named in the {GFX90A_ROCM62_V10_RECIPE.name} recipe, "
+                                f"read from the store's configure_argv")
+        for n, v, w in _C14_EXTRAS),
+)
+
+#: Digest the C14 receipt row bound (akx-all14-gpu-build-receipt-c14-20261119 RESULT.json).
+GFX90A_ROCM62_C14_DIGEST = "7aab89bb9eb255e533f9b234cad1fe60c6dedd718d50323c07dba43f81134424"
+
+
 def check_rocm_version(version_file: str = ROCM_VERSION_FILE) -> tuple[bool, str]:
     """(ok, observed) for the ROCm release a gfx90a-rocm62 build would compile against.
 
@@ -335,6 +368,7 @@ def recipe_for(name: str) -> BuildRecipe:
     recipes = {
         recipe.name: recipe for recipe in (
             HOUSE_GPU_RECIPE, NATIVE_CPU_RECIPE, GFX90A_ROCM62_V10_RECIPE,
+            GFX90A_ROCM62_C14,
             HOUSE_GPU_COVERAGE_RECIPE, NATIVE_CPU_COVERAGE_RECIPE,
             NATIVE_CPU_NODE_PROFILE_RECIPE,
         )
@@ -360,6 +394,7 @@ def from_flags(name: str, flags: Sequence[Mapping[str, Any]], *,
 
 
 __all__ = ["BuildRecipe", "BuildRecipeError", "Flag", "GFX90A_ROCM62_V10_RECIPE",
+           "GFX90A_ROCM62_C14", "GFX90A_ROCM62_C14_DIGEST",
            "HOUSE_GPU_RECIPE", "ROCM_VERSION_REQUIRED", "ROCWMMA_IN_BINARY_ARM",
            "check_rocm_version",
            "HOUSE_GPU_COVERAGE_RECIPE", "NATIVE_CPU_RECIPE",
