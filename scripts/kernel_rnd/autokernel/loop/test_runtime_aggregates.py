@@ -10,7 +10,7 @@ import pytest
 from . import campaign_control as cc, runtime_aggregates as A, serving_preparation as prep
 from . import standalone_runtime as sr
 from .test_standalone_runtime import _runtime
-from .test_profile_preparation_runtime import _fixture, _start
+from .test_profile_preparation_runtime import _fixture, _start, _unresolved_settlement
 from .test_feed_runtime import opened_owner
 from . import test_serving_preparation_execution as calibration_cases
 
@@ -102,9 +102,10 @@ def test_profile_capture_fault_retains_original_dated_reduction_and_debt(tmp_pat
         controller.close()
 
 
-def test_unsettled_profile_never_enters_usable_cache(tmp_path):
-    materialized, registry, target, _, counter, _ = _fixture(tmp_path)
+def test_unsettled_profile_never_enters_usable_cache(tmp_path, monkeypatch):
+    materialized, registry, target, _, counter, _ = _fixture(tmp_path, selected_provider=True)
     controller, runtime = _start(materialized, registry)
+    _unresolved_settlement(controller, monkeypatch)
     try:
         with pytest.raises(sr.StandaloneRuntimeUncertain):
             runtime.tick()

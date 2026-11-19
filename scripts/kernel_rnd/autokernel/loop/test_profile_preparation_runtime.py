@@ -189,9 +189,58 @@ def _start(materialized, registry):
     return controller, runtime
 
 
-def test_actual_installed_profile_retains_original_output_but_binding_gate_blocks_feedback(tmp_path):
-    materialized, registry, target, binding, counter, profile = _fixture(tmp_path)
+def _unresolved_settlement(controller, monkeypatch):
+    """Make the settlement transaction unresolvable AFTER the original publication.
+
+    AKU-07k (768249e16) verifies every provider receipt against the request's accounting
+    binding before the lifecycle retains it, so a provider whose receipt is not for the
+    selected proposal can no longer publish at all. The retained-output / unsettled state
+    these tests exercise is reached with the original (selected) provider and a settlement
+    that cannot resolve, which is the real remaining way to be published-but-unsettled."""
+    def refuse(_request):
+        raise RuntimeError("fixture: settlement verifier unavailable")
+    # The owner pins the controller's bound methods (_selected_implementation), so the fault
+    # goes in the controller's own trusted settlement-verifier seam, not a method patch.
+    monkeypatch.setattr(controller, "_driver_settlement_validator", refuse)
+
+
+def test_unbound_provider_receipt_publishes_nothing_and_never_relaunches(tmp_path):
+    """The default fixture provider's receipt is for ``request_id``/cpu/search, not the selected
+    proposal/backend/class. Since AKU-07k the lifecycle refuses it before retention, so no
+    held cost exists to publish or settle against: nothing is published, no cost is
+    fabricated, the reservation stays open (fencing successors) and nothing relaunches."""
+    materialized, registry, target, _, counter, _ = _fixture(tmp_path)
     controller, runtime = _start(materialized, registry)
+    try:
+        first = runtime.tick()
+        assert first.status == "waiting"
+        assert "held receipt is unavailable" in first.reason
+        assert runtime.tick().status == "recovery_required"
+        assert runtime.retry_pending().status == "waiting"
+        assert counter.read_text() == "x"
+        assert controller.current_verified_profile_result(target) is None
+        assert runtime.profile_executor.planner_profiles(time.monotonic()) == {}
+        assert runtime.driver.profiles == {}
+        assert not runtime.profile_executor._attempts
+        assert len(controller._actor_profile_execution_reservations) == 1
+        assert not controller._actor_profile_execution_settlements
+        events = journal.Journal(str(controller.store / "journal"),
+                                  campaign_id=controller.resolved.campaign_id).read_all()
+        assert not any(row.kind == journal.KIND_ACTOR_PREPARATION
+                       and row.payload["event"] == "PROFILE_VERIFIED" for row in events)
+        assert not any(row.kind == journal.KIND_UNIFIED_DRIVER_SETTLED for row in events)
+        assert controller.unified_driver_pending_intent() is not None
+    finally:
+        runtime.close()
+        controller.close()
+
+
+def test_actual_installed_profile_retains_original_output_when_settlement_cannot_resolve(
+        tmp_path, monkeypatch):
+    materialized, registry, target, binding, counter, profile = _fixture(
+        tmp_path, selected_provider=True)
+    controller, runtime = _start(materialized, registry)
+    _unresolved_settlement(controller, monkeypatch)
     try:
         with pytest.raises(sr.StandaloneRuntimeUncertain, match="profile settlement unresolved"):
             runtime.tick()
@@ -301,11 +350,19 @@ def test_configured_target_with_registered_request_installs_refresh_owner(tmp_pa
     ("profile_content", {"nonfinite": float("nan")}),
 ])
 def test_malformed_original_profile_closes_reservation_and_retains_cost(tmp_path, field, value):
-    materialized, registry, target, _, counter, _ = _fixture(tmp_path, malformed=(field, value))
+    # Original (selected) provider: retained spent cost needs a receipt that binds to the
+    # selected proposal; the unbound default provider never retains one (AKU-07k).
+    materialized, registry, target, _, counter, _ = _fixture(
+        tmp_path, malformed=(field, value), selected_provider=True)
     controller, runtime = _start(materialized, registry)
     try:
-        with pytest.raises(sr.StandaloneRuntimeUncertain):
-            runtime.tick()
+        # With a receipt bound to the selected proposal the spent cost now settles durably
+        # as a failed (not published) profile instead of staying an unresolved diagnosis.
+        result = runtime.tick()
+        assert result.status == "settled"
+        assert result.execution_receipt["disposition"] == "failed"
+        assert result.execution_receipt["settlement_request"]["outcome"] == "failed"
+        assert result.execution_receipt["provider_held_receipt"]["backend"] == "cpu"
         assert counter.read_text() == "x"
         assert controller.current_verified_profile_result(target) is None
         assert not controller._actor_profile_execution_reservations
@@ -405,8 +462,8 @@ def test_runtime_source_refusal_is_bounded_and_keeps_issued_intent(tmp_path, mon
         controller.close()
 
 
-def test_actual_profile_restart_reopens_original_diagnosis_without_live_issuance(tmp_path):
-    materialized, registry, target, _, counter, _ = _fixture(tmp_path)
+def test_actual_profile_restart_reopens_original_diagnosis_without_live_issuance(tmp_path, monkeypatch):
+    materialized, registry, target, _, counter, _ = _fixture(tmp_path, selected_provider=True)
     seed = materialized.inputs.scheduler_engine.export_state().to_dict()
     config = materialized.manifest.driver_config
     args = SimpleNamespace(store=config.store_path,
@@ -415,6 +472,7 @@ def test_actual_profile_restart_reopens_original_diagnosis_without_live_issuance
     controller, runtime = factory(materialized.resolved, args)
     controller.apply_command(_command(materialized.resolved, "resume", "resume", 0))
     assert runtime.recover().status == "recovered"
+    _unresolved_settlement(controller, monkeypatch)  # first incarnation only
     with pytest.raises(sr.StandaloneRuntimeUncertain):
         runtime.tick()
     original = ud._thaw(controller.current_verified_profile_result(target))
@@ -446,9 +504,10 @@ def _synthetic_reporting_receipt(attempt):
     """Grammar fixture only: deliberately not a provider-issued settlement."""
     from .driver_execution import _terminal_body
     work = attempt.work
-    proposal = work.selection.proposal
-    held = replace(attempt.held, proposal_id=proposal.proposal_id,
-                   backend=proposal.backend, stage_class=proposal.stage_class)
+    # The retained receipt is now the original, selected-proposal-bound one (AKU-07k), so the
+    # old proposal/backend/class rewrite is a no-op. Fabricate by changing the receipt
+    # identity instead, which the original attempt must still refuse to settle.
+    held = replace(attempt.held, receipt_id=attempt.held.receipt_id + ":fabricated")
     settlement = ud._thaw(attempt.settlement)
     settlement["receipt"] = held.to_dict()
     body = {"schema": pp.RECEIPT_SCHEMA, "catalog_id": work.catalog_id,
@@ -466,9 +525,10 @@ def _synthetic_reporting_receipt(attempt):
 
 
 @pytest.fixture
-def diagnostic_attempt(tmp_path):
-    materialized, registry, target, _, counter, _ = _fixture(tmp_path)
+def diagnostic_attempt(tmp_path, monkeypatch):
+    materialized, registry, target, _, counter, _ = _fixture(tmp_path, selected_provider=True)
     controller, runtime = _start(materialized, registry)
+    _unresolved_settlement(controller, monkeypatch)
     try:
         with pytest.raises(sr.StandaloneRuntimeUncertain):
             runtime.tick()
