@@ -7452,16 +7452,17 @@ def _main(argv: list[str] | None = None) -> int:
                             ctx=getattr(serving_recipe, "ctx", None), np=serving_recipe.np)
                     except Exception as exc:  # noqa: BLE001 -- recorded, fail closed
                         capacity_record = {"error": f"{type(exc).__name__}: {exc}"}
-                if keep_dims:
-                    dims_record = surface_validation.keep_dimensions(
-                        declared=keep_dims, primary=primary_dim, comparisons=measured_dims,
-                        capacity=capacity_record)
-                    surface_validation.retain_dimensions(args.store, hypothesis.mechanism_id,
-                                                         dims_record)
-                    evidence["keep_dimensions"] = dims_record
-                    if not dims_record["passed"]:
-                        raise loop.ConfirmVetoed("KEEP_CANDIDATE-dimensions: "
-                                                 + dims_record["reason"])
+                # Always recorded (an undeclared target carries five not_measured verdicts),
+                # so every direct-launch keep row has one verdict per dimension.
+                dims_record = surface_validation.keep_dimensions(
+                    declared=keep_dims, primary=primary_dim, comparisons=measured_dims,
+                    capacity=capacity_record)
+                surface_validation.retain_dimensions(args.store, hypothesis.mechanism_id,
+                                                     dims_record)
+                evidence["keep_dimensions"] = dims_record
+                if not dims_record["passed"]:
+                    raise loop.ConfirmVetoed("KEEP_CANDIDATE-dimensions: "
+                                             + dims_record["reason"])
             cross = None
             if lane_binding is not None:
                 # LANE BINDING (lane_targets.py): a keep touching a path shared with

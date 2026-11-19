@@ -166,3 +166,58 @@ def test_dimension_records_are_retained(tmp_path):
     record = sv.keep_dimensions(declared=(), primary="short_decode", comparisons={}, capacity=None)
     path = sv.retain_dimensions(tmp_path, "mech/id", record, now=1.0)
     assert path.parent.name == sv.DIMENSIONS_DIR and json.loads(path.read_text())["passed"] is True
+
+
+def test_record_carries_one_verdict_per_dimension_and_unmeasured_is_never_a_pass():
+    record = sv.keep_dimensions(
+        declared=("short_decode", "long_decode", "capacity"), primary="short_decode",
+        comparisons={"long_decode": _row(-3.0, decisive=True)}, capacity=None)
+    verdicts = record["verdicts"]
+    assert set(verdicts) == set(sv.KEEP_DIMENSIONS)
+    assert verdicts["short_decode"] == "pass"
+    assert verdicts["long_decode"] == "fail"
+    assert verdicts["capacity"] == "not_measured"          # declared, never measured
+    assert verdicts["prefill_at_depth"] == "not_measured"  # undeclared
+    assert record["passed"] is False
+    assert all(row["verdict"] == verdicts[n] for n, row in record["dimensions"].items())
+
+
+def test_undeclared_target_records_only_not_measured_verdicts():
+    record = sv.keep_dimensions(declared=(), primary="short_decode", comparisons={}, capacity=None)
+    assert set(record["verdicts"].values()) == {"not_measured"}
+
+
+def test_synthetic_capacity_regression_is_refused_in_the_record():
+    record = sv.keep_dimensions(declared=("capacity",), primary="short_decode", comparisons={},
+                                capacity=_cap([52 * GIB, 60 * GIB, 63 * GIB]))
+    assert record["verdicts"]["capacity"] == "fail" and record["passed"] is False
+
+
+def test_a_wall_clock_timeout_never_renders_a_dimension_as_pass():
+    timed_row = {**_row(5.0, decisive=True), "timed_out": True}   # would pass if read
+    record = sv.keep_dimensions(declared=("long_decode", "capacity"), primary="short_decode",
+                                comparisons={"long_decode": timed_row},
+                                capacity={**_cap([50 * GIB] * 3), "timed_out": True})
+    assert record["verdicts"]["long_decode"] == "not_measured"
+    assert record["verdicts"]["capacity"] == "not_measured"
+    assert record["passed"] is False and "timed out" in record["reason"]
+    errored = sv.keep_dimensions(declared=("long_decode",), primary="short_decode",
+                                 comparisons={"long_decode": {"error": "TimeoutExpired: 900s"}},
+                                 capacity=None)
+    assert errored["verdicts"]["long_decode"] == "not_measured" and errored["passed"] is False
+
+
+def test_legacy_record_without_verdicts_still_reads():
+    legacy = {"schema": sv.DIMENSIONS_SCHEMA, "dimensions": {
+        "short_decode": {"disposition": "passed"}, "capacity": {"disposition": "pending"}}}
+    got = sv.dimension_verdicts(legacy)
+    assert got["short_decode"] == "pass" and got["capacity"] == "not_measured"
+    assert got["long_decode"] == "not_measured"            # absent row is never a pass
+    assert set(sv.dimension_verdicts(None).values()) == {"not_measured"}
+
+
+def test_keep_tail_records_dimensions_on_the_kept_outcome_evidence():
+    from pathlib import Path
+    src = (Path(__file__).with_name("run.py")).read_text()
+    assert 'evidence["keep_dimensions"] = dims_record' in src
+    assert 'if not dims_record["passed"]' in src

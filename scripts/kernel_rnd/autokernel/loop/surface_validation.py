@@ -381,6 +381,34 @@ DIMENSIONS_DIR = "keep-dimensions"
 GPU_CAPACITY_CEILING_BYTES = 62 << 30
 
 
+#: One verdict per dimension (AKX-ALL-17). Only a measured, non-regressing dimension is `pass`;
+#: `skipped` (undeclared) and `pending` (declared, unmeasured, errored or timed out) are
+#: `not_measured`, never a pass. Additive: records written before this field are read by
+#: `dimension_verdicts`, which derives the same answer from `disposition`.
+VERDICT_BY_DISPOSITION = {"passed": "pass", "failed": "fail",
+                          "pending": "not_measured", "skipped": "not_measured"}
+
+
+def _timed_out(measurement: Any) -> bool:
+    """A wall-clock timeout (run-level or per-step) is never a measurement."""
+    if not isinstance(measurement, Mapping):
+        return False
+    return bool(measurement.get("timed_out") or measurement.get("timeout")
+                or measurement.get("status") == "timeout")
+
+
+def dimension_verdicts(record: Mapping[str, Any] | None) -> dict[str, str]:
+    """pass/fail/not_measured for every tracked dimension; tolerant of legacy records."""
+    rows = (record or {}).get("dimensions") if isinstance(record, Mapping) else None
+    rows = rows if isinstance(rows, Mapping) else {}
+    out = {}
+    for name in KEEP_DIMENSIONS:
+        row = rows.get(name)
+        disposition = row.get("disposition") if isinstance(row, Mapping) else None
+        out[name] = VERDICT_BY_DISPOSITION.get(disposition, "not_measured")
+    return out
+
+
 def parse_dimensions(text: str | None) -> tuple[str, ...]:
     names = tuple(dict.fromkeys(item.strip() for item in (text or "").split(",") if item.strip()))
     unknown = [name for name in names if name not in KEEP_DIMENSIONS]
@@ -405,6 +433,8 @@ def _capacity_row(capacity: Mapping[str, Any] | None) -> dict[str, Any]:
     """
     from . import capacity_probe
     cap = dict(capacity or {})
+    if _timed_out(cap):
+        return {"disposition": "pending", **cap, "reason": "capacity probe timed out: not a measurement"}
     if cap.get("error"):
         return {"disposition": "pending", **cap, "reason": f"capacity probe failed: {cap['error']}"[:512]}
     if cap.get("sequence") != capacity_probe.SEQUENCE:
@@ -446,6 +476,10 @@ def keep_dimensions(*, declared: Sequence[str], primary: str,
                 rows[name] = {"disposition": "pending",
                               "reason": "declared but no instrument measured it"}
                 continue
+            if _timed_out(comparison):
+                rows[name] = {"disposition": "pending",
+                              "reason": "measurement timed out: not a measurement"}
+                continue
             if isinstance(comparison, Mapping) and comparison.get("error"):
                 rows[name] = {"disposition": "pending",
                               "reason": f"measurement failed: {comparison['error']}"[:512]}
@@ -460,8 +494,11 @@ def keep_dimensions(*, declared: Sequence[str], primary: str,
                           "noise_floor_pct": comparison.get("noise_floor_pct"),
                           "reason": "cross-workload interim non-inferiority rule"}
     blocking = {n: r for n, r in rows.items() if r["disposition"] in ("failed", "pending")}
+    for row in rows.values():
+        row["verdict"] = VERDICT_BY_DISPOSITION[row["disposition"]]
     record = {"schema": DIMENSIONS_SCHEMA, "declared": list(declared), "primary": primary,
               "dimensions": rows, "passed": not blocking,
+              "verdicts": {n: rows[n]["verdict"] for n in KEEP_DIMENSIONS},
               "reason": ("; ".join(f"{n}: {r['disposition']} ({r['reason']})"
                                    for n, r in blocking.items())
                          or "no declared dimension regressed")}
@@ -484,6 +521,7 @@ def retain_dimensions(store: Path, mechanism_id: str, record: Mapping[str, Any],
 __all__ = ["DEBT_SCHEMA", "DIMENSIONS_SCHEMA", "GPU_CAPACITY_CEILING_BYTES",
            "KEEP_DIMENSIONS", "MAX_BYTES", "REFERENCE_SCHEMA", "SCHEMA",
            "SurfaceValidationRefused", "classify", "debt",
+           "VERDICT_BY_DISPOSITION", "dimension_verdicts",
            "keep_dimensions", "original_anchor_commit", "parse_dimensions",
            "primary_dimension", "reopen_reference", "retain", "retain_dimensions", "row",
            "validate", "validate_debt"]
