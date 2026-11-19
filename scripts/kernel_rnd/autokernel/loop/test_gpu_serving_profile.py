@@ -519,3 +519,53 @@ def test_run_py_records_a_candidate_profile_after_timing_and_orders_the_tail():
     assert 'serving_beliefs.annotate(row, {"candidate_serving_profile": profile})' in helper
     assert "raise" not in helper.replace("raise loop", "")   # never refuses the comparison
     assert '"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(' in source
+
+
+# ------------------------------------------------------------------ AK-PROF-GAPHIST
+
+def _disp(rows):
+    return gsp.parse_trace(_trace_csv(rows))
+
+
+def test_gap_histogram_bins_within_step_gaps_and_excludes_step_breaks():
+    rows = [("void a<1>(int)", 0, 1000),
+            ("void b<1>(int)", 1500, 2500),          # gap 500 ns   -> <1us
+            ("void a<1>(int)", 8500, 9500),          # gap 6000 ns  -> <10us
+            ("void b<1>(int)", 15500, 16500),        # gap 6000 ns  -> <10us
+            ("void a<1>(int)", 5_016_500, 5_017_500),  # 5 ms: step break, excluded
+            ("void b<1>(int)", 5_017_500, 5_018_000)]  # gap 0 -> <1us
+    out = gsp.gap_histogram(_disp(rows))
+    assert out["status"] == "observed" and out["gaps"] == 4 and out["step_breaks"] == 1
+    assert out["total_gap_ns"] == 500 + 6000 + 6000 + 0
+    hist = {r["bin"]: r["count"] for r in out["histogram"]}
+    assert hist["<1us"] == 2 and hist["<10us"] == 2 and sum(hist.values()) == 4
+    top = out["top_pairs"][0]
+    assert (top["prev"], top["next"]) == ("a<1>", "b<1>")        # 500 + 6000 ns over 2 pairs
+    assert top["total_gap_ns"] == 6500 and top["count"] == 3   # incl. the 0 ns pair
+
+
+def test_gap_histogram_uses_running_max_end_for_overlapping_dispatches():
+    rows = [("k1", 0, 10_000), ("k2", 2_000, 4_000), ("k3", 12_000, 13_000)]
+    out = gsp.gap_histogram(_disp(rows))
+    assert out["gaps"] == 2 and out["total_gap_ns"] == 0 + 2_000   # k2 overlaps, k3 follows k1's end
+
+
+def test_gap_histogram_refuses_rows_without_per_dispatch_start_end():
+    bad = [gsp.Dispatch(5, 5, "k", 0, 0, 1), gsp.Dispatch(9, 9, "k", 0, 0, 1)]
+    assert gsp.gap_histogram(bad)["status"] == "no_timestamps"
+    assert gsp.gap_histogram([])["status"] == "insufficient"
+
+
+def test_analyze_carries_a_gap_histogram_per_window():
+    wall, offset = 1_700_000_000.0, -1_699_000_000.0 * 1e9
+    marks = _marks(wall, offset)
+
+    def ns(t):
+        return int((wall + t) * 1e9 + offset)
+    rows = [("void warm<1>(int)", ns(10.5), ns(10.6)), ("void warm<1>(int)", ns(11.0), ns(11.2)),
+            ("void k<1>(int)", ns(20.0), ns(20.000001)), ("void m<1>(int)", ns(20.000011), ns(20.000012)),
+            ("void k<1>(int)", ns(20.000032), ns(20.000033))]
+    result = gsp.analyze(_disp(rows), marks, {"short_decode": {"start": wall + 19.9, "end": wall + 21}}, {})
+    gaps = result["windows"]["short_decode"]["gaps"]
+    assert gaps["status"] == "observed" and gaps["gaps"] == 2
+    assert gaps["total_gap_ns"] == pytest.approx(10_000 + 20_000, abs=2)

@@ -543,6 +543,73 @@ def kernel_table(rows: Sequence[Dispatch], resources: Mapping[str, Mapping], *,
     return table[:limit]
 
 
+# ------------------------------------------------------------------ AK-PROF-GAPHIST
+
+# Within-step gap framing (FlyDSL blog, intake-2697): the idle time BETWEEN consecutive
+# dispatches of one decode/prefill step, as opposed to the idle time between steps.
+STEP_BREAK_NS = 1_000_000            # a gap >= 1 ms is a step boundary, not a within-step gap
+GAP_BIN_EDGES_NS = (1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000)
+GAP_PAIR_ROWS = 10
+
+
+def _gap_bin(ns: int) -> str:
+    for edge in GAP_BIN_EDGES_NS:
+        if ns < edge:
+            return f"<{edge // 1000}us"
+    return f">={GAP_BIN_EDGES_NS[-1] // 1000}us"
+
+
+def gap_histogram(rows: Sequence[Dispatch], *, step_break_ns: int = STEP_BREAK_NS,
+                  limit: int = GAP_PAIR_ROWS) -> dict:
+    """Within-step inter-kernel gap histogram + top-N gap kernel-pair table (pure).
+
+    Post-processing of the existing trace rows; no new GPU pass. Gaps are measured from the
+    running maximum end time to the next start (overlapping dispatches give gap 0, counted in
+    the first bin). A gap >= `step_break_ns` is a step boundary and is excluded from the
+    histogram (counted as `step_breaks`). Pairs are (previous-ending kernel -> next kernel),
+    ranked by total within-step gap ns. Rows without per-dispatch start/end carry no gap
+    information: that is reported as status `no_timestamps`, never a zero histogram."""
+    ordered = sorted(rows, key=lambda item: item.start)
+    if len(ordered) < 2:
+        return {"status": "no_timestamps" if ordered and ordered[0].end <= ordered[0].start
+                else "insufficient", "gaps": 0}
+    if any(r.end <= r.start for r in ordered):
+        return {"status": "no_timestamps", "gaps": 0}
+    bins = [f"<{e // 1000}us" for e in GAP_BIN_EDGES_NS] + [f">={GAP_BIN_EDGES_NS[-1] // 1000}us"]
+    counts = {b: 0 for b in bins}
+    gap_ns = {b: 0 for b in bins}
+    pairs: dict[tuple[str, str], list[int]] = {}
+    high, last_name, breaks, break_ns = ordered[0].end, normalize_name(ordered[0].name), 0, 0
+    values: list[int] = []
+    for row in ordered[1:]:
+        gap = max(0, row.start - high)
+        name = normalize_name(row.name)
+        if gap >= step_break_ns:
+            breaks += 1
+            break_ns += gap
+        else:
+            b = _gap_bin(gap)
+            counts[b] += 1
+            gap_ns[b] += gap
+            values.append(gap)
+            cell = pairs.setdefault((last_name, name), [0, 0])
+            cell[0] += 1
+            cell[1] += gap
+        if row.end >= high:
+            high, last_name = row.end, name
+    values.sort()
+    total = sum(values)
+    top = sorted(pairs.items(), key=lambda kv: (-kv[1][1], kv[0]))[:limit]
+    return {"status": "observed" if values else "insufficient",
+            "step_break_ns": step_break_ns, "gaps": len(values), "total_gap_ns": total,
+            "mean_gap_ns": round(total / len(values), 1) if values else None,
+            "median_gap_ns": values[len(values) // 2] if values else None,
+            "step_breaks": breaks, "step_break_ns_total": break_ns,
+            "histogram": [{"bin": b, "count": counts[b], "gap_ns": gap_ns[b]} for b in bins],
+            "top_pairs": [{"prev": a, "next": n, "count": c, "total_gap_ns": t,
+                           "mean_gap_ns": round(t / c, 1)} for (a, n), (c, t) in top]}
+
+
 def analyze(rows: Sequence[Dispatch], marks: Sequence[Mapping], windows: Mapping[str, Mapping],
             resources: Mapping[str, Mapping]) -> dict:
     """Window tables from one whole-lifetime trace (pure)."""
@@ -560,7 +627,8 @@ def analyze(rows: Sequence[Dispatch], marks: Sequence[Mapping], windows: Mapping
                      "kernel_ns": sum(r.end - r.start for r in picked),
                      "busy_fraction": round(_busy_ns(picked) / length_ns, 4),
                      "tokens": round(tokens, 2) if tokens else None,
-                     "kernels": kernel_table(picked, resources, tokens=tokens)}
+                     "kernels": kernel_table(picked, resources, tokens=tokens),
+                     "gaps": gap_histogram(picked)}
     return {"clock": clock, "windows": out}
 
 
@@ -912,7 +980,7 @@ def hotspot_rows(view: Mapping) -> list:
 
 __all__ = ["GPU_HOST_CPU_LIST", "GPU_HOST_PREFIX", "LONG_CONTEXT_WINDOWS", "LongContextHook",
            "ProfileFailed", "SCHEMA", "WINDOWS", "WindowPlan", "analyze", "cache_key",
-           "cached", "choose_clock", "code_object_kernels", "cut", "hotspot_rows",
+           "cached", "choose_clock", "code_object_kernels", "cut", "gap_histogram", "hotspot_rows",
            "kernel_resources", "kernel_table", "kernel_weight", "launch_weighted",
            "normalize_name", "observation", "occupancy",
            "parse_trace", "plan_windows", "primary_window", "profile_command",
