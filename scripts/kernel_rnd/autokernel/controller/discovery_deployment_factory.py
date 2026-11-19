@@ -474,7 +474,8 @@ _CORRECTNESS_SUITE_SEED = 2026081301
 # instrument reads the clean detached C10 worktree (same repository, so
 # `refs/heads/<_INSTRUMENT_BRANCH>` still resolves). It is a protected root: builds
 # never write into it.
-_INSTRUMENT_PATH = Path("/mnt/raid0/llm/worktrees/llama-c10-fold-20261109")
+# C14 (2026-11-19): clean detached C14 worktree of the same repository.
+_INSTRUMENT_PATH = Path("/mnt/raid0/llm/worktrees/llama-c14-pin-20261119")
 # CH-3 (2026-08-27): the measurement instrument IS the champion.
 #
 # AutoKernel screens a candidate against this tree, so pointing it at the
@@ -510,7 +511,10 @@ _INSTRUMENT_BRANCH = "ak/champion/llama-cpp-ffc1bac82eec"
 # real v10..C10 delta, and the reviewed-target identity check now compares the
 # instrument's bytes with THESE champion pins (production is recorded, not required
 # to match).
-_INSTRUMENT_COMMIT = "7f1bd044b1e49a88b33460977bd96feae3db8e5c"
+# REPINNED 2026-11-19 to champion C14 `eee3da838` (operator 2026-11-10: GPU discovery binds to
+# the CHAMPION; the champion branch advanced C10 -> C14 and rejected every C10 bundle).
+# Delta `git diff --binary ffc1bac82..eee3da838`: 283 paths.
+_INSTRUMENT_COMMIT = "eee3da838e3c8306a856f2c72c4b04048fded698"
 
 #: CH-2 champion seeding: the ratified production `llama-server` digests, per backend,
 #: copied from the single source of truth `scripts/session/verify_llama_cpp.sh`
@@ -531,14 +535,14 @@ _RATIFIED_PRODUCTION_SERVER_SHA256 = MappingProxyType({
 # (Was `d17c66f6e...`, the v9-champion delta.)
 # C10 (2026-11-10): `git diff --binary ffc1bac82..7f1bd044b`, 279 paths.
 _INSTRUMENT_DIFF_SHA256 = (
-    "d1554ba713648f3e4709efb0b8dedf9cf966c57e538ffe231654296bcc254ec7")
+    "a81bd586e0d60a9a34d37c560776ab2b5cdec5ffd7faca1339504e4c5ce6b155")  # C14
 # REPINNED to v10's blob. This is the ONE reviewed blob whose bytes actually
 # moved across the promotion (llama-bench.cpp, its README and the ready-continue
 # contract are byte-identical at v10, so their constants below are unchanged):
 # v10 carries upstream's new `test-backend-ops` cases for GGML_OP_MEAN_D1 and
 # GGML_OP_MOE_TOPK_NORM. Was `7571a536b...` at the v9-era champion.
 _INSTRUMENT_TEST_SOURCE_SHA256 = (
-    "1dc504a96734368f361f0679ca67a42261fa4ad6d44d462d9fb821f041d28b6b")  # C10
+    "de7fca511448cd2c9dacfeb8131487a87e2b0b057ff8383cac6b143d30ea6a2b")  # C14
 _READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
 # CHANGED by the champion: MoE-Spec adds an 8-line env-var fallback so
 # llama-bench (which has its own arg parser) can read --moe-spec-budget.
@@ -558,9 +562,9 @@ _INSTRUMENT_BENCH_README_SHA256 = "6429015fe5025d35b65e6271520ea668267910f82922e
 # C10 (2026-11-10): the v10..C10 path set is 279 names, so it is pinned as a
 # digest -- sha256 of the sorted UTF-8 names joined by NUL -- plus its count;
 # the receipt still records the full observed list.
-_INSTRUMENT_DIFF_PATH_COUNT = 279
+_INSTRUMENT_DIFF_PATH_COUNT = 283  # C14
 _INSTRUMENT_DIFF_PATHS_SHA256 = (
-    "3633cc0c5c0d61ba73bf55d19bd7c76a8da84492d471fb2c123434ad1d8bb7c1")
+    "20b05917e71431d03eb563d558fa7d39b52d30cb59e01b901ba416ce35f7a41a")  # C14
 
 
 def _diff_paths_digest(paths) -> str:
@@ -584,14 +588,15 @@ def _diff_paths_digest(paths) -> str:
 # advanced with the promotion. If the reviewed-source package is meant to carry a
 # human reading of these bytes, that reading is outstanding and is tracked
 # separately — it is not something a digest can record.
-# REPINNED to C10 `7f1bd044b`, 2026-11-10: fattn.cu, fattn-common.cuh,
+# REPINNED to C14 `eee3da838`, 2026-11-19 (fattn.cu, fattn-common.cuh and fattn-tile.cuh moved C10 -> C14;
+# the other seven are byte-identical to C10). Earlier, C10 `7f1bd044b`, 2026-11-10: fattn.cu, fattn-common.cuh,
 # fattn-tile.cuh, mmvq.cu, quantize.cu and vecdotq.cuh moved v10 -> C10; the other
 # four are byte-identical to v10. Same caveat as above: a consistency pin, not a reading.
 _TARGET_SOURCE_SHA256 = MappingProxyType({
-    "ggml/src/ggml-cuda/fattn.cu": "85365929b725b3d8ca27714aadfcb93fa8bc147cea4466821e308cba32ba563f",
-    "ggml/src/ggml-cuda/fattn-common.cuh": "0092d2d9d43334bee4890f5a03fe6020581071013c8a511a532821adad5a8ef1",
+    "ggml/src/ggml-cuda/fattn.cu": "120059415c0eb2e109c30617659aec1aca8f32aee0020e53e299df972aed57cb",
+    "ggml/src/ggml-cuda/fattn-common.cuh": "5321985da967255ea76c524f9a545ba2e08be9d9854ce394917673d7674dc814",
     "ggml/src/ggml-cuda/fattn-tile.cu": "f57657daf3c5209a32d182bb888ead02b1e806a26273cfa4df8b0a6345ae8247",
-    "ggml/src/ggml-cuda/fattn-tile.cuh": "6fe0c4a971edffd5ea36bfcfe93a0d3fdef9b2ca8bcc34e15d144a70007b15b7",
+    "ggml/src/ggml-cuda/fattn-tile.cuh": "49da94163552779c56714ad8393f7f31529cea0d0e98468de741aa81e0fd6d93",
     "ggml/src/ggml-cuda/mmvq.cu": "5d8a26a1929d8fd38b088c236d114d343d3acba7c470bac8186b9aebcf9b3be2",
     "ggml/src/ggml-cuda/rope.cu": "94f7aed2ff08b84302a23a3c8b792b9a77dd297acb1d772ddf35d46a75d55abc",
     "ggml/src/ggml-cuda/norm.cu": "3c133eec8aab2cf54996d98c4150e2640b5a47af559c9eb5d16f520c03e237a5",
@@ -2075,7 +2080,9 @@ def _c6_structural_precision(
             "ggml/src/ggml-cuda/fattn-common.cuh",
             (("float VKQ_numerator   = 0.0f;", 1),
              ("float VKQ_denominator = 0.0f;", 1),
-             ("dst[tid] = VKQ_numerator / VKQ_denominator;", 1)),
+             # C14 (INF48-FA-ALLMASK-NAN): the final divide is the zero-guarded `fattn_div_rowsum`
+             # (`rowsum == 0 ? 0 : val / rowsum`), identical arithmetic on every non-empty row.
+             ("dst[tid] = fattn_div_rowsum(VKQ_numerator, VKQ_denominator);", 1)),
             "flash_attn_combine_results"),
     }
     try:

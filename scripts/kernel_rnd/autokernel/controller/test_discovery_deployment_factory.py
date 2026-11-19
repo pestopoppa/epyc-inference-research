@@ -1570,7 +1570,7 @@ class C6PortfolioRouteTests(unittest.TestCase):
 class ChampionC10InstrumentTests(unittest.TestCase):
     """Operator decision 2026-11-10: GPU discovery binds to champion C10, not production v10."""
 
-    C10 = "7f1bd044b1e49a88b33460977bd96feae3db8e5c"
+    C10 = "eee3da838e3c8306a856f2c72c4b04048fded698"  # champion pin (C14 since 2026-11-19)
 
     def _config(self, root: Path):
         return SimpleNamespace(
