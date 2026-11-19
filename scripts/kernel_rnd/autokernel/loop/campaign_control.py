@@ -1766,13 +1766,7 @@ class CampaignController:
                     raise ControlRefused("worker event lacks its indexed active intent")
                 candidate_events = [*self._active_worker_events, copy.deepcopy(row)]
             projection = worker_lifecycle_module.project_events(candidate_events)
-            try:
-                entry = self._journal.append(journal_module.KIND_WORKER_LIFECYCLE, row)
-                self._verify_journal_layout(self.store / "journal")
-            except BaseException:
-                self._poisoned = True
-                raise
-            self._journal_cursor = entry.seq
+            entry = self._append_durable(journal_module.KIND_WORKER_LIFECYCLE, row)
             self._worker_lifecycle_revision += 1
             self._worker_last_generation = max(
                 self._worker_last_generation, row["worker_generation"])
@@ -1832,14 +1826,8 @@ class CampaignController:
                     raise ControlRefused(
                         "grant-free acquisition resolution conflicts with active lifecycle")
             projection = worker_lifecycle_module.project_acquisitions(candidate_events)
-            try:
-                entry = self._journal.append(
-                    journal_module.KIND_WORKER_ACQUISITION, row)
-                self._verify_journal_layout(self.store / "journal")
-            except BaseException:
-                self._poisoned = True
-                raise
-            self._journal_cursor = entry.seq
+            entry = self._append_durable(
+                journal_module.KIND_WORKER_ACQUISITION, row)
             self._worker_lifecycle_revision += 1
             self._worker_last_generation = max(
                 self._worker_last_generation, row["worker_generation"])
@@ -1968,15 +1956,9 @@ class CampaignController:
                 a2_unit_permit.project_unit([*(i.payload for i in entries), row])
             except a2_unit_permit.A2UnitRefused as exc:
                 raise ControlRefused(f"invalid A2 unit record: {exc}") from exc
-            try:
-                entry = self._journal.append(
-                    journal_module.KIND_A2_RUNTIME_EXECUTION, row,
-                    campaign_id=self.resolved.campaign_id, record_id=row["execution_id"])
-                self._verify_journal_layout(self.store / "journal")
-            except BaseException:
-                self._poisoned = True
-                raise
-            self._journal_cursor = entry.seq
+            entry = self._append_durable(
+                journal_module.KIND_A2_RUNTIME_EXECUTION, row,
+                campaign_id=self.resolved.campaign_id, record_id=row["execution_id"])
             self._a2_unit_entries.setdefault(key, []).append(copy.deepcopy(entry))
             return copy.deepcopy(row)
 
@@ -2027,15 +2009,9 @@ class CampaignController:
                     [*(item.payload for item in entries), transition])
             except a2_execution_state.A2ExecutionStateRefused as exc:
                 raise ControlRefused(f"A2 runtime transition is inconsistent: {exc}") from exc
-            try:
-                entry = self._journal.append(
-                    journal_module.KIND_A2_RUNTIME_EXECUTION, transition,
-                    campaign_id=self.resolved.campaign_id, record_id=execution_id)
-                self._verify_journal_layout(self.store / "journal")
-            except BaseException:
-                self._poisoned = True
-                raise
-            self._journal_cursor = entry.seq
+            entry = self._append_durable(
+                journal_module.KIND_A2_RUNTIME_EXECUTION, transition,
+                campaign_id=self.resolved.campaign_id, record_id=execution_id)
             self._a2_logical_executions[transition["logical_id"]] = execution_id
             self._a2_execution_entries.setdefault(execution_id, []).append(
                 copy.deepcopy(entry))
@@ -2467,15 +2443,9 @@ class CampaignController:
             "occurred_at": self.clock(), "command": dict(command),
             "result": dict(result),
         })
-        try:
-            entry = self._journal.append(
-                journal_module.KIND_CAMPAIGN_COMMAND_V3 if fenced
-                else journal_module.KIND_CAMPAIGN_COMMAND_V2, row)
-            self._verify_journal_layout(self.store / "journal")
-        except BaseException:
-            self._poisoned = True
-            raise
-        self._journal_cursor = entry.seq
+        entry = self._append_durable(
+            journal_module.KIND_CAMPAIGN_COMMAND_V3 if fenced
+            else journal_module.KIND_CAMPAIGN_COMMAND_V2, row)
 
     def _settle_v2_commands_locked(self) -> None:
         if self.snapshot_version not in {2, 3} or self._worker_run_active \
@@ -2907,14 +2877,8 @@ class CampaignController:
         except maintenance_module.MaintenanceExecutionRefused as exc:
             raise ControlRefused(f"invalid maintenance transition: {exc}") from exc
         assert self._journal is not None
-        try:
-            entry = self._journal.append(
-                journal_module.KIND_MAINTENANCE_EXECUTION, validated)
-            self._verify_journal_layout(self.store / "journal")
-        except BaseException:
-            self._poisoned = True
-            raise
-        self._journal_cursor = entry.seq
+        entry = self._append_durable(
+            journal_module.KIND_MAINTENANCE_EXECUTION, validated)
         self._maintenance_events.append(copy.deepcopy(validated))
         self._maintenance_state = projected
         return copy.deepcopy(entry)
@@ -3005,15 +2969,9 @@ class CampaignController:
                 seed, config_generation=self.config_generation,
                 supervisor_incarnation=self.supervisor_incarnation)
             assert self._journal is not None
-            try:
-                entry = self._journal.append(
-                    journal_module.KIND_RETENTION_CATALOG_INSTALLED, row,
-                    record_id=seed.seed_digest)
-                self._verify_journal_layout(self.store / "journal")
-            except BaseException:
-                self._poisoned = True
-                raise
-            self._journal_cursor = entry.seq
+            entry = self._append_durable(
+                journal_module.KIND_RETENTION_CATALOG_INSTALLED, row,
+                record_id=seed.seed_digest)
             self._retention_catalog_seed = seed
             self._retention_catalog_event = copy.deepcopy(row)
             return copy.deepcopy(row)
@@ -3129,13 +3087,7 @@ class CampaignController:
             if campaign_id != self.resolved.campaign_id:
                 raise ControlRefused("maintenance tombstone campaign binding differs")
             assert self._journal is not None
-            try:
-                entry = self._journal.append(kind, payload, campaign_id=campaign_id)
-                self._verify_journal_layout(self.store / "journal")
-            except BaseException:
-                self._poisoned = True
-                raise
-            self._journal_cursor = entry.seq
+            entry = self._append_durable(kind, payload, campaign_id=campaign_id)
             if payload.get("reclamation_state") == "intent":
                 self._maintenance_tombstone_intent = True
             self._maintenance_state = replace(
@@ -3316,6 +3268,23 @@ class CampaignController:
         except OSError as exc:
             raise ControlRefused(f"cannot verify journal layout: {exc}") from exc
 
+    def _append_durable(self, kind: str, payload: Any, *,
+                        after: "Callable[[], Any] | None" = None, **append_kw: Any):
+        """Append one journal record, verify the on-disk layout and run ``after`` (an
+        in-memory apply that must not diverge from the journal); any failure poisons the
+        controller. Advances the journal cursor and returns the entry."""
+        assert self._journal is not None
+        try:
+            entry = self._journal.append(kind, payload, **append_kw)
+            self._verify_journal_layout(self.store / "journal")
+            if after is not None:
+                after()
+        except BaseException:
+            self._poisoned = True
+            raise
+        self._journal_cursor = entry.seq
+        return entry
+
     def _append_event(self, event: str, data: Mapping[str, Any]):
         self._verify_store()
         if self._journal is None:
@@ -3381,15 +3350,9 @@ class CampaignController:
         self._verify_store()
         if self._journal is None:
             raise ControlRefused("controller journal is unavailable")
-        try:
-            entry = self._journal.append(
-                journal_module.KIND_CANDIDATE_TRANSACTION, payload,
-                record_id=str(payload["transaction_id"]))
-            self._verify_journal_layout(self.store / "journal")
-        except BaseException:
-            self._poisoned = True
-            raise
-        self._journal_cursor = entry.seq
+        entry = self._append_durable(
+            journal_module.KIND_CANDIDATE_TRANSACTION, payload,
+            record_id=str(payload["transaction_id"]))
         self._candidate_entries.append(copy.deepcopy(entry))
         if payload["phase"] == "INTENT":
             self._candidate_pending = transaction_key
@@ -3666,16 +3629,10 @@ class CampaignController:
             }
             self._verify_store()
             assert self._journal is not None
-            try:
-                entry = self._journal.append(
-                    journal_module.KIND_UNIFIED_DRIVER_ISSUED, event,
-                    record_id=transition_id)
-                self._verify_journal_layout(self.store / "journal")
-                self._scheduler_engine.apply_preview(preview)
-            except BaseException:
-                self._poisoned = True
-                raise
-            self._journal_cursor = entry.seq
+            entry = self._append_durable(
+                journal_module.KIND_UNIFIED_DRIVER_ISSUED, event,
+                record_id=transition_id,
+                after=lambda: self._scheduler_engine.apply_preview(preview))
             self._driver_issued[catalog.catalog_id] = copy.deepcopy(event)
             return {
                 "schema": driver_module.TRANSACTION_RECEIPT_SCHEMA,
@@ -4052,21 +4009,15 @@ class CampaignController:
         projected = actor_state_module.project_events(
             [*self._actor_preparation_events, validated])
         assert self._journal is not None
-        try:
-            entry = self._journal.append(
-                journal_module.KIND_ACTOR_PREPARATION, validated,
-                record_id=(validated["profile_request_digest"]
-                           if validated["event"] == "PROFILE_REQUEST"
-                           else validated["reservation_id"]
-                           if validated["event"] != "PROFILE_VERIFIED"
-                           else actor_state_module.digest(validated)
-                           if validated["schema"] == actor_state_module.PROFILE_V2_SCHEMA
-                           else validated["target_profile_digest"]))
-            self._verify_journal_layout(self.store / "journal")
-        except BaseException:
-            self._poisoned = True
-            raise
-        self._journal_cursor = entry.seq
+        entry = self._append_durable(
+            journal_module.KIND_ACTOR_PREPARATION, validated,
+            record_id=(validated["profile_request_digest"]
+                       if validated["event"] == "PROFILE_REQUEST"
+                       else validated["reservation_id"]
+                       if validated["event"] != "PROFILE_VERIFIED"
+                       else actor_state_module.digest(validated)
+                       if validated["schema"] == actor_state_module.PROFILE_V2_SCHEMA
+                       else validated["target_profile_digest"]))
         self._actor_preparation_events.append(copy.deepcopy(validated))
         self._actor_preparation_state = projected
         return copy.deepcopy(entry)
@@ -4374,15 +4325,9 @@ class CampaignController:
                 raise ControlRefused(f"child accounting refused: {exc}") from exc
             self._verify_store()
             assert self._journal is not None
-            try:
-                entry = self._journal.append(
-                    journal_module.KIND_UNIFIED_DRIVER_CHILD_ACCOUNTED, record,
-                    record_id=record["digest"])
-                self._verify_journal_layout(self.store / "journal")
-            except BaseException:
-                self._poisoned = True
-                raise
-            self._journal_cursor = entry.seq
+            entry = self._append_durable(
+                journal_module.KIND_UNIFIED_DRIVER_CHILD_ACCOUNTED, record,
+                record_id=record["digest"])
             chain.append(copy.deepcopy(record))
             return {"status": "accepted", "digest": record["digest"], "role": role}
 
@@ -4451,16 +4396,10 @@ class CampaignController:
                 raise ControlRefused("operation settlement is invalid: " + "; ".join(violations))
             self._verify_store()
             assert self._journal is not None
-            try:
-                entry = self._journal.append(
-                    journal_module.KIND_UNIFIED_DRIVER_SETTLED, event,
-                    record_id=request["transition_id"])
-                self._verify_journal_layout(self.store / "journal")
-                self._scheduler_engine.apply_operation_preview(preview)
-            except BaseException:
-                self._poisoned = True
-                raise
-            self._journal_cursor = entry.seq
+            entry = self._append_durable(
+                journal_module.KIND_UNIFIED_DRIVER_SETTLED, event,
+                record_id=request["transition_id"],
+                after=lambda: self._scheduler_engine.apply_operation_preview(preview))
             self._driver_settled[request["transition_id"]] = copy.deepcopy(event)
             return {"schema": DRIVER_SETTLEMENT_RECEIPT_SCHEMA,
                     "transition_id": request["transition_id"], "status": "accepted",
@@ -4571,16 +4510,10 @@ class CampaignController:
             }
             self._verify_store()
             assert self._journal is not None
-            try:
-                entry = self._journal.append(
-                    journal_module.KIND_UNIFIED_DRIVER_SETTLED, event,
-                    record_id=row["transition_id"])
-                self._verify_journal_layout(self.store / "journal")
-                self._scheduler_engine.apply_accounting_preview(preview)
-            except BaseException:
-                self._poisoned = True
-                raise
-            self._journal_cursor = entry.seq
+            entry = self._append_durable(
+                journal_module.KIND_UNIFIED_DRIVER_SETTLED, event,
+                record_id=row["transition_id"],
+                after=lambda: self._scheduler_engine.apply_accounting_preview(preview))
             self._driver_settled[row["transition_id"]] = copy.deepcopy(event)
             return {"schema": DRIVER_SETTLEMENT_RECEIPT_SCHEMA,
                     "transition_id": row["transition_id"], "status": "accepted",
