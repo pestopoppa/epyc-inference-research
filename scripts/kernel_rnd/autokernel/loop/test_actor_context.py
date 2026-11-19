@@ -679,6 +679,17 @@ class OrchestratorVariableMode(unittest.TestCase):
                          len(_real_prompt()) + len("\n\n" + actors.ANTI_GAMING_RULE))  # 57f6db044
         self.assertEqual(seen["bundle_dirs"], [], "no on-disk bundle tree: the REPL holds it")
 
+    def test_a_refused_orchestrator_bundle_degrades_to_an_honestly_labelled_inline_call(self):
+        # R3: the orchestrator branch must degrade exactly like the `variable` branch.
+        with mock.patch.object(actor_context, "orchestrator_bundle", side_effect=OSError("disk full")):
+            seen = self._propose(actors.backend_for("orch:auto", "high"),
+                                 actors.ActorSeat(bounded=False, context_mode="orchestrator-variable"))
+        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), LIVE_PROMPT_SHA256)
+        self.assertNotIn(actors.SEAT_ENV_ARM, seen["env"] or {},
+                         "an inline call is never recorded as the orchestrator-variable arm")
+        self.assertNotIn("--context-bundle", seen["argv"])
+        self.assertNotIn("bundle", seen, "no bundle was shipped for a refused call")
+
     def test_inline_stays_the_default_for_the_orchestrator_kind(self):
         for seat in (None, actors.ActorSeat(bounded=False)):
             seen = self._propose(actors.backend_for("orch:auto", "high"), seat)

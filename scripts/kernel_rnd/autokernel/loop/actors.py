@@ -3937,8 +3937,15 @@ class AgentPlanner:
             if self.backend.kind != "orchestrator":
                 return text, None
             from . import actor_context
-            bundle = actor_context.orchestrator_bundle(
-                text, role=role, lane=Path(self.workspace) if self.seat.lane_guard else None)
+            try:
+                bundle = actor_context.orchestrator_bundle(
+                    text, role=role, lane=Path(self.workspace) if self.seat.lane_guard else None)
+            except (OSError, ValueError) as exc:
+                # Same degrade as the `variable` branch: inline text, unsuffixed arm.
+                import sys
+                print(f"actor context: orchestrator bundle refused ({type(exc).__name__}: {exc}); "
+                      "this call is inline", file=sys.stderr)
+                return text, None
             return bundle.index, bundle
         if mode != "variable" or self.backend.kind != "opencode":
             return text, None
