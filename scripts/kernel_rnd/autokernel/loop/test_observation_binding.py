@@ -127,7 +127,12 @@ def test_provider_artifact_change_during_hash_is_refused(tmp_path, monkeypatch):
         value = real_read(fd, count)
         if value and not changed:
             changed = True
+            before = artifact.stat().st_mtime_ns
             artifact.write_bytes(b"replaced-provider-bytes")
+            # Same-size rewrite inside one coarse kernel timestamp tick keeps mtime/ctime
+            # identical (observed on this host's /tmp); force a distinct mtime so the test
+            # exercises the guard, not the clock granularity.
+            os.utime(artifact, ns=(before + 1_000_000_000, before + 1_000_000_000))
         return value
 
     monkeypatch.setattr(os, "read", changing_read)
