@@ -502,7 +502,11 @@ _INSTRUMENT_PATH = Path("/mnt/raid0/llm/worktrees/llama-c10-fold-20261109")
 # correct, and it is the whole point of the reset -- the champion's standing
 # versus production is zero by construction until the first keep of the new
 # cycle. See `_INSTRUMENT_DIFF_SHA256`.
-_INSTRUMENT_BRANCH = "ak/champion/llama-cpp-ffc1bac82eec"
+# PROOF PIN (c6-admission-live-proof-r9, 2026-11-19; NOT for main): the champion branch
+# above advanced to C14 `eee3da838` after this file's C10 pin, so every C10 bundle fails
+# _verify_instrument. This plumbing proof needs a stable instrument, so it binds to a
+# ref frozen at C10 `7f1bd044b` (a descendant of production v10, same sealed constants).
+_INSTRUMENT_BRANCH = "ak/c6-proof-instrument-c10-20261119"
 # REPINNED 2026-11-10 to champion C10 (operator decision: GPU discovery binds to
 # the CHAMPION, not production). C10 = `7f1bd044b`, the C9 tip folded with its
 # admitted keeps; it descends from production v10 `ffc1bac82`. Every constant
