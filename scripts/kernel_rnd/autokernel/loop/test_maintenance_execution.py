@@ -21,13 +21,18 @@ from .test_candidate_transactions import FakeGitBackend, _manager
 from .test_retention_consumer import NOW, _policy, _view
 
 
+# Captured at import: several tests replace shutil.rmtree with a fake that does not take
+# ignore_errors, and a fixture teardown must not run through that fake.
+_REAL_RMTREE = shutil.rmtree
+
+
 @pytest.fixture
 def native_root():
     path = Path(tempfile.mkdtemp(prefix="_maintenance_execution_", dir=Path(__file__).parent))
     try:
         yield path
     finally:
-        shutil.rmtree(path, ignore_errors=True)
+        _REAL_RMTREE(path, ignore_errors=True)
 
 
 def _native_tombstones(journal):

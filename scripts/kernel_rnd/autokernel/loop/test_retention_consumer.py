@@ -23,6 +23,11 @@ NOW = datetime(2026, 9, 9, tzinfo=timezone.utc)
 H = "a" * 64
 
 
+# Captured at import: several tests replace shutil.rmtree with a fake that does not take
+# ignore_errors, and a fixture teardown must not run through that fake.
+_REAL_RMTREE = shutil.rmtree
+
+
 @pytest.fixture
 def native_tmp_path():
     """Storage intentionally refuses /tmp, so use a disposable owned repo peer."""
@@ -30,7 +35,7 @@ def native_tmp_path():
     try:
         yield path
     finally:
-        shutil.rmtree(path, ignore_errors=True)
+        _REAL_RMTREE(path, ignore_errors=True)
 
 
 def _source(path: Path) -> cm.SourceIdentity:
