@@ -5,6 +5,9 @@ Never use ``line.endswith('OK')``: colour output ends lines with ``OK\\x1b[0m``.
 import re
 
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+# A passing case line ends in ``: OK`` (default) or ``... OK`` with no colon (--autokernel-properties:
+# ``... oracle=ggml_cpu_reference/v1 OK``). A bare ``OK`` summary line never counts (needs a non-space before it).
+_OKLINE = re.compile(r"(?::\s*|\S\s+)OK\s*$")
 _NM = re.compile(r"^\s*(\d+)/(\d+) tests passed\s*$")
 
 
@@ -20,7 +23,7 @@ def parse_tbo(text, rc):
     """
     clean = strip_ansi(text)
     lines = clean.splitlines()
-    n_ok = sum(1 for l in lines if re.search(r":\s*OK\s*$", l) and "Backend" not in l)
+    n_ok = sum(1 for l in lines if _OKLINE.search(l) and "Backend" not in l)
     names, in_block = [], False
     for l in lines:
         if "Failing tests:" in l:

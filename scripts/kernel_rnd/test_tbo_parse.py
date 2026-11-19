@@ -29,3 +29,16 @@ def test_fail_closed():
     assert not parse_tbo("garbage\n", 0)["parsed"]  # no N/M line
     assert not parse_tbo("", 0)["parsed"]
     assert strip_ansi("\x1b[1;32mOK\x1b[0m") == "OK"
+
+
+def test_properties_format_ok_without_colon():
+    # --autokernel-properties lines end "... oracle=ggml_cpu_reference/v1 OK" (ANSI-wrapped or plain), no colon before OK
+    t = (FX / "props_trim.log").read_text()
+    assert "\x1b[" in t
+    r = parse_tbo(t, 0)
+    assert r["n_ok"] == 3 and r["n_fail"] == 0 and r["parsed"] and r["passed_line"] == "3/3 tests passed"
+    assert parse_tbo(strip_ansi(t), 0)["n_ok"] == 3
+    # the bare "OK" summary line and "Backend X: OK" are not cases
+    assert parse_tbo("  OK\nBackend CPU: OK\n1/1 tests passed\n", 0)["n_ok"] == 0
+    # the colon format is unchanged
+    assert parse_tbo((FX / "pass_trim.log").read_text(), 0)["n_ok"] >= 2
