@@ -39,6 +39,8 @@ AUTHORITY = "nonpromotable_candidate_only_discovery"
 BORROWED_PHASE_SCHEMA = "epyc.autokernel.borrowed_device_claim_phase.v1"
 CORRECTNESS_SCHEMA = "epyc.autokernel.targeted_correctness_receipt.v3"
 C6_CORRECTNESS_SCHEMA = "epyc.autokernel.c6_correctness_receipt.v1"
+C6_SPLIT_REFUSAL_SCHEMA = "epyc.autokernel.c6_split_policy_refusal.v1"
+C6_SPLIT_REFUSAL_NAME = "c6-refusal.json"
 C6_SIDECAR_SCHEMA = "epyc.autokernel.c6_native_operator_sidecar.v3"
 C6_ORACLE_SIDECAR_SCHEMA = "epyc.autokernel.c6_native_oracle_phase.v1"
 C6_INPUT_BINDING_SCHEMA = "epyc.autokernel.c6_input_binding.v1"
@@ -130,21 +132,31 @@ class SealedEvidenceRefusal(EvidenceProducerError):
         self.receipt_sha256 = receipt_sha256
 
 
-class C6SplitPolicyRefusal(EvidenceProducerError):
+class C6SplitPolicyRefusal(SealedEvidenceRefusal):
     """The native C6 split evaluator refused a candidate by policy.
 
     A typed C6 disposition (the name starts with C6) instead of the generic
     EvidenceProducerError, so a live proof can tell a candidate refusal from a
     carrier failure.  ``failed_legs`` names which policy leg(s) refused:
     oracle_exit, numerics, precision_equivalence, determinism, semantic_judge.
-    It carries no durable receipt of its own (the legs are in the message).
+    When raised by the live evaluator it carries the sealed ``c6-refusal.json``
+    receipt (per-leg verdicts), so the controller records it as that
+    candidate's correctness verdict and moves on instead of dying.
     """
 
-    def __init__(self, failed_legs: Sequence[str]) -> None:
+    def __init__(self, failed_legs: Sequence[str], *,
+                 receipt_path: str | None = None,
+                 receipt_sha256: str | None = None) -> None:
         self.failed_legs = tuple(failed_legs)
         super().__init__(
             "native C6 split correctness/determinism/semantic policy refused: "
-            + ",".join(self.failed_legs))
+            + ",".join(self.failed_legs),
+            receipt_path=receipt_path, receipt_sha256=receipt_sha256)
+
+
+_C6_POLICY_LEGS = frozenset({
+    "oracle_exit", "numerics", "precision_equivalence", "determinism",
+    "semantic_judge"})
 
 
 def _c6_policy_failed_legs(*, oracle_exit_code: int, numerical: Sequence[Any],
@@ -2469,7 +2481,33 @@ def _evaluate_c6_oracle_and_candidate_outputs(
         determinism_correct=determinism.correct,
         semantic_gating=semantic.gating)
     if failed_legs:
-        raise C6SplitPolicyRefusal(failed_legs)
+        refusal = _seal(oracle_sidecar.parent / C6_SPLIT_REFUSAL_NAME, {
+            "schema": C6_SPLIT_REFUSAL_SCHEMA, "authority": AUTHORITY,
+            "status": "refused", "result": "REFUSED",
+            "non_promotable": True, "promotion_claim": False,
+            "error_type": "C6SplitPolicyRefusal",
+            "failed_legs": list(failed_legs),
+            "campaign_id": plan.campaign_id, "device_id": plan.device_id,
+            "manifest_sha256": plan.manifest_sha256,
+            "candidate_build_identity": asdict(plan.candidate),
+            "seeded_case_identity": case_identity,
+            "oracle_exit_code": oracle_capture.exit_code,
+            "reference_output_sha256": hashlib.sha256(reference_raw).hexdigest(),
+            "reference_float64_output_sha256": hashlib.sha256(
+                reference_f64_raw).hexdigest(),
+            "candidate_output_sha256": [
+                hashlib.sha256(item).hexdigest() for item in raw_outputs],
+            "precision_contract": asdict(policy),
+            "precision_equivalence_policy": asdict(precision_policy),
+            "numeric_verdicts": [asdict(row) for row in numerical],
+            "precision_equivalence": [hawkeye_measurement.serialize_carrier(row)
+                                      for row in precision_equivalence],
+            "determinism": json.loads(json.dumps(asdict(determinism))),
+            "semantic_gating": bool(semantic.gating),
+        })
+        raise C6SplitPolicyRefusal(
+            failed_legs, receipt_path=str(refusal["path"]),
+            receipt_sha256=str(refusal["file_sha256"]))
     _verify_plan_files(plan)
     dispatch_sha = schemas.content_hash(_expectations(plan))
     ordered_inputs = [by_name[name] for name in _C6_INPUT_ORDER[operation]]
@@ -5403,6 +5441,31 @@ def load_gpu_source_correctness_receipt(
     return loaded
 
 
+def load_c6_split_policy_refusal(
+        path: Path, plan: GpuSourceEvidencePlan) -> Mapping[str, Any]:
+    """Reopen a sealed native-C6 split policy refusal (never a pass)."""
+    try:
+        loaded = proofs.load_receipt(path, schema=C6_SPLIT_REFUSAL_SCHEMA)
+    except proofs.ProofError as exc:
+        raise EvidenceProducerError(
+            "C6 split policy refusal is not durably recoverable") from exc
+    body = loaded["body"]
+    legs = body.get("failed_legs")
+    if (body.get("authority") != AUTHORITY
+            or body.get("status") != "refused"
+            or body.get("promotion_claim") is not False
+            or body.get("error_type") != "C6SplitPolicyRefusal"
+            or body.get("campaign_id") != plan.campaign_id
+            or body.get("device_id") != plan.device_id
+            or body.get("manifest_sha256") != plan.manifest_sha256
+            or body.get("candidate_build_identity") != asdict(plan.candidate)
+            or not isinstance(legs, list) or not legs
+            or any(item not in _C6_POLICY_LEGS for item in legs)):
+        raise EvidenceProducerError(
+            "C6 split policy refusal does not bind this plan")
+    return loaded
+
+
 def load_gpu_source_correctness_refusal(
         path: Path, plan: GpuSourceEvidencePlan) -> Mapping[str, Any]:
     """Validate a durable typed refusal without converting it into a pass."""
@@ -5664,6 +5727,14 @@ def produce_gpu_source_evidence(
             raise EvidenceProducerError(
                 "correctness stage has contradictory pass/refusal receipts")
         correctness = load_gpu_source_correctness_receipt(correctness_path, plan)
+    elif (correctness_dir / C6_SPLIT_REFUSAL_NAME).exists() \
+            or (correctness_dir / C6_SPLIT_REFUSAL_NAME).is_symlink():
+        loaded_c6 = load_c6_split_policy_refusal(
+            correctness_dir / C6_SPLIT_REFUSAL_NAME, plan)
+        raise C6SplitPolicyRefusal(
+            tuple(loaded_c6["body"]["failed_legs"]),
+            receipt_path=str(loaded_c6["path"]),
+            receipt_sha256=str(loaded_c6["file_sha256"]))
     elif refusal_path.exists() or refusal_path.is_symlink():
         loaded_refusal = load_gpu_source_correctness_refusal(refusal_path, plan)
         raise CorrectnessParseRefusal(

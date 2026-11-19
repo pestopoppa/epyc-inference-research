@@ -43,5 +43,40 @@ class C6SplitPolicyRefusalTest(unittest.TestCase):
         self.assertIn("determinism", str(exc))
 
 
+    def test_carries_sealed_receipt(self):
+        exc = E.C6SplitPolicyRefusal(("precision_equivalence",),
+                                     receipt_path="/r", receipt_sha256="a" * 64)
+        self.assertIsInstance(exc, E.SealedEvidenceRefusal)
+        self.assertEqual(exc.receipt_path, "/r")
+
+
+class QuantizedPrecisionBoundTest(unittest.TestCase):
+    """r12: a correct q5_0 MMVQ kernel (NMSE 3.6e-5) had normalized RMS
+    6.0e-3 against the unquantized-activation float64 reference."""
+
+    def policy(self, dtype):
+        H = E.hawkeye_measurement
+        return H.PrecisionEquivalencePolicy(
+            operator_id="MUL_MAT", template_id="cuda-vecdotq-v1",
+            input_dtype=dtype, required_output_dtype="f32",
+            required_accumulator_dtype="f32", reduce_dimension=256,
+            structural_evidence_sha256="a" * 64)
+
+    def verdict(self, dtype, rel):
+        ref = [5.0 * (1 if i % 2 else -1) for i in range(32)]
+        got = [v * (1 + rel) for v in ref]
+        return E.hawkeye_measurement.evaluate_precision_equivalence(
+            ref, got, policy=self.policy(dtype),
+            observed_output_dtype="f32", observed_accumulator_dtype="f32")
+
+    def test_f32_bound_refuses_q8_quantization_noise(self):
+        self.assertFalse(self.verdict("float32", 1.2e-3).correct)
+
+    def test_q8_block_bound_accepts_noise_and_refuses_wrong_kernel(self):
+        self.assertTrue(self.verdict("q8_1", 1.2e-3).correct)
+        self.assertEqual(self.policy("q8_1").input_dtype, "q8_block")
+        self.assertFalse(self.verdict("q8_1", 0.5).correct)
+
+
 if __name__ == "__main__":
     unittest.main()

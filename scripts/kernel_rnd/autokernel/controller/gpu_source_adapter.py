@@ -1056,6 +1056,13 @@ class GovernedGpuSourceAdapter:
                     claim_acquirer=claim_acquirer,
                     claim_verifier=self.claim_verifier,
                     claim_timeout_s=self.claim_timeout_s)
+            except evidence.C6SplitPolicyRefusal as exc:
+                if not exc.receipt_path or not exc.receipt_sha256:
+                    raise GpuSourceAdapterError(
+                        "C6 split policy refusal lacks its durable terminal") from exc
+                raise controller.C6SplitPolicyCorrectnessRefusal(
+                    str(exc), receipt_path=exc.receipt_path,
+                    receipt_sha256=exc.receipt_sha256) from exc
             except evidence.CorrectnessParseRefusal as exc:
                 if not exc.receipt_path or not exc.receipt_sha256:
                     raise GpuSourceAdapterError(

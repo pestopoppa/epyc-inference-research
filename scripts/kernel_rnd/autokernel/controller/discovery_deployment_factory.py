@@ -2376,8 +2376,16 @@ def _c6_native_capability(
         "precision_equivalence_policy": {
             "operator_id": operation,
             "template_id": template.template_id,
+            # Quantized MUL_MAT (vecdotq/MMVQ) reduces over q8_1-quantized
+            # activations, while the float64 reference uses the unquantized
+            # f32 activations; an f32-epsilon bound refuses every such kernel
+            # including production (r12: normalized RMS 6.0e-3 vs bound
+            # 1.9e-6 at NMSE 3.6e-5).  The reduction input is q8 blocks.
             "input_dtype": (
-                "float16" if operation == "FLASH_ATTN_EXT" else "float32"),
+                "float16" if operation == "FLASH_ATTN_EXT"
+                else "q8_block" if operation == "MUL_MAT"
+                and str(type_a).lower() not in {"f32", "f16", "bf16"}
+                else "float32"),
             "required_output_dtype": "f32",
             "required_accumulator_dtype": "f32",
             "reduce_dimension": (

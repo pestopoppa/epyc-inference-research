@@ -209,6 +209,14 @@ class CorrectnessRefusal(GovernedStageRefusal):
     disposition = "correctness_falsified"
 
 
+class C6SplitPolicyCorrectnessRefusal(CorrectnessRefusal):
+    """Native C6 split policy refused this candidate (sealed c6-refusal.json).
+
+    A per-candidate correctness verdict: recorded as that candidate's
+    terminal like any CorrectnessRefusal; the controller continues.
+    """
+
+
 class TimedOutputCorrectnessRefusal(CorrectnessRefusal):
     """A measured same-input candidate divergence; science was consumed."""
 

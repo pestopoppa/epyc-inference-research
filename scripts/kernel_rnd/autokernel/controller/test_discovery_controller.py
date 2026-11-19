@@ -1261,6 +1261,25 @@ class Tests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    root=Path(t); p=FakePlanner(); r=D.run_controller(self.cfg(root,1),planner=p,critic=FakeCritic(["accept"]),screener=Bad([]),lease=Lease()); again=D.run_controller(self.cfg(root,1),planner=p,critic=FakeCritic(["accept"]),screener=Bad([]),lease=Lease())
    self.assertEqual(r["iterations"][0]["status"],"screen_refused"); self.assertEqual(again,r); self.assertEqual(len(p.calls),1)
+ def test_c6_split_policy_refusal_is_candidate_verdict_and_loop_continues(self):
+  # r12 (c6-admission-live-proof): a per-candidate native-C6 policy refusal
+  # killed the controller.  It is that candidate's correctness verdict.
+  class C6Refuses(FakeScreen):
+   def screen(self,*args):
+    self.calls+=1
+    if self.calls==1:
+     raise D.C6SplitPolicyCorrectnessRefusal("native C6 split correctness/determinism/semantic policy refused: precision_equivalence",receipt_path="/sealed/c6-refusal.json",receipt_sha256=H)
+    return D.SealedScreen("receipt",H[:-1]+"2",.001,"candidate",H,H,H)
+  with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
+   root=Path(t); screen=C6Refuses([])
+   r=D.run_controller(self.cfg(root,2),planner=FakePlanner(),critic=FakeCritic(["accept","accept"]),screener=screen,lease=Lease())
+   self.assertIsInstance(D.C6SplitPolicyCorrectnessRefusal("x",receipt_path="/r",receipt_sha256=H),D.CorrectnessRefusal)
+   first=r["iterations"][0]
+   self.assertEqual(first["status"],"correctness_falsified")
+   self.assertEqual(first["stage_receipt_sha256"],H)
+   self.assertIn("precision_equivalence",first["reason"])
+   self.assertNotIn("inflight",r)
+   self.assertEqual(screen.calls,2); self.assertGreaterEqual(len(r["iterations"]),2)
  def test_post_proof_transport_interruption_pauses_and_resumes_same_candidate(self):
   class Interrupted(FakeScreen):
    def screen(self,*args):

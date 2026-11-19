@@ -85,8 +85,13 @@ _DTYPE_EPSILON = {
     "float32": 1.1920928955078125e-7,
     "float16": 9.765625e-4,
     "bfloat16": 7.8125e-3,
+    # Block-quantized 8-bit activations (ggml q8_1/q8_K, symmetric
+    # scale = amax/127): one quantization step relative to the block max.
+    # The input of a quantized vec-dot reduction (MMVQ), not a float type.
+    "q8_block": 7.8125e-3,
 }
 _DTYPE_ALIASES = {
+    "q8_1": "q8_block", "q8_k": "q8_block",
     "double": "float64", "fp64": "float64",
     "float": "float32", "fp32": "float32",
     "half": "float16", "fp16": "float16",
