@@ -517,6 +517,9 @@ _CANONICAL_VALUE_FLAGS = frozenset({
     # Host-RAM prompt cache size (MiB), as production :8083 launches it. Server-side
     # memory policy only; carried verbatim in the command and so in the execution digest.
     "--cache-ram",
+    # Per-slot context-checkpoint count (frontdoor emits it from the registry's
+    # ctx_checkpoints). Server-side memory policy; verbatim in the command and digest.
+    "--ctx-checkpoints",
 })
 _CANONICAL_SWITCH_FLAGS = frozenset({
     "--jinja", "--mlock", "--no-mmap", "--kv-unified", "--no-kv-unified",
@@ -572,6 +575,8 @@ def _canonical_command(command: tuple[str, ...]) -> tuple[str, dict[str, str | b
         _canonical_int(parsed, "--threads-draft")
     if "--cache-ram" in parsed:
         _canonical_int(parsed, "--cache-ram")
+    if "--ctx-checkpoints" in parsed and _canonical_int(parsed, "--ctx-checkpoints") < 0:
+        raise ResolutionError("canonical --ctx-checkpoints must be a non-negative integer")
     if "--load-threads" in parsed and _canonical_int(parsed, "--load-threads") < 0:
         raise ResolutionError("canonical --load-threads must be a non-negative integer")
     if "--log-colors" in parsed and parsed["--log-colors"] not in {"on", "off", "auto"}:
@@ -1177,6 +1182,10 @@ def _capability(template: serving.Recipe, backend: str, drafter: ArtifactDigest 
             # load-time threading only (no workload, request or arithmetic change), carried
             # verbatim in the normalized command and so in the execution digest.
             consumed.update({index, index + 1})
+        elif flag == "--no-cache-idle-slots":
+            # Production :8083 idle-slot cache policy: a bare server switch, no request or
+            # arithmetic effect, carried verbatim in the normalized command and digest.
+            consumed.add(index)
         elif (flag == "--draft-p-min" and index + 1 < len(flags)
               and _finite_probability(flags[index + 1])):
             # The speculative acceptance threshold (Q38FN lane, 2026-10-03: the codified
