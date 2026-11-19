@@ -1,0 +1,82 @@
+{
+ "version": 1,
+ "generated": "2026-11-18",
+ "hardware": "MI210 gfx90a (mi210_0)",
+ "provenance": "research/deep-dives/mi210-next-hotspots-20261118.md (epyc-root); rocprofv3 kernel traces on disk, no new runs",
+ "profiles": [
+  {
+   "model": "27b-q8_0",
+   "mode": "dflash2_verify_d8192",
+   "window_rule": "post_prefill",
+   "description": "27B Q8_0 DFlash2 verify n=8 at depth 8192; post-prefill window of the C8-H17 llama-bench trace (predates parts of C16: small-op shares are an upper bound)",
+   "traces": [
+    "/mnt/raid0/llm/tmp/c8-h17-profile-20261107/out/prof/dflash_d8192/r0-1794055046/.hip-tmp/trace/prof_kernel_trace.csv"
+   ]
+  },
+  {
+   "model": "27b-q8_0",
+   "mode": "dflash2_verify_d32768",
+   "window_rule": "post_prefill",
+   "description": "27B Q8_0 DFlash2 verify n=8 at depth 32768; post-prefill window of the C8-H17 llama-bench trace (predates parts of C16: small-op shares are an upper bound)",
+   "traces": [
+    "/mnt/raid0/llm/tmp/c8-h17-profile-20261107/out/prof/dflash_d32768/r0-1794055215/.hip-tmp/trace/prof_kernel_trace.csv"
+   ]
+  },
+  {
+   "model": "27b-q8_0",
+   "mode": "dflash2_verify_d131072",
+   "window_rule": "post_prefill",
+   "description": "27B Q8_0 DFlash2 verify n=8 at depth 131072; post-prefill window of the C8-H17 llama-bench trace (predates parts of C16: small-op shares are an upper bound)",
+   "traces": [
+    "/mnt/raid0/llm/tmp/c8-h17-profile-20261107/out/prof/dflash_d131072/r0-1794056265/.hip-tmp/trace/prof_kernel_trace.csv"
+   ]
+  },
+  {
+   "model": "27b-q8_0",
+   "mode": "decode_d8192",
+   "window_rule": "post_prefill",
+   "description": "27B Q8_0 plain decode n=1 at depth 8192 (not the served path; reference)",
+   "traces": [
+    "/mnt/raid0/llm/tmp/c8-h17-profile-20261107/out/prof/tg_d8192/r0-1794055004/.hip-tmp/trace/prof_kernel_trace.csv"
+   ]
+  },
+  {
+   "model": "27b-q8_0",
+   "mode": "decode_d32768",
+   "window_rule": "post_prefill",
+   "description": "27B Q8_0 plain decode n=1 at depth 32768 (not the served path; reference)",
+   "traces": [
+    "/mnt/raid0/llm/tmp/c8-h17-profile-20261107/out/prof/tg_d32768/r0-1794055067/.hip-tmp/trace/prof_kernel_trace.csv"
+   ]
+  },
+  {
+   "model": "27b-q8_0",
+   "mode": "decode_d131072",
+   "window_rule": "post_prefill",
+   "description": "27B Q8_0 plain decode n=1 at depth 131072 (not the served path; reference)",
+   "traces": [
+    "/mnt/raid0/llm/tmp/c8-h17-profile-20261107/out/prof/tg_d131072/r0-1794055275/.hip-tmp/trace/prof_kernel_trace.csv"
+   ]
+  },
+  {
+   "model": "a3b-q8_0",
+   "mode": "mtp_verify_n3",
+   "window_rule": "all",
+   "description": "A3B Q8_0 MTP verify n=3, llama-bench -p 3 -r 5 d0, C14 base, r1+r2 pooled",
+   "traces": [
+    "/mnt/raid0/llm/tmp/rka-a3b-n4-trace-gpu-20261118/out/trace/r1-n3/kt_kernel_trace.csv",
+    "/mnt/raid0/llm/tmp/rka-a3b-n4-trace-gpu-20261118/out/trace/r2-n3/kt_kernel_trace.csv"
+   ]
+  },
+  {
+   "model": "a3b-q8_0",
+   "mode": "mtp_verify_n4",
+   "window_rule": "all",
+   "description": "A3B Q8_0 MTP verify n=4, llama-bench -p 4 -r 5 d0, C14 base, r1+r2 pooled",
+   "traces": [
+    "/mnt/raid0/llm/tmp/rka-a3b-n4-trace-gpu-20261118/out/trace/r1-n4/kt_kernel_trace.csv",
+    "/mnt/raid0/llm/tmp/rka-a3b-n4-trace-gpu-20261118/out/trace/r2-n4/kt_kernel_trace.csv"
+   ]
+  }
+ ]
+}

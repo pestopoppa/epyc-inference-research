@@ -170,7 +170,8 @@ class SerializedTail:
     def __init__(self, champion_head: Callable[[], str],
                  lock: threading.Lock | None = None,
                  fence: Callable[[], Any] | None = None,
-                 priority: Callable[[Any], float | None] | None = None) -> None:
+                 priority: Callable[[Any], float | None] | None = None,
+                 demote: Callable[[Any], bool] | None = None) -> None:
         self._lock = lock or threading.Lock()
         self._champion_head = champion_head
         #: AKX-ALL-29.2a: `priority(hypothesis)` -> launch-weighted ns/token of the kernel
@@ -180,6 +181,9 @@ class SerializedTail:
         #: It orders timing only; nothing about any verdict or the keep gate changes.
         #: None: the historical plain lock, byte for byte.
         self._priority = priority
+        #: AK-AMDAHL-PRUNE: `demote(hypothesis)` True -> admitted after every candidate
+        #: not demoted (its e2e ceiling is below the keep bar). Order only; never refuses.
+        self._demote = demote
         self._admission = threading.Condition()
         self._waiting: list[tuple[float, int]] = []
         self._arrivals = 0
@@ -213,12 +217,19 @@ class SerializedTail:
         """Block until this candidate is the best-ranked waiter and the tail is free."""
         import heapq
         try:
-            score = self._priority(hypothesis) if hypothesis is not None else None
+            score = (self._priority(hypothesis)
+                     if hypothesis is not None and self._priority is not None else None)
         except Exception:       # noqa: BLE001 -- an ordering hint never fails an attempt
             score = None
+        try:
+            low = bool(self._demote(hypothesis)) if (self._demote is not None
+                                                     and hypothesis is not None) else False
+        except Exception:       # noqa: BLE001 -- an ordering hint never fails an attempt
+            low = False
         with self._admission:
             self._arrivals += 1
-            key = (-float(score) if isinstance(score, (int, float)) and score > 0 else 0.0,
+            key = (1 if low else 0,
+                   -float(score) if isinstance(score, (int, float)) and score > 0 else 0.0,
                    self._arrivals)
             heapq.heappush(self._waiting, key)
             while self._admitted or self._waiting[0] != key:
@@ -228,8 +239,9 @@ class SerializedTail:
             self.admission_log.append({
                 "mechanism_id": getattr(hypothesis, "mechanism_id", None),
                 "target_symbol": getattr(hypothesis, "target_symbol", None),
-                "launch_weighted_ns_per_token": score if key[0] else None,
-                "arrival": key[1], "waiting_behind": len(self._waiting)})
+                "launch_weighted_ns_per_token": score if key[1] else None,
+                "amdahl_demoted": bool(key[0]),
+                "arrival": key[2], "waiting_behind": len(self._waiting)})
 
     def _release_admission(self) -> None:
         with self._admission:
@@ -248,7 +260,7 @@ class SerializedTail:
         With a `priority` (AKX-ALL-29.2a) the waiting candidates are admitted in
         launch-weighted order; see `__init__`.
         """
-        if self._priority is None:
+        if self._priority is None and self._demote is None:
             with self._session(base_head, clock):
                 yield
             return

@@ -389,7 +389,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           reserve_candidate=None, record_abandoned=None,
           next_resume=None, begin_author_custody=None, finish_author_custody=None,
           author_sandbox: bool = False,
-          cpu_window=None, tail_priority=None, on_tail_ready=None,
+          cpu_window=None, tail_priority=None, tail_demote=None, on_tail_ready=None,
           make_exact_judge=None, make_isa_check=None) -> PoolResult:
     """Run `iterations` iterations across `workers` lanes and report the accounting.
 
@@ -423,7 +423,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
     # AKX-ALL-29.2a: `tail_priority(hypothesis)` orders which waiting candidate is timed
     # next (launch-weighted kernel estimate); None keeps the plain lock.
     tail = pipeline.SerializedTail(lambda: champion_head(champion_tree, branch), fence=fence,
-                                   priority=tail_priority)
+                                   priority=tail_priority, demote=tail_demote)
     if on_tail_ready is not None:
         on_tail_ready(tail)
 

@@ -2897,6 +2897,9 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12,
         if context.get("two_denominator"):   # AK-PROF-TWO-DENOM: wall share + launch gap
             lines.extend(["", "## GPU share by two denominators",
                           hotspots.render_two_denominator(context["two_denominator"])])
+    if not cpu and context.get("amdahl_ceilings"):   # AK-AMDAHL-PRUNE: e2e ceilings
+        from . import amdahl
+        lines.extend(amdahl.render(context["amdahl_ceilings"]))
     if not cpu and context.get("gpu_counters"):   # RVP-CTR-1: counter-grounded planner signals
         lines.extend(gpu_counter_signals.render(context["gpu_counters"], limit=limit))
     if cpu and context.get("long_context"):

@@ -1,0 +1,1225 @@
+{
+ "schema": "epyc.autokernel.gpu_serving_shares.v1",
+ "version": 1,
+ "generated": "2026-11-18",
+ "hardware": "MI210 gfx90a (mi210_0)",
+ "provenance": "research/deep-dives/mi210-next-hotspots-20261118.md (epyc-root); rocprofv3 kernel traces on disk, no new runs",
+ "profiles": [
+  {
+   "model": "27b-q8_0",
+   "mode": "dflash2_verify_d8192",
+   "window_rule": "post_prefill",
+   "description": "27B Q8_0 DFlash2 verify n=8 at depth 8192; post-prefill window of the C8-H17 llama-bench trace (predates parts of C16: small-op shares are an upper bound)",
+   "busy_fraction": 0.9487,
+   "busy_ns": 52164188,
+   "sources": [
+    {
+     "path": "/mnt/raid0/llm/tmp/c8-h17-profile-20261107/out/prof/dflash_d8192/r0-1794055046/.hip-tmp/trace/prof_kernel_trace.csv",
+     "sha256": "fb4642325335e50d7a8728647a535fa5349611be4872d10c9e5aecea8b587853",
+     "dispatches": 2639,
+     "busy_ns": 52164188
+    }
+   ],
+   "kernels": [
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 3, false, false, 0, false, false, false>",
+     "share": 0.722061,
+     "calls": 508
+    },
+    {
+     "kernel": "gv_fattn_kernel<true, true>",
+     "share": 0.046165,
+     "calls": 16
+    },
+    {
+     "kernel": "quantize_q8_1<false>",
+     "share": 0.043211,
+     "calls": 508
+    },
+    {
+     "kernel": "cpy_scalar<&(void cpy_1_scalar<float, float>(char const*, char*))>",
+     "share": 0.037574,
+     "calls": 448
+    },
+    {
+     "kernel": "gated_delta_net_cuda<128, false, true, float>",
+     "share": 0.018401,
+     "calls": 48
+    },
+    {
+     "kernel": "rms_norm_f32<1024, true, false, false>",
+     "share": 0.017943,
+     "calls": 130
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_add(float, float)), float, float, float, float const*>",
+     "share": 0.015542,
+     "calls": 177
+    },
+    {
+     "kernel": "k_get_rows_float<float, float>",
+     "share": 0.015327,
+     "calls": 97
+    },
+    {
+     "kernel": "concat_non_cont<unsigned int, 0>",
+     "share": 0.01491,
+     "calls": 48
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_silu(float)), float>",
+     "share": 0.009567,
+     "calls": 112
+    },
+    {
+     "kernel": "l2_norm_f32<32>",
+     "share": 0.008005,
+     "calls": 96
+    },
+    {
+     "kernel": "gv_merge_kernel",
+     "share": 0.007337,
+     "calls": 16
+    },
+    {
+     "kernel": "rms_norm_f32<256, true, false, false>",
+     "share": 0.007291,
+     "calls": 85
+    },
+    {
+     "kernel": "rope_multi<true, false, float>",
+     "share": 0.005239,
+     "calls": 32
+    },
+    {
+     "kernel": "_ZL16k_set_rows_quantIl10block_q8_0Li32ETnPFvPKfPT0_EXadL_ZL23quantize_f32_q8_0_blockS2_PS0_EEEvS2_PKT_S4_llllllllllllll15HIP_vector_typeIjLj3EESC_SC_SC_SC_",
+     "share": 0.00515,
+     "calls": 32
+    },
+    {
+     "kernel": "ssm_conv_f32<true, 128ul, 4ul>",
+     "share": 0.004911,
+     "calls": 48
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_mul(float, float)), float, float, float, float const*>",
+     "share": 0.004862,
+     "calls": 48
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_sigmoid(float)), float>",
+     "share": 0.004083,
+     "calls": 48
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_softplus(float)), float>",
+     "share": 0.00407,
+     "calls": 48
+    },
+    {
+     "kernel": "fwht_cuda<256>",
+     "share": 0.002776,
+     "calls": 32
+    },
+    {
+     "kernel": "fwht_cuda<64>",
+     "share": 0.002653,
+     "calls": 32
+    },
+    {
+     "kernel": "(other)",
+     "share": 0.002923,
+     "calls": 30
+    }
+   ]
+  },
+  {
+   "model": "27b-q8_0",
+   "mode": "dflash2_verify_d32768",
+   "window_rule": "post_prefill",
+   "description": "27B Q8_0 DFlash2 verify n=8 at depth 32768; post-prefill window of the C8-H17 llama-bench trace (predates parts of C16: small-op shares are an upper bound)",
+   "busy_fraction": 0.9183,
+   "busy_ns": 98930453,
+   "sources": [
+    {
+     "path": "/mnt/raid0/llm/tmp/c8-h17-profile-20261107/out/prof/dflash_d32768/r0-1794055215/.hip-tmp/trace/prof_kernel_trace.csv",
+     "sha256": "743c2a2e3f41dfd0eb1c8532ae69150c0c0c95ef875747ff6a483072e42ca83a",
+     "dispatches": 4969,
+     "busy_ns": 98930453
+    }
+   ],
+   "kernels": [
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 3, false, false, 0, false, false, false>",
+     "share": 0.380193,
+     "calls": 508
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, true, true, 0, false, false, true>",
+     "share": 0.158238,
+     "calls": 144
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, false, true, 0, false, false, true>",
+     "share": 0.08723,
+     "calls": 300
+    },
+    {
+     "kernel": "flash_attn_ext_vec<256, 1, (ggml_type)8, (ggml_type)8, false, false>",
+     "share": 0.083164,
+     "calls": 16
+    },
+    {
+     "kernel": "gv_fattn_kernel<true, true>",
+     "share": 0.053502,
+     "calls": 16
+    },
+    {
+     "kernel": "cpy_scalar<&(void cpy_1_scalar<float, float>(char const*, char*))>",
+     "share": 0.04244,
+     "calls": 896
+    },
+    {
+     "kernel": "quantize_q8_1<false>",
+     "share": 0.024552,
+     "calls": 508
+    },
+    {
+     "kernel": "quantize_q8_1_1d<false>",
+     "share": 0.021327,
+     "calls": 444
+    },
+    {
+     "kernel": "rms_norm_f32<1024, true, false, false>",
+     "share": 0.020478,
+     "calls": 260
+    },
+    {
+     "kernel": "k_get_rows_float<float, float>",
+     "share": 0.016406,
+     "calls": 194
+    },
+    {
+     "kernel": "gated_delta_net_cuda<128, false, true, float>",
+     "share": 0.015206,
+     "calls": 96
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_add(float, float)), float, float, float, float const*>",
+     "share": 0.01356,
+     "calls": 273
+    },
+    {
+     "kernel": "l2_norm_f32<32>",
+     "share": 0.009261,
+     "calls": 192
+    },
+    {
+     "kernel": "rms_norm_f32<256, true, false, false>",
+     "share": 0.008101,
+     "calls": 170
+    },
+    {
+     "kernel": "concat_non_cont<unsigned int, 0>",
+     "share": 0.007779,
+     "calls": 48
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_silu(float)), float>",
+     "share": 0.007705,
+     "calls": 160
+    },
+    {
+     "kernel": "rope_multi<true, false, float>",
+     "share": 0.007698,
+     "calls": 64
+    },
+    {
+     "kernel": "gv_merge_kernel",
+     "share": 0.007202,
+     "calls": 16
+    },
+    {
+     "kernel": "_ZL16k_set_rows_quantIl10block_q8_0Li32ETnPFvPKfPT0_EXadL_ZL23quantize_f32_q8_0_blockS2_PS0_EEEvS2_PKT_S4_llllllllllllll15HIP_vector_typeIjLj3EESC_SC_SC_SC_",
+     "share": 0.005557,
+     "calls": 64
+    },
+    {
+     "kernel": "ssm_conv_f32<true, 128ul, 4ul>",
+     "share": 0.005052,
+     "calls": 96
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_sigmoid(float)), float>",
+     "share": 0.004562,
+     "calls": 96
+    },
+    {
+     "kernel": "fwht_cuda<64>",
+     "share": 0.003128,
+     "calls": 64
+    },
+    {
+     "kernel": "fwht_cuda<256>",
+     "share": 0.003078,
+     "calls": 64
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_mul(float, float)), float, float, float, float const*>",
+     "share": 0.002525,
+     "calls": 48
+    },
+    {
+     "kernel": "concat_cont<unsigned int, 0>",
+     "share": 0.002415,
+     "calls": 49
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_softplus(float)), float>",
+     "share": 0.002316,
+     "calls": 48
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_softplus(float)), float>",
+     "share": 0.002232,
+     "calls": 48
+    },
+    {
+     "kernel": "(other)",
+     "share": 0.005093,
+     "calls": 87
+    }
+   ]
+  },
+  {
+   "model": "27b-q8_0",
+   "mode": "dflash2_verify_d131072",
+   "window_rule": "post_prefill",
+   "description": "27B Q8_0 DFlash2 verify n=8 at depth 131072; post-prefill window of the C8-H17 llama-bench trace (predates parts of C16: small-op shares are an upper bound)",
+   "busy_fraction": 0.934,
+   "busy_ns": 68342945,
+   "sources": [
+    {
+     "path": "/mnt/raid0/llm/tmp/c8-h17-profile-20261107/out/prof/dflash_d131072/r0-1794056265/.hip-tmp/trace/prof_kernel_trace.csv",
+     "sha256": "1010fe7a71d831586fd95aa25ca27c350f49fc6f472c40606968a94a10859eaa",
+     "dispatches": 2639,
+     "busy_ns": 68342945
+    }
+   ],
+   "kernels": [
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 3, false, false, 0, false, false, false>",
+     "share": 0.539943,
+     "calls": 508
+    },
+    {
+     "kernel": "gv_fattn_kernel<true, true>",
+     "share": 0.274268,
+     "calls": 16
+    },
+    {
+     "kernel": "quantize_q8_1<false>",
+     "share": 0.033118,
+     "calls": 508
+    },
+    {
+     "kernel": "cpy_scalar<&(void cpy_1_scalar<float, float>(char const*, char*))>",
+     "share": 0.028749,
+     "calls": 448
+    },
+    {
+     "kernel": "rms_norm_f32<1024, true, false, false>",
+     "share": 0.014791,
+     "calls": 130
+    },
+    {
+     "kernel": "gated_delta_net_cuda<128, false, true, float>",
+     "share": 0.014319,
+     "calls": 48
+    },
+    {
+     "kernel": "concat_non_cont<unsigned int, 0>",
+     "share": 0.012097,
+     "calls": 48
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_add(float, float)), float, float, float, float const*>",
+     "share": 0.011821,
+     "calls": 177
+    },
+    {
+     "kernel": "k_get_rows_float<float, float>",
+     "share": 0.011795,
+     "calls": 97
+    },
+    {
+     "kernel": "gv_merge_kernel",
+     "share": 0.010336,
+     "calls": 16
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_silu(float)), float>",
+     "share": 0.007361,
+     "calls": 112
+    },
+    {
+     "kernel": "l2_norm_f32<32>",
+     "share": 0.006199,
+     "calls": 96
+    },
+    {
+     "kernel": "rms_norm_f32<256, true, false, false>",
+     "share": 0.005649,
+     "calls": 85
+    },
+    {
+     "kernel": "rope_multi<true, false, float>",
+     "share": 0.005321,
+     "calls": 32
+    },
+    {
+     "kernel": "_ZL16k_set_rows_quantIl10block_q8_0Li32ETnPFvPKfPT0_EXadL_ZL23quantize_f32_q8_0_blockS2_PS0_EEEvS2_PKT_S4_llllllllllllll15HIP_vector_typeIjLj3EESC_SC_SC_SC_",
+     "share": 0.003947,
+     "calls": 32
+    },
+    {
+     "kernel": "ssm_conv_f32<true, 128ul, 4ul>",
+     "share": 0.003774,
+     "calls": 48
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_mul(float, float)), float, float, float, float const*>",
+     "share": 0.003552,
+     "calls": 48
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_sigmoid(float)), float>",
+     "share": 0.003118,
+     "calls": 48
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_softplus(float)), float>",
+     "share": 0.003114,
+     "calls": 48
+    },
+    {
+     "kernel": "fwht_cuda<256>",
+     "share": 0.002245,
+     "calls": 32
+    },
+    {
+     "kernel": "fwht_cuda<64>",
+     "share": 0.002039,
+     "calls": 32
+    },
+    {
+     "kernel": "(other)",
+     "share": 0.002444,
+     "calls": 30
+    }
+   ]
+  },
+  {
+   "model": "27b-q8_0",
+   "mode": "decode_d8192",
+   "window_rule": "post_prefill",
+   "description": "27B Q8_0 plain decode n=1 at depth 8192 (not the served path; reference)",
+   "busy_fraction": 0.934,
+   "busy_ns": 1053311659,
+   "sources": [
+    {
+     "path": "/mnt/raid0/llm/tmp/c8-h17-profile-20261107/out/prof/tg_d8192/r0-1794055004/.hip-tmp/trace/prof_kernel_trace.csv",
+     "sha256": "9663cd68e4690bebb8b3bf1db5013610dc29bbb11f20b6df8114f007781165c2",
+     "dispatches": 50996,
+     "busy_ns": 1053311659
+    }
+   ],
+   "kernels": [
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, true, true, 0, false, false, true>",
+     "share": 0.471415,
+     "calls": 4608
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, false, true, 0, false, false, true>",
+     "share": 0.24616,
+     "calls": 9249
+    },
+    {
+     "kernel": "flash_attn_ext_vec<256, 1, (ggml_type)8, (ggml_type)8, false, false>",
+     "share": 0.078402,
+     "calls": 512
+    },
+    {
+     "kernel": "quantize_q8_1_1d<false>",
+     "share": 0.036882,
+     "calls": 8401
+    },
+    {
+     "kernel": "rms_norm_f32<1024, true, false, false>",
+     "share": 0.028784,
+     "calls": 4129
+    },
+    {
+     "kernel": "k_get_rows_float<float, float>",
+     "share": 0.02237,
+     "calls": 3105
+    },
+    {
+     "kernel": "gated_delta_net_cuda<128, false, false, float>",
+     "share": 0.014409,
+     "calls": 1536
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_add(float, float)), float, float, float, float const*>",
+     "share": 0.013573,
+     "calls": 3072
+    },
+    {
+     "kernel": "rope_multi<true, false, float>",
+     "share": 0.012885,
+     "calls": 1024
+    },
+    {
+     "kernel": "rms_norm_f32<256, true, false, false>",
+     "share": 0.011211,
+     "calls": 2560
+    },
+    {
+     "kernel": "ak_h15_conv_fused_kernel",
+     "share": 0.009759,
+     "calls": 1536
+    },
+    {
+     "kernel": "__amd_rocclr_copyBuffer",
+     "share": 0.008663,
+     "calls": 1536
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_silu(float)), float>",
+     "share": 0.006811,
+     "calls": 1536
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_sigmoid(float)), float>",
+     "share": 0.006702,
+     "calls": 1536
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_softplus(float)), float>",
+     "share": 0.006493,
+     "calls": 1536
+    },
+    {
+     "kernel": "_ZL16k_set_rows_quantIl10block_q8_0Li32ETnPFvPKfPT0_EXadL_ZL23quantize_f32_q8_0_blockS2_PS0_EEEvS2_PKT_S4_llllllllllllll15HIP_vector_typeIjLj3EESC_SC_SC_SC_",
+     "share": 0.006212,
+     "calls": 1024
+    },
+    {
+     "kernel": "fwht_cuda<256>",
+     "share": 0.004513,
+     "calls": 1024
+    },
+    {
+     "kernel": "fwht_cuda<64>",
+     "share": 0.0044,
+     "calls": 1024
+    },
+    {
+     "kernel": "flash_attn_combine_results<256>",
+     "share": 0.003592,
+     "calls": 512
+    },
+    {
+     "kernel": "cpy_scalar<&(void cpy_1_scalar<float, float>(char const*, char*))>",
+     "share": 0.00226,
+     "calls": 512
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_sigmoid(float)), float>",
+     "share": 0.002253,
+     "calls": 512
+    },
+    {
+     "kernel": "flash_attn_mask_to_KV_live<1>",
+     "share": 0.002251,
+     "calls": 512
+    }
+   ]
+  },
+  {
+   "model": "27b-q8_0",
+   "mode": "decode_d32768",
+   "window_rule": "post_prefill",
+   "description": "27B Q8_0 plain decode n=1 at depth 32768 (not the served path; reference)",
+   "busy_fraction": 0.8422,
+   "busy_ns": 1292285872,
+   "sources": [
+    {
+     "path": "/mnt/raid0/llm/tmp/c8-h17-profile-20261107/out/prof/tg_d32768/r0-1794055067/.hip-tmp/trace/prof_kernel_trace.csv",
+     "sha256": "caccfe89b8a09961f90c9e03eb5a3a6fe954175fc53b9723d22ccd0e4660b7ba",
+     "dispatches": 50996,
+     "busy_ns": 1292285872
+    }
+   ],
+   "kernels": [
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, true, true, 0, false, false, true>",
+     "share": 0.402278,
+     "calls": 4608
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, false, true, 0, false, false, true>",
+     "share": 0.210006,
+     "calls": 9249
+    },
+    {
+     "kernel": "flash_attn_ext_vec<256, 1, (ggml_type)8, (ggml_type)8, false, false>",
+     "share": 0.209943,
+     "calls": 512
+    },
+    {
+     "kernel": "quantize_q8_1_1d<false>",
+     "share": 0.030481,
+     "calls": 8401
+    },
+    {
+     "kernel": "rms_norm_f32<1024, true, false, false>",
+     "share": 0.024842,
+     "calls": 4129
+    },
+    {
+     "kernel": "k_get_rows_float<float, float>",
+     "share": 0.021225,
+     "calls": 3105
+    },
+    {
+     "kernel": "gated_delta_net_cuda<128, false, false, float>",
+     "share": 0.012674,
+     "calls": 1536
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_add(float, float)), float, float, float, float const*>",
+     "share": 0.01116,
+     "calls": 3072
+    },
+    {
+     "kernel": "ak_h15_conv_fused_kernel",
+     "share": 0.010497,
+     "calls": 1536
+    },
+    {
+     "kernel": "rope_multi<true, false, float>",
+     "share": 0.009846,
+     "calls": 1024
+    },
+    {
+     "kernel": "rms_norm_f32<256, true, false, false>",
+     "share": 0.009158,
+     "calls": 2560
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_softplus(float)), float>",
+     "share": 0.007814,
+     "calls": 1536
+    },
+    {
+     "kernel": "__amd_rocclr_copyBuffer",
+     "share": 0.007248,
+     "calls": 1536
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_silu(float)), float>",
+     "share": 0.00558,
+     "calls": 1536
+    },
+    {
+     "kernel": "_ZL16k_set_rows_quantIl10block_q8_0Li32ETnPFvPKfPT0_EXadL_ZL23quantize_f32_q8_0_blockS2_PS0_EEEvS2_PKT_S4_llllllllllllll15HIP_vector_typeIjLj3EESC_SC_SC_SC_",
+     "share": 0.005577,
+     "calls": 1024
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_sigmoid(float)), float>",
+     "share": 0.005537,
+     "calls": 1536
+    },
+    {
+     "kernel": "fwht_cuda<256>",
+     "share": 0.003742,
+     "calls": 1024
+    },
+    {
+     "kernel": "fwht_cuda<64>",
+     "share": 0.003643,
+     "calls": 1024
+    },
+    {
+     "kernel": "flash_attn_combine_results<256>",
+     "share": 0.003119,
+     "calls": 512
+    },
+    {
+     "kernel": "(other)",
+     "share": 0.005631,
+     "calls": 1536
+    }
+   ]
+  },
+  {
+   "model": "27b-q8_0",
+   "mode": "decode_d131072",
+   "window_rule": "post_prefill",
+   "description": "27B Q8_0 plain decode n=1 at depth 131072 (not the served path; reference)",
+   "busy_fraction": 0.3655,
+   "busy_ns": 2177677929,
+   "sources": [
+    {
+     "path": "/mnt/raid0/llm/tmp/c8-h17-profile-20261107/out/prof/tg_d131072/r0-1794055275/.hip-tmp/trace/prof_kernel_trace.csv",
+     "sha256": "d90091ec8b54fa324be5980efa9fc2a6fc99b1f82db5f3e91ddcae2b741e850b",
+     "dispatches": 50996,
+     "busy_ns": 2177677929
+    }
+   ],
+   "kernels": [
+    {
+     "kernel": "flash_attn_ext_vec<256, 1, (ggml_type)8, (ggml_type)8, false, false>",
+     "share": 0.536791,
+     "calls": 512
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, true, true, 0, false, false, true>",
+     "share": 0.232249,
+     "calls": 4608
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, false, true, 0, false, false, true>",
+     "share": 0.123818,
+     "calls": 9249
+    },
+    {
+     "kernel": "quantize_q8_1_1d<false>",
+     "share": 0.018129,
+     "calls": 8401
+    },
+    {
+     "kernel": "rms_norm_f32<1024, true, false, false>",
+     "share": 0.014761,
+     "calls": 4129
+    },
+    {
+     "kernel": "k_get_rows_float<float, float>",
+     "share": 0.010857,
+     "calls": 3105
+    },
+    {
+     "kernel": "rope_multi<true, false, float>",
+     "share": 0.007377,
+     "calls": 1024
+    },
+    {
+     "kernel": "gated_delta_net_cuda<128, false, false, float>",
+     "share": 0.006976,
+     "calls": 1536
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_add(float, float)), float, float, float, float const*>",
+     "share": 0.006666,
+     "calls": 3072
+    },
+    {
+     "kernel": "rms_norm_f32<256, true, false, false>",
+     "share": 0.005502,
+     "calls": 2560
+    },
+    {
+     "kernel": "ak_h15_conv_fused_kernel",
+     "share": 0.005409,
+     "calls": 1536
+    },
+    {
+     "kernel": "fwht_cuda<256>",
+     "share": 0.004473,
+     "calls": 1024
+    },
+    {
+     "kernel": "__amd_rocclr_copyBuffer",
+     "share": 0.004258,
+     "calls": 1536
+    },
+    {
+     "kernel": "_ZL16k_set_rows_quantIl10block_q8_0Li32ETnPFvPKfPT0_EXadL_ZL23quantize_f32_q8_0_blockS2_PS0_EEEvS2_PKT_S4_llllllllllllll15HIP_vector_typeIjLj3EESC_SC_SC_SC_",
+     "share": 0.003346,
+     "calls": 1024
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_sigmoid(float)), float>",
+     "share": 0.003341,
+     "calls": 1536
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_silu(float)), float>",
+     "share": 0.003306,
+     "calls": 1536
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_softplus(float)), float>",
+     "share": 0.003204,
+     "calls": 1536
+    },
+    {
+     "kernel": "cpy_scalar<&(void cpy_1_scalar<float, float>(char const*, char*))>",
+     "share": 0.002429,
+     "calls": 512
+    },
+    {
+     "kernel": "fwht_cuda<64>",
+     "share": 0.002172,
+     "calls": 1024
+    },
+    {
+     "kernel": "(other)",
+     "share": 0.004935,
+     "calls": 1536
+    }
+   ]
+  },
+  {
+   "model": "a3b-q8_0",
+   "mode": "mtp_verify_n3",
+   "window_rule": "all",
+   "description": "A3B Q8_0 MTP verify n=3, llama-bench -p 3 -r 5 d0, C14 base, r1+r2 pooled",
+   "busy_fraction": 0.5342,
+   "busy_ns": 272418665,
+   "sources": [
+    {
+     "path": "/mnt/raid0/llm/tmp/rka-a3b-n4-trace-gpu-20261118/out/trace/r1-n3/kt_kernel_trace.csv",
+     "sha256": "d2e0479ec5c51ad2a6c0ca69cb5fab88bcfcd69d1a88b3e44d43be07aaca5ff0",
+     "dispatches": 17844,
+     "busy_ns": 136356054
+    },
+    {
+     "path": "/mnt/raid0/llm/tmp/rka-a3b-n4-trace-gpu-20261118/out/trace/r2-n3/kt_kernel_trace.csv",
+     "sha256": "f1281691246a67c775782b358ca2e6bc36c01d278c92ddeab136031f49a2ec69",
+     "dispatches": 17844,
+     "busy_ns": 136062611
+    }
+   ],
+   "kernels": [
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 3, false, false, 0, false, false, false>",
+     "share": 0.128839,
+     "calls": 3100
+    },
+    {
+     "kernel": "mul_mat_vec_q_moe<(ggml_type)8, 2>",
+     "share": 0.127398,
+     "calls": 1200
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, false, true, 0, false, false, true>",
+     "share": 0.102502,
+     "calls": 2220
+    },
+    {
+     "kernel": "quantize_q8_1<false>",
+     "share": 0.076183,
+     "calls": 4700
+    },
+    {
+     "kernel": "quantize_q8_1_1d<false>",
+     "share": 0.036475,
+     "calls": 2240
+    },
+    {
+     "kernel": "k_get_rows_float<float, float>",
+     "share": 0.033029,
+     "calls": 1610
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_mul(float, float)), float, float, float, float const*>",
+     "share": 0.031207,
+     "calls": 1900
+    },
+    {
+     "kernel": "rms_norm_f32<1024, true, false, false>",
+     "share": 0.029865,
+     "calls": 1620
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, true, false, 0, false, false, false>",
+     "share": 0.028788,
+     "calls": 400
+    },
+    {
+     "kernel": "k_argsort_f32_i32<(ggml_sort_order)1>",
+     "share": 0.027548,
+     "calls": 390
+    },
+    {
+     "kernel": "flash_attn_ext_vec<256, 1, (ggml_type)1, (ggml_type)1, false, false>",
+     "share": 0.024229,
+     "calls": 100
+    },
+    {
+     "kernel": "mul_mat_vec_f<float, float, 3, 128, false, false>",
+     "share": 0.023246,
+     "calls": 800
+    },
+    {
+     "kernel": "gv_fattn_kernel<false, true, false>",
+     "share": 0.023178,
+     "calls": 100
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_silu(float)), float>",
+     "share": 0.022751,
+     "calls": 1400
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_sigmoid(float)), float>",
+     "share": 0.022549,
+     "calls": 1400
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_add(float, float)), float, float, float, float const*>",
+     "share": 0.02166,
+     "calls": 1300
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, true, true, 0, false, false, true>",
+     "share": 0.021038,
+     "calls": 500
+    },
+    {
+     "kernel": "scale_f32",
+     "share": 0.020862,
+     "calls": 1200
+    },
+    {
+     "kernel": "gated_delta_net_cuda<128, false, false, float>",
+     "share": 0.020114,
+     "calls": 600
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, false, true, 0, false, false, false>",
+     "share": 0.018162,
+     "calls": 400
+    },
+    {
+     "kernel": "mul_mat_vec_f<float, float, 1, 128, false, false>",
+     "share": 0.016919,
+     "calls": 800
+    },
+    {
+     "kernel": "rms_norm_f32<256, true, false, false>",
+     "share": 0.016095,
+     "calls": 1000
+    },
+    {
+     "kernel": "ak_h15_conv_fused_kernel",
+     "share": 0.014283,
+     "calls": 600
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_add(float, float)), float, float, float, float const*, float const*>",
+     "share": 0.013389,
+     "calls": 800
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_add(float, float)), float, float, float, float const*, float const*, float const*, float const*, float const*, float const*, float const*>",
+     "share": 0.013366,
+     "calls": 800
+    },
+    {
+     "kernel": "rope_multi<true, false, float>",
+     "share": 0.012089,
+     "calls": 400
+    },
+    {
+     "kernel": "aiter::topksoftmax_4x256x8",
+     "share": 0.011021,
+     "calls": 410
+    },
+    {
+     "kernel": "__amd_rocclr_copyBuffer",
+     "share": 0.01016,
+     "calls": 600
+    },
+    {
+     "kernel": "soft_max_f32<true, 256, 256, float>",
+     "share": 0.007445,
+     "calls": 390
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_div(float, float)), float, float, float, float const*>",
+     "share": 0.006556,
+     "calls": 390
+    },
+    {
+     "kernel": "k_set_rows<float, long, __half>",
+     "share": 0.006455,
+     "calls": 400
+    },
+    {
+     "kernel": "reduce_rows_f32<false>",
+     "share": 0.006449,
+     "calls": 390
+    },
+    {
+     "kernel": "op_clamp_kernel<float>",
+     "share": 0.006438,
+     "calls": 390
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_softplus(float)), float>",
+     "share": 0.004943,
+     "calls": 300
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_softplus(float)), float>",
+     "share": 0.004752,
+     "calls": 300
+    },
+    {
+     "kernel": "cpy_scalar<&(void cpy_1_scalar<float, float>(char const*, char*))>",
+     "share": 0.00362,
+     "calls": 200
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_sigmoid(float)), float>",
+     "share": 0.0032,
+     "calls": 200
+    },
+    {
+     "kernel": "(other)",
+     "share": 0.003197,
+     "calls": 138
+    }
+   ]
+  },
+  {
+   "model": "a3b-q8_0",
+   "mode": "mtp_verify_n4",
+   "window_rule": "all",
+   "description": "A3B Q8_0 MTP verify n=4, llama-bench -p 4 -r 5 d0, C14 base, r1+r2 pooled",
+   "busy_fraction": 0.482,
+   "busy_ns": 341110642,
+   "sources": [
+    {
+     "path": "/mnt/raid0/llm/tmp/rka-a3b-n4-trace-gpu-20261118/out/trace/r1-n4/kt_kernel_trace.csv",
+     "sha256": "81bded445748b4c48cef4ebd53c58b63bac87021ae6c245fa745b90828d3a8fa",
+     "dispatches": 18044,
+     "busy_ns": 170834161
+    },
+    {
+     "path": "/mnt/raid0/llm/tmp/rka-a3b-n4-trace-gpu-20261118/out/trace/r2-n4/kt_kernel_trace.csv",
+     "sha256": "e3891827770ea7082d1edf2d40a961feae32c664a7d136f2ad8927fea81f0c0d",
+     "dispatches": 18044,
+     "busy_ns": 170276481
+    }
+   ],
+   "kernels": [
+    {
+     "kernel": "mul_mat_f<float, 64, 4, 8, false>",
+     "share": 0.134097,
+     "calls": 400
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 4, false, false, 0, false, false, false>",
+     "share": 0.132376,
+     "calls": 3100
+    },
+    {
+     "kernel": "mul_mat_vec_q_moe<(ggml_type)8, 2>",
+     "share": 0.131926,
+     "calls": 1200
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, false, true, 0, false, false, true>",
+     "share": 0.081895,
+     "calls": 2220
+    },
+    {
+     "kernel": "quantize_q8_1<false>",
+     "share": 0.061114,
+     "calls": 4700
+    },
+    {
+     "kernel": "quantize_q8_1_1d<false>",
+     "share": 0.029119,
+     "calls": 2240
+    },
+    {
+     "kernel": "k_get_rows_float<float, float>",
+     "share": 0.026606,
+     "calls": 1610
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_mul(float, float)), float, float, float, float const*>",
+     "share": 0.025147,
+     "calls": 1900
+    },
+    {
+     "kernel": "rms_norm_f32<1024, true, false, false>",
+     "share": 0.023921,
+     "calls": 1620
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, true, false, 0, false, false, false>",
+     "share": 0.023386,
+     "calls": 400
+    },
+    {
+     "kernel": "k_argsort_f32_i32<(ggml_sort_order)1>",
+     "share": 0.022535,
+     "calls": 390
+    },
+    {
+     "kernel": "flash_attn_ext_vec<256, 1, (ggml_type)1, (ggml_type)1, false, false>",
+     "share": 0.019647,
+     "calls": 100
+    },
+    {
+     "kernel": "gv_fattn_kernel<false, true, false>",
+     "share": 0.019015,
+     "calls": 100
+    },
+    {
+     "kernel": "gated_delta_net_cuda<128, false, false, float>",
+     "share": 0.018755,
+     "calls": 600
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_silu(float)), float>",
+     "share": 0.018207,
+     "calls": 1400
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_sigmoid(float)), float>",
+     "share": 0.01815,
+     "calls": 1400
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_add(float, float)), float, float, float, float const*>",
+     "share": 0.017367,
+     "calls": 1300
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, true, true, 0, false, false, true>",
+     "share": 0.016956,
+     "calls": 500
+    },
+    {
+     "kernel": "scale_f32",
+     "share": 0.016641,
+     "calls": 1200
+    },
+    {
+     "kernel": "mul_mat_vec_q<(ggml_type)8, 1, false, true, 0, false, false, false>",
+     "share": 0.014673,
+     "calls": 400
+    },
+    {
+     "kernel": "Cijk_Alik_Bljk_SB_MT32x32x32_MI16x16x4x1_SE_1LDSB0_APM1_ABV0_ACED0_AF0EM1_AF1EM1_AMAS0_ASE_ASGT_ASLT_ASM_ASAE01_ASCE01_ASEM1_AAC0_BL1_BS1_CLR0_DTLA0_DTLB0_DTVA0_DTVB0_DVO0_ETSP_EPS0_ELFLR0_EMLL0_FSSC10_FL0_GLVWA1_GLVWB1_GRCGA1_GRCGB1_GRPM1_GRVW1_GSU5_GSUASB_GLS0_ISA90a_IU1_K1_KLA_LBSPPA128_LBSPPB128_LPA2_LPB2_LDL1_LRVW2_LWPMn1_LDW0_MAC_MIAV0_MDA2_MO40_MMFGLC_MKFGSU256_NTA0_NTB0_NTC0_NTD0_NEPBS0_NLCA1_NLCB1_ONLL1_OPLV0_PK0_PAP0_PGR2_PLR9_PKA0_SIA3_SLW1_SS0_SU0_SUM0_SUS0_SCIUI1_SPO0_SRVW0_SSO0_SVW4_SNLL0_TSGRA0_TSGRB0_TT1_16_TLDS1_UMLDSA1_UMLDSB1_USFGROn1_VAW1_VSn1_VW1_VWB1_VFLRP0_WSGRA1_WSGRB1_WS64_WG32_8_1_WGM1",
+     "share": 0.013885,
+     "calls": 400
+    },
+    {
+     "kernel": "mul_mat_vec_f<float, float, 1, 128, false, false>",
+     "share": 0.013488,
+     "calls": 800
+    },
+    {
+     "kernel": "rms_norm_f32<256, true, false, false>",
+     "share": 0.012875,
+     "calls": 1000
+    },
+    {
+     "kernel": "ak_h15_conv_fused_kernel",
+     "share": 0.012661,
+     "calls": 600
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_add(float, float)), float, float, float, float const*, float const*>",
+     "share": 0.010795,
+     "calls": 800
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_add(float, float)), float, float, float, float const*, float const*, float const*, float const*, float const*, float const*, float const*>",
+     "share": 0.010703,
+     "calls": 800
+    },
+    {
+     "kernel": "rope_multi<true, false, float>",
+     "share": 0.009485,
+     "calls": 400
+    },
+    {
+     "kernel": "aiter::topksoftmax_4x256x8",
+     "share": 0.008238,
+     "calls": 410
+    },
+    {
+     "kernel": "__amd_rocclr_copyBuffer",
+     "share": 0.008156,
+     "calls": 600
+    },
+    {
+     "kernel": "soft_max_f32<true, 256, 256, float>",
+     "share": 0.006385,
+     "calls": 390
+    },
+    {
+     "kernel": "k_bin_bcast<&(op_div(float, float)), float, float, float, float const*>",
+     "share": 0.005293,
+     "calls": 390
+    },
+    {
+     "kernel": "Cijk_S",
+     "share": 0.00527,
+     "calls": 400
+    },
+    {
+     "kernel": "op_clamp_kernel<float>",
+     "share": 0.005188,
+     "calls": 390
+    },
+    {
+     "kernel": "k_set_rows<float, long, __half>",
+     "share": 0.005169,
+     "calls": 400
+    },
+    {
+     "kernel": "reduce_rows_f32<false>",
+     "share": 0.005169,
+     "calls": 390
+    },
+    {
+     "kernel": "unary_op_kernel<&(op_softplus(float)), float>",
+     "share": 0.003967,
+     "calls": 300
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_softplus(float)), float>",
+     "share": 0.003791,
+     "calls": 300
+    },
+    {
+     "kernel": "cpy_scalar<&(void cpy_1_scalar<float, float>(char const*, char*))>",
+     "share": 0.002823,
+     "calls": 200
+    },
+    {
+     "kernel": "unary_gated_op_kernel<&(op_sigmoid(float)), float>",
+     "share": 0.002575,
+     "calls": 200
+    },
+    {
+     "kernel": "(other)",
+     "share": 0.00255,
+     "calls": 138
+    }
+   ]
+  }
+ ]
+}

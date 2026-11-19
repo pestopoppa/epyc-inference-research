@@ -103,6 +103,7 @@ from . import floor_selfcheck
 from . import tail_timing
 from . import actor_opencode_config
 from . import belief_context, planner_only
+from . import amdahl
 from . import actor_passthrough
 from . import cross_target, kernel_coverage, blast_radius
 from . import gpu_counter_signals, isa_claims
@@ -2549,6 +2550,7 @@ def _main(argv: list[str] | None = None) -> int:
                         help="candidate source tree the planner edits")
     parser.add_argument("--anchor-build", type=Path, required="--planner-only" not in original_argv)
     planner_only.add_arguments(parser)
+    amdahl.add_arguments(parser)
     parser.add_argument("--cor-build", type=Path,
                         help="original champion-of-record build when it differs from the current anchor")
     parser.add_argument("--resume-run", type=Path,
@@ -4489,6 +4491,9 @@ def _main(argv: list[str] | None = None) -> int:
             **({"node_profile": dict(node_profile_observation)} if cpu_launch else {}),
             **({"gpu_serving_profile": dict(gpu_profile_observation)}
                if direct_launch and not cpu_launch else {}),
+            # AK-AMDAHL-PRUNE: per-kernel e2e ceilings from the AKX-ALL-16 shares file.
+            **({"amdahl_ceilings": _amdahl_assessor(args).planner_view()}
+               if not cpu_launch and getattr(args, "amdahl_prune", "off") != "off" else {}),
             **({"gpu_counters": gpu_counter_signals.load_observation(args.gpu_counters)}
                if getattr(args, "gpu_counters", None) and not cpu_launch else {}),
             **({"long_context": longctx.planner_context(
@@ -7949,6 +7954,10 @@ def _main(argv: list[str] | None = None) -> int:
             **({"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(
                     gpu_profile_observation, getattr(hypothesis, "target_symbol", None))}
                if direct_launch and not cpu_launch else {}),
+            # AK-AMDAHL-PRUNE: every candidate's e2e ceiling is logged at tail admission
+            # (<store>/amdahl-ceilings.jsonl); `demote` mode times below-bar ones last.
+            **({"tail_demote": lambda hypothesis: _amdahl_tail_demote(args, hypothesis)}
+               if not cpu_launch and getattr(args, "amdahl_prune", "off") != "off" else {}),
             **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}),
             **({"make_exact_judge": _exact_judge_factory(args)}
                if getattr(args, "exact_lane_config", None) else {}),
@@ -9064,6 +9073,32 @@ def _isa_check_factory(args):
         return isa_claims.candidate_check(resolve, args.isa_claims_gate, observe=observe)
     return make
 
+
+
+_AMDAHL_ASSESSORS: dict[int, "amdahl.Assessor"] = {}
+
+
+def _amdahl_assessor(args) -> "amdahl.Assessor":
+    """One AK-AMDAHL-PRUNE assessor per run. A missing or invalid shares file degrades
+    to an `unavailable` view (no profile), never to a refused run."""
+    key = id(args)
+    if key not in _AMDAHL_ASSESSORS:
+        store = getattr(args, "store", None)
+        try:
+            _AMDAHL_ASSESSORS[key] = amdahl.from_args(args, store=store)
+        except (ValueError, OSError) as exc:
+            print(f"AK-AMDAHL-PRUNE: serving shares unavailable ({exc}); ceilings unknown",
+                  file=sys.stderr)
+            _AMDAHL_ASSESSORS[key] = amdahl.Assessor(
+                mode=getattr(args, "amdahl_prune", amdahl.DEFAULT_MODE), profile=None,
+                profile_id=None, log_path=(Path(store) / amdahl.LOG_NAME) if store else None)
+    return _AMDAHL_ASSESSORS[key]
+
+
+def _amdahl_tail_demote(args, hypothesis) -> bool:
+    row = _amdahl_assessor(args).record(getattr(hypothesis, "target_symbol", None),
+                                        mechanism_id=getattr(hypothesis, "mechanism_id", None))
+    return bool(row and row.get("demoted"))
 
 def main(argv: list[str] | None = None) -> int:
     from . import lane_watchdog, serial_run
