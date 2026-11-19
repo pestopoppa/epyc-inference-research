@@ -1880,6 +1880,60 @@ class SchedulerEngine:
             selection, tuple(item.receipt for item in children), outcome=outcome,
             operation_roles=tuple(item.role for item in children))
 
+    def _validate_issued(self, selection: Selection, not_issued: str, differs: str) -> None:
+        """An issued selection of this scheduler's current state, or SchedulingRefused."""
+        if (selection.status != "selected" or selection.proposal is None
+                or selection.digest not in self.issued_selection_digests):
+            raise SchedulingRefused(not_issued)
+        if (selection.scheduler_id != self.scheduler_id
+                or selection.config_digest != self.config_digest
+                or selection.accounting_epoch != self.accounting_epoch
+                or selection.capacity_digest != self.capacity_digest
+                or selection.round_number != self.round_number
+                or selection.service_bound_seconds != self._bound()):
+            raise SchedulingRefused(differs)
+
+    def _check_slot(self, selection: Selection) -> None:
+        """The selection's slot is its unused frozen coverage slot or the next noncoverage slot."""
+        if selection.slot_kind == "coverage":
+            frontier = selection.proposal.frontier_id
+            if (frontier is None or selection.slot_index is None
+                    or selection.slot_index >= len(self.frozen_frontier)
+                    or self.frozen_frontier[selection.slot_index] != frontier
+                    or frontier in self.used_coverage):
+                raise SchedulingRefused("coverage selection does not match its unused frozen slot")
+        elif selection.slot_index != self._next_noncoverage_slot():
+            raise SchedulingRefused("noncoverage slot is not the next durable slot")
+
+    def _consume_slot(self, selection: Selection) -> None:
+        proposal = selection.proposal
+        if selection.slot_kind == "coverage":
+            self.used_coverage[proposal.frontier_id] = proposal.proposal_id
+            self.coverage_debt.pop(proposal.frontier_id, None)
+        else:
+            self.used_noncoverage.append(proposal.proposal_id)
+
+    def _replace_seed_after_attempt(self, proposal: StageProposal, *, duration: float,
+                                    outcome: str) -> float:
+        """Charge one attempt to the proposal's seed account; the attempt's weight."""
+        if proposal.seed_id is None:
+            return self.config.normal_weight
+        seed = self._seed_for(proposal)
+        weight = self.config.seed_weight if seed.boosted else self.config.normal_weight
+        comparisons = seed.valid_comparisons + (outcome == "valid_comparison")
+        boosted = (seed.boosted and seed.attempts + 1 < self.config.seed_attempt_cap
+                   and seed.charged_seconds + duration < self.config.seed_charged_seconds_cap
+                   and comparisons < self.config.seed_valid_comparison_cap)
+        self._replace_seed(seed, SeedAccount(
+            seed_id=seed.seed_id, backend=seed.backend,
+            target_revision=seed.target_revision, alias_identity=seed.alias_identity,
+            seed_ids=seed.seed_ids, first_submitted_at=seed.first_submitted_at,
+            attempts=seed.attempts + 1, charged_seconds=seed.charged_seconds + duration,
+            valid_comparisons=comparisons, boosted=boosted))
+        if not boosted:
+            self._promote_seed(seed.backend)
+        return weight
+
     def cancel_operation_before_launch(self, selection: Selection | Mapping[str, Any], *,
                                        denial_ref: str, denial_class: str = "terminal") -> bool:
         """Explicit terminal no-launch cancellation: one failed attempt, zero seconds.
@@ -1899,44 +1953,12 @@ class SchedulerEngine:
             return False
         if self._records_by_selection.get(selection.digest):
             raise SchedulingRefused("selection already has accounted receipts")
-        if (selection.status != "selected" or selection.proposal is None
-                or selection.digest not in self.issued_selection_digests):
-            raise SchedulingRefused("cancellation is not an issued selection")
-        if (selection.scheduler_id != self.scheduler_id
-                or selection.config_digest != self.config_digest
-                or selection.accounting_epoch != self.accounting_epoch
-                or selection.capacity_digest != self.capacity_digest
-                or selection.round_number != self.round_number
-                or selection.service_bound_seconds != self._bound()):
-            raise SchedulingRefused("cancellation selection differs from scheduler state")
+        self._validate_issued(selection, "cancellation is not an issued selection",
+                              "cancellation selection differs from scheduler state")
         proposal = selection.proposal
-        if selection.slot_kind == "coverage":
-            frontier = proposal.frontier_id
-            if (frontier is None or selection.slot_index is None
-                    or selection.slot_index >= len(self.frozen_frontier)
-                    or self.frozen_frontier[selection.slot_index] != frontier
-                    or frontier in self.used_coverage):
-                raise SchedulingRefused("coverage selection does not match its unused frozen slot")
-            self.used_coverage[frontier] = proposal.proposal_id
-            self.coverage_debt.pop(frontier, None)
-        else:
-            if selection.slot_index != self._next_noncoverage_slot():
-                raise SchedulingRefused("noncoverage slot is not the next durable slot")
-            self.used_noncoverage.append(proposal.proposal_id)
-        if proposal.seed_id is not None:
-            seed = self._seed_for(proposal)
-            comparisons = seed.valid_comparisons
-            boosted = (seed.boosted and seed.attempts + 1 < self.config.seed_attempt_cap
-                       and seed.charged_seconds < self.config.seed_charged_seconds_cap
-                       and comparisons < self.config.seed_valid_comparison_cap)
-            self._replace_seed(seed, SeedAccount(
-                seed_id=seed.seed_id, backend=seed.backend,
-                target_revision=seed.target_revision, alias_identity=seed.alias_identity,
-                seed_ids=seed.seed_ids, first_submitted_at=seed.first_submitted_at,
-                attempts=seed.attempts + 1, charged_seconds=seed.charged_seconds,
-                valid_comparisons=comparisons, boosted=boosted))
-            if not boosted:
-                self._promote_seed(seed.backend)
+        self._check_slot(selection)
+        self._consume_slot(selection)
+        self._replace_seed_after_attempt(proposal, duration=0, outcome="failed")
         self.round_seed_used = self.round_seed_used or proposal.seed_id is not None
         self.campaign_attempts += 1
         self.cancelled_operations[selection.digest] = ref
@@ -1999,16 +2021,8 @@ class SchedulerEngine:
     def fail_stage_before_claim(self, selection: Selection | Mapping[str, Any]) -> None:
         """Settle an issued launch that failed before any resource claim existed."""
         selection = _normalize(selection, Selection)
-        if (selection.status != "selected" or selection.proposal is None
-                or selection.digest not in self.issued_selection_digests):
-            raise SchedulingRefused("pre-claim failure is not an issued selection")
-        if (selection.scheduler_id != self.scheduler_id
-                or selection.config_digest != self.config_digest
-                or selection.accounting_epoch != self.accounting_epoch
-                or selection.capacity_digest != self.capacity_digest
-                or selection.round_number != self.round_number
-                or selection.service_bound_seconds != self._bound()):
-            raise SchedulingRefused("pre-claim failure selection differs from scheduler state")
+        self._validate_issued(selection, "pre-claim failure is not an issued selection",
+                              "pre-claim failure selection differs from scheduler state")
         self.issued_selection_digests = tuple(
             digest for digest in self.issued_selection_digests
             if digest != selection.digest)
@@ -2062,16 +2076,8 @@ class SchedulerEngine:
                 "selection already has a different original component receipt set")
         if selection.digest in self.cancelled_operations:
             raise SchedulingRefused("selection was already cancelled before launch")
-        if (selection.status != "selected" or selection.proposal is None
-                or selection.digest not in self.issued_selection_digests):
-            raise SchedulingRefused("selection was not issued by this scheduler round")
-        if (selection.scheduler_id != self.scheduler_id
-                or selection.config_digest != self.config_digest
-                or selection.accounting_epoch != self.accounting_epoch
-                or selection.capacity_digest != self.capacity_digest
-                or selection.round_number != self.round_number
-                or selection.service_bound_seconds != self._bound()):
-            raise SchedulingRefused("selection does not match scheduler/config/epoch/round")
+        self._validate_issued(selection, "selection was not issued by this scheduler round",
+                              "selection does not match scheduler/config/epoch/round")
         proposal = selection.proposal
         if not operation:
             if any(receipt.proposal_id != proposal.proposal_id
@@ -2090,16 +2096,8 @@ class SchedulerEngine:
             if any(receipt.beneficiary_shares != receipts[0].beneficiary_shares
                    for receipt in receipts[1:]):
                 raise SchedulingRefused("component beneficiary shares differ")
-        if selection.slot_kind == "coverage":
-            frontier = proposal.frontier_id
-            if (frontier is None or selection.slot_index is None
-                    or selection.slot_index >= len(self.frozen_frontier)
-                    or self.frozen_frontier[selection.slot_index] != frontier
-                    or frontier in self.used_coverage):
-                raise SchedulingRefused("coverage selection does not match its unused frozen slot")
-        else:
-            if selection.slot_index != self._next_noncoverage_slot():
-                raise SchedulingRefused("noncoverage slot is not the next durable slot")
+        self._check_slot(selection)
+        if selection.slot_kind != "coverage":
             reservation = self.round_reservations.get(str(selection.slot_index))
             if reservation is not None and selection.slot_kind != reservation:
                 raise SchedulingRefused("selection does not match the frozen slot reservation")
@@ -2134,11 +2132,7 @@ class SchedulerEngine:
                or receipt.memory_reservation_bytes > self.capacity.memory_reservation_bytes
                for receipt in receipts):
             violations.append("actual held claims exceeded configured capacity")
-        if selection.slot_kind == "coverage":
-            self.used_coverage[proposal.frontier_id] = proposal.proposal_id
-            self.coverage_debt.pop(proposal.frontier_id, None)
-        else:
-            self.used_noncoverage.append(proposal.proposal_id)
+        self._consume_slot(selection)
         terms = []
         if self.capacity.physical_region_fraction:
             terms.append(sum((receipt.ended_at - receipt.started_at)
@@ -2152,23 +2146,7 @@ class SchedulerEngine:
             terms.append(sum((receipt.ended_at - receipt.started_at)
                              * receipt.memory_reservation_bytes for receipt in receipts)
                          / self.capacity.memory_reservation_bytes)
-        weight = self.config.normal_weight
-        if proposal.seed_id is not None:
-            seed = self._seed_for(proposal)
-            weight = self.config.seed_weight if seed.boosted else self.config.normal_weight
-            comparisons = seed.valid_comparisons + (outcome == "valid_comparison")
-            boosted = (seed.boosted and seed.attempts + 1 < self.config.seed_attempt_cap
-                       and seed.charged_seconds + duration < self.config.seed_charged_seconds_cap
-                       and comparisons < self.config.seed_valid_comparison_cap)
-            updated = SeedAccount(
-                seed_id=seed.seed_id, backend=seed.backend,
-                target_revision=seed.target_revision, alias_identity=seed.alias_identity,
-                seed_ids=seed.seed_ids, first_submitted_at=seed.first_submitted_at,
-                attempts=seed.attempts + 1, charged_seconds=seed.charged_seconds + duration,
-                valid_comparisons=comparisons, boosted=boosted)
-            self._replace_seed(seed, updated)
-            if not boosted:
-                self._promote_seed(seed.backend)
+        weight = self._replace_seed_after_attempt(proposal, duration=duration, outcome=outcome)
         self.round_seed_used = self.round_seed_used or proposal.seed_id is not None
         self.deficits[proposal.backend] = (self.deficits.get(proposal.backend, 0.0)
                                            + max(terms, default=0.0) / weight)
