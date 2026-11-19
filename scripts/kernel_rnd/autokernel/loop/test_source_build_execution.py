@@ -523,6 +523,36 @@ def test_genuine_profile_then_actor_consumer_runs_owned_build(tmp_path):
             build_timeout_s=30, env={"PATH": os.environ["PATH"], "LANG": "C"},
             sandbox_cgroup_root=worktree.process_sandbox.default_cgroup_root())
         assert enrollment["candidate_id"] == "akc-profile-actor-build"
+        # AKU-06l installed-path proof: profile -> planner -> critic -> build -> one
+        # atomic v2 settlement as `prerequisite`, every original child cost durable.
+        transition = selected.transition_id
+        children = controller.unified_driver_children(transition)
+        assert [c["role"] for c in children] == ["planner", "critic", "build"]
+        assert lifecycle.unaccounted_children == [] and stage.unaccounted_children == []
+        settled = controller._driver_settled[transition]
+        assert settled["schema"] == journal.UNIFIED_DRIVER_SETTLED_SCHEMA_V2
+        assert settled["outcome"] == "prerequisite"
+        assert settled["children"] == [c["digest"] for c in children]
+        accounting = controller._scheduler_engine.accounting_view()
+        assert accounting.receipt_count >= 3 + 1  # three original children + the profile receipt
+        assert accounting.held_seconds >= sum(
+            c["receipt"]["ended_at"] - c["receipt"]["started_at"] for c in children)
+        digest_before = controller._scheduler_engine.operational_projection().projection_digest
+        # exact retry is a duplicate, never a second accounting
+        retry = owner.settle_selected(selected, outcome="prerequisite")
+        assert retry["status"] == "duplicate"
+        assert controller._scheduler_engine.operational_projection().projection_digest \
+            == digest_before
+        # restart replay: v2 settlement + child chain reproduce the exact projection
+        durable = copy.deepcopy(controller._driver_settled[transition])
+        runtime.close()
+        controller.close()
+        controller, runtime = _start(materialized, registry)
+        assert controller._driver_settled[transition] == durable
+        assert [c["digest"] for c in controller.unified_driver_children(transition)] \
+            == durable["children"]
+        assert controller._scheduler_engine.operational_projection().projection_digest \
+            == digest_before
         assert not shadow_marker.exists()
         events = controller._journal.read_all()
         assert sum(row.kind == "ACTOR_PREPARATION" for row in events) >= 5

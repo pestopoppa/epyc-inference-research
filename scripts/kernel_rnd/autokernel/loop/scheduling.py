@@ -636,6 +636,19 @@ class OperationChild:
 
 
 @dataclass(frozen=True, slots=True)
+class OperationPreview:
+    """Locally derived result of one atomic operation settlement or cancellation."""
+
+    kind: str
+    selection: "Selection"
+    children: tuple[OperationChild, ...]
+    outcome: str
+    denial_ref: str | None
+    prior: "OperationalProjection"
+    after: "OperationalProjection"
+
+
+@dataclass(frozen=True, slots=True)
 class AccountedReceipt:
     receipt_id: str
     receipt_digest: str
@@ -1844,7 +1857,7 @@ class SchedulerEngine:
         points = sorted({edge for item in receipts for edge in (item.started_at, item.ended_at)})
         for edge in points:
             live = [item for item in receipts if item.started_at <= edge < item.ended_at]
-            if (sum(item.physical_region_fraction for item in live)
+            if len(live) > 1 and (sum(item.physical_region_fraction for item in live)
                     > self.capacity.physical_region_fraction + 1e-12
                     or sum(item.memory_reservation_bytes for item in live)
                     > self.capacity.memory_reservation_bytes):
@@ -1929,6 +1942,59 @@ class SchedulerEngine:
         self.cancelled_operations[selection.digest] = ref
         self.issued_selection_digests = ()
         return True
+
+    def _clone(self) -> "SchedulerEngine":
+        """Independent engine with identical operational state (previews, AKU-06l)."""
+        trial = SchedulerEngine(self.config, self.export_state())
+        trial.cancelled_operations = dict(self.cancelled_operations)
+        if trial.operational_projection().projection_digest \
+                != self.operational_projection().projection_digest:
+            raise SchedulingRefused("scheduler clone differs from its source")
+        return trial
+
+    def preview_operation_accounting(self, selection: Selection | Mapping[str, Any],
+                                     children: Sequence[OperationChild], *,
+                                     outcome: str) -> "OperationPreview":
+        """Validate one multi-child settlement atomically; the engine is not mutated.
+
+        The preview runs on an isolated copy, so a refusal at any child leaves this
+        engine bit-identical (AKU-06l)."""
+        selection = _normalize(selection, Selection)
+        prior = self.operational_projection()
+        trial = self._clone()
+        if not trial.account_operation(selection, children, outcome=outcome):
+            raise SchedulingRefused("operation accounting preview changed nothing")
+        return OperationPreview("operation", selection, tuple(children), outcome, None,
+                                prior, trial.operational_projection())
+
+    def preview_operation_cancellation(self, selection: Selection | Mapping[str, Any], *,
+                                       denial_ref: str) -> "OperationPreview":
+        selection = _normalize(selection, Selection)
+        prior = self.operational_projection()
+        trial = self._clone()
+        if not trial.cancel_operation_before_launch(selection, denial_ref=denial_ref):
+            raise SchedulingRefused("operation cancellation preview changed nothing")
+        return OperationPreview("cancellation", selection, (), "failed", denial_ref,
+                                prior, trial.operational_projection())
+
+    def apply_operation_preview(self, preview: "OperationPreview") -> bool:
+        """Apply a locally derived operation preview; exact replay is idempotent."""
+        if not isinstance(preview, OperationPreview):
+            raise SchedulingRefused("operation preview is untyped")
+        current = self.operational_projection().projection_digest
+        if current == preview.after.projection_digest:
+            return False
+        if current != preview.prior.projection_digest:
+            raise SchedulingRefused("operation preview is stale")
+        if preview.kind == "operation":
+            changed = self.account_operation(preview.selection, preview.children,
+                                             outcome=preview.outcome)
+        else:
+            changed = self.cancel_operation_before_launch(
+                preview.selection, denial_ref=preview.denial_ref)
+        if self.operational_projection().projection_digest != preview.after.projection_digest:
+            raise SchedulingRefused("operation application differs from preview")
+        return changed
 
     def fail_stage_before_claim(self, selection: Selection | Mapping[str, Any]) -> None:
         """Settle an issued launch that failed before any resource claim existed."""
@@ -2280,7 +2346,7 @@ __all__ = [
     "ACCOUNTING_SCHEMA", "CONFIG_SCHEMA", "OUTAGE_SCHEMA", "PROPOSAL_SCHEMA",
     "RECEIPT_RECORD_SCHEMA", "RECEIPT_SCHEMA", "SEED_SCHEMA", "SELECTION_SCHEMA", "STATE_SCHEMA",
     "VECTOR_SCHEMA", "AccountedReceipt", "AccountingView", "HeldClaimReceipt", "Outage",
-    "OPERATION_ROLES", "OperationChild", "ResourceVector", "SchedulerConfig", "SchedulerEngine", "SchedulerState",
+    "OPERATION_ROLES", "OperationChild", "OperationPreview", "ResourceVector", "SchedulerConfig", "SchedulerEngine", "SchedulerState",
     "SchedulingRefused", "SeedAccount", "Selection", "StageProposal",
     "account_stage", "account_stage_components", "adaptive_weights", "change_capacity",
     "fail_stage_before_claim",

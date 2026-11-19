@@ -30,6 +30,14 @@ class PreparationRefused(ValueError):
     """Preparation lacks an exact binding or accepted lifecycle authority."""
 
 
+class PreparationDenied(PreparationRefused):
+    """The lifecycle denied admission before launch (AKU-06l): no receipt, typed class."""
+
+    def __init__(self, message: str, denial_class: str) -> None:
+        super().__init__(message)
+        self.denial_class = denial_class
+
+
 class PreparationSettlementUncertain(RuntimeError):
     """Owner did not acknowledge terminal settlement; never re-invoke blindly."""
 
@@ -538,11 +546,17 @@ class ActorPreparationConsumer:
             supplied_outcome = self.capability.invoke(reservation, profile.backend(), prompt)
             outcome = StageOutcome.from_dict(supplied_outcome)
         except Exception as exc:
+            denial = getattr(exc, "denial_class", None)
             failure_class = ("malformed_outcome" if isinstance(exc, PreparationRefused)
                              else "invocation_exception")
+            if denial in {"retryable", "terminal"}:
+                failure_class = f"admission_denied_{denial}"
             terminal = StageOutcome(
                 reservation.reservation_id, "failed", "", failure_class, 0.0, False, False)
             self._finish(reservation, terminal, failure_class)
+            if denial in {"retryable", "terminal"}:
+                raise PreparationDenied(
+                    f"actor lifecycle {failure_class} settled by owner", denial) from exc
             raise PreparationRefused(
                 f"actor lifecycle {failure_class} settled by owner") from exc
         if outcome.reservation_id != reservation.reservation_id:
@@ -627,6 +641,6 @@ class ActorPreparationConsumer:
 
 
 __all__ = ["ActorAvailability", "ActorBudgets", "ActorPreparationConsumer", "ActorProfile",
-           "ActorStageCapability", "PreparationRefused", "PreparationResult",
+           "ActorStageCapability", "PreparationDenied", "PreparationRefused", "PreparationResult",
            "PreparationSettlementUncertain",
            "StageOutcome", "StageReservation"]

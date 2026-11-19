@@ -24,6 +24,18 @@ class ActorInvocationUncertain(BaseException):
     """Controller may have crossed provider admission; retain INTENT for recovery."""
 
 
+class ActorAdmissionDenied(Exception):
+    """Typed pre-launch admission denial with no receipt (AKU-06l).
+
+    ``denial_class`` is the closed lifecycle classification (``retryable`` or
+    ``terminal``); the operation owner decides waiting versus cancellation from it,
+    never from the free-text reason."""
+
+    def __init__(self, reason: str, denial_class: str) -> None:
+        super().__init__(reason)
+        self.denial_class = denial_class
+
+
 @dataclass(frozen=True)
 class TargetProfileReceipt:
     """Verified result of the distinct, primary-owned target-profile job.
@@ -180,6 +192,7 @@ class ActorLifecycleAdapter:
         self._bindings: dict[str, tuple[dict[str, Any], preparation.ActorProfile]] = {}
         self._invoked: set[str] = set()
         self._held_costs: dict[str, Any] = {}
+        self.unaccounted_children: list[tuple[str, str, str]] = []
 
     def reserve(self, *, request: Mapping[str, Any], stage_plan_digest: str,
                 actor_profile: Mapping[str, Any], budgets: Mapping[str, int],
@@ -232,6 +245,21 @@ class ActorLifecycleAdapter:
             self._bindings[reservation.reservation_id] = (request_row, profile)
         return raw
 
+    def _account_child(self, request, terminal, held, role: str, actor_kind: Any) -> None:
+        """AKU-06l: durably account this original child through the controller.
+
+        Only for a bound (unified v3) request. A refusal never raises into the already
+        charged child: it is recorded in ``unaccounted_children`` for the owner."""
+        account = getattr(self.controller, "unified_driver_account_child", None)
+        if request.accounting_binding is None or not callable(account):
+            return
+        try:
+            account(binding=request.accounting_binding, terminal=terminal, receipt=held,
+                    role=role, operation=("source_build" if actor_kind == "build_recipe"
+                                          else "actor_preparation"))
+        except Exception as exc:
+            self.unaccounted_children.append((request.request_id, role, str(exc)))
+
     def invoke(self, reservation: preparation.StageReservation,
                backend: actors.Backend, prompt: str) -> Mapping[str, Any]:
         binding = self._bindings.get(reservation.reservation_id)
@@ -283,6 +311,17 @@ class ActorLifecycleAdapter:
             terminal = self.controller.worker_terminal_for_request(
                 request_id=request.request_id, plan_digest=request.plan_digest,
                 lineage_id=request.lineage_id, stage_id=request.stage_id)
+        except worker_lifecycle.AdmissionDenied as exc:
+            try:
+                absent = self.controller.worker_terminal_for_request(
+                    request_id=request.request_id, plan_digest=request.plan_digest,
+                    lineage_id=request.lineage_id, stage_id=request.stage_id) is None
+            except Exception:
+                absent = False
+            if not absent:
+                raise ActorInvocationUncertain(
+                    "typed admission denial coexists with a terminal; reconcile") from exc
+            raise ActorAdmissionDenied(str(exc), exc.denial_class) from exc
         except Exception as exc:
             raise ActorInvocationUncertain(
                 "controller invocation has no authoritative negative-admission proof") from exc
@@ -307,6 +346,8 @@ class ActorLifecycleAdapter:
             raise ActorInvocationUncertain(
                 "provider-authored held accounting duration is invalid")
         self._held_costs[reservation.reservation_id] = held
+        self._account_child(request, terminal, held, profile.role, _request.get(
+            "actor_kind"))
         if terminal.return_code != 0:
             return preparation.StageOutcome(
                 reservation.reservation_id, "failed", "", "process_exit",
@@ -344,5 +385,5 @@ class ActorLifecycleAdapter:
             provider_cost_receipt=self._held_costs.get(reservation.reservation_id))
 
 
-__all__ = ["ActorInvocationUncertain", "ActorLifecycleAdapter", "ActorLifecycleConfig",
+__all__ = ["ActorAdmissionDenied", "ActorInvocationUncertain", "ActorLifecycleAdapter", "ActorLifecycleConfig",
            "ActorPersistence", "TargetProfileOwner", "TargetProfileReceipt"]

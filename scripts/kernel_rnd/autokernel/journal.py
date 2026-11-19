@@ -312,6 +312,10 @@ KIND_UNIFIED_DRIVER_ISSUED = "UNIFIED_DRIVER_ISSUED"
 UNIFIED_DRIVER_ISSUED_SCHEMA = "epyc.autokernel.unified_driver_issued.v1"
 KIND_UNIFIED_DRIVER_SETTLED = "UNIFIED_DRIVER_SETTLED"
 UNIFIED_DRIVER_SETTLED_SCHEMA = "epyc.autokernel.unified_driver_settled.v1"
+# AKU-06l additive records: old readers refuse the new kind and the v2 schema.
+UNIFIED_DRIVER_SETTLED_SCHEMA_V2 = "epyc.autokernel.unified_driver_settled.v2"
+KIND_UNIFIED_DRIVER_CHILD_ACCOUNTED = "UNIFIED_DRIVER_CHILD_ACCOUNTED"
+UNIFIED_DRIVER_CHILD_ACCOUNTED_SCHEMA = "epyc.autokernel.unified_driver_child_accounted.v1"
 KIND_A2_RUNTIME_EXECUTION = "A2_RUNTIME_EXECUTION"
 A2_RUNTIME_EXECUTION_SCHEMA = "epyc.autokernel.a2_runtime_execution_transition.v1"
 A2_UNIT_RECORD_SCHEMA = "epyc.autokernel.a2_unit_record.v2"  # AKU-04f additive; same kind
@@ -357,6 +361,7 @@ NATIVE_KINDS = frozenset({
     KIND_RETENTION_CATALOG_INSTALLED,
     KIND_UNIFIED_DRIVER_ISSUED,
     KIND_UNIFIED_DRIVER_SETTLED,
+    KIND_UNIFIED_DRIVER_CHILD_ACCOUNTED,
     KIND_A2_RUNTIME_EXECUTION,
     KIND_MICROBENCH_RUN_COMPLETED,
     KIND_T0_REFUSAL,
@@ -1257,6 +1262,22 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             validate_transition(payload)
         except A2ExecutionStateRefused as exc:
             out.append(f"A2 runtime execution transition: {exc}")
+    elif kind == KIND_UNIFIED_DRIVER_CHILD_ACCOUNTED:
+        if __package__:
+            from .loop.operation_accounting import OperationAccountingRefused, validate_child_record
+        else:
+            from autokernel.loop.operation_accounting import OperationAccountingRefused, validate_child_record
+        try:
+            validate_child_record(payload)
+        except OperationAccountingRefused as exc:
+            out.append(f"unified driver child accounting: {exc}")
+    elif (kind == KIND_UNIFIED_DRIVER_SETTLED
+          and payload.get("schema") == UNIFIED_DRIVER_SETTLED_SCHEMA_V2):
+        if __package__:
+            from .loop.operation_accounting import validate_settled_v2
+        else:
+            from autokernel.loop.operation_accounting import validate_settled_v2
+        out.extend(validate_settled_v2(payload))
     elif kind in {KIND_UNIFIED_DRIVER_ISSUED, KIND_UNIFIED_DRIVER_SETTLED}:
         expected = {"schema", "catalog_id", "campaign_id", "config_generation",
                     "config_digest", "supervisor_incarnation", "catalog", "selection",
@@ -4214,6 +4235,8 @@ __all__ = [
     "KIND_RETENTION_CATALOG_INSTALLED",
     "KIND_UNIFIED_DRIVER_ISSUED", "UNIFIED_DRIVER_ISSUED_SCHEMA",
     "KIND_UNIFIED_DRIVER_SETTLED", "UNIFIED_DRIVER_SETTLED_SCHEMA",
+    "UNIFIED_DRIVER_SETTLED_SCHEMA_V2", "KIND_UNIFIED_DRIVER_CHILD_ACCOUNTED",
+    "UNIFIED_DRIVER_CHILD_ACCOUNTED_SCHEMA",
     "validate_worker_accounting_binding_history",
     "KIND_A2_RUNTIME_EXECUTION", "A2_RUNTIME_EXECUTION_SCHEMA", "A2_UNIT_RECORD_SCHEMA",
     "CANDIDATE_TRANSACTION_SCHEMA", "CANDIDATE_TRANSACTION_PHASES",

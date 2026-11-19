@@ -270,6 +270,7 @@ class SourceBuildStageExecutor:
         self._results: dict[str, worktree.BuildResult] = {}
         self._held: dict[str, scheduling.HeldClaimReceipt] = {}
         self._accounting_binding: Any = None
+        self.unaccounted_children: list[tuple[str, str, str]] = []
 
     def log_path_for(self, plan: worktree.BuildPlan) -> str:
         if not isinstance(plan, worktree.BuildPlan):
@@ -347,6 +348,15 @@ class SourceBuildStageExecutor:
         except Exception as exc:
             raise SourceBuildExecutionUncertain("build terminal lacks trusted held cost") from exc
         self._held[request_id] = held
+        if request.accounting_binding is not None:
+            try:
+                self.controller.unified_driver_account_child(
+                    binding=request.accounting_binding, terminal=terminal, receipt=held,
+                    role="build", operation="source_build")
+            except Exception as exc:
+                # Not a launch failure: the held cost stays chargeable via the lifecycle.
+                # The owner sees the gap and cannot settle the operation as a success.
+                self.unaccounted_children.append((request_id, "build", str(exc)))
         if not terminal.accepted or terminal.return_code != 0:
             raise SourceBuildExecutionRefused("owned build child failed; held cost remains chargeable")
         raw = self.controller.read_worker_stdout(
@@ -451,6 +461,27 @@ class SourceBuildExecutionOwner:
         self.actor_consumer = actor_consumer
         self.build_executor = build_executor
 
+    def settle_selected(self, selected: unified_driver.SelectedActorWork, *,
+                        outcome: str, denial: Mapping[str, Any] | None = None
+                        ) -> Mapping[str, Any]:
+        """Settle the selected operation once from its durable child prefix (AKU-06l).
+
+        ``denial`` is the typed terminal denial, folded into a durable reference; with
+        no children it is the explicit zero-cost no-receipt cancellation."""
+        children = self.driver.controller.unified_driver_children(selected.transition_id)
+        denial_ref = None
+        if denial is not None:
+            denial_ref = hashlib.sha256(_canonical({
+                "transition_id": selected.transition_id,
+                "selection_digest": selected.selection.digest,
+                "denial": dict(denial), "children": [c["digest"] for c in children],
+            })).hexdigest()
+        return self.driver.controller.unified_driver_settle_v2({
+            "schema": campaign_control.DRIVER_SETTLEMENT_SCHEMA_V2,
+            "catalog_id": selected.catalog_id, "transition_id": selected.transition_id,
+            "selection": selected.selection.to_dict(), "outcome": outcome,
+            "children": [c["digest"] for c in children], "denial_ref": denial_ref})
+
     def execute_selected(
             self, selected: unified_driver.SelectedActorWork, *,
             source_worktree: worktree.Worktree, source_commit: str,
@@ -461,7 +492,7 @@ class SourceBuildExecutionOwner:
             libraries: Mapping[str, Path], linkage_sha256: str,
             log_path: str, configure_timeout_s: float, build_timeout_s: float,
             env: Mapping[str, str], sandbox_cgroup_root: str,
-            production_trees=()) -> Mapping[str, Any]:
+            production_trees=(), settle: bool = True) -> Mapping[str, Any]:
         if not isinstance(selected, unified_driver.SelectedActorWork) \
                 or selected.actor_request.actor_kind != "build_recipe":
             raise SourceBuildExecutionRefused("selected work is not one build recipe")
@@ -470,9 +501,19 @@ class SourceBuildExecutionOwner:
             selected.transition_id, selected.selection.to_dict()))
         if current.to_dict() != selected.to_dict():
             raise SourceBuildExecutionRefused("selected build work is no longer current")
-        result = self.actor_consumer.prepare(
-            current.actor_request, stage_plan_digest=current.stage_plan_digest)
+        try:
+            result = self.actor_consumer.prepare(
+                current.actor_request, stage_plan_digest=current.stage_plan_digest)
+        except actor_preparation.PreparationDenied as exc:
+            if exc.denial_class == "terminal":
+                self.settle_selected(current, outcome="failed",
+                                     denial={"class": "terminal", "reason": str(exc)})
+            raise
         if result.status != "proposed":
+            if settle and self.driver.controller.unified_driver_children(
+                    current.transition_id):
+                self.settle_selected(
+                    current, outcome="invalid" if result.status == "refused" else "failed")
             raise SourceBuildExecutionRefused(
                 f"build actor produced no accepted advice: {result.status}")
         bound = source_build_preparation.bind_build_preparation(
@@ -480,14 +521,22 @@ class SourceBuildExecutionOwner:
             resolved_campaign=self.driver.resolved, source_commit=source_commit,
             build_plan=build_plan, source_worktree=source_worktree,
             materialized_source=materialized_source)
-        return self.build_executor.execute(
-            bound, source_worktree=source_worktree, candidate_id=candidate_id,
-            output_binary=output_binary, toolchain=toolchain, libraries=libraries,
-            linkage_sha256=linkage_sha256, log_path=log_path,
-            configure_timeout_s=configure_timeout_s,
-            build_timeout_s=build_timeout_s, env=env,
-            sandbox_cgroup_root=sandbox_cgroup_root,
-            production_trees=production_trees)
+        try:
+            enrollment = self.build_executor.execute(
+                bound, source_worktree=source_worktree, candidate_id=candidate_id,
+                output_binary=output_binary, toolchain=toolchain, libraries=libraries,
+                linkage_sha256=linkage_sha256, log_path=log_path,
+                configure_timeout_s=configure_timeout_s,
+                build_timeout_s=build_timeout_s, env=env,
+                sandbox_cgroup_root=sandbox_cgroup_root,
+                production_trees=production_trees)
+        except SourceBuildExecutionRefused:
+            if settle:
+                self.settle_selected(current, outcome="failed")
+            raise
+        if settle:
+            self.settle_selected(current, outcome="prerequisite")
+        return enrollment
 
 
 __all__ = ["ENROLLMENT_SCHEMA", "SourceBuildExecutionOwner",

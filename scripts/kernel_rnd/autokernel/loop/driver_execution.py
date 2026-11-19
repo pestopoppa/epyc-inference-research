@@ -861,14 +861,34 @@ class UnifiedDriverExecution:
                 request_id=request.request_id, plan_digest=request.plan_digest,
                 lineage_id=request.lineage_id, stage_id=request.stage_id)
             if terminal is None:
-                if (isinstance(lifecycle_error, (
+                status = self.controller.worker_attempt_status(
+                    request_id=request.request_id, plan_digest=request.plan_digest,
+                    lineage_id=request.lineage_id, stage_id=request.stage_id)
+                typed = (isinstance(lifecycle_error, worker_lifecycle.AdmissionDenied)
+                         and status in {"not_acquired", "unknown"})
+                if typed and lifecycle_error.denial_class == "terminal" \
+                        and getattr(self.controller, "snapshot_version", None) == 3:
+                    # AKU-06l: a typed terminal denial before any held interval is the
+                    # explicit zero-cost no-receipt cancellation, settled exactly once.
+                    denial_ref = unified_driver._digest({
+                        "transition_id": transition_id, "request_id": request.request_id,
+                        "stage_id": request.stage_id, "denial_class": "terminal",
+                        "reason": str(lifecycle_error)})
+                    try:
+                        self.controller.unified_driver_settle_v2({
+                            "schema": campaign_control.DRIVER_SETTLEMENT_SCHEMA_V2,
+                            "catalog_id": catalog.catalog_id,
+                            "transition_id": transition_id,
+                            "selection": selection.to_dict(), "outcome": "failed",
+                            "children": [], "denial_ref": denial_ref})
+                    except BaseException as exc:
+                        raise DriverExecutionUncertain(
+                            "terminal-denial cancellation is uncertain; exact retry required"
+                        ) from exc
+                    raise lifecycle_error
+                if (typed or (isinstance(lifecycle_error, (
                         worker_lifecycle.WaitingAuthority,
-                        campaign_control.ControlRefused))
-                        and self.controller.worker_attempt_status(
-                            request_id=request.request_id,
-                            plan_digest=request.plan_digest,
-                            lineage_id=request.lineage_id,
-                            stage_id=request.stage_id) == "not_acquired"):
+                        campaign_control.ControlRefused)) and status == "not_acquired")):
                     self._launched.discard(transition_id)
                     raise lifecycle_error
                 raise DriverExecutionUncertain(
