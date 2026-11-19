@@ -1,0 +1,42 @@
+{
+  "schema": "epyc.autokernel.graph_kld_policy.v1",
+  "ratification": "RATIFY-AK-GRAPH-KLD-THRESHOLDS-20261118",
+  "ruling": "operator 2026-11-18, amended 2026-11-19: 27B-anchored gate. GPU: 27B Q8_0 KLD <= 0.003 and |dPPL| <= 0.5% decide; Q38FN (run hybrid --n-cpu-moe 48 as the GPU test vehicle) KLD/dPPL reported only but same-top >= 93.0% refuses. CPU: same 27B clause plus Q38FN |dPPL| <= 0.5% and top-1 >= 93%.",
+  "protocol": "measurement/protocols/kernel-research.md P-AK-SEARCH-1-A5 / A5a",
+  "corpus": "/mnt/raid0/llm/data/wiki.test.raw",
+  "chunks": 16,
+  "models": {
+    "q38_27b": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "q38fn": "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
+  },
+  "backends": {
+    "gpu": [
+      {
+        "model": "q38_27b",
+        "decisive": true,
+        "max_mean_kld": 0.003,
+        "max_abs_dppl_pct": 0.5
+      },
+      {
+        "model": "q38fn",
+        "decisive": true,
+        "min_same_top_pct": 93.0,
+        "n_cpu_moe": 48
+      }
+    ],
+    "cpu": [
+      {
+        "model": "q38_27b",
+        "decisive": true,
+        "max_mean_kld": 0.003,
+        "max_abs_dppl_pct": 0.5
+      },
+      {
+        "model": "q38fn",
+        "decisive": true,
+        "max_abs_dppl_pct": 0.5,
+        "min_same_top_pct": 93.0
+      }
+    ]
+  }
+}
