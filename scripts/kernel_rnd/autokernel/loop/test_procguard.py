@@ -152,7 +152,7 @@ def test_call_scope_sweeps_only_its_own_cookie(tmp_path):
 AK_HELPER = r"""
 import sys
 sys.path.insert(0, sys.argv[1])
-import ak_check
+from autokernel.loop import ak_check
 ak_check.install_signal_cleanup()
 ak_check.run_bounded([sys.argv[2], "300"], cpus=[int(sys.argv[3])], timeout_s=600, cwd=".")
 """
@@ -178,7 +178,7 @@ def test_ak_check_child_dies_with_ak_check(tmp_path, sig):
     its own group, then KILL) while its own-session child runs."""
     cpu = sorted(os.sched_getaffinity(0))[-1]
     helper = subprocess.Popen([sys.executable, "-c", AK_HELPER,
-                               str(Path(ak_check.__file__).parent), SLEEP, str(cpu)],
+                               str(Path(ak_check.__file__).resolve().parents[2]), SLEEP, str(cpu)],
                               cwd=str(tmp_path))
     child = None
     try:
