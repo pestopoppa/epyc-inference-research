@@ -3,6 +3,7 @@ import ast
 from contextlib import ExitStack, contextmanager, nullcontext
 from functools import wraps
 import sys
+import time
 from types import SimpleNamespace
 from unittest import mock
 from pathlib import Path
@@ -132,12 +133,16 @@ class ClaimLifecycle(unittest.TestCase):
         nodes = [next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
                       and n.name == name) for name in wanted]
         events = []
-        scope = {"wraps": wraps, "sys": sys,
+        # The extracted functions read `time` and the enclosing _main's `budget_debit`,
+        # `bench_kv`, `direct_launch` and `_recipe_kv_type`; bench.compare now receives kv kwargs.
+        scope = {"wraps": wraps, "sys": sys, "time": time, "budget_debit": [None], "bench_kv": None,
+                 "direct_launch": None, "_recipe_kv_type": lambda _launch: None,
                  "gfx_counter": [SimpleNamespace(sample=events.append)],
                  "cpu_launch": False, "nullcontext": nullcontext,
                  "cpu_measurement_window": nullcontext,
                  "gates": SimpleNamespace(op_correctness=lambda: events.append("oracle body")),
-                 "bench": SimpleNamespace(compare=lambda: events.append("bench warmup and compare"))}
+                 "bench": SimpleNamespace(
+                     compare=lambda **_kw: events.append("bench warmup and compare"))}
         exec(compile(ast.fix_missing_locations(ast.Module(body=nodes, type_ignores=[])),
                      "run.py", "exec"), scope)
         scope["local_op_correctness"]()
