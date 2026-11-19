@@ -168,3 +168,55 @@ def test_writer_and_projection_reject_naive_or_far_future_observation_times(tmp_
     result = _project(tmp_path, workloads)
     assert result["keeps"][0]["freshness"]["state"] == "malformed"
     assert result["keeps"][0]["rows"][0]["classification"] == "UNKNOWN"
+
+
+# --- AKX-P5a: vacuous-pass refusal wired into project() ---------------------------------
+def _forward(now):
+    from . import forward_admission as fa
+    h = "a" * 64
+    ev = {"diff_scope": {"additive": True, "files": ["x.cpp"]}, "enum_ordinal_moves": 0,
+          "emitters_outside_tests": 0, "emitter_grep": {"command": "grep -rn X", "output_sha256": h},
+          "digests": {"unchanged": True, "anchor": h, "candidate": h},
+          "token_identity": {"passed": True, "role": "positive_control"}}
+    return fa.build(lever_id="lv", consumer={"id": "INF-77", "handoff": "h.md"}, evidence=ev,
+                    admitted_at=now - timedelta(days=1), env={})
+
+
+def _vproject(tmp_path, rows, forward=None):
+    _, workloads = _record(tmp_path, rows)
+    now = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    return ks.project(tmp_path, keeps=["keep-a"], resolved_targets=_targets(workloads),
+        campaign_id="campaign-a", manifest_digest=_sha("manifest"),
+        manifest_path="/campaign/resolved.json", now=now,
+        forward_records=None if forward is None else {"keep-a": forward})["keeps"][0]
+
+
+def test_all_inert_keep_without_forward_projects_refused(tmp_path):
+    keep = _vproject(tmp_path, [_row("keep-a", "w1", "INERT", "T0"),
+                                _row("keep-a", "w2", "INERT", "T1")])
+    assert keep["verdict"] == "refused" and keep["vacuity"]["verdict"] == "refused"
+    assert "vacuous" in keep["vacuity"]["reason"]
+
+
+def test_all_inert_keep_with_valid_forward_is_admitted(tmp_path):
+    now = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    keep = _vproject(tmp_path, [_row("keep-a", "w1", "INERT", "T0")], _forward(now))
+    assert keep["verdict"] == "forward" and keep["vacuity"]["headline_claim"] == "none"
+
+
+def test_forward_with_touched_workload_is_refused(tmp_path):
+    now = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    keep = _vproject(tmp_path, [_row("keep-a", "w1", "INERT", "T0"),
+                                _row("keep-a", "w2", "TOUCHED")], _forward(now))
+    assert keep["verdict"] == "refused" and "reachable" in keep["vacuity"]["reason"]
+
+
+def test_touched_or_unknown_keep_is_ordinary_and_absent_keep_has_no_vacuity(tmp_path):
+    keep = _vproject(tmp_path, [_row("keep-a", "w1", "INERT", "T0"),
+                                _row("keep-a", "w2", "UNKNOWN")])
+    assert keep["vacuity"]["verdict"] == "ordinary" and "verdict" not in keep
+    missing = ks.project(tmp_path / "none", keeps=["keep-a"],
+        resolved_targets=_targets({"w1": _sha("s")}), campaign_id="campaign-a",
+        manifest_digest=_sha("manifest"), manifest_path="/campaign/resolved.json",
+        now=datetime(2026, 11, 1, tzinfo=timezone.utc))["keeps"][0]
+    assert missing["vacuity"] is None

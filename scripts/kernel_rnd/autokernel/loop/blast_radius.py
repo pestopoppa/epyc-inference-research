@@ -126,6 +126,18 @@ def classify(fp: FP.PatchFootprint, wl: WorkloadRecord, *, keep_id: str,
     return done("TOUCHED", touched_detail={"executed_hunks": [h.hunk_id for h in live]})
 
 
+def keep_vacuity(screen: Mapping[str, Any], forward: Mapping[str, Any] | None = None,
+                 now: datetime | None = None) -> dict:
+    """AKX-P5a gate verdict for a screen (a ``blast_radius_screen`` or a record holding one).
+
+    UNKNOWN decides as TOUCHED, so only an all-INERT screen is vacuous."""
+    from . import forward_admission as FA
+    scr = screen.get("screen", screen)
+    return FA.vacuous_pass_check(
+        touched_ids=[*scr.get("touched_ids", ()), *scr.get("unknown_ids", ())],
+        inert_ids=scr.get("inert_ids", ()), forward=forward, now=now)
+
+
 def screen_keep(fp: FP.PatchFootprint, workloads: Sequence[WorkloadRecord], *, keep_id: str,
                 census_freshness_keys: Mapping[str, str], created_at: str,
                 tool_versions: Mapping[str, str] | None = None) -> tuple[dict, list[dict]]:

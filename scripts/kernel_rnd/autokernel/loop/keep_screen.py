@@ -271,8 +271,13 @@ def project(store_root: Path | str, *, keeps: Sequence[str],
             resolved_targets: Sequence[Mapping[str, Any]] | None,
             campaign_id: str | None, manifest_digest: str | None,
             manifest_path: str | None, now: datetime | None = None,
-            stale_after_s: int = 1800) -> dict[str, Any]:
-    """Project current real keep IDs against a resolved roster and immutable records."""
+            stale_after_s: int = 1800,
+            forward_records: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any]:
+    """Project current real keep IDs against a resolved roster and immutable records.
+
+    ``forward_records`` (keep_id -> FORWARD admission) feeds the AKX-P5a vacuity check: a
+    fresh keep whose screen has no TOUCHED/UNKNOWN workload projects verdict ``refused``
+    unless a valid FORWARD record admits it."""
     now = now or datetime.now(timezone.utc)
     stamp = now.isoformat().replace("+00:00", "Z")
     if (not keeps or len(keeps) > MAX_KEEPS
@@ -368,14 +373,21 @@ def project(store_root: Path | str, *, keeps: Sequence[str],
                 "verdict": refusal.get("verdict") if refusal and fresh else "UNKNOWN",
                 "refusal_remedy": refusal.get("remedy") if refusal and fresh else None,
                 "source_row_sha256": _digest(row) if row and fresh else None})
-        envelope["keeps"].append({"keep_id": keep_id, "source_path": str(path),
+        vacuity = None
+        if loaded and fresh:
+            from .blast_radius import keep_vacuity
+            vacuity = keep_vacuity(loaded["screen"], (forward_records or {}).get(keep_id), now)
+        entry = {"keep_id": keep_id, "source_path": str(path),
             "record_sha256": loaded["record_sha256"] if loaded else None,
             "freshness": {"state": "fresh" if fresh else
                           "stale" if loaded else "malformed" if malformed else "absent",
                           "age_s": age_s, "stale_after_s": stale_after_s,
                           "detail": error or ("record is older than its staleness bound"
                               if not fresh else "current")},
-            "rows": rows})
+            "rows": rows, "vacuity": vacuity}
+        if vacuity and vacuity["verdict"] in ("refused", "forward"):
+            entry["verdict"] = vacuity["verdict"]
+        envelope["keeps"].append(entry)
     return envelope
 
 
