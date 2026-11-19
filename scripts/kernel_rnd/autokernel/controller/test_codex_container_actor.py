@@ -82,6 +82,36 @@ class CodexContainerActorTest(unittest.TestCase):
                 C._require_image_present({})
         self.assertIn(125, C.DOCKER_LAUNCH_FAILURE_CODES)
 
+    def test_external_stop_signal_raises_typed_actor_deadline(self):
+        import signal
+        import subprocess
+        from unittest import mock
+        self.assertTrue(issubclass(C.ActorDeadline, C.CodexContainerError))
+        self.assertFalse(issubclass(C.ActorDeadline, C.CodexContainerConfigurationError))
+        exc = C.ActorDeadline(signal.SIGTERM)
+        self.assertEqual(exc.signum, signal.SIGTERM)
+        # legacy text is load-bearing: discovery_controller keeps "interrupted" terminal
+        self.assertIn("interrupted at checkpoint", str(exc))
+
+        def fake_run(argv, *a, **k):
+            if "run" in argv and "--name" in argv:
+                signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(C, "ASSET_TEMP_ROOT", Path(tmp)), \
+                mock.patch.object(C, "_require_image_present"), \
+                mock.patch.object(C.subprocess, "run", side_effect=fake_run):
+            wrapper = Path(tmp) / "codex.js"
+            wrapper.write_text("x"); wrapper.chmod(0o700)
+            (Path(tmp) / "auth.json").write_text("{}")
+            with mock.patch.object(C, "runtime_identity", return_value={}), \
+                    mock.patch.object(C, "_codex_native_assets",
+                                      return_value=(wrapper, wrapper)):
+                with self.assertRaises(C.ActorDeadline):
+                    C.run_actor(wrapper=wrapper, workspace=Path(tmp), model=C.SUPPORTED_MODELS[0],
+                                effort="high", prompt="p", environment={"CODEX_HOME": tmp})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -74,6 +74,24 @@ class CodexContainerError(RuntimeError):
     """The workspace-only actor boundary cannot be established."""
 
 
+class ActorDeadline(CodexContainerError):
+    """The actor was interrupted by an external stop/deadline signal.
+
+    A typed outcome, not a fault: the owner (a supervisor, a filler window)
+    asked the controller to stop while the actor was mid-turn.  The message keeps
+    the legacy "interrupted at checkpoint" text so the controller's
+    transient-classification guard (it leaves interrupted actors terminal)
+    is unchanged.  c6-admission-live-proof-r9 (2026-11-19): the window ended
+    during a planner turn and the untyped CodexContainerError scored FUTILITY.
+    """
+
+    def __init__(self, signum: int | None = None) -> None:
+        self.signum = signum
+        super().__init__(
+            "actor container interrupted at checkpoint"
+            + (f" (signal {signum})" if signum is not None else ""))
+
+
 class CodexContainerConfigurationError(CodexContainerError):
     """A non-transient deployment fault (e.g. the pinned image is absent)."""
 
@@ -223,7 +241,7 @@ def run_actor(
             sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
 
         def terminate(_signum: int, _frame: object) -> None:
-            raise CodexContainerError("actor container interrupted at checkpoint")
+            raise ActorDeadline(_signum)
 
         for sig in previous_handlers:
             signal.signal(sig, terminate)
