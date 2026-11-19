@@ -33,7 +33,7 @@
     "belief_context.py": 580,
     "bench.py": 385,
     "bestof.py": 1056,
-    "blast_radius.py": 106,
+    "blast_radius.py": 236,
     "build_enrollment.py": 321,
     "calibrate_served_shapes.py": 619,
     "call_budget.py": 31,
@@ -276,36 +276,36 @@
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +14 lines over 497, 2 commit(s) since cdf6faa44, latest 460cfc464 autokernel: narrow AK-TOOL-CHAMPION-CONTEXT to launch-time refusal against CANON); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "actor_metrics.py": {
-      "ceiling": 486,
-      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: c17d0d0b7, 6a3981e4b, 3e9c00e53 reasoning and section-pull metrics; reduction behind the discard-invariant custody pin"
+      "ceiling": 491,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: c17d0d0b7, 6a3981e4b, 3e9c00e53 reasoning and section-pull metrics; reduction behind the discard-invariant custody pin | ratchet 491 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "actor_orchestrator.py": {
-      "ceiling": 323,
-      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 952c4d859 abstain schema carries belief focus fields"
+      "ceiling": 369,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 952c4d859 abstain schema carries belief focus fields | ratchet 369 (trimmed): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "actor_wire_gate.py": {
       "ceiling": 117,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +2 lines over 115, 1 commit(s) since cdf6faa44, latest 0fe366b53 autokernel: make --dry-run evaluate the live startup refusals); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "actors.py": {
-      "ceiling": 3084,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +38 lines over 3037, 10 commit(s) since cdf6faa44, latest f212ddb5d autokernel: resolve the claude actor binary per container); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 7caa320c8, f212ddb5d, dd3ab6326 hotspot render, per-container claude binary, opencode v2 argv; reduction behind the custody pin"
+      "ceiling": 3118,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +38 lines over 3037, 10 commit(s) since cdf6faa44, latest f212ddb5d autokernel: resolve the claude actor binary per container); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 7caa320c8, f212ddb5d, dd3ab6326 hotspot render, per-container claude binary, opencode v2 argv; reduction behind the custody pin | ratchet 3118 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-SPLIT-ACTORS (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "ak_check.py": {
       "ceiling": 1081,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 1080, 1 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "archive.py": {
-      "ceiling": 500,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +31 lines over 469, 2 commit(s) since cdf6faa44, latest 4ede8b2fa fix(research): resolve belief and decision ROOT paths explicitly); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 511,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +31 lines over 469, 2 commit(s) since cdf6faa44, latest 4ede8b2fa fix(research): resolve belief and decision ROOT paths explicitly); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 511 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "belief_context.py": {
       "ceiling": 624,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +18 lines over 580, 2 commit(s) since cdf6faa44, latest 3bd5d85d9 autokernel: AK-TOOL-CHAMPION-CONTEXT stale-anchor refusal + AK-TOOL-UNSOURCED-LI); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 952c4d859, 3bd5d85d9 profile focus symbols, unsourced-figure lint"
     },
     "bench.py": {
-      "ceiling": 439,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +29 lines over 385, 2 commit(s) since cdf6faa44, latest e50adce0b feat(autokernel/G1): round-2 AK fixes -- window-scoped device flock, live comput); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: ak/next-code-20261109 growth, actual count after merge"
+      "ceiling": 451,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +29 lines over 385, 2 commit(s) since cdf6faa44, latest e50adce0b feat(autokernel/G1): round-2 AK fixes -- window-scoped device flock, live comput); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: ak/next-code-20261109 growth, actual count after merge | ratchet 451 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "bestof.py": {
       "ceiling": 1135,
@@ -328,8 +328,8 @@
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +101 lines over 465, 5 commit(s) since cdf6faa44, latest ebfeec4aa AutoKernel: close re-anchor tool gaps and the dry-run COR check); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "claim.py": {
-      "ceiling": 830,
-      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: e50adce0b, b05e3c3da window-scoped device flock and ancestor-hold resolution"
+      "ceiling": 855,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: e50adce0b, b05e3c3da window-scoped device flock and ancestor-hold resolution | ratchet 855 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "clock_policy.py": {
       "ceiling": 183,
@@ -340,12 +340,12 @@
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 480, 1 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "cpu_route_witness.py": {
-      "ceiling": 278,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 277, 1 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 298,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 277, 1 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 298 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "dispatch_guard.py": {
-      "ceiling": 205,
-      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 390daf496 calls the retired-mechanism refusal"
+      "ceiling": 213,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 390daf496 calls the retired-mechanism refusal | ratchet 213 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "epoch_aliases.py": {
       "ceiling": 233,
@@ -360,12 +360,12 @@
       "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: NOT in the 2026-11-09 proposal, growth unreviewed; latest a137475bc"
     },
     "gates.py": {
-      "ceiling": 3104,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +116 lines over 2988, 4 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 3247,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +116 lines over 2988, 4 commit(s) since cdf6faa44, latest f19e05a5e autokernel: one shared strip_ansi and a vacuous-parse rule for tool output parse); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 3247 (trimmed): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-GATES (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "gpu_serving_profile.py": {
-      "ceiling": 699,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +2 lines over 697, 1 commit(s) since cdf6faa44, latest 78382e01f fix: score MMQ launcher candidates with their device kernels); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 748,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +2 lines over 697, 1 commit(s) since cdf6faa44, latest 78382e01f fix: score MMQ launcher candidates with their device kernels); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 748 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "gpu_window.py": {
       "ceiling": 459,
@@ -388,8 +388,8 @@
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +60 lines over 267, 2 commit(s) since cdf6faa44, latest f30243373 autokernel: SL-2 fail-closed on regressions from either metric); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "lane_watchdog.py": {
-      "ceiling": 475,
-      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: ak/next-code-20261109 growth, actual count after merge"
+      "ceiling": 486,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: ak/next-code-20261109 growth, actual count after merge | ratchet 486 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "longctx.py": {
       "ceiling": 820,
@@ -400,28 +400,28 @@
       "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: NOT in the 2026-11-09 proposal, growth unreviewed; latest 1bc36e200"
     },
     "loop.py": {
-      "ceiling": 1462,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +31 lines over 1427, 9 commit(s) since cdf6faa44, latest e33cf3cd1 autokernel: identical-state planner abstention stop + log-only retry_budget_shad); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: e33cf3cd1, 9ddf6d38e, 3ab4ffbf1 same-state stop, empty-suite preflight, typed resume ineligibility; reduction behind the custody pin"
+      "ceiling": 1474,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +31 lines over 1427, 9 commit(s) since cdf6faa44, latest e33cf3cd1 autokernel: identical-state planner abstention stop + log-only retry_budget_shad); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: e33cf3cd1, 9ddf6d38e, 3ab4ffbf1 same-state stop, empty-suite preflight, typed resume ineligibility; reduction behind the custody pin | ratchet 1474 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-GATE-PLUMBING (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "new_epoch.py": {
       "ceiling": 91,
       "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: a25f5ff79 per-surface anchor epochs"
     },
     "pipeline.py": {
-      "ceiling": 364,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +9 lines over 355, 4 commit(s) since cdf6faa44, latest 9b436c770 autokernel: refuse symlink, submodule and actor-commit escapes at candidate vali); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 380,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +9 lines over 355, 4 commit(s) since cdf6faa44, latest 9b436c770 autokernel: refuse symlink, submodule and actor-commit escapes at candidate vali); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 380 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-GATE-PLUMBING (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "planner_only.py": {
-      "ceiling": 221,
-      "approval": "operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); RATIFY-AK-C9-20261109 item 3: planner-only 0358db7a3; operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 3f6301af8 planner-only CPU targets, actual count on the merged tree"
+      "ceiling": 241,
+      "approval": "operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); RATIFY-AK-C9-20261109 item 3: planner-only 0358db7a3; operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 3f6301af8 planner-only CPU targets, actual count on the merged tree | ratchet 241 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "pool.py": {
-      "ceiling": 490,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +2 lines over 488, 5 commit(s) since cdf6faa44, latest 5afd1ae08 Record autokernel build completion timestamps); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 495,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +2 lines over 488, 5 commit(s) since cdf6faa44, latest 5afd1ae08 Record autokernel build completion timestamps); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 495 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-GATE-PLUMBING (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "production.py": {
-      "ceiling": 1314,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 1311, 1 commit(s) since cdf6faa44, latest 61af96a93 Preserve per-workload serving measurement recipes); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: NOT in the 2026-11-09 proposal, growth unreviewed; latest a034d16e6"
+      "ceiling": 1328,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 1311, 1 commit(s) since cdf6faa44, latest 61af96a93 Preserve per-workload serving measurement recipes); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: NOT in the 2026-11-09 proposal, growth unreviewed; latest a034d16e6 | ratchet 1328 (trimmed): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "provider_breaker.py": {
       "ceiling": 71,
@@ -432,8 +432,8 @@
       "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: dc1436210, e50adce0b, fd98d5d0e VRAM ceiling abort, own-launch tracking, clock trace"
     },
     "resolved_recipe.py": {
-      "ceiling": 1374,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +10 lines over 1364, 1 commit(s) since cdf6faa44, latest 6cf25cfab feat: bind explicit CPU NUMA policy in serving recipe identity); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 1379,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +10 lines over 1364, 1 commit(s) since cdf6faa44, latest 6cf25cfab feat: bind explicit CPU NUMA policy in serving recipe identity); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 1379 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "resume.py": {
       "ceiling": 2916,
@@ -444,12 +444,12 @@
       "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 390daf496 retired-mechanism refusal at formation, new file"
     },
     "roofline_coverage.py": {
-      "ceiling": 227,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +14 lines over 213, 1 commit(s) since cdf6faa44, latest d717f5884 fix(autokernel): publish scope gaps once per transition atomically); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 229,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +14 lines over 213, 1 commit(s) since cdf6faa44, latest d717f5884 fix(autokernel): publish scope gaps once per transition atomically); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 229 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "run.py": {
-      "ceiling": 6953,
-      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +317 lines over 6588, 37 commit(s) since cdf6faa44, latest 46472498c autokernel: stop dispatching at the grant's cleanup reserve, end resumably); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); RATIFY-AK-C9-20261109 item 3: planner-only 0358db7a3, ceiling 6905 -> 6909; operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 40 commits since baseline plus next-code growth. OPEN design question, not settled by this ceiling: extract the duplicated attempt-record blocks (file is custody-pinned)?; +1 for 390daf496"
+      "ceiling": 7083,
+      "approval": "operator 2026-11-01 via ws58 AskUserQuestion: OAB-31 six snapshot ceilings; AutoKernel review 2026-11-09 (operator-requested regrowth review; +317 lines over 6588, 37 commit(s) since cdf6faa44, latest 46472498c autokernel: stop dispatching at the grant's cleanup reserve, end resumably); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json); RATIFY-AK-C9-20261109 item 3: planner-only 0358db7a3, ceiling 6905 -> 6909; operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 40 commits since baseline plus next-code growth. OPEN design question, not settled by this ceiling: extract the duplicated attempt-record blocks (file is custody-pinned)?; +1 for 390daf496 | ratchet 7083 (bridge): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-SPLIT-RUNPY (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "runtime_arms.py": {
       "ceiling": 510,
@@ -460,16 +460,16 @@
       "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: a25f5ff79, 2f047a7b1 surface-scoped seeding and stale-COR fence"
     },
     "serial_run.py": {
-      "ceiling": 2558,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +218 lines over 2340, 5 commit(s) since cdf6faa44, latest cb5100276 autokernel: provider circuit breaker parks a run after N provider-terminal itera); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 2560,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +218 lines over 2340, 5 commit(s) since cdf6faa44, latest cb5100276 autokernel: provider circuit breaker parks a run after N provider-terminal itera); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 2560 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-GATE-PLUMBING (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "served_shape_cases.py": {
       "ceiling": 858,
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +40 lines over 818, 1 commit(s) since cdf6faa44, latest 625b5000a autokernel: AK-PROF-TWO-DENOM hotspot denominators + AK-OP-E2E-PENDING op keep s); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "serving.py": {
-      "ceiling": 2201,
-      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 15 commits plus next-code growth; target-steps, acceptance and refused-partial evidence. OPEN design question, not settled by this ceiling: move target-steps helpers into a module?"
+      "ceiling": 2204,
+      "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 15 commits plus next-code growth; target-steps, acceptance and refused-partial evidence. OPEN design question, not settled by this ceiling: move target-steps helpers into a module? | ratchet 2204 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-GATE-PLUMBING (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "serving_beliefs.py": {
       "ceiling": 203,
@@ -496,8 +496,96 @@
       "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: d480cac2e refusal of ratified do-not-fold changes"
     },
     "unified_driver.py": {
-      "ceiling": 1293,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +62 lines over 1231, 1 commit(s) since cdf6faa44, latest daed7b39f Supervise AutoKernel lane entry points); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 1295,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +62 lines over 1231, 1 commit(s) since cdf6faa44, latest daed7b39f Supervise AutoKernel lane entry points); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 1295 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261119 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
+    },
+    "actor_lifecycle.py": {
+      "ceiling": 316,
+      "approval": "ratchet 316 (trimmed): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 286. A second ratchet carries a trim-or-split obligation."
+    },
+    "actor_preparation.py": {
+      "ceiling": 503,
+      "approval": "ratchet 503 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 493. A second ratchet carries a trim-or-split obligation."
+    },
+    "actor_preparation_state.py": {
+      "ceiling": 310,
+      "approval": "ratchet 310 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 209. A second ratchet carries a trim-or-split obligation."
+    },
+    "campaign_control.py": {
+      "ceiling": 4747,
+      "approval": "ratchet 4747 (bridge): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 4473. A second ratchet carries a trim-or-split obligation."
+    },
+    "candidate_manifest.py": {
+      "ceiling": 1171,
+      "approval": "ratchet 1171 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 1152. A second ratchet carries a trim-or-split obligation."
+    },
+    "candidate_transactions.py": {
+      "ceiling": 950,
+      "approval": "ratchet 950 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 905. A second ratchet carries a trim-or-split obligation."
+    },
+    "census.py": {
+      "ceiling": 151,
+      "approval": "ratchet 151 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 150. A second ratchet carries a trim-or-split obligation."
+    },
+    "cross_target.py": {
+      "ceiling": 437,
+      "approval": "ratchet 437 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 417. A second ratchet carries a trim-or-split obligation."
+    },
+    "driver_execution.py": {
+      "ceiling": 982,
+      "approval": "ratchet 982 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 959. A second ratchet carries a trim-or-split obligation."
+    },
+    "hip_launch_proof.py": {
+      "ceiling": 96,
+      "approval": "ratchet 96 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 75. A second ratchet carries a trim-or-split obligation."
+    },
+    "keep_screen.py": {
+      "ceiling": 386,
+      "approval": "ratchet 386 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 378. A second ratchet carries a trim-or-split obligation."
+    },
+    "native_scientific_witness.py": {
+      "ceiling": 675,
+      "approval": "ratchet 675 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 623. A second ratchet carries a trim-or-split obligation."
+    },
+    "native_server_t0_witness.py": {
+      "ceiling": 667,
+      "approval": "ratchet 667 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 657. A second ratchet carries a trim-or-split obligation."
+    },
+    "numerics_gates.py": {
+      "ceiling": 215,
+      "approval": "ratchet 215 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 214. A second ratchet carries a trim-or-split obligation."
+    },
+    "profile_preparation.py": {
+      "ceiling": 621,
+      "approval": "ratchet 621 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 577. A second ratchet carries a trim-or-split obligation."
+    },
+    "scheduling.py": {
+      "ceiling": 2073,
+      "approval": "ratchet 2073 (bridge): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 1927. A second ratchet carries a trim-or-split obligation."
+    },
+    "source_build_execution.py": {
+      "ceiling": 476,
+      "approval": "ratchet 476 (trimmed): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 429. A second ratchet carries a trim-or-split obligation."
+    },
+    "standalone_inputs.py": {
+      "ceiling": 773,
+      "approval": "ratchet 773 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 770. A second ratchet carries a trim-or-split obligation."
+    },
+    "surface_validation.py": {
+      "ceiling": 414,
+      "approval": "ratchet 414 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 388. A second ratchet carries a trim-or-split obligation."
+    },
+    "target_profile_execution.py": {
+      "ceiling": 280,
+      "approval": "ratchet 280 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 267. A second ratchet carries a trim-or-split obligation."
+    },
+    "unified_worker.py": {
+      "ceiling": 2250,
+      "approval": "ratchet 2250 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 2247. A second ratchet carries a trim-or-split obligation."
+    },
+    "worker_lifecycle.py": {
+      "ceiling": 2479,
+      "approval": "ratchet 2479 (trimmed): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 2259. A second ratchet carries a trim-or-split obligation."
     }
   }
 }
