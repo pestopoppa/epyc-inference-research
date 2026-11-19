@@ -4521,7 +4521,7 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
 # H13b passed every op oracle (8253/0) yet its seam fusions read inputs ggml-alloc had
 # reused: Q38FN PPL 3.905 vs 3.4425, KLD ~0.19, same-top ~88%. Only a graph-level check
 # sees that. The CODE lives here; the THRESHOLD touches the measurement trust boundary
-# and has NO default: `KldThresholds` is supplied by explicit config, and without it the
+# and has NO default: the policy file (GRAPH_KLD_POLICY_FILE) is ratified config; without it the
 # verdict is `threshold_unset` (a refusal that is reported -- never a pass, never a skip).
 GRAPH_KLD_GATE = "graph_kld"
 GRAPH_KLD_THRESHOLD_UNSET = "threshold_unset"
@@ -4537,21 +4537,6 @@ _KLD_NUM = r"([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)"
 def touches_graph_fusion(changed_paths) -> bool:
     """True when any changed path is a graph-fusion / allocator / graph-matcher file."""
     return any(rx.search(str(p)) for p in changed_paths for rx in _FUSION_PATH_RES)
-
-
-@dataclass(frozen=True)
-class KldThresholds:
-    """Operator-supplied limits. No defaults: constructing one is an explicit act."""
-    max_mean_kld: float
-    min_same_top_pct: float
-
-    @classmethod
-    def from_config(cls, cfg) -> "KldThresholds | None":
-        """None unless BOTH limits are present and numeric in `cfg`."""
-        try:
-            return cls(float(cfg["max_mean_kld"]), float(cfg["min_same_top_pct"]))
-        except (KeyError, TypeError, ValueError):
-            return None
 
 
 #: The KV type graph_kld_argv pins on purpose (op-level numerics oracle, recipe-independent).
@@ -4586,39 +4571,6 @@ def parse_graph_kld(text: str) -> dict:
     if m:
         r["ln_ratio"] = float(m.group(1))
     return r
-
-
-def graph_kld_verdict(metrics: dict, thresholds: "KldThresholds | None") -> Verdict:
-    """threshold_unset and unparseable output both REFUSE; only measured-within-limits passes."""
-    if thresholds is None:
-        return Verdict(GRAPH_KLD_GATE, False, GRAPH_KLD_THRESHOLD_UNSET,
-                       "no operator-supplied KLD/same-top thresholds; measured "
-                       + json.dumps(metrics, sort_keys=True))
-    if "kld_mean" not in metrics or "same_top_p_pct" not in metrics:
-        return Verdict(GRAPH_KLD_GATE, False, "kld_unparsed",
-                       "llama-perplexity output carried no Mean KLD / Same top p")
-    bad = []
-    if metrics["kld_mean"] > thresholds.max_mean_kld:
-        bad.append(f"mean KLD {metrics['kld_mean']:.4f} > {thresholds.max_mean_kld}")
-    if metrics["same_top_p_pct"] < thresholds.min_same_top_pct:
-        bad.append(f"same-top {metrics['same_top_p_pct']:.2f}% < {thresholds.min_same_top_pct}%")
-    if bad:
-        return Verdict(GRAPH_KLD_GATE, False, "graph_kld_exceeded",
-                       "; ".join(bad) + " -- graph-level divergence the op oracles cannot see")
-    return Verdict(GRAPH_KLD_GATE, True, "",
-                   f"mean KLD {metrics['kld_mean']:.4f}, same-top {metrics['same_top_p_pct']:.2f}%")
-
-
-def graph_kld_gate(changed_paths, *, thresholds: "KldThresholds | None",
-                   run_kld: "Callable[[], str]") -> "Verdict | None":
-    """None when the patch fuses nothing across graph nodes (gate not triggered; `run_kld`
-    is never called). Otherwise run the candidate-vs-champion comparison (`run_kld` returns
-    llama-perplexity text) and return the verdict."""
-    if not touches_graph_fusion(changed_paths):
-        return None
-    # AK-BENCH-KV-TYPE-PIN: graph_kld_argv deliberately runs f16 KV (a graph-level numerics
-    # oracle that speaks for no serving recipe); the measured record names it.
-    return graph_kld_verdict({**parse_graph_kld(run_kld()), "kv_type": GRAPH_KLD_KV_TYPE}, thresholds)
 
 
 GRAPH_KLD_TIMEOUT_S = 3600

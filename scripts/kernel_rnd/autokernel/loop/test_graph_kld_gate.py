@@ -10,18 +10,19 @@ CLEAN = """Mean ln(PPL(Q)/PPL(base)) :   0.000300 ±   0.000400
 Mean    KLD:   0.000900 ±   0.000050
 Same top p: 99.700000 ±   0.050000 %
 """
-TH = gates.KldThresholds(max_mean_kld=0.01, min_same_top_pct=98.0)  # test-only values
+TH = gates.GraphKldPolicy("gpu", "c", 16, {"m": "m.gguf"}, (gates.GraphKldClause(
+    "m", True, max_mean_kld=0.01, min_same_top_pct=98.0),))  # test-only values
 FUSION = ["ggml/src/ggml-cuda/hc-fusion.cu"]
 
 
-def _run(text, paths=FUSION, th=TH):
-    return gates.graph_kld_gate(paths, thresholds=th, run_kld=lambda: text)
+def _run(text, th=TH):
+    return gates.graph_kld_policy_verdict({"m": gates.parse_graph_kld(text)}, th)
 
 
 def test_bad_fails():
     v = _run(BAD)
     assert not v.passed and v.reason == "graph_kld_exceeded"
-    assert "KLD" in v.detail and "same-top" in v.detail
+    assert "max_mean_kld" in v.detail and "min_same_top_pct" in v.detail
 
 
 def test_clean_passes():
@@ -35,16 +36,15 @@ def test_threshold_unset_is_reported_not_pass_not_skip():
 
 
 def test_negative_control_threshold_changes_verdict():
-    loose = gates.KldThresholds(1.0, 0.0)
+    loose = gates.GraphKldPolicy("gpu", "c", 16, {"m": "m.gguf"}, (gates.GraphKldClause(
+        "m", True, max_mean_kld=1.0, min_same_top_pct=0.0),))
     assert _run(BAD, th=loose).passed          # same data, loose limits: passes
     assert not _run(BAD).passed                # tight limits: fails
 
 
 def test_non_fusion_not_triggered():
-    def boom():
-        raise AssertionError("must not run")
     for p in (["ggml/src/ggml-cpu/ops.cpp"], ["ggml/src/ggml-cuda/mmq.cuh"], []):
-        assert gates.graph_kld_gate(p, thresholds=TH, run_kld=boom) is None
+        assert not gates.touches_graph_fusion(p)
 
 
 def test_fusion_paths_trigger():
@@ -62,12 +62,6 @@ def test_parse_and_argv():
     a = gates.graph_kld_argv("pp", model="m", corpus="c", base_logits="b", mode="kld")
     assert a[-1] == "--kl-divergence" and "--kl-divergence-base" in a
     assert "--kl-divergence" not in gates.graph_kld_argv("pp", model="m", corpus="c", base_logits="b", mode="base")
-
-
-def test_config_requires_both():
-    assert gates.KldThresholds.from_config({"max_mean_kld": 0.1}) is None
-    assert gates.KldThresholds.from_config({}) is None
-    assert gates.KldThresholds.from_config({"max_mean_kld": 0.1, "min_same_top_pct": 95}) is not None
 
 
 def test_run_uses_each_builds_binary_and_saves_base_once(tmp_path):
