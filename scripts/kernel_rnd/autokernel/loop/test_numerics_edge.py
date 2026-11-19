@@ -7,6 +7,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
+pytest.importorskip("numpy", reason="numerics tests need numpy (declared project dependency)")
 import numpy as np
 
 from autokernel.loop import gates, numerics_edge as ne, numerics_gates as ng, numerics_native as nn

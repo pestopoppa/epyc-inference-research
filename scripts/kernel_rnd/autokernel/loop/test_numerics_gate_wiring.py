@@ -7,6 +7,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
+pytest.importorskip("numpy", reason="numerics tests need numpy (declared project dependency)")
 from autokernel.loop import gates, guard_bands, numerics_gates as NG
 
 CONSOLE = "Backend 1/1: CPU\n  3/3 tests passed\n  Backend CPU: OK\n1/1 backends passed\nOK\n"

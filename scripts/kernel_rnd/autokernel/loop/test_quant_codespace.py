@@ -7,6 +7,9 @@ import tempfile
 import unittest
 from fractions import Fraction
 
+import pytest
+
+pytest.importorskip("numpy", reason="numerics tests need numpy (declared project dependency)")
 import numpy as np
 
 from autokernel.loop import quant_codespace as qc

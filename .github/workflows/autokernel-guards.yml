@@ -39,7 +39,7 @@ jobs:
       # cannot start is not a passing guard and is not a failing test; it is no guard
       # at all, and it hid two real test regressions for two days.
       - name: Install the test runner
-        run: python3 -m pip install --disable-pip-version-check pytest
+        run: python3 -m pip install --disable-pip-version-check pytest numpy pyyaml
 
       # Fail loudly and specifically if the runner is still not importable, rather than
       # letting a future dependency change reproduce the same silent two-day hole.

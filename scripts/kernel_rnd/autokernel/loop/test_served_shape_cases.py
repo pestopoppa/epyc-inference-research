@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("numpy", reason="numerics tests need numpy (declared project dependency)")
 from . import gates
 from . import served_shape_cases as ssc
 

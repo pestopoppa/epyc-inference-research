@@ -1,6 +1,9 @@
 """AKX-ALL-31: planted-control numerics gates (CPU/host only)."""
 import unittest
 
+import pytest
+
+pytest.importorskip("numpy", reason="numerics tests need numpy (declared project dependency)")
 from autokernel.loop import numerics_gates as ng
 
 
