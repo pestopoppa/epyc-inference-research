@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 
+import shutil
+
 import pytest
 
 from . import ab_server_pair as ab
@@ -95,6 +97,8 @@ http.server.ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()
 """
 
 
+@pytest.mark.skipif(shutil.which("ss") is None,
+                    reason="ab_server_pair.listening_pid shells out to iproute2 `ss`, absent here")
 def test_start_failure_still_tears_down_and_proves_dead(tmp_path):
     """A fake server (no ggml libs mapped) must FAIL the linkage proof, and the pair must be torn down dead."""
     import socket
