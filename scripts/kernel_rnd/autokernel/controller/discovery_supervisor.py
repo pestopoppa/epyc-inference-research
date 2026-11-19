@@ -1272,6 +1272,27 @@ def _forwarded_launcher_env(environ: Mapping[str, str] | None = None) -> tuple[s
     return tuple(forwarded)
 
 
+def _detached_command(spec: LaunchSpec, environ: Mapping[str, str] | None = None) -> tuple[str, ...]:
+    """argv of the detached supervisor.  The launcher env rides on an explicit
+    ``env VAR=val`` prefix, so it never depends on the tmux server's global
+    environment (a server already running on the socket would otherwise supply
+    its own and silently drop the launcher's)."""
+    closure = spec.body["execution_closure"]["path"]
+    return (
+        "env",
+        "PYTHONDONTWRITEBYTECODE=1",
+        f"PYTHONPATH={closure}",
+        *_forwarded_launcher_env(environ),
+        str(spec.body["python"]),
+        "-B",
+        "-m",
+        SUPERVISOR_MODULE,
+        "_run",
+        "--runtime-root",
+        str(spec.runtime_root),
+    )
+
+
 def start_detached(spec: LaunchSpec, *, start_timeout: float = 20.0) -> dict[str, Any]:
     root = _runtime(spec.runtime_root)
     try:
@@ -1284,19 +1305,7 @@ def start_detached(spec: LaunchSpec, *, start_timeout: float = 20.0) -> dict[str
     if _tmux_binding(spec.session_name) is not None:
         raise SupervisorError("tmux session exists without matching live identity")
     closure = spec.body["execution_closure"]["path"]
-    command = (
-        "env",
-        "PYTHONDONTWRITEBYTECODE=1",
-        f"PYTHONPATH={closure}",
-        *_forwarded_launcher_env(),
-        str(spec.body["python"]),
-        "-B",
-        "-m",
-        SUPERVISOR_MODULE,
-        "_run",
-        "--runtime-root",
-        str(spec.runtime_root),
-    )
+    command = _detached_command(spec)
     result = _tmux("new-session", "-d", "-s", spec.session_name, "-c", str(closure), "--", *command)
     if result.returncode:
         raise SupervisorError(f"tmux launch failed: {result.stderr.strip()}")
