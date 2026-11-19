@@ -411,3 +411,48 @@ def test_declared_window_marker_and_legacy_absence_preserve_honest_evaluation(pa
 def test_required_marker_absence_and_response_crossing_refuse(pair, reason):
     with pytest.raises(scientific.ScientificWitnessRefused, match=reason):
         _evaluate(pair, 0)
+
+
+def _synthetic_generation_row(request_extra, settings):
+    """LABELLED SYNTHETIC row: exercises _generation only, no server behaviour."""
+    request = {"prompt": "p", "n_predict": 2, "temperature": 0.0, "top_k": 1, "cache_prompt": False,
+               **request_extra}
+    response = {"content": "ab", "stop": True, "timings": {"predicted_n": 2},
+                "generation_settings": settings}
+    raw_row = {"error": None, "prompt_id": "p1", "slot_index": 0, "request_sha256": "a" * 64,
+               "response_sha256": "b" * 64}
+    return {"request": request, "response": response, "raw": raw_row,
+            "artifact": {"locator": "loc", "sha256": "c" * 64}}
+
+
+def test_v2_request_omitting_top_p_does_not_keyerror_in_generation():
+    row = _synthetic_generation_row({"seed": 1, "ignore_eos": True, "return_tokens": True,
+                                     "stream": False},
+                                    {"temperature": 0.0, "top_k": 1, "top_p": 0.95, "n_predict": 2})
+    generation = server.NativeServerT0WitnessAdapter._generation(row)
+    assert generation.error is None and generation.content == "ab"
+
+
+def test_present_top_p_contradiction_is_still_refused_and_omitted_key_is_not_compared():
+    row = _synthetic_generation_row({"top_p": 0.9}, {"top_p": 0.95})
+    assert "contradict" in server.NativeServerT0WitnessAdapter._generation(row).error
+
+
+def test_source_pins_include_token_evidence_module_and_accept_historical_six_module_set():
+    row = _server_source_record()
+    modules = row["owning_source_pins"]["modules"]
+    assert len(modules) == 7
+    assert any(str(item.get("path", "")).endswith("native_server_token_evidence.py") for item in modules)
+    assert ob._plain(server.validate_server_source(row)) == row
+    legacy = _server_source_record()
+    legacy["owning_source_pins"]["modules"] = legacy["owning_source_pins"]["modules"][:6]
+    assert len(server.validate_server_source(legacy)["owning_source_pins"]["modules"]) == 6
+    legacy["owning_source_pins"]["modules"] = legacy["owning_source_pins"]["modules"][:5]
+    with pytest.raises(scientific.ScientificWitnessRefused):
+        server.validate_server_source(legacy)
+
+
+def test_v1_pair_receipts_carry_no_token_witness_key(pair):
+    _issue_parents(pair)
+    body = pair["adapter"]._issued[next(iter(pair["adapter"]._issued))].body
+    assert "same_server_token_witness" not in body

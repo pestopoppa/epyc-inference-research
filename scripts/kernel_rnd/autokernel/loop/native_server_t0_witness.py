@@ -18,6 +18,7 @@ from . import lifecycle_observation as lo
 from . import measurement_capture as mc
 from . import native_scientific_witness as scientific
 from . import native_server_response as raw
+from . import native_server_token_evidence as token_evidence
 from . import observation_binding as ob
 from . import worker_lifecycle as wl
 
@@ -48,7 +49,7 @@ def _source_pins() -> Mapping[str, Any]:
         replay.IssuedNativeEvidenceRegistry.snapshot, replay.NativeParentReceiptReplayer._replay_unit,
         ParentServerT0PairReference.__init__, ParentServerT0PairReference.to_dict)
     return ob._freeze({"modules": [lo.prepare_artifact_identity(Path(item.__file__))
-                                  for item in (sg, scientific, t0, correctness, npe, replay)],
+                                  for item in (sg, scientific, t0, correctness, npe, replay, token_evidence)],
         "callables": [lo.callable_identity(function) for function in functions],
         "raw_source": raw.source_identity(), "final_trial_source": final.source_identity()})
 
@@ -319,7 +320,7 @@ class NativeServerT0WitnessAdapter:
             else:
                 settings = response.get("generation_settings")
                 if settings is not None and (not isinstance(settings, Mapping)
-                        or any(key in settings and (type(settings[key]) is bool
+                        or any(key in settings and key in request and (type(settings[key]) is bool
                                or settings[key] != request[key])
                                for key in ("temperature", "top_k", "top_p", "n_predict"))):
                     error = "original response sampling settings contradict frozen request"
@@ -438,7 +439,17 @@ class NativeServerT0WitnessAdapter:
                       or not slot["report"]["anchor_bound"] for slot in slots)
         report = {"slots": slots, "gate_ids": list(correctness.T0_GATE_IDS),
                   "coverage": REPLAY_COVERAGE}
-        return {"schema": RECEIPT_SCHEMA, "witness": "correctness", "adapter_id": ADAPTER_ID,
+        token_witness = None
+        if any(key in row["request"] for row in rows for key in token_evidence.V2_REQUEST_KEYS):
+            try:
+                token_witness = ob._plain(token_evidence.repeat_witness(rows))
+            except token_evidence.TokenEvidenceRefused as exc:
+                raise scientific.ScientificWitnessRefused(f"server token evidence refused: {exc}") from exc
+            if token_witness["overall"] == "diverged":
+                defects.append("same-server repeat-token witness diverged")
+        # v1 requests carry no token request: the key is absent so v1 receipts stay byte-identical.
+        extra = {} if token_witness is None else {"same_server_token_witness": token_witness}
+        return {**extra, "schema": RECEIPT_SCHEMA, "witness": "correctness", "adapter_id": ADAPTER_ID,
             "frame": ob._plain(scientific._frame(observed.context)),
             "native_observation": observed.native_artifact.to_dict(),
             "lifecycle_reference": observed.lifecycle_link.reference.to_dict(),
@@ -664,7 +675,8 @@ def validate_server_source(value: Any) -> Mapping[str, Any]:
     row["owning_issuer"] = owner["correctness"]
     pins = _closed(row["owning_source_pins"], ("modules", "callables", "raw_source", "final_trial_source"),
                    "server T0 owning source pins")
-    if type(pins["modules"]) not in (list, tuple) or len(pins["modules"]) != 6:
+    # 6 = historical pin set (before the repeat-token witness module); 7 = current.
+    if type(pins["modules"]) not in (list, tuple) or len(pins["modules"]) not in (6, 7):
         raise scientific.ScientificWitnessRefused("server T0 source module set differs")
     pins["modules"] = [lo._validate_artifact(item) for item in pins["modules"]]
     if type(pins["callables"]) not in (list, tuple) or len(pins["callables"]) != 19:
