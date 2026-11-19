@@ -1574,11 +1574,12 @@ class CampaignController:
                 f"worker lifecycle replay is inconsistent: {exc}") from exc
         # AKU-07k recovery consumer: re-check every durable accounting binding against
         # the replayed issued catalog/transition/selection. Legacy unbound history passes.
-        binding_violations = journal_module.validate_worker_accounting_binding_history(
-            worker_events, self._driver_issued)
-        if binding_violations:
+        try:
+            worker_lifecycle_module.validate_accounting_binding_history(
+                worker_events, self._driver_issued)
+        except worker_lifecycle_module.LifecycleRefused as exc:
             raise journal_module.JournalCorruption(
-                "worker accounting binding recovery refused: " + "; ".join(binding_violations))
+                f"worker accounting binding recovery refused: {exc}") from exc
         if self._worker_projection.active:
             active_id = next(iter(self._worker_projection.active))
             self._active_worker_events = [

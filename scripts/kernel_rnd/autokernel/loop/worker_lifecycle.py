@@ -1057,7 +1057,6 @@ def validate_accounting_binding_history(
     unbound launch must have no binding digest.  With ``issued`` (catalog_id -> issued
     row) each binding must also equal the issued catalog/transition/selection.
     Unbound legacy histories are unchanged."""
-    from .scheduling import HeldClaimReceipt, SchedulingRefused
     launches: dict[tuple[str, int], AccountingBinding | None] = {}
     for row in rows:
         key = (row["worker_id"], row["worker_generation"])
@@ -1069,20 +1068,23 @@ def validate_accounting_binding_history(
         elif row["event"] == "OWNED_HELD_RECEIPT_RETAINED":
             if key not in launches:
                 continue
-            binding = launches[key]
-            data = row["data"]
-            if binding is None:
-                if "accounting_binding_digest" in data:
-                    raise LifecycleRefused(
-                        "durable held receipt carries a binding the launch did not")
-                continue
-            if data.get("accounting_binding_digest") != binding.digest:
-                raise LifecycleRefused(
-                    "durable held receipt lacks the launch accounting binding")
-            try:
-                binding.verify_receipt(HeldClaimReceipt.from_dict(data["receipt"]))
-            except SchedulingRefused as exc:
-                raise LifecycleRefused(str(exc)) from exc
+            _check_held_binding(launches[key], row["data"])
+
+
+def _check_held_binding(binding: "AccountingBinding | None", data: Mapping[str, Any]) -> None:
+    """A durable held-receipt row against its launch binding (AKU-07k), or LifecycleRefused.
+    An unbound launch must carry no binding digest."""
+    from .scheduling import HeldClaimReceipt, SchedulingRefused
+    if binding is None:
+        if "accounting_binding_digest" in data:
+            raise LifecycleRefused("durable held receipt carries a binding the launch did not")
+        return
+    if data.get("accounting_binding_digest") != binding.digest:
+        raise LifecycleRefused("durable held receipt lacks the launch accounting binding")
+    try:
+        binding.verify_receipt(HeldClaimReceipt.from_dict(data["receipt"]))
+    except SchedulingRefused as exc:
+        raise LifecycleRefused(str(exc)) from exc
 
 
 def validate_acquisition_transition(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -2692,20 +2694,10 @@ class WorkerLifecycle:
         return_code = retained["data"]["return_code"] if retained else None
         if held_row is not None:
             # AKU-07k: validate the durable binding BEFORE any recovery event is appended.
-            data = held_row["data"]
-            if request.accounting_binding is not None:
-                if data.get("accounting_binding_digest") != request.accounting_binding.digest:
-                    raise ContainmentFailure(
-                        "durable held receipt lacks the launch accounting binding")
-                from .scheduling import HeldClaimReceipt
-                try:
-                    request.accounting_binding.verify_receipt(
-                        HeldClaimReceipt.from_dict(data["receipt"]))
-                except LifecycleRefused as exc:
-                    raise ContainmentFailure(str(exc)) from exc
-            elif "accounting_binding_digest" in data:
-                raise ContainmentFailure(
-                    "durable held receipt carries a binding the launch did not")
+            try:
+                _check_held_binding(request.accounting_binding, held_row["data"])
+            except LifecycleRefused as exc:
+                raise ContainmentFailure(str(exc)) from exc
         reason = "recovered old/uncertain worker result is diagnostic only"
         terminal = TerminalWorker(
             worker_id, generation, request.request_id, request.plan_digest,

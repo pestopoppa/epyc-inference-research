@@ -568,13 +568,14 @@ def test_genuine_profile_then_actor_consumer_runs_owned_build(tmp_path):
                 "accounting_binding" in launch["data"]["contract"])
         assert any(by_stage.get("setup", [])) and any(by_stage.get("build", []))
         lifecycle_rows = [row.payload for row in events if row.kind == "WORKER_LIFECYCLE"]
-        assert journal.validate_worker_accounting_binding_history(
-            lifecycle_rows, controller._driver_issued) == []
+        from .worker_lifecycle import LifecycleRefused, validate_accounting_binding_history as validate
+        validate(lifecycle_rows, controller._driver_issued)
         tampered = copy.deepcopy(lifecycle_rows)
         bound_held = next(r for r in tampered if r["event"] == "OWNED_HELD_RECEIPT_RETAINED"
                           and "accounting_binding_digest" in r["data"])
         bound_held["data"]["accounting_binding_digest"] = "0" * 64
-        assert journal.validate_worker_accounting_binding_history(tampered)
+        with pytest.raises(LifecycleRefused):
+            validate(tampered, controller._driver_issued)
     finally:
         if store is not None:
             store.close()
