@@ -461,10 +461,8 @@ def protocol_mismatch(recorded: Mapping[str, Any], current: Mapping[str, Any]) -
                     out.append(f"argv (recorded {r!r}, now {c!r})")
             elif r != c:
                 out.append(f"{key} (recorded {r!r}, now {c!r})")
-        rk = recorded.get("kv_type") or (bench.argv_kv_type(recorded["argv"])
-                                          if isinstance(recorded.get("argv"), list) else bench.KV_DEFAULT)
-        ck = current.get("kv_type") or (bench.argv_kv_type(current["argv"])
-                                         if isinstance(current.get("argv"), list) else bench.KV_DEFAULT)
+        rk, ck = (rec.get("kv_type") or (bench.argv_kv_type(rec["argv"]) if isinstance(
+            rec.get("argv"), list) else bench.KV_DEFAULT) for rec in (recorded, current))
         if rk != ck:
             out.append(f"kv_type (recorded {rk!r}, now {ck!r})")
         return out
