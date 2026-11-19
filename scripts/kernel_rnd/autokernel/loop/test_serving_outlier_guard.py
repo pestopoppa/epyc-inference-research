@@ -161,6 +161,10 @@ def test_gpu_clock_instability_is_also_independent_evidence(monkeypatch):
     named as its own `evidence_sources` entry."""
     recipe, launch = _inputs()
     calls = []
+    # This test is about the strict `clock_stable is False` rule. The shipped policy is now the
+    # ratified request-phase band (RATIFY-AK-C9-2-20261109), under which a GPU record with no
+    # clock_trace is unstable by definition; the band path is tested in test_clock_policy.
+    monkeypatch.setattr(serving.clock_policy, "load", lambda path=None: serving.clock_policy.ClockPolicy())
 
     def measure(recipe, build, port, *, evidence, **kwargs):
         calls.append(1)
