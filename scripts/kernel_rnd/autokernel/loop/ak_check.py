@@ -70,7 +70,8 @@ degrades to the compile check, saying so.
 Exit status: 0 pass (or nothing to check), 1 the patch failed, 2 refused or the sandbox
 could not run (NOT evidence about the patch), 64 usage.
 
-Standard library only: the author's shim runs this file by path.
+Standard library plus sibling loop modules: the author's shim runs this module with
+`python -m` and the research root on PYTHONPATH.
 """
 from __future__ import annotations
 
@@ -91,6 +92,7 @@ import sys
 import threading
 import time
 from typing import Iterable, Iterator, Mapping, Sequence
+from .claim import ClaimRefused, resolve_orchestrator_root
 from .tool_output import strip_ansi
 
 SCHEMA = "epyc.autokernel.ak_check_call.v1"
@@ -346,42 +348,12 @@ def measuring_processes(pid: int | None = None,
 # Peer CPU-region occupancy (another SESSION, not the loop, measuring on these cores).
 
 def _orchestrator_root() -> Path | None:
-    """The orchestrator checkout that owns the CPU-region lock files, or None.
-
-    Same resolution `claim.resolve_orchestrator_root` uses, duplicated here (not
-    imported: ak-check's shim runs this file by PATH as a standalone script, with no
-    parent package, so a package-relative `from . import claim` is not available):
-    EPYC_ORCHESTRATOR_REPO (exclusive when set), then EPYC_ROOT_REPO's layout, then any
-    sys.path / PYTHONPATH entry holding the lock owner (a hub-view ROOT has no repos/)."""
-    owner = Path("src") / "runtime" / "cpu_region_lock.py"
-    explicit = os.environ.get("EPYC_ORCHESTRATOR_REPO")
-    if explicit:
-        candidate = Path(explicit).resolve()
-        return candidate if (candidate / owner).is_file() else None
-    configured = Path(os.environ.get("EPYC_ROOT_REPO", "/workspace")).resolve()
-    candidates = [configured, configured / "repos" / "epyc-orchestrator"]
-    git_marker = configured / ".git"
+    """The orchestrator checkout that owns the CPU-region lock files, or None
+    (`claim.resolve_orchestrator_root`, with its refusal mapped to None)."""
     try:
-        if git_marker.is_file():
-            prefix, sep, value = git_marker.read_text(encoding="utf-8").strip().partition(":")
-            if prefix == "gitdir" and sep:
-                git_dir = Path(value.strip())
-                if not git_dir.is_absolute():
-                    git_dir = configured / git_dir
-                common = Path((git_dir / "commondir").read_text(encoding="utf-8").strip())
-                if not common.is_absolute():
-                    common = git_dir / common
-                candidates.append(common.resolve().parent / "repos" / "epyc-orchestrator")
-    except OSError:
-        pass
-    candidates.extend(Path(entry or ".").resolve() for entry in sys.path)
-    for candidate in candidates:
-        try:
-            if (candidate / owner).is_file():
-                return candidate
-        except OSError:
-            continue
-    return None
+        return resolve_orchestrator_root()
+    except ClaimRefused:
+        return None
 
 
 def _ensure_region_lock_importable() -> None:
@@ -1297,10 +1269,14 @@ def scratch_provider(registry, lane_name: str, *, op_test_bytes: int = OP_TEST_S
 
 
 def shim_text(*, python: str, lane: Path, build_dir: Path, compile_db: Path) -> str:
-    args = [python, str(Path(__file__).resolve()), "--lane", str(lane),
+    # Run as a module: ak_check imports sibling loop modules, so a by-path run cannot.
+    research_root = Path(__file__).resolve().parents[4]
+    args = [python, "-m", "scripts.kernel_rnd.autokernel.loop.ak_check", "--lane", str(lane),
             "--build-dir", str(build_dir), "--compile-db", str(compile_db)]
     return ("#!/bin/bash\n# ak-check shim for one author call (written by the autokernel loop)\n"
-            "set -euo pipefail\nexec " + " ".join(shlex.quote(a) for a in args) + ' "$@"\n')
+            "set -euo pipefail\nexport PYTHONPATH=" + shlex.quote(str(research_root))
+            + '"${PYTHONPATH:+:$PYTHONPATH}"\nexec '
+            + " ".join(shlex.quote(a) for a in args) + ' "$@"\n')
 
 
 def author_env(lane: Path, build_dir: Path, *, scratch: Path | None, log: Path,
@@ -1504,7 +1480,7 @@ __all__ = ["OP_TEST_SCRATCH_BYTES", "SCRATCH_KIND", "SCRATCH_MARKER", "scratch_p
            "wait_for_peer_region"]
 
 if __name__ == "__main__":
-    # The shim runs this file by path: only a real ak-check process takes over its own
+    # The shim runs this module (-m): only a real ak-check process takes over its own
     # TERM/HUP/INT (never an importer such as the loop or pytest).
     install_signal_cleanup()
     sys.exit(main())
