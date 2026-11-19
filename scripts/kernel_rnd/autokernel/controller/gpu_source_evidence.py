@@ -2657,27 +2657,26 @@ class _CorrectnessResult:
         return f"{self.passed_cases}/{self.total_cases} tests passed"
 
 
-# Pinned champion C10 MUL_MAT baseline. Source: c10-c6-dispatch-reprofile-
-# 20261110-r2, C10 store gpu-20261109-7f1bd044b-c10fold, console reparsed with
-# the T0 parser (1201/1202 reconciled). The single failure is the host FP64
-# ratio property on q4_K m=16 n=2 k=256; production v10 fails the same case.
-# Identity is the case whose TERMINAL verdict says FAIL (the stderr
-# "FP64 RATIO FAIL" diagnostic lands one case earlier in the console).
-C10_MUL_MAT_CORRECTNESS_BASELINE: Mapping[str, Any] = MappingProxyType({
-    "baseline_id": "c10-c6-dispatch-reprofile-20261110-r2/c10/MUL_MAT",
-    "champion_store": "gpu-20261109-7f1bd044b-c10fold",
-    "source_log": ("/mnt/raid0/llm/tmp/c10-c6-dispatch-reprofile-20261110-r2/"
-                   "out/logs/run-c10-backend-ops-MUL_MAT.txt"),
+# Pinned champion C14 MUL_MAT baseline. Source: ak-c14-c6-dispatch-reprofile-
+# 20261119-r2, C14 store gpu-20261118-eee3da838-c14 (SHA256SUMS + BUILD-IDENTITY
+# verified), console reconciled 1202/1202 with KFD residency. C14 fails no case:
+# the C10 baseline's single q4_K FP64-ratio failure (and v10's 66) pass on C14, so the
+# fail multiset is empty and any MUL_MAT failure of a candidate is a new failure.
+C14_MUL_MAT_CORRECTNESS_BASELINE: Mapping[str, Any] = MappingProxyType({
+    "baseline_id": "ak-c14-c6-dispatch-reprofile-20261119-r2/c14/MUL_MAT",
+    "champion_store": "gpu-20261118-eee3da838-c14",
+    "source_log": ("/mnt/raid0/llm/tmp/ak-c14-c6-dispatch-reprofile-20261119-r2/"
+                   "out/logs/run-c14-backend-ops-MUL_MAT.txt"),
     "source_log_sha256":
-        "73d3193e3ea8d1eebdbcc9787b9610e8aa7957c07fb76bb8c440c93d76a9bc3a",
+        "05183424cba63c1e0dfdd0c0fb1d00532f6e3565ede75f8ec7f56d1428ed3b84",
     "backend": "ROCm0", "op": "MUL_MAT", "expected_cases": 1202,
     # argv after the executable with any "-j N" removed.
     "argv_tail": ("test", "-o", "MUL_MAT", "-b", "ROCm0", "--suite-seed",
                   "2026081301", "--autokernel-properties"),
-    "fail_multiset": MappingProxyType({
-        "type_a=q4_K,type_b=f32,m=16,n=2,k=256,bs=[1,1],nr=[1,1],"
-        "per=[0,1,2,3],k_v=0,o=1": 1}),
+    "fail_multiset": MappingProxyType({}),
 })
+# Alias kept for callers that still name the C10 baseline.
+C10_MUL_MAT_CORRECTNESS_BASELINE = C14_MUL_MAT_CORRECTNESS_BASELINE
 
 
 def _normalized_argv_tail(argv: Sequence[str]) -> tuple[str, ...]:

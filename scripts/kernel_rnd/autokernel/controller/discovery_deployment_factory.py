@@ -643,13 +643,16 @@ _PROFILE_TRACE_CSV_SHA256 = "a11bc20a03dfd5ca157990c1766ebbb5edb70a5c036d73d85d8
 # itself: v10 already dispatches flash_attn_ext_vec (not flash_attn_tile) at decode,
 # the 8-argument mul_mat_vec_q<> signature, Q8_0 at grid 16384/19447808 wg 512,
 # rope_neox wg 256, rms_norm_f32<256, true, false, false> and quantize_q8_1_1d wg 64.
+# RE-PINNED 2026-11-19 to the C14 eee3da838 decode trace (row ak-c14-c6-dispatch-reprofile-20261119-r2):
+# every anchor tuple (calls, grid, workgroup, LDS) and the 60,054 row count and the agent CSV are
+# byte-identical to C10; only the trace sha changed. C14 FLASH_ATTN_EXT corpus is 3339 supported cases.
 # C10 additionally splits quantize_q8_1_1d into <false>/<true> instantiations.
 _PROFILE_V3_TRACE_CSV = Path(
     "/mnt/raid0/llm/autokernel/diagnostics/"
-    "c10-rocprofv3-anchor-tg128-20261110/raw/c10_kernel_trace.csv")
-_PROFILE_V3_TRACE_CSV_SHA256 = "2d950e3c682ac996543d531ecd3f8719458947994a42b66e46365da32eeeac7f"
+    "c14-rocprofv3-anchor-tg128-20261119/raw/c14_kernel_trace.csv")
+_PROFILE_V3_TRACE_CSV_SHA256 = "a93823a001595526f4d4bc130ea0d6f44d2afc09751d0a64424d4be9e866d32e"
 _PROFILE_V3_TRACE_ROWS = 60_054
-_PROFILE_V3_AGENT_CSV = _PROFILE_V3_TRACE_CSV.with_name("c10_agent_info.csv")
+_PROFILE_V3_AGENT_CSV = _PROFILE_V3_TRACE_CSV.with_name("c14_agent_info.csv")
 _PROFILE_V3_AGENT_CSV_SHA256 = "c0ab0a4b292919218f8d748024af16fc8edebf3879b51c52f4740913c50a786b"
 # Re-sealed 2026-11-07 after review of f8167767a (MI210-port DNR + H4/H9 evidence) and
 # a4e2201bf (isa_schedule validation only; existing fingerprints recomputed identical).
@@ -1207,7 +1210,7 @@ def _template_registry() -> ExperimentTemplateRegistry:
             "ggml_cuda_flash_attn_ext_supported", "ggml_cuda_flash_attn_ext_get_alloc_size"),
          "markers": ("flash_attn_tile<", "flash_attn_vec<", "flash_attn_ext_vec<",
                      "flash_attn_combine_results<"),
-         "op": "FLASH_ATTN_EXT", "cases": 3094, "anchor": fattn_tile_anchor,
+         "op": "FLASH_ATTN_EXT", "cases": 3339, "anchor": fattn_tile_anchor,
          "replays": ({"trace": "VEC selector", "symbol": "ggml_cuda_get_best_fattn_kernel"},)},
         {"id": "cuda-fattn-tile-v1", "path": "ggml/src/ggml-cuda/fattn-tile.cuh",
          "primary": "ggml_cuda_fattn_tile_get_config_amd",
@@ -1218,12 +1221,12 @@ def _template_registry() -> ExperimentTemplateRegistry:
             "flash_attn_tile_iter_KQ", "flash_attn_tile_iter", "flash_attn_tile",
             "launch_fattn_tile_switch_ncols1", "launch_fattn_tile_switch_ncols2",
             "ggml_cuda_flash_attn_ext_tile_case", "ggml_cuda_flash_attn_ext_tile"),
-         "markers": ("flash_attn_tile<", "flash_attn_ext_vec<"), "op": "FLASH_ATTN_EXT", "cases": 3094,
+         "markers": ("flash_attn_tile<", "flash_attn_ext_vec<"), "op": "FLASH_ATTN_EXT", "cases": 3339,
          "anchor": fattn_tile_anchor,
          "replays": ({"trace": "D64 Q1 TILE geometry", "symbol": "ggml_cuda_fattn_tile_get_config_amd"},)},
         {"id": "cuda-fattn-tile-entry-v1", "path": "ggml/src/ggml-cuda/fattn-tile.cu",
          "primary": "ggml_cuda_flash_attn_ext_tile", "symbols": ("ggml_cuda_flash_attn_ext_tile",),
-         "markers": ("flash_attn_tile<", "flash_attn_ext_vec<"), "op": "FLASH_ATTN_EXT", "cases": 3094,
+         "markers": ("flash_attn_tile<", "flash_attn_ext_vec<"), "op": "FLASH_ATTN_EXT", "cases": 3339,
          "anchor": fattn_tile_anchor, "replays": ()},
         {"id": "cuda-fattn-common-v1", "path": "ggml/src/ggml-cuda/fattn-common.cuh",
          "primary": "launch_fattn",
@@ -1235,7 +1238,7 @@ def _template_registry() -> ExperimentTemplateRegistry:
             "flash_attn_mask_to_KV_max", "flash_attn_stream_k_fixup_uniform",
             "flash_attn_stream_k_fixup_general", "flash_attn_combine_results", "launch_fattn"),
          "markers": ("flash_attn_tile<", "flash_attn_ext_vec<", "flash_attn_combine_results<"),
-         "op": "FLASH_ATTN_EXT", "cases": 3094, "anchor": fattn_common_anchor, "replays": ()},
+         "op": "FLASH_ATTN_EXT", "cases": 3339, "anchor": fattn_common_anchor, "replays": ()},
         {"id": "cuda-mmvq-v2", "path": "ggml/src/ggml-cuda/mmvq.cu",
          "primary": "ggml_cuda_op_mul_mat_vec_q",
          "symbols": ("ggml_cuda_op_mul_mat_vec_q", "ggml_cuda_mul_mat_vec_q",
@@ -2482,7 +2485,7 @@ def _evidence_binding(config: deployment.DiscoveryDeployment) -> EvidencePlanBin
             # measured with, and a candidate fails only on cases the C10
             # champion passes.
             correctness_argv = (*correctness_argv, "--autokernel-properties")
-            correctness_baseline = evidence.C10_MUL_MAT_CORRECTNESS_BASELINE
+            correctness_baseline = evidence.C14_MUL_MAT_CORRECTNESS_BASELINE
         correctness_invocations: tuple[Mapping[str, Any], ...] = ()
         if template.template_id == "cuda-fattn-tile-v1":
             required_cases = [dict(row) for row in semantics["required_correctness_cases"]]

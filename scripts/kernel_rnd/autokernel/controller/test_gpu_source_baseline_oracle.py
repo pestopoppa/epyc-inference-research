@@ -20,8 +20,12 @@ from scripts.kernel_rnd import c6_reward_integrity as R
 from . import gpu_source_evidence as E
 
 FIXTURES = Path(__file__).parent / "fixtures"
-C10_LOG_SHA256 = E.C10_MUL_MAT_CORRECTNESS_BASELINE["source_log_sha256"]
-BASELINE_PARAMS = next(iter(E.C10_MUL_MAT_CORRECTNESS_BASELINE["fail_multiset"]))
+# The C10 champion baseline (historical; recorded fixture) keeps the tolerated-fail
+# machinery under test; the live pin is the C14 baseline, whose fail multiset is empty.
+C10_LOG_SHA256 = "73d3193e3ea8d1eebdbcc9787b9610e8aa7957c07fb76bb8c440c93d76a9bc3a"
+BASELINE_PARAMS = ("type_a=q4_K,type_b=f32,m=16,n=2,k=256,bs=[1,1],nr=[1,1],"
+                   "per=[0,1,2,3],k_v=0,o=1")
+C14_LOG_SHA256 = "05183424cba63c1e0dfdd0c0fb1d00532f6e3565ede75f8ec7f56d1428ed3b84"
 ARGV = ("/x/test-backend-ops", "test", "-o", "MUL_MAT", "-b", "ROCm0", "-j", "1",
         "--suite-seed", "2026081301", "--autokernel-properties")
 
@@ -34,7 +38,14 @@ def recorded_c10_stdout() -> str:
     return raw.decode("utf-8")
 
 
-def plan(*, baseline=E.C10_MUL_MAT_CORRECTNESS_BASELINE, cases=1202):
+C10_BASELINE = {**E._baseline_json(E.C14_MUL_MAT_CORRECTNESS_BASELINE),
+                "baseline_id": "c10-c6-dispatch-reprofile-20261110-r2/c10/MUL_MAT",
+                "champion_store": "gpu-20261109-7f1bd044b-c10fold",
+                "source_log_sha256": C10_LOG_SHA256,
+                "fail_multiset": {BASELINE_PARAMS: 1}}
+
+
+def plan(*, baseline=C10_BASELINE, cases=1202):
     return SimpleNamespace(correctness_backend="ROCm0", correctness_op="MUL_MAT",
                            expected_correctness_cases=cases,
                            correctness_baseline=baseline)
@@ -61,8 +72,39 @@ def console(verdicts: list[tuple[str, str]], *, failing_block: bool = True) -> s
 
 
 def baseline_for(cases: int, fails: dict[str, int]):
-    return {**E._baseline_json(E.C10_MUL_MAT_CORRECTNESS_BASELINE),
+    return {**E._baseline_json(E.C14_MUL_MAT_CORRECTNESS_BASELINE),
             "expected_cases": cases, "fail_multiset": fails}
+
+
+class C14BaselinePinTests(unittest.TestCase):
+    def test_c14_baseline_is_the_measured_clean_run(self) -> None:
+        b = E.C14_MUL_MAT_CORRECTNESS_BASELINE
+        self.assertEqual(b["champion_store"], "gpu-20261118-eee3da838-c14")
+        self.assertEqual(b["source_log_sha256"], C14_LOG_SHA256)
+        self.assertEqual(b["expected_cases"], 1202)
+        self.assertEqual(dict(b["fail_multiset"]), {})
+        self.assertIs(E.C10_MUL_MAT_CORRECTNESS_BASELINE, b)
+
+    def test_empty_baseline_makes_every_fail_new(self) -> None:
+        raw = console([("a=1", "OK"), ("a=2", "FAIL")])
+        with self.assertRaisesRegex(E.CorrectnessParseRefusal, "not failed by baseline"):
+            E._parse_correctness(raw, plan(baseline=baseline_for(2, {}), cases=2))
+
+    def test_all_ok_console_passes_the_empty_baseline(self) -> None:
+        raw = console([("a=1", "OK"), ("a=2", "OK")])
+        parsed = E._parse_correctness(raw, plan(baseline=baseline_for(2, {}), cases=2))
+        self.assertEqual(E._expected_correctness_exit(parsed), 0)
+
+    def test_recorded_c14_console_log_if_present(self) -> None:
+        log = Path(E.C14_MUL_MAT_CORRECTNESS_BASELINE["source_log"])
+        if not log.is_file():
+            self.skipTest("C14 row log reclaimed")
+        raw = log.read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), C14_LOG_SHA256)
+        parsed = E._parse_correctness(raw.decode("utf-8", "replace"),
+                                      plan(baseline=E.C14_MUL_MAT_CORRECTNESS_BASELINE))
+        self.assertEqual(parsed.summary, "1202/1202 tests passed")
+        self.assertEqual(parsed.baseline_fails, ())
 
 
 class BaselineCorrectnessTests(unittest.TestCase):
@@ -124,15 +166,15 @@ class BaselineCorrectnessTests(unittest.TestCase):
 
     def test_baseline_bound_to_its_measured_argv(self) -> None:
         E._validate_correctness_baseline(
-            E.C10_MUL_MAT_CORRECTNESS_BASELINE, argv=ARGV, backend="ROCm0",
+            E.C14_MUL_MAT_CORRECTNESS_BASELINE, argv=ARGV, backend="ROCm0",
             op="MUL_MAT", expected_cases=1202)
         with self.assertRaisesRegex(E.EvidenceProducerError, "different correctness argv"):
             E._validate_correctness_baseline(
-                E.C10_MUL_MAT_CORRECTNESS_BASELINE, argv=ARGV[:-1], backend="ROCm0",
+                E.C14_MUL_MAT_CORRECTNESS_BASELINE, argv=ARGV[:-1], backend="ROCm0",
                 op="MUL_MAT", expected_cases=1202)
         with self.assertRaisesRegex(E.EvidenceProducerError, "case count"):
             E._validate_correctness_baseline(
-                E.C10_MUL_MAT_CORRECTNESS_BASELINE, argv=ARGV, backend="ROCm0",
+                E.C14_MUL_MAT_CORRECTNESS_BASELINE, argv=ARGV, backend="ROCm0",
                 op="MUL_MAT", expected_cases=1139)
 
 
