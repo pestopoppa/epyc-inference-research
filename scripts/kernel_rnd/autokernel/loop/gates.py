@@ -4574,7 +4574,8 @@ def graph_kld_run(anchor_build: Path, candidate_build: Path, *, model: str, corp
 # The per-backend clauses live in GRAPH_KLD_POLICY_FILE, written by the operator's ratify
 # script (P-AK-SEARCH-1-A5 amendment); the values are human-only. Absent or malformed file
 # -> `threshold_unset` (a reported refusal). Clauses: GPU decides on 27B Q8_0 (KLD and |dPPL|)
-# with Q38FN report-only; CPU adds Q38FN |dPPL| and same-top. |dPPL| % = |exp(ln_ratio)-1|*100.
+# with Q38FN report-only except a min same-top refusing clause (operator 2026-11-19, run hybrid
+# via the clause's n_cpu_moe); CPU adds Q38FN |dPPL| and same-top. |dPPL| % = |exp(ln_ratio)-1|*100.
 GRAPH_KLD_POLICY_SCHEMA = "epyc.autokernel.graph_kld_policy.v1"
 GRAPH_KLD_POLICY_FILE = Path(__file__).with_name("graph_kld_policy.json")
 _GRAPH_KLD_LIMITS = ("max_mean_kld", "max_abs_dppl_pct", "min_same_top_pct")
@@ -4587,6 +4588,8 @@ class GraphKldClause:
     max_mean_kld: float | None = None
     max_abs_dppl_pct: float | None = None
     min_same_top_pct: float | None = None
+    #: GPU gate vehicle for models not served on GPU (Q38FN): -ngl 999 plus --n-cpu-moe N.
+    n_cpu_moe: int | None = None
 
 
 @dataclass(frozen=True)
@@ -4612,7 +4615,9 @@ def load_graph_kld_policy(backend: str, path: "Path | None" = None) -> "GraphKld
             decisive = bool(row["decisive"])
             if row["model"] not in models or (decisive and not limits):
                 return None
-            clauses.append(GraphKldClause(str(row["model"]), decisive, **limits))
+            ncm = row.get("n_cpu_moe")
+            clauses.append(GraphKldClause(str(row["model"]), decisive, **limits,
+                                          n_cpu_moe=None if ncm is None else int(ncm)))
         if not any(c.decisive for c in clauses):
             return None
         return GraphKldPolicy(backend, str(cfg["corpus"]), int(cfg.get("chunks", 16)),
@@ -4675,9 +4680,11 @@ def graph_kld_keep_check(changed_paths, *, backend: str, anchor_build: Path,
     if policy is None:
         return graph_kld_policy_verdict({}, None)
     run = run or graph_kld_run
-    extra = ("-ngl", "0") if backend == "cpu" else ("-ngl", "999")
+    base_extra = ("-ngl", "0") if backend == "cpu" else ("-ngl", "999")
+    ncm = {c.model: c.n_cpu_moe for c in policy.clauses if c.n_cpu_moe is not None}
     per_model = {}
     for key in dict.fromkeys(c.model for c in policy.clauses):
+        extra = base_extra + (("--n-cpu-moe", str(ncm[key])) if key in ncm and backend != "cpu" else ())
         Path(base_dir).mkdir(parents=True, exist_ok=True)
         try:
             text = run(Path(anchor_build), Path(candidate_build), model=policy.models[key],

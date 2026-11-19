@@ -101,7 +101,7 @@ RULING = {
     "models": {"q38_27b": "27b.gguf", "q38fn": "fn.gguf"},
     "backends": {
         "gpu": [{"model": "q38_27b", "decisive": True, "max_mean_kld": 0.003, "max_abs_dppl_pct": 0.5},
-                {"model": "q38fn", "decisive": False}],
+                {"model": "q38fn", "decisive": True, "min_same_top_pct": 93.0, "n_cpu_moe": 48}],
         "cpu": [{"model": "q38_27b", "decisive": True, "max_mean_kld": 0.003, "max_abs_dppl_pct": 0.5},
                 {"model": "q38fn", "decisive": True, "max_abs_dppl_pct": 0.5, "min_same_top_pct": 93.0}],
     }}
@@ -131,10 +131,21 @@ GOOD27 = _out(0.001, 0.0010, 98.5)
 GOODFN = _out(0.002, 0.0200, 95.0)
 
 
-def test_policy_gpu_27b_decides_q38fn_report_only(tmp_path):
-    v, calls = _keep(tmp_path, "gpu", {"27b.gguf": GOOD27, "fn.gguf": BAD})
-    assert v.passed and "report-only" in v.detail
+def test_policy_gpu_27b_decides_kld_dppl_q38fn_only_top1(tmp_path):
+    # operator 2026-11-19: Q38FN KLD/dPPL stay report-only on GPU; only its top-1 refuses.
+    v, calls = _keep(tmp_path, "gpu", {"27b.gguf": GOOD27, "fn.gguf": _out(0.05, 0.5, 95.0)})
+    assert v.passed
     assert [c[0] for c in calls] == ["27b.gguf", "fn.gguf"] and calls[0][2] == ("-ngl", "999")
+    assert calls[1][2] == ("-ngl", "999", "--n-cpu-moe", "48")  # hybrid gate vehicle
+
+
+def test_policy_gpu_h13b_like_passes_27b_refused_on_q38fn_top1(tmp_path):
+    h13b = _out(0.002, 0.1865, 88.6)  # clean on the 27B, Q38FN same-top 88.6% < 93
+    v, _ = _keep(tmp_path, "gpu", {"27b.gguf": GOOD27, "fn.gguf": h13b})
+    assert not v.passed and v.reason == "graph_kld_exceeded"
+    assert "q38fn min_same_top_pct" in v.detail and "q38_27b max" not in v.detail.split(" -- ")[0]
+    unparsed, _ = _keep(tmp_path, "gpu", {"27b.gguf": GOOD27, "fn.gguf": "no metrics"})
+    assert not unparsed.passed and unparsed.reason == "kld_unparsed"
 
 
 def test_policy_gpu_27b_kld_over_refuses(tmp_path):
@@ -202,7 +213,8 @@ def test_shipped_policy_matches_ruling_when_present():
     gpu, cpu = gates.load_graph_kld_policy("gpu"), gates.load_graph_kld_policy("cpu")
     assert [(c.model, c.decisive, c.max_mean_kld, c.max_abs_dppl_pct, c.min_same_top_pct)
             for c in gpu.clauses] == [("q38_27b", True, 0.003, 0.5, None),
-                                      ("q38fn", False, None, None, None)]
+                                      ("q38fn", True, None, None, 93.0)]
+    assert gpu.clauses[1].n_cpu_moe == 48
     assert [(c.model, c.decisive, c.max_mean_kld, c.max_abs_dppl_pct, c.min_same_top_pct)
             for c in cpu.clauses] == [("q38_27b", True, 0.003, 0.5, None),
                                       ("q38fn", True, None, 0.5, 93.0)]
