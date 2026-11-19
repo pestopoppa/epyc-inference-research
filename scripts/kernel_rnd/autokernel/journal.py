@@ -314,6 +314,7 @@ KIND_UNIFIED_DRIVER_SETTLED = "UNIFIED_DRIVER_SETTLED"
 UNIFIED_DRIVER_SETTLED_SCHEMA = "epyc.autokernel.unified_driver_settled.v1"
 KIND_A2_RUNTIME_EXECUTION = "A2_RUNTIME_EXECUTION"
 A2_RUNTIME_EXECUTION_SCHEMA = "epyc.autokernel.a2_runtime_execution_transition.v1"
+A2_UNIT_RECORD_SCHEMA = "epyc.autokernel.a2_unit_record.v2"  # AKU-04f additive; same kind
 LOOP_BUNDLE_SAVED_SCHEMA = "epyc.autokernel.loop_bundle_saved.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1 = "epyc.autokernel.accumulator_bundle.v1"
 LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.accumulator_bundle.v2"
@@ -1217,6 +1218,17 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
         else:
             from autokernel.lesson_admission import violations
         out.extend(violations(payload))
+    elif kind == KIND_A2_RUNTIME_EXECUTION and payload.get("schema") == A2_UNIT_RECORD_SCHEMA:
+        # AKU-04f additive versioned branch: per-unit intent/permit records (v2). Digest and
+        # field validation here; chain/permit validation happens in replay (project_unit).
+        if __package__:
+            from .loop.a2_unit_permit import A2UnitRefused, validate_record
+        else:
+            from autokernel.loop.a2_unit_permit import A2UnitRefused, validate_record
+        try:
+            validate_record(payload)
+        except A2UnitRefused as exc:
+            out.append(f"A2 unit record: {exc}")
     elif kind == KIND_A2_RUNTIME_EXECUTION:
         if __package__:
             from .loop.a2_execution_state import A2ExecutionStateRefused, validate_transition
@@ -4183,7 +4195,7 @@ __all__ = [
     "KIND_RETENTION_CATALOG_INSTALLED",
     "KIND_UNIFIED_DRIVER_ISSUED", "UNIFIED_DRIVER_ISSUED_SCHEMA",
     "KIND_UNIFIED_DRIVER_SETTLED", "UNIFIED_DRIVER_SETTLED_SCHEMA",
-    "KIND_A2_RUNTIME_EXECUTION", "A2_RUNTIME_EXECUTION_SCHEMA",
+    "KIND_A2_RUNTIME_EXECUTION", "A2_RUNTIME_EXECUTION_SCHEMA", "A2_UNIT_RECORD_SCHEMA",
     "CANDIDATE_TRANSACTION_SCHEMA", "CANDIDATE_TRANSACTION_PHASES",
     "CANDIDATE_TRANSACTION_OPERATIONS",
     "KIND_PLANNED_SERVING_ARM_CAPTURED", "PLANNED_SERVING_ARM_CAPTURE_SCHEMA",

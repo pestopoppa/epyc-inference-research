@@ -274,6 +274,27 @@ def project_unit(records: Sequence[Mapping[str, Any]]) -> UnitState:
                      _digest([r["record_digest"] for r in rows]))
 
 
+def unit_key(record: Mapping[str, Any]) -> str:
+    """Stable key of the one unit chain a record belongs to (fixed identity, no attempt)."""
+    try:
+        return _digest({k: record[k] for k in ("execution_id", "plan_digest", "frame_digest",
+                                                "unit_range", "unit", "producer_identity")})
+    except (KeyError, TypeError) as exc:
+        raise A2UnitRefused("A2 unit record lacks its identity fields") from exc
+
+
+def replay_units(payloads: Sequence[Mapping[str, Any]]) -> dict[str, UnitState]:
+    """Replay journal payloads (v2 only; others ignored) into per-unit permit state.
+
+    Every state here came from replay: `authorize_launch` can only succeed for the CURRENT
+    owner holding an unconsumed permit, and `launched_unknown` is never absence."""
+    groups: dict[str, list[Mapping[str, Any]]] = {}
+    for payload in payloads:
+        if isinstance(payload, Mapping) and payload.get("schema") == RECORD_SCHEMA:
+            groups.setdefault(unit_key(payload), []).append(payload)
+    return {key: project_unit(rows) for key, rows in groups.items()}
+
+
 def authorize_launch(state: UnitState, *, current_owner: int, permit: str) -> bool:
     """True only for an unconsumed permit presented by the current owner that issued it.
 
@@ -291,4 +312,5 @@ def may_relaunch(state: UnitState) -> bool:
 
 __all__ = ["A2UnitRefused", "KINDS", "MAX_ATTEMPTS", "RECORD_SCHEMA", "TERMINAL_STATUSES",
            "UnitState", "authorize_launch", "make_follow", "make_intent", "may_relaunch",
-           "permit_id", "project_unit", "select_unit_range", "validate_record"]
+           "permit_id", "project_unit", "replay_units", "select_unit_range", "unit_key",
+           "validate_record"]

@@ -829,6 +829,7 @@ class CampaignController:
         self._driver_settlement_validator: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None
         self._driver_artifact_store: Any = None
         self._a2_execution_entries: dict[str, list[Any]] = {}
+        self._a2_unit_entries: dict[str, list[Any]] = {}
         self._a2_logical_executions: dict[str, str] = {}
         self._a2_bank_sources: dict[str, list[str]] = {}
         self._supervisor_id: str | None = None
@@ -978,6 +979,7 @@ class CampaignController:
         maintenance_events: list[dict[str, Any]] = []
         maintenance_state = maintenance_module.MaintenanceState()
         a2_execution_entries: dict[str, list[Any]] = {}
+        a2_unit_entries: dict[str, list[Any]] = {}
         a2_logical_executions: dict[str, str] = {}
         a2_bank_sources: dict[str, list[str]] = {}
         actor_preparation_events: list[dict[str, Any]] = []
@@ -987,6 +989,22 @@ class CampaignController:
             self._journal_cursor = entry.seq
             if entry.campaign_id not in (None, self.resolved.campaign_id):
                 raise ControlRefused("store contains another campaign identity")
+            if (entry.kind == journal_module.KIND_A2_RUNTIME_EXECUTION
+                    and isinstance(entry.payload, Mapping)
+                    and entry.payload.get("schema") == journal_module.A2_UNIT_RECORD_SCHEMA):
+                # AKU-04f v2 per-unit records: chain-verified into permit state, kept apart
+                # from the v1 transition projection (which stays byte-identical).
+                from . import a2_unit_permit
+                key = a2_unit_permit.unit_key(entry.payload)
+                try:
+                    a2_unit_permit.project_unit(
+                        [*(item.payload for item in a2_unit_entries.get(key, [])),
+                         entry.payload])
+                except a2_unit_permit.A2UnitRefused as exc:
+                    raise journal_module.JournalCorruption(
+                        f"invalid A2 unit record history: {exc}") from exc
+                a2_unit_entries.setdefault(key, []).append(copy.deepcopy(entry))
+                continue
             if entry.kind == journal_module.KIND_A2_RUNTIME_EXECUTION:
                 from . import a2_execution_state
                 try:
@@ -1556,6 +1574,7 @@ class CampaignController:
                 tuple(seed_row["uncertain_scopes"]), supplied,
                 seed_row["schema"], retention_catalog_module._TOKEN)
         self._a2_execution_entries = a2_execution_entries
+        self._a2_unit_entries = a2_unit_entries
         self._a2_logical_executions = a2_logical_executions
         self._a2_bank_sources = a2_bank_sources
         self._actor_preparation_events = actor_preparation_events
@@ -1868,6 +1887,41 @@ class CampaignController:
             with self._mutex:
                 self._worker_run_active = False
                 self._settle_v2_commands_locked()
+
+    def append_a2_unit_record(self, record: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Append one AKU-04f v2 unit record (chain-verified) or replay an exact duplicate."""
+        from . import a2_unit_permit
+
+        with self._mutex:
+            self._require_active_locked()
+            assert self._journal is not None
+            try:
+                row = a2_unit_permit.validate_record(record)
+                key = a2_unit_permit.unit_key(row)
+                entries = self._a2_unit_entries.get(key, [])
+                if any(item.payload["record_digest"] == row["record_digest"]
+                       for item in entries):
+                    return copy.deepcopy(row)
+                a2_unit_permit.project_unit([*(i.payload for i in entries), row])
+            except a2_unit_permit.A2UnitRefused as exc:
+                raise ControlRefused(f"invalid A2 unit record: {exc}") from exc
+            try:
+                entry = self._journal.append(
+                    journal_module.KIND_A2_RUNTIME_EXECUTION, row,
+                    campaign_id=self.resolved.campaign_id, record_id=row["execution_id"])
+                self._verify_journal_layout(self.store / "journal")
+            except BaseException:
+                self._poisoned = True
+                raise
+            self._journal_cursor = entry.seq
+            self._a2_unit_entries.setdefault(key, []).append(copy.deepcopy(entry))
+            return copy.deepcopy(row)
+
+    def replay_a2_unit_records(self, key: str) -> tuple:
+        """Replayed (never authorizing) unit records for one `a2_unit_permit.unit_key`."""
+        with self._mutex:
+            self._require_active_locked()
+            return tuple(copy.deepcopy(i.payload) for i in self._a2_unit_entries.get(key, []))
 
     def append_a2_runtime_transition(self, *, logical_id: str, plan,
                                      event: Mapping[str, Any]) -> Mapping[str, Any]:
