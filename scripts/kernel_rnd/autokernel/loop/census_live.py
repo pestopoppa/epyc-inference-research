@@ -28,8 +28,10 @@ def child_env(binary: Path | str, extra: Mapping[str, str] | None = None) -> dic
 def taskset_runner(cpus: str, *, run=subprocess.run):
     """A `census.run_process`-shaped runner that pins the child to ``cpus``."""
     def runner(argv, *, env, timeout):
+        # -v output can carry non-UTF-8 bytes (tensor names/vocab); a strict decode raised
+        # UnicodeDecodeError mid-census, so decode leniently.
         return run(["/usr/bin/taskset", "-c", cpus, *argv], capture_output=True, text=True,
-                   timeout=timeout, env=dict(env))
+                   errors="replace", timeout=timeout, env=dict(env))
     return runner
 
 

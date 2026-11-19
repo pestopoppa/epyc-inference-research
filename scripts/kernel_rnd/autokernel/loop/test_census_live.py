@@ -26,6 +26,7 @@ class Live(unittest.TestCase):
         lines = "\n".join(f"node #{i:4d} ( MUL_MAT):  x [ CPU ]" for i in range(1500))
 
         def run(argv, **kw):
+            assert kw.get("errors") == "replace"
             calls.append((argv, kw["env"]))
             return subprocess.CompletedProcess(argv, 0, stdout=lines, stderr="")
         with tempfile.TemporaryDirectory() as td:
