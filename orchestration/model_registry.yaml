@@ -12092,6 +12092,54 @@ roles:
       gpu_only_candidate: true
       hybrid_candidate: false
 
+  # 2026-11-19: downloaded, NOT evaluated, NOT in the serving lineup (operator: "register it in the
+  # model registry when done"). Catalogue-only; no role, process_layout, server_mode, routing or
+  # benchmark binding. The operator first pointed at the NVFP4 variant
+  # wallawalla47/Qwen3.8-27B-Uncensored-NVFP4-NInferV3 (same finetune); this GGUF Q8_0 is what was fetched.
+  # hf_revision is not recorded: the download was not made through safe_download.py, so there is no
+  # download-ledger line; sha256 values below were verified against the HF LFS oids.
+  qwen38_27b_uncensored_q8_local:
+    tier: C
+    description: orcarouter Qwen3.8-27B-Uncensored Q8_0 (bartowski GGUF) exact local artifact; abliterated finetune of Qwen/Qwen3.8-27B. Catalogue-only, downloaded and not evaluated.
+    model:
+      name: orcarouter_Qwen3.8-27B-Uncensored-Q8_0
+      path: /mnt/raid0/llm/models/bartowski/orcarouter_Qwen3.8-27B-Uncensored-GGUF/orcarouter_Qwen3.8-27B-Uncensored-Q8_0.gguf
+      uploader_class: community
+      hf_repo: bartowski/orcarouter_Qwen3.8-27B-Uncensored-GGUF
+      base_model: orcarouter/Qwen3.8-27B-Uncensored    # abliterated finetune of Qwen/Qwen3.8-27B
+      sha256: 99bdffce202e32149f013e019db0d539ffbcae113d381d5cc55a143e91b5ddb7
+      mmproj_path: /mnt/raid0/llm/models/bartowski/orcarouter_Qwen3.8-27B-Uncensored-GGUF/mmproj-orcarouter_Qwen3.8-27B-Uncensored-f16.gguf
+      mmproj_sha256: bf709317815597d2ee48b8fb10796c9a22006da2f329d76e37761433a66fa697
+      mmproj_alt:
+        mmproj-orcarouter_Qwen3.8-27B-Uncensored-bf16.gguf: 9244bb2c3b80df4fb3e36b51fcc29f38d0b08b54329b6fd4c01022fd51bfee20
+      quant: Q8_0
+      size_gb: 27.12
+      architecture: qwen35
+    artifact_status:
+      download: present
+      observed_date: 2026-11-19
+      file_bytes: 29116389632
+      mmproj_bytes:
+        mmproj-orcarouter_Qwen3.8-27B-Uncensored-f16.gguf: 927607584
+        mmproj-orcarouter_Qwen3.8-27B-Uncensored-bf16.gguf: 931146528
+      provenance: bartowski/orcarouter_Qwen3.8-27B-Uncensored-GGUF
+      evaluation: not_evaluated
+    candidate_roles: []          # not a serving candidate; no role may select this artifact
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration_without_operator_ruling
+      reason: "Downloaded, unevaluated community abliterated finetune; no quality, speed or safety evidence. Not in the serving lineup."
+    performance:
+      benchmark_status: not_run_exact_artifact
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+
   # =============================================================================
   # EXTERNAL API BACKENDS
   # =============================================================================
