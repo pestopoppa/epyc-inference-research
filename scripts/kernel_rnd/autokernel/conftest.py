@@ -23,11 +23,17 @@ measurement would block it, or it would block them. So:
 """
 from contextlib import contextmanager
 import json
+from pathlib import Path
 import subprocess
 
 import pytest
 
 from .loop import belief_context, claim, gpu_window
+
+# Current hub view first (the /workspace shared clone can lag origin/main), then /workspace.
+_REAL_ROOT_CANDIDATES = (Path("/mnt/raid0/llm/views/epyc-root-main"), Path("/workspace"))
+_ORCHESTRATOR_CANDIDATES = (Path("/workspace/repos/epyc-orchestrator"),
+                            Path("/mnt/raid0/llm/epyc-orchestrator"))
 
 _REAL_GPU_QUIET = {"hold_gpu_quiet_measurement": claim.hold_gpu_quiet_measurement,
                    "gpu_quiet_preflight": claim.gpu_quiet_preflight}
@@ -145,10 +151,21 @@ def _isolate_belief_reader(tmp_path_factory):
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(belief_context, "RUNNER", _belief_runner)
         if not (os.environ.get("EPYC_ROOT_REPO") or os.environ.get("EPYC_ROOT")):
-            root = tmp_path_factory.mktemp("epyc-root")
-            (root / "scripts/vidya/adapters").mkdir(parents=True)
+            # Several tests read real ROOT files (the VB-AK-SEAT contract, the real-mask
+            # verifier, the PII hook, the legacy-serving adapter) and skip or fail on a
+            # throwaway root. Prefer a real checkout when one is present on this host; the
+            # empty root is the last resort for a runner that has none.
+            real = next((c for c in _REAL_ROOT_CANDIDATES
+                         if (c / "scripts/vidya/adapters").is_dir()), None)
+            root = real or tmp_path_factory.mktemp("epyc-root")
+            (root / "scripts/vidya/adapters").mkdir(parents=True, exist_ok=True)
             patch.setenv("EPYC_ROOT_REPO", str(root))
             patch.setenv("EPYC_ROOT", str(root))
+        if not os.environ.get("EPYC_ORCHESTRATOR_REPO"):
+            owner = next((c for c in _ORCHESTRATOR_CANDIDATES
+                          if (c / "src/runtime/cpu_region_lock.py").is_file()), None)
+            if owner is not None:
+                patch.setenv("EPYC_ORCHESTRATOR_REPO", str(owner))
         yield
 
 
