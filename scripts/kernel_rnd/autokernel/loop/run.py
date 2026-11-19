@@ -98,7 +98,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
-from . import exact_lane, keep_timing, variance_keep
+from . import exact_lane, hip_launch_proof, keep_timing, variance_keep
 from . import floor_selfcheck
 from . import tail_timing
 from . import actor_opencode_config
@@ -7463,6 +7463,12 @@ def _main(argv: list[str] | None = None) -> int:
                 if not dims_record["passed"]:
                     raise loop.ConfirmVetoed("KEEP_CANDIDATE-dimensions: "
                                              + dims_record["reason"])
+                if not cpu_launch:
+                    # AKX-ALL-14 (G6): a GPU keep carries the build recipe digest and the
+                    # row's HIP residency proof; unproven is recorded, never invented.
+                    evidence["gpu_build_receipt"] = hip_launch_proof.build_receipt(
+                        recipe_name=recipe.name, recipe_digest=recipe.sha256(),
+                        residency=(getattr(comparison, "row", None) or {}).get("residency"))
             cross = None
             if lane_binding is not None:
                 # LANE BINDING (lane_targets.py): a keep touching a path shared with

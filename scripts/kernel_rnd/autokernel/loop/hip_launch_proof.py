@@ -118,5 +118,42 @@ def fold(residency_record: Mapping, *, link: Mapping | None, maps: Mapping | Non
             "peak_kfd_processes": residency_record.get("peak_kfd_processes")}
 
 
-__all__ = ["LINKAGE_SCRIPT", "PROVEN", "REFUTED", "SCHEMA", "UNPROVEN", "fold", "linkage",
+def fold_launches(records) -> dict | None:
+    """Row-level aggregate of per-launch `hip_proof` records (pure).
+
+    `proven` only when EVERY launch carries a proven proof; any refuted launch makes the
+    row refuted; a launch with no proof (instrument not run, CPU arm) makes it unproven.
+    None when there are no launches at all."""
+    rows = [dict(r) for r in records or ()]
+    if not rows:
+        return None
+    statuses = [(r.get("hip_proof") or {}).get("status", UNPROVEN) for r in rows]
+    status = (REFUTED if REFUTED in statuses else
+              PROVEN if all(x == PROVEN for x in statuses) else UNPROVEN)
+    return {"schema": SCHEMA, "status": status, "launches": len(rows),
+            "proven": statuses.count(PROVEN), "refuted": statuses.count(REFUTED),
+            "legs": sorted({f"{k}={v}" for r in rows
+                            for k, v in ((r.get("hip_proof") or {}).get("legs") or {}).items()})}
+
+
+RECEIPT_SCHEMA = "epyc.autokernel.gpu_build_receipt.v1"
+
+
+def build_receipt(*, recipe_name: str, recipe_digest: str, residency: Mapping | None) -> dict:
+    """The block a loop-built GPU candidate's keep record carries (AKX-ALL-14, pure).
+
+    Binds the build recipe digest to the row's residency proof. A row whose residency
+    carries no `hip_proof` (a calibration floor from before this field, a CPU arm, an
+    instrument fault) reads `unproven` -- never proven, never invented."""
+    proof = (residency or {}).get("hip_proof") if isinstance(residency, Mapping) else None
+    proof = dict(proof) if isinstance(proof, Mapping) else {
+        "schema": SCHEMA, "status": UNPROVEN, "launches": 0,
+        "reason": "row residency carries no hip_proof"}
+    return {"schema": RECEIPT_SCHEMA, "build_recipe": recipe_name,
+            "build_recipe_digest": recipe_digest, "hip_proof": proof,
+            "residency_status": (residency or {}).get("status") if isinstance(residency, Mapping)
+            else None}
+
+
+__all__ = ["LINKAGE_SCRIPT", "RECEIPT_SCHEMA", "build_receipt", "fold_launches", "PROVEN", "REFUTED", "SCHEMA", "UNPROVEN", "fold", "linkage",
            "mapped_ggml"]

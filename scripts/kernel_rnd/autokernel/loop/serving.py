@@ -1073,6 +1073,10 @@ def _residency_fold(records: Sequence[Mapping]) -> dict:
             "proven": sum(1 for r in rows if r.get("status") == RESIDENCY_PROVEN),
             "resident_floor_bytes": residency.RESIDENT_FLOOR_BYTES}
     fold["gpu_residency"] = fold["status"]
+    if not cpu_only:
+        hip = hip_launch_proof.fold_launches(rows)   # AKX-ALL-14: the row carries the proof
+        if hip is not None:
+            fold["hip_proof"] = hip
     if cpu_only:
         fold["cpu_placement"] = "unproven"
         fold["contention"] = "unproven"
