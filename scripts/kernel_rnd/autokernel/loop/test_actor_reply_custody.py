@@ -116,7 +116,12 @@ with mock.patch.object(actors.subprocess, "run", side_effect=child):
     actors._run_agent("prompt", workspace=Path(os.environ["TEST_ACTOR_LANE"]), backend=backend)
 """
     done = subprocess.run([sys.executable, "-c", code],
-                          env={**os.environ, "TEST_ACTOR_LANE": str(workspace)},
+                          env={**os.environ, "TEST_ACTOR_LANE": str(workspace),
+                               # The child imports `autokernel`; pytest's own sys.path edit
+                               # (rootdir insertion) is not inherited by a subprocess.
+                               "PYTHONPATH": os.pathsep.join(
+                                   [str(Path(actors.__file__).resolve().parents[2]),
+                                    *filter(None, [os.environ.get("PYTHONPATH")])])},
                           capture_output=True, text=True)
     assert done.returncode == 17, done.stderr
     captures = list(tmp_path.rglob("actor.stdout"))
