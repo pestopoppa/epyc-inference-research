@@ -11,6 +11,7 @@ from typing import Any, Mapping, Sequence
 
 from ..controller import do_not_repeat
 from . import retired_mechanisms
+from . import trial_lifecycle
 
 ANSWER_STATUSES = frozenset({"kept", "keep_candidate", "confirm_vetoed", "measured_null",
                              "regression"})
@@ -135,6 +136,17 @@ class Registry:
 
     def finish(self, identity: str, *, status: str, effect: float | None, epoch: str) -> None:
         try:
+            # S3-AKU-01: an iteration outcome is terminal once recorded. A duplicate or
+            # racing completion for an already-finished attempt is a no-op. Only applies
+            # when both the persisted and the new status are lifecycle outcome statuses;
+            # 'pending' (set by reserve), unknown and legacy statuses pass through.
+            prior = self.db.execute("SELECT status FROM attempts WHERE identity=?",
+                                    (identity,)).fetchone()
+            if prior is not None and str(prior[0]) in trial_lifecycle.OUTCOME_STATUS_VALUES \
+                    and str(status) in trial_lifecycle.OUTCOME_STATUS_VALUES \
+                    and trial_lifecycle.guard_outcome_persist(
+                        str(prior[0]), str(status)) is trial_lifecycle.Decision.NOOP:
+                return
             changed = self.db.execute(
                 "UPDATE attempts SET status=?,effect=?,epoch=? WHERE identity=?",
                 (str(status), effect, str(epoch), identity)).rowcount

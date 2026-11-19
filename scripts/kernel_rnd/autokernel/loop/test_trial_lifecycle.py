@@ -170,3 +170,23 @@ def test_every_enum_member_is_used_in_sources():
                                                       "serial_scheduling.py"))
     for item in T.OutcomeStatus:
         assert item.value in text, item
+
+
+def test_run_py_persists_outcomes_only_through_guarded_registry_finish():
+    """run.py's two outcome-persistence sites (record_pooled / candidate disposition) both
+    call dispatch_guard.Registry(...).finish, which applies guard_outcome_persist; replay the
+    exact call pattern against a real Registry (duplicate completion is a no-op)."""
+    import re
+    import tempfile
+    from pathlib import Path
+    from . import dispatch_guard as DG
+    src = (Path(__file__).parent / "run.py").read_text()
+    assert len(re.findall(r"dispatch_guard\.Registry\(args\.store\)", src)) >= 3
+    assert src.count("registry.finish(") == 2
+    with tempfile.TemporaryDirectory() as tmp:
+        registry = DG.Registry(Path(tmp))
+        registry.reserve("attempt-1")
+        registry.finish("attempt-1", status="measured_null", effect=0.0, epoch="e")
+        registry.finish("attempt-1", status="lane_error", effect=None, epoch="e")
+        assert registry.db.execute("SELECT status FROM attempts").fetchone()[0] == "measured_null"
+        registry.close()

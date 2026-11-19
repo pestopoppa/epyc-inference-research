@@ -318,3 +318,33 @@ print(json.dumps(out))
     completed = subprocess.run([sys.executable, "-c", code, str(path)],
                                check=True, capture_output=True, text=True, env=child_env)
     assert json.loads(completed.stdout) == [None, None, None]
+
+
+def test_duplicate_or_racing_finish_is_noop_once_terminal():
+    with tempfile.TemporaryDirectory() as tmp:
+        r = D.Registry(Path(tmp))
+        r.reserve(identity())
+        r.finish(identity(), status="lane_error", effect=None, epoch="e0")
+        r.finish(identity(), status="kept", effect=0.5, epoch="e1")  # racing second outcome
+        r.finish(identity(), status="lane_error", effect=None, epoch="e2")  # duplicate
+        row = r.db.execute("SELECT status,effect,epoch FROM attempts").fetchone()
+        assert row == ("lane_error", None, "e0")
+        r.close()
+
+
+def test_finish_passes_through_unknown_status_and_redispatch_resets():
+    with tempfile.TemporaryDirectory() as tmp:
+        r = D.Registry(Path(tmp))
+        r.reserve(identity())
+        r.finish(identity(), status="legacy_odd", effect=None, epoch="e0")
+        r.finish(identity(), status="kept", effect=0.1, epoch="e1")  # prior unknown -> applies
+        assert r.db.execute("SELECT status FROM attempts").fetchone()[0] == "kept"
+        r.close()
+        (Path(tmp) / "b").mkdir()
+        r = D.Registry(Path(tmp) / "b")
+        r.reserve(identity())
+        r.finish(identity(), status="lane_error", effect=None, epoch="e0")
+        r.reserve(identity(), resumed=True)  # re-dispatch resets to pending
+        r.finish(identity(), status="measured_null", effect=0.0, epoch="e1")
+        assert r.db.execute("SELECT status FROM attempts").fetchone()[0] == "measured_null"
+        r.close()
