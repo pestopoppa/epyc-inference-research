@@ -3813,17 +3813,69 @@ class CampaignController:
                 clock_domain=row["clock_domain"], verifier_ref=row["verifier_ref"])
             prior = self._actor_preparation_state.profiles.get(
                 row["target_revision_digest"])
+            successor = row["schema"] == actor_state_module.PROFILE_V2_SCHEMA
             if prior is not None:
-                if prior != row:
+                if prior == row:
+                    return receipt
+                if not successor:
                     raise ControlRefused(
                         "target profile replacement requires a new owner epoch")
-                return receipt
+            elif successor:
+                raise ControlRefused("successor profile lacks a settled predecessor")
+            # AKU-06i: a v2 successor is joined to its exact predecessor, settlement and
+            # selected request by the projection; v1 replacement stays refused above.
             self._append_actor_event_locked(row)
+            if successor:
+                for stale in [key for key, item in self._current_actor_profile_receipts.items()
+                              if item.target_revision_digest == row["target_revision_digest"]]:
+                    del self._current_actor_profile_receipts[stale]
             self._current_actor_profile_receipts[receipt.digest] = receipt
             del self._actor_profile_execution_reservations[reservation.reservation_id]
             self._actor_profile_execution_settlements[reservation.reservation_id] = (
                 provider_cost_receipt, terminal)
             return receipt
+
+    def actor_preparation_projection(self):
+        """Current replayed actor-preparation projection (read-only use)."""
+        with self._mutex:
+            self._require_active_locked()
+            return self._actor_preparation_state
+
+    def profile_refresh_binding(self) -> dict[str, Any]:
+        """Current-owner binding fields a PROFILE_REQUEST v2 must carry."""
+        with self._mutex:
+            self._require_active_locked()
+            return {"campaign_id": self.resolved.campaign_id,
+                    "config_generation": self.config_generation,
+                    "config_digest": self.config_digest,
+                    "supervisor_id": self._supervisor_id,
+                    "supervisor_incarnation": self.supervisor_incarnation,
+                    "control_revision": self.control_revision}
+
+    def record_profile_refresh_request(self, value: Mapping[str, Any]):
+        """Durably record one derived PROFILE_REQUEST v2 (idempotent per request)."""
+        row = actor_state_module.validate_event(value)
+        if row["event"] != "PROFILE_REQUEST":
+            raise ControlRefused("profile refresh requires a PROFILE_REQUEST")
+        with self._mutex:
+            self._require_active_locked()
+            current = self._actor_preparation_state.profiles.get(
+                row["target_revision_digest"])
+            open_request = self._actor_preparation_state.profile_requests.get(
+                row["target_revision_digest"])
+            if open_request is not None:
+                if open_request["profile_request_digest"] == row["profile_request_digest"]:
+                    return copy.deepcopy(dict(open_request))
+                raise ControlRefused("target already has an open refresh request")
+            if current is None:
+                raise ControlRefused("refresh request lacks a settled predecessor profile")
+            binding = {key: row[key] for key in (
+                "campaign_id", "config_generation", "config_digest", "supervisor_id",
+                "supervisor_incarnation", "control_revision")}
+            if binding != self.profile_refresh_binding():
+                raise ControlRefused("refresh request differs from current owner binding")
+            self._append_actor_event_locked(row)
+            return copy.deepcopy(row)
 
     def cancel_target_profile_execution(self, reservation) -> None:
         """Cancel only a proved pre-launch profile admission."""
@@ -3930,6 +3982,8 @@ class CampaignController:
                            if validated["event"] == "PROFILE_REQUEST"
                            else validated["reservation_id"]
                            if validated["event"] != "PROFILE_VERIFIED"
+                           else actor_state_module.digest(validated)
+                           if validated["schema"] == actor_state_module.PROFILE_V2_SCHEMA
                            else validated["target_profile_digest"]))
             self._verify_journal_layout(self.store / "journal")
         except BaseException:

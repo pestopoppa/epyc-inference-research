@@ -14,7 +14,7 @@ from typing import Any, Mapping
 
 from . import actor_preparation_state as state
 from . import campaign, campaign_control as cc, lifecycle_observation as lo
-from . import planned_serving, scheduling, target_profile_execution as tp
+from . import planned_serving, profile_refresh, scheduling, target_profile_execution as tp
 from . import unified_driver as ud, unified_planner as up, worker_lifecycle as wl
 
 BINDING_SCHEMA = "epyc.autokernel.installed_profile_mechanism.v1"
@@ -78,6 +78,9 @@ def _source_closure():
         "profile_verify": InstalledProfilePreparationOwner.verify_settlement,
         "profile_replay": InstalledProfilePreparationOwner.planner_profiles,
         "profile_refresh_debt": InstalledProfilePreparationOwner.consumed_request_debt,
+        "profile_refresh_requests": InstalledProfilePreparationOwner.refresh_requests,
+        "profile_refresh_select": profile_refresh.select_refresh,
+        "profile_refresh_derive": profile_refresh.derive_successor_request,
         "profile_observation_row": InstalledProfilePreparationOwner._profile_observation_row,
         "profile_observation_failed": InstalledProfilePreparationOwner._profile_observation_failed,
         "profile_debt_observation": InstalledProfilePreparationOwner._record_profile_debt,
@@ -151,6 +154,10 @@ class InstalledProfileMechanismBinding:
 @dataclass(frozen=True)
 class InstalledProfilePreparationBinding:
     mechanisms: Mapping[str, InstalledProfileMechanismBinding]
+    # AKU-06i opt-in: None keeps v1 (an expired consumed request stays refresh debt).
+    # A positive cap enables derived PROFILE_REQUEST v2 refreshes bounded by that many
+    # generations per target.
+    refresh_attempt_cap: int | None = None
 
     def __post_init__(self):
         if not isinstance(self.mechanisms, Mapping):
@@ -163,6 +170,9 @@ class InstalledProfilePreparationBinding:
                     or target != value.mechanism.loaded_identity["target_revision_digest"]):
                 raise ProfilePreparationRefused("installed profile target/type differs")
         object.__setattr__(self, "mechanisms", MappingProxyType(rows))
+        cap = self.refresh_attempt_cap
+        if cap is not None and (type(cap) is not int or cap < 1):
+            raise ProfilePreparationRefused("refresh attempt cap must be a positive integer")
 
     def validate(self, resolved, runtime_anchors, requests):
         if (type(resolved) is not campaign.ResolvedCampaign
@@ -194,7 +204,10 @@ class InstalledProfilePreparationBinding:
         producer = tp.TargetProfileExecution(controller=controller, mechanisms={
             target: binding.mechanism for target, binding in self.mechanisms.items()})
         controller.register_target_profile_producer(producer)
-        return InstalledProfilePreparationOwner(controller, self, producer, configured_profiles)
+        return InstalledProfilePreparationOwner(
+            controller, self, producer, configured_profiles,
+            templates={target: request.to_dict() for target, request in requests.items()
+                       if target in self.mechanisms})
 
 
 @dataclass(frozen=True)
@@ -333,7 +346,7 @@ def _selected_implementation(controller, producer):
 
 
 class InstalledProfilePreparationOwner:
-    def __init__(self, controller, binding, producer, configured_profiles):
+    def __init__(self, controller, binding, producer, configured_profiles, templates=None):
         if (type(controller) is not cc.CampaignController
                 or type(binding) is not InstalledProfilePreparationBinding
                 or type(producer) is not tp.TargetProfileExecution
@@ -343,6 +356,8 @@ class InstalledProfilePreparationOwner:
         self._configured = MappingProxyType({target: up.TargetProfile.from_dict(
             value.to_dict() if isinstance(value, up.TargetProfile) else _plain(value))
             for target, value in configured_profiles.items()})
+        self._templates = MappingProxyType(
+            {target: _plain(value) for target, value in (templates or {}).items()})
         self._attempts = {}
         self._receipts = {}
         self._entered = set()
@@ -467,6 +482,49 @@ class InstalledProfilePreparationOwner:
             self._observation_attempted_at = aggregate.utc_now()
         except Exception:
             pass  # retain the earlier immutable cache, never alter profile selection
+
+    def refresh_requests(self, requests, profiles, now):
+        """Durable derived/reused PROFILE_REQUEST v2 per refreshable target (AKU-06i).
+
+        Returns {target: ProfilePreparationRequest} to substitute for the consumed
+        original/predecessor request; empty unless the binding opted in.  The real
+        predecessor settlement digest comes from the settled predecessor record; an
+        unsettled/failed predecessor or an exhausted cap yields nothing (the target
+        then remains consumed-request debt, exactly as in v1).
+        """
+        cap = self.binding.refresh_attempt_cap
+        if cap is None:
+            return {}
+        now = state._finite(now, "profile refresh time")
+        domain = wl.monotonic_clock_domain()
+        out = {}
+        for target, request in requests.items():
+            if target in profiles or target not in self.binding.mechanisms:
+                continue
+            template = self._templates.get(target)
+            snapshot = self._profile(target)
+            if template is None or snapshot is None:
+                continue
+            row, settled = snapshot["profile_event"], snapshot["settlement"]
+            if (settled is None or settled["outcome"] != "prerequisite"
+                    or settled["catalog_id"] != row["catalog_id"]
+                    or settled["transition_id"] != row["transition_id"]):
+                continue  # only a settled original/predecessor can be renewed
+            projection = self.controller.actor_preparation_projection()
+            decision = profile_refresh.select_refresh(
+                projection, target=target, template=template,
+                settlement_digest=state.digest(settled), attempt_cap=cap,
+                binding=self.controller.profile_refresh_binding(), now=now,
+                clock_domain=domain, occurred_at=self.controller.clock())
+            if decision.status == "derived":
+                recorded = self.controller.record_profile_refresh_request(decision.request)
+            elif decision.status == "reuse_open_request":
+                recorded = decision.request  # restart/expiry: the original open request
+            else:
+                continue
+            out[target] = ud.ProfilePreparationRequest.from_dict(
+                _plain(recorded["profile_request"]))
+        return out
 
     def consumed_request_debt(self, requests, profiles):
         """Exclude an already consumed fixed request without inventing renewal."""

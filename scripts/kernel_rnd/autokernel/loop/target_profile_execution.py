@@ -240,8 +240,16 @@ class TargetProfileExecution:
                 "profile_content": output["profile_content"],
                 "loaded_identity": output["loaded_identity"],
                 "artifact_identity": output["artifact_identity"]})
+            opened = self.controller.actor_preparation_projection().profile_requests.get(
+                request["target_revision_digest"])
+            joins = {}
+            if opened is not None and opened["profile_request_digest"] == request_digest:
+                joins = {name: opened[name] for name in (
+                    "generation", "predecessor_profile_digest",
+                    "predecessor_request_digest", "predecessor_settlement_digest")}
             event = {
-                "schema": state.PROFILE_SCHEMA, "event": "PROFILE_VERIFIED",
+                "schema": state.PROFILE_V2_SCHEMA if joins else state.PROFILE_SCHEMA,
+                "event": "PROFILE_VERIFIED",
                 "campaign_id": self.controller.resolved.campaign_id,
                 "config_generation": self.controller.config_generation,
                 "config_digest": self.controller.config_digest,
@@ -259,7 +267,7 @@ class TargetProfileExecution:
                 "measurement_carrier": dict(carrier), "clock_domain": clock_domain,
                 "verifier_ref": f"controller-worker:{terminal.worker_id}:{terminal.worker_generation}",
                 "verified_at": verified_at, "valid_until": valid_until,
-                "occurred_at": self.controller.clock(),
+                "occurred_at": self.controller.clock(), **joins,
             }
         except Exception as exc:
             self.controller.finish_target_profile_execution(

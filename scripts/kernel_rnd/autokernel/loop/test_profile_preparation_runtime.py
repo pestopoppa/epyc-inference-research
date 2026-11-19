@@ -51,7 +51,8 @@ class SyntheticSelectedProfileProvider(FullHeldProvider):
             lifecycle_started_at, released_at, receipt)
 
 
-def _fixture(tmp_path, *, malformed=None, return_code=0, selected_provider=False, backend="cpu"):
+def _fixture(tmp_path, *, malformed=None, return_code=0, selected_provider=False, backend="cpu",
+             fail_from=None):
     document = _document(tmp_path)
     if backend == "gpu":
         recipe = canonical_recipe(backend="gpu")
@@ -85,7 +86,9 @@ def _fixture(tmp_path, *, malformed=None, return_code=0, selected_provider=False
     profiler.write_text("#!/usr/bin/env python3\nfrom pathlib import Path\nimport json,sys\n"
         "request=json.loads(sys.argv[1])\n"
         f"assert request['target_revision_digest']=={target!r}\n"
-        f"p=Path({str(counter)!r});p.write_text((p.read_text() if p.exists() else '')+'x')\n"
+        f"p=Path({str(counter)!r});n=len(p.read_text()) if p.exists() else 0\n"
+        f"p.write_text((p.read_text() if p.exists() else '')+'x')\n"
+        + (f"if n>={fail_from}: print('not-json'); raise SystemExit(1)\n" if fail_from is not None else "") +
         f"print({json.dumps(output)!r})\nraise SystemExit({return_code})\n")
     profiler.chmod(profiler.stat().st_mode | stat.S_IXUSR)
     mechanism = tp.ProfileMechanism("tiny-profile", profiler,

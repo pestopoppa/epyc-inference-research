@@ -950,6 +950,9 @@ class UnifiedCampaignDriver:
         if self._pending is not None or self.controller.unified_driver_pending_intent() is not None:
             raise DriverRefused("cannot refresh profiles underneath an issued catalog")
         self.profiles = owner.planner_profiles(now)
+        refreshed = owner.refresh_requests(self.profile_requests, self.profiles, now)
+        if refreshed:  # AKU-06i: a derived/reused v2 request replaces the consumed one
+            self.profile_requests = MappingProxyType({**self.profile_requests, **refreshed})
         self._profile_request_debt = owner.consumed_request_debt(self.profile_requests, self.profiles)
 
     def materialize_profile(self, outcome: DriverOutcome) -> SelectedProfileWork:

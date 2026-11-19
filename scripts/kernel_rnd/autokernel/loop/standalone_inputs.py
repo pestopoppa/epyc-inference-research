@@ -768,6 +768,7 @@ def runtime_factory(materialized: MaterializedInputs, registry: ProviderRegistry
         verified_inputs = _verified_snapshot_inputs(materialized, verifier)
 
     mechanisms = {}
+    refresh_caps = set()
     for target, request in materialized.inputs.profile_requests.items():
         installed = registry.profile_binding(request.profile_contract["adapter_id"])
         if installed is None or target not in installed.mechanisms:
@@ -775,10 +776,13 @@ def runtime_factory(materialized: MaterializedInputs, registry: ProviderRegistry
                 raise StandaloneInputsRefused("profile binding changed after preflight")
             continue
         mechanisms[target] = installed.mechanisms[target]
+        refresh_caps.add(installed.refresh_attempt_cap)
     if mechanisms:
         from .profile_preparation import InstalledProfilePreparationBinding
-        verified_inputs = replace(verified_inputs,
-            profile_binding=InstalledProfilePreparationBinding(mechanisms))
+        if len(refresh_caps) != 1:  # AKU-06i: one consistent refresh bound per owner
+            raise StandaloneInputsRefused("profile bindings disagree on the refresh attempt cap")
+        verified_inputs = replace(verified_inputs, profile_binding=InstalledProfilePreparationBinding(
+            mechanisms, refresh_attempt_cap=next(iter(refresh_caps))))
 
     def build(resolved: campaign.ResolvedCampaign, args):
         if (resolved.to_dict() != materialized.resolved.to_dict()
