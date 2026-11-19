@@ -25,8 +25,6 @@ def _make(d: Path, i: int, mtime: float) -> Path:
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
     orch._PENDING.clear()
-    monkeypatch.delenv(orch.SIDECAR_KEEP_ENV, raising=False)
-    monkeypatch.delenv(orch.SIDECAR_DAYS_ENV, raising=False)
     yield
     orch._PENDING.clear()
 
@@ -89,13 +87,9 @@ def test_missing_dir_is_quiet(tmp_path):
     assert orch.sweep_sidecars(tmp_path / "absent") == []
 
 
-def test_env_configures_the_policy_and_bad_values_use_defaults(tmp_path, monkeypatch):
+def test_defaults_apply_when_keep_and_days_are_omitted(tmp_path):
     for i in range(5):
         _make(tmp_path, i, OLD + i)
-    monkeypatch.setenv(orch.SIDECAR_KEEP_ENV, "2")
-    assert len(orch.sweep_sidecars(tmp_path)) == 3
-    monkeypatch.setenv(orch.SIDECAR_KEEP_ENV, "junk")
-    monkeypatch.setenv(orch.SIDECAR_DAYS_ENV, "-3")
     assert orch.sweep_sidecars(tmp_path) == []  # defaults: 200 / 14
 
 
@@ -105,7 +99,7 @@ def test_argv_sweeps_before_allocating_its_own_sidecar(tmp_path, monkeypatch):
     call_dir = ws.parent / orch.SIDECAR_DIR
     call_dir.mkdir()
     stale = [_make(call_dir, i, OLD + i) for i in range(3)]
-    monkeypatch.setenv(orch.SIDECAR_KEEP_ENV, "1")
+    monkeypatch.setattr(orch, "SIDECAR_KEEP_DEFAULT", 1)
     backend = actors.backend_for("orch:auto", "high")
     argv = backend.argv("P", ws, read_only=True)
     mine = Path(argv[argv.index("--provenance-out") + 1])

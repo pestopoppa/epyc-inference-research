@@ -120,25 +120,13 @@ PROVENANCE_SCHEMA = "epyc.autokernel.orchestrator_call.v1"
 #: call's metrics row by path + sha256 (`sidecar`), so a later audit/replay may re-read
 #: and re-verify it; it cannot be deleted when the call ends. It is therefore swept at
 #: the start of each `argv`: a file is removed only when it is outside the newest
-#: `KEEP` AND older than `DAYS`. Defaults: 200 files (several full loop runs of
-#: ~1 planner + 1 author + critic calls per iteration) and 14 days (spans a
-#: audit-and-refile cycle). `DAYS=0` drops the age guard (count only); `KEEP=0` with
-#: `DAYS=0` removes all but in-flight files. Non-integers fail closed to the default.
-SIDECAR_KEEP_ENV = "AK_ORCHESTRATOR_SIDECAR_KEEP"
-SIDECAR_DAYS_ENV = "AK_ORCHESTRATOR_SIDECAR_DAYS"
+#: `KEEP` AND older than `DAYS`: 200 files (several full loop runs of ~1 planner +
+#: 1 author + critic calls per iteration) and 14 days (spans an audit-and-refile cycle).
 SIDECAR_KEEP_DEFAULT = 200
 SIDECAR_DAYS_DEFAULT = 14
 #: The module's OWN provenance name (`argv`: `<UTC stamp>-<12 hex>.provenance.json`);
 #: nothing else in SIDECAR_DIR ever matches, so a foreign file is never a candidate.
 _PROVENANCE_NAME = re.compile(r"^\d{8}T\d{6}-[0-9a-f]{12}\.provenance\.json$")
-
-
-def _env_nonneg_int(name: str, default: int) -> int:
-    try:
-        value = int((os.environ.get(name) or "").strip())
-    except ValueError:
-        return default
-    return value if value >= 0 else default
 
 
 def sweep_sidecars(call_dir: Path, *, keep: int | None = None, days: float | None = None,
@@ -148,8 +136,8 @@ def sweep_sidecars(call_dir: Path, *, keep: int | None = None, days: float | Non
     other type is never touched) whose name matches `_PROVENANCE_NAME`. Kept: the
     newest `keep` by mtime, any younger than `days`, and any path still pending a
     `collect`. Returns the removed names. Never raises."""
-    keep = _env_nonneg_int(SIDECAR_KEEP_ENV, SIDECAR_KEEP_DEFAULT) if keep is None else keep
-    days = (_env_nonneg_int(SIDECAR_DAYS_ENV, SIDECAR_DAYS_DEFAULT) if days is None else days)
+    keep = SIDECAR_KEEP_DEFAULT if keep is None else keep
+    days = SIDECAR_DAYS_DEFAULT if days is None else days
     cutoff = (time.time() if now is None else now) - days * 86400
     with _PENDING_LOCK:
         pending = {p.name for p in _PENDING.values()}
