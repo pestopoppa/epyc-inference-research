@@ -1907,6 +1907,12 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
                             out.append("data.operation_payload.enrollment: must be INTENT")
                     except _enroll.EnrollmentRefused as exc:
                         out.append(f"data.operation_payload.enrollment: {exc}")
+                if operation in {"start_batch", "advance_validated"} \
+                        and "composed" in operation_payload:
+                    # AKX-P3a: opt-in composed census evidence; legacy shape unchanged.
+                    operation_fields = operation_fields | {"composed"}
+                if operation == "complete_batch" and "composed" in operation_payload:
+                    operation_fields = operation_fields | {"composed", "row_set", "candidate"}
                 if set(operation_payload) != operation_fields:
                     out.append(
                         f"data.operation_payload: {operation} fields differ from "

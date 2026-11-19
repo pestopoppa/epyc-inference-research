@@ -95,11 +95,12 @@ def run_dispatch_probe(binary: Path, model: Path, shape: Shape, *,
                        recipe_argv: Iterable[str] = (), env: Mapping[str, str] | None = None,
                        expected_ops: Iterable[str] = (), require_device: bool = False,
                        timeout: int = 900,
-                       runner: Callable[..., subprocess.CompletedProcess] | None = None
+                       runner: Callable[..., subprocess.CompletedProcess] | None = None,
+                       argv_fn: Callable[..., list[str]] | None = None
                        ) -> dict[str, Any]:
     probe_env = dict(env or {})
     probe_env["GGML_SCHED_DEBUG"] = "2"
-    argv = shape_argv(binary, model, shape, recipe_argv)
+    argv = (argv_fn or shape_argv)(binary, model, shape, recipe_argv)
     proc = (runner or run_process)(argv, env=probe_env, timeout=timeout)
     graph = parse_scheduler_graph(proc.stdout + proc.stderr)
     required = frozenset(expected_ops)

@@ -248,7 +248,8 @@ def checkouts(repo: Path, branch: str) -> list[Path]:
 
 def fold_onto_champion(repo: Path, champion_branch: str, commits: Sequence[str], *,
                        note: str, fold_check: Callable[..., Mapping[str, Any]] | None = None,
-                       store: Path | None = None) -> dict:
+                       store: Path | None = None, lane: str | None = None,
+                       lane_evidence: Mapping[str, Any] | None = None) -> dict:
     """Fold `commits` (in order) into the ONE champion: pick, G0, CAS, fast-forward.
 
     Returns {"result": folded | conflict | already present | g0_refused |
@@ -266,9 +267,22 @@ def fold_onto_champion(repo: Path, champion_branch: str, commits: Sequence[str],
     # lane's series has no records here and is held (over-refusal is the accepted side).
     held_ppl = [c for c in commits if gates.ppl_contract_range_requires_gate(
         repo, f"{c}^", c, store=store)]
+    cross_lane = None
     if held_ppl:
-        return {"result": "ppl_contract_held", "commit": None, "picked": [],
-                "held": list(held_ppl)}
+        # Cross-lane quality gate (AKX-AUTO-3): the hold lifts only when the originating
+        # lane's own four-layer ppl_contract evidence covers the promoted commit.
+        # No lane or no evidence keeps the hold exactly as before.
+        from . import cross_lane_gate
+        evidence = lane_evidence if lane_evidence is not None \
+            else (cross_lane_gate.load_lane_evidence(store) if store is not None else {})
+        if lane and evidence:
+            cross_lane = cross_lane_gate.fold_verdict(commits, [lane], evidence)
+        if cross_lane is None or not cross_lane["admissible"]:
+            out = {"result": "ppl_contract_held", "commit": None, "picked": [],
+                   "held": list(held_ppl)}
+            if cross_lane is not None:
+                out["cross_lane"] = cross_lane
+            return out
     ref = f"refs/heads/{champion_branch}"
     old = _out(repo, "rev-parse", "--verify", ref)
     tip, picked = old, []
@@ -309,6 +323,8 @@ def fold_onto_champion(repo: Path, champion_branch: str, commits: Sequence[str],
             stale.append({"checkout": str(tree), "error": done.stderr.strip()[:300]})
     out = {"result": "folded", "commit": tip, "picked": picked, "g0": g0.get("reason"),
            "checkouts": [str(t) for t in trees]}
+    if cross_lane is not None:
+        out["cross_lane"] = cross_lane
     if stale:
         out["checkouts_stale"] = stale
     return out
@@ -380,7 +396,7 @@ def record_keep(bound, *, repo: Path, keep_commit: str, decision: Mapping[str, A
         try:
             entry["fold"] = {"branch": bound.champion_branch, **fold_onto_champion(
                 repo, bound.champion_branch, [keep_commit], fold_check=fold_check,
-                note=f"fold from {bound.lane.target_id} ({lane})", store=store)}
+                note=f"fold from {bound.lane.target_id} ({lane})", store=store, lane=lane)}
         except Exception as exc:  # noqa: BLE001 -- held on the working branch, retried
             entry["fold"] = {"branch": bound.champion_branch, "commit": None,
                              "result": f"error: {type(exc).__name__}: {exc}"}
@@ -447,7 +463,7 @@ def refresh_gates(bound, *, repo: Path, store: Path, branch: str,
                 result = fold_onto_champion(repo, bound.champion_branch, [commit],
                                             fold_check=fold_check,
                                             note=f"fold retry from {bound.lane.target_id}",
-                                            store=store)
+                                            store=store, lane=lane)
             except Exception as exc:  # noqa: BLE001
                 result = {"result": f"error: {type(exc).__name__}: {exc}", "commit": None}
             out.append(append(bound, {"event": "fold_retry", "lane": lane, "patch_id": pid,
@@ -562,7 +578,8 @@ def eligible(bound, *, repo: Path, retained: Iterable[str] | None = None) -> lis
 
 def check_one(bound, *, repo: Path,
               measure: Callable[[Mapping[str, Any]], Mapping[str, Any]],
-              fold_check: Callable[..., Mapping[str, Any]] | None = None) -> dict | None:
+              fold_check: Callable[..., Mapping[str, Any]] | None = None,
+              store: Path | None = None) -> dict | None:
     """Fold-check the first eligible held series of another lane on THIS lane's target.
 
     `measure(series)` applies `series["commits"]` onto this lane's working branch in a
@@ -606,7 +623,8 @@ def check_one(bound, *, repo: Path,
                 event["fold"] = {"branch": bound.champion_branch, **fold_onto_champion(
                     repo, bound.champion_branch, series["commits"], fold_check=fold_check,
                     note=f"gated series from {series['origin_target']}, approved by "
-                         + ", ".join(sorted(checkers)))}
+                         + ", ".join(sorted(checkers)),
+                    store=store, lane=series["origin_lane"])}
             except Exception as exc:  # noqa: BLE001
                 event["fold"] = {"branch": bound.champion_branch, "commit": None,
                                  "result": f"error: {type(exc).__name__}: {exc}"}

@@ -435,11 +435,14 @@ class CandidateTransactions:
 
     def start_batch(self, *, request_id: str, batch: cm.ValidationBatch,
                     row_set: cm.RequiredRowSet, candidate: cm.CandidateManifest,
-                    comparator: cm.CandidateManifest) -> dict[str, Any]:
+                    comparator: cm.CandidateManifest,
+                    composed: Mapping[str, Any] | None = None) -> dict[str, Any]:
         payload = {"batch": batch.validated().to_dict(),
                    "row_set": cm.RequiredRowSet.from_dict(row_set.to_dict()).to_dict(),
                    "candidate": candidate.validated().to_dict(),
                    "comparator": comparator.validated().to_dict()}
+        if composed is not None:  # AKX-P3a: opt-in, legacy payloads keep their digest
+            payload["composed"] = copy.deepcopy(dict(composed))
         return self._execute("start_batch", request_id, payload, ())
 
     def record_row(self, *, request_id: str, batch_id: str,
@@ -451,9 +454,18 @@ class CandidateTransactions:
                        row_state.to_dict()).to_dict()}
         return self._execute("record_row", request_id, payload, ())
 
-    def complete_batch(self, *, request_id: str,
-                       batch: cm.ValidationBatch) -> dict[str, Any]:
+    def complete_batch(self, *, request_id: str, batch: cm.ValidationBatch,
+                       composed: Mapping[str, Any] | None = None,
+                       row_set: cm.RequiredRowSet | None = None,
+                       candidate: cm.CandidateManifest | None = None) -> dict[str, Any]:
         payload = {"batch": batch.validated().to_dict()}
+        if composed is not None:
+            if row_set is None or candidate is None:
+                raise CandidateTransactionError(
+                    "composed census at completion needs the row set and candidate")
+            payload["composed"] = copy.deepcopy(dict(composed))
+            payload["row_set"] = cm.RequiredRowSet.from_dict(row_set.to_dict()).to_dict()
+            payload["candidate"] = candidate.validated().to_dict()
         return self._execute("complete_batch", request_id, payload, ())
 
     def advance_validated(self, *, request_id: str, verifier_id: str,
@@ -461,7 +473,8 @@ class CandidateTransactions:
                           candidate: cm.CandidateManifest,
                           comparator: cm.CandidateManifest,
                           loo_plans: Mapping[str, cm.LOOPlan] | None = None,
-                          loo_results: Mapping[str, cm.LOOResult] | None = None) -> dict[str, Any]:
+                          loo_results: Mapping[str, cm.LOOResult] | None = None,
+                          composed: Mapping[str, Any] | None = None) -> dict[str, Any]:
         payload = {
             "verifier_id": _text(verifier_id, "verifier id"),
             "batch": batch.validated().to_dict(),
@@ -473,6 +486,8 @@ class CandidateTransactions:
             "loo_results": {key: value.to_dict()
                             for key, value in sorted((loo_results or {}).items())},
         }
+        if composed is not None:
+            payload["composed"] = copy.deepcopy(dict(composed))
         return self._execute("advance_validated", request_id, payload, ())
 
     def _execute(self, operation: str, request_id: str,
@@ -662,7 +677,8 @@ class CandidateTransactions:
                 state, cm.ValidationBatch.from_dict(payload["batch"]),
                 cm.RequiredRowSet.from_dict(payload["row_set"]),
                 cm.CandidateManifest.from_dict(payload["candidate"]),
-                cm.CandidateManifest.from_dict(payload["comparator"]))
+                cm.CandidateManifest.from_dict(payload["comparator"]),
+                composed=payload.get("composed"))
             return next_state, self._result(next_state)
         if operation == "record_row":
             batch_id = _text(payload["batch_id"], "batch id")
@@ -678,8 +694,13 @@ class CandidateTransactions:
                                                    key=lambda item: item.batch_id))).validated()
             return next_state, self._result(next_state)
         if operation == "complete_batch":
+            composed = payload.get("composed")
             next_state = cm.complete_batch(
-                state, cm.ValidationBatch.from_dict(payload["batch"]))
+                state, cm.ValidationBatch.from_dict(payload["batch"]), composed=composed,
+                row_set=(cm.RequiredRowSet.from_dict(payload["row_set"])
+                         if composed is not None else None),
+                candidate=(cm.CandidateManifest.from_dict(payload["candidate"])
+                           if composed is not None else None))
             return next_state, self._result(next_state)
         if operation == "advance_validated":
             verifier_id = _text(payload["verifier_id"], "verifier id")
@@ -698,7 +719,7 @@ class CandidateTransactions:
                 cm.CandidateManifest.from_dict(payload["candidate"]),
                 cm.CandidateManifest.from_dict(payload["comparator"]),
                 verifier=verifier, loo_plans=plans, loo_results=results,
-                loo_verifier=loo_verifier)
+                loo_verifier=loo_verifier, composed=payload.get("composed"))
             return next_state, self._result(next_state)
         raise CandidateTransactionError(f"unsupported candidate operation {operation!r}")
 
@@ -749,6 +770,7 @@ class CandidateTransactions:
         candidate = cm.CandidateManifest.from_dict(payload["candidate"])
         comparator = cm.CandidateManifest.from_dict(payload["comparator"])
         cm._validate_batch_obligations(batch, row_set, candidate, comparator)
+        cm._composed_gate(batch, row_set, candidate, payload.get("composed"), "advance")
         if candidate.production_ref_digest != state.production_ref_digest:
             raise cm.TransitionError(
                 "batch candidate production reference mismatches state")

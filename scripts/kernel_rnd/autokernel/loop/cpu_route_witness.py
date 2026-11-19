@@ -211,6 +211,22 @@ WITNESSES["cpu_fa_schedule"] = RouteWitness(
     quants=(), ops=("FLASH_ATTN_EXT",), reference="fa_anchor_bits")
 
 
+# AKX-AUTO-9 generated default routes (`gates.default_cpu_route`). No bespoke engagement
+# case exists for a file nobody hand-listed: quant families are judged by the ppl_contract
+# layers (op-level NMSE on served shapes is layer (a)), graph/ops/unclassified kernels by
+# whole-model identity. Neither reference is run by this witness module.
+for _family in ("quant_kernel",):
+    WITNESSES["default:" + _family] = RouteWitness(
+        op=None, case=None, breakpoint=None, symbol_pattern=None, active=None,
+        quants=(), ops=("MUL_MAT", "MUL_MAT_ID"), expert_modes=("alternating", "single"),
+        reference="ppl_contract")
+for _family in ("graph_scheduling", "graph_ops", "unclassified_kernel"):
+    WITNESSES["default:" + _family] = RouteWitness(
+        op=None, case=None, breakpoint=None, symbol_pattern=None, active=None,
+        quants=(), ops=(), reference="model_identity")
+del _family
+
+
 def assess_case(witness: RouteWitness, records: list[dict], output: str,
                 returncode: int, dso: Path) -> Result:
     """Only debugger-pipe records can establish path engagement."""

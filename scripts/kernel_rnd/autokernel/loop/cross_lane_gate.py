@@ -161,4 +161,35 @@ def promotion_verdict(candidate_commit: str, ppl_contract_lanes: Any,
                             tuple(f"lane {x} refused" for x in refused))
 
 
-__all__ = ["LaneVerdict", "PromotionVerdict", "lane_verdict", "promotion_verdict", "NMSE_BOUND"]
+EVIDENCE_DIR = "cross_lane"
+
+
+def load_lane_evidence(store: Any) -> dict[str, Any]:
+    """Read ``<store>/cross_lane/<lane>.json`` into ``{lane: evidence}``. Unreadable or
+    non-object files are skipped, so a damaged record can only REFUSE (no evidence)."""
+    import json
+    from pathlib import Path
+    out: dict[str, Any] = {}
+    root = Path(store) / EVIDENCE_DIR if store is not None else None
+    if root is None or not root.is_dir():
+        return out
+    for path in sorted(root.glob("*.json")):
+        try:
+            doc = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(doc, dict):
+            out[path.stem] = doc
+    return out
+
+
+def fold_verdict(commits: Any, lanes: Any, lane_evidence: Any) -> dict[str, Any]:
+    """Promotion-path adapter: the promoted commit is the last of the series."""
+    commits = list(commits)
+    v = promotion_verdict(commits[-1] if commits else "", lanes, lane_evidence or {})
+    return {"admissible": v.admissible, "reasons": list(v.reasons),
+            "lanes": {x.lane: {"admissible": x.admissible, "reasons": list(x.reasons)}
+                      for x in v.lanes}}
+
+
+__all__ = ["EVIDENCE_DIR", "fold_verdict", "load_lane_evidence", "LaneVerdict", "PromotionVerdict", "lane_verdict", "promotion_verdict", "NMSE_BOUND"]

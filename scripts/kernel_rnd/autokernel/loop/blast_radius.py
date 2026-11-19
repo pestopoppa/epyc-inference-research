@@ -297,12 +297,23 @@ def footprint_for_commit(repo: Path, child: str) -> Optional[FP.PatchFootprint]:
 
 def record_keep_best_effort(store_root: Path, repo: Path, *, keep_id: str, child: str,
                             resolved_campaign: Any, manifest_path: str | None,
-                            censuses: Mapping[str, tuple] | None = None) -> Optional[Path]:
+                            censuses: Mapping[str, tuple] | None = None,
+                            champion_commit: str | None = None,
+                            census_store: Path | str | None = None) -> Optional[Path]:
     """The loop's keep hook. Observe-only: a screen failure never un-keeps; with no
-    record, `keep_screen.project` already reports every workload UNKNOWN (TOUCHED)."""
+    record, `keep_screen.project` already reports every workload UNKNOWN (TOUCHED).
+
+    With no explicit ``censuses`` and a ``champion_commit``, the census store is consulted
+    (`census_store.censuses_for_keep`): only a record whose freshness key matches the current
+    champion is used, anything else stays absent (UNKNOWN)."""
     if resolved_campaign is None or not manifest_path:
         return None
     try:
+        if censuses is None and champion_commit:
+            from . import census_store as CS
+            censuses = CS.censuses_for_keep(
+                [t.to_dict() for t in resolved_campaign.targets],
+                champion_commit=champion_commit, store=census_store) or None
         return record_keep_screen(
             store_root, keep_id=keep_id,
             resolved_targets=[t.to_dict() for t in resolved_campaign.targets],

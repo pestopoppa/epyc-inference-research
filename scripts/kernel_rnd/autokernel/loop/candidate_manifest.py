@@ -1035,11 +1035,25 @@ def _validate_batch_obligations(batch: ValidationBatch, row_set: RequiredRowSet,
     _validate_row_bindings(row_set, candidate, comparator)
 
 
+def _composed_gate(batch: ValidationBatch, row_set: RequiredRowSet,
+                   candidate: CandidateManifest, composed, phase: str) -> None:
+    """AKX-P3a (Spec D): enforce the composed census on a transition that carries evidence."""
+    if composed is None:
+        return
+    from . import composed_census  # lazy: composed_census imports this module
+    try:
+        composed_census.check_evidence(batch, row_set, candidate, composed, phase=phase)
+    except composed_census.ComposedCensusRefused as exc:
+        raise TransitionError(f"composed census refused ({phase}): {exc}") from exc
+
+
 def start_batch(state: CandidateState, batch: ValidationBatch, row_set: RequiredRowSet,
-                candidate: CandidateManifest, comparator: CandidateManifest) -> CandidateState:
+                candidate: CandidateManifest, comparator: CandidateManifest,
+                *, composed=None) -> CandidateState:
     state, batch = state.validated(), batch.validated()
     row_set = RequiredRowSet.from_dict(row_set.to_dict())
     candidate, comparator = candidate.validated(), comparator.validated()
+    _composed_gate(batch, row_set, candidate, composed, "start")
     existing = next((item for item in state.active_batches + state.completed_batches
                      if item.batch_id == batch.batch_id), None)
     if existing is not None:
@@ -1076,8 +1090,15 @@ def refuse_gate_start(state: CandidateState, batch_id: str, reason: str) -> Cand
     return state
 
 
-def complete_batch(state: CandidateState, batch: ValidationBatch) -> CandidateState:
+def complete_batch(state: CandidateState, batch: ValidationBatch,
+                   *, composed=None, row_set: RequiredRowSet | None = None,
+                   candidate: CandidateManifest | None = None) -> CandidateState:
     state, batch = state.validated(), batch.validated()
+    if composed is not None:
+        if row_set is None or candidate is None:
+            raise TransitionError("composed census at completion needs the row set and candidate")
+        _composed_gate(batch, RequiredRowSet.from_dict(row_set.to_dict()),
+                       candidate.validated(), composed, "complete")
     active = {item.batch_id: item for item in state.active_batches}
     if batch.batch_id not in active:
         raise TransitionError("completed batch was not active")
@@ -1120,10 +1141,12 @@ def advance_validated(state: CandidateState, batch: ValidationBatch,
                       comparator: CandidateManifest, *, verifier: TrustedVerifier | None,
                       loo_plans: Mapping[str, LOOPlan] | None = None,
                       loo_results: Mapping[str, LOOResult] | None = None,
-                      loo_verifier: TrustedLOOVerifier | None = None) -> CandidateState:
+                      loo_verifier: TrustedLOOVerifier | None = None,
+                      composed=None) -> CandidateState:
     state, batch = state.validated(), batch.validated()
     row_set = RequiredRowSet.from_dict(row_set.to_dict())
     candidate, comparator = candidate.validated(), comparator.validated()
+    _composed_gate(batch, row_set, candidate, composed, "advance")
     if verifier is None:
         raise TrustedVerificationRequired("trusted evidence validator adapter is not connected")
     _validate_batch_obligations(batch, row_set, candidate, comparator)

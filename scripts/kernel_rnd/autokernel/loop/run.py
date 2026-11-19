@@ -4641,6 +4641,10 @@ def _main(argv: list[str] | None = None) -> int:
             # Widened single-file CPU routes (gates.CPU_SOURCE_ROUTES): same pre-build
             # inputs as the IQK routes (post-image, HEAD image, -U0 hunks).
             route_paths = set(gates.CPU_SOURCE_ROUTE_PATHS)
+            # AKX-AUTO-9: a lone compiled CPU file no hand-listed route names is governed by
+            # its generated default route (gates.default_cpu_route; flag AK_DEFAULT_ROUTE_ADMISSION).
+            if len(changed) == 1 and gates.default_cpu_route(changed[0]) is not None:
+                route_paths.add(changed[0])
             # ops.cpp hosts a route AND the older GATED_DELTA_NET rule: a change is governed
             # by a widened route only when its target symbol resolves to one.
             route_edit = len(changed) == 1 and changed[0] in route_paths and \
@@ -7662,7 +7666,8 @@ def _main(argv: list[str] | None = None) -> int:
             with keep_stage("akx_keep_screen"):  # AKX-P1e; no census -> all UNKNOWN
                 blast_radius.record_keep_best_effort(
                     args.store, args.worktree, keep_id=hypothesis.mechanism_id, child=head,
-                    resolved_campaign=resolved_campaign, manifest_path=args.resolved_campaign)
+                    resolved_campaign=resolved_campaign, manifest_path=args.resolved_campaign,
+                    champion_commit=current_anchor_commit[0])
             if lane_binding is not None and cpu_launch is not None:
                 with keep_stage("fold_check_held"):
                     fold_check_held(worker)
@@ -7736,7 +7741,7 @@ def _main(argv: list[str] | None = None) -> int:
 
             try:
                 event = cross_target.check_one(lane_binding, repo=args.worktree,
-                                               measure=measure)
+                                               measure=measure, store=Path(args.store))
                 if event is not None:
                     print(f"crosstgt  fold-check {event['origin_head'][:12]} from "
                           f"{event.get('origin_target')}: {event.get('result')} "

@@ -610,6 +610,11 @@ class CpuSourceRoute:
     #: on this EPYC 9655 host -- the `#if` arm is the compiled one and the `#else` arm is
     #: dead code here (review 2026-10-06; `z_HAVE_FANCY_SIMD` arms are the opposite).
     body_duplicates_first: tuple[str, ...] = ()
+    #: AKX-AUTO-9: a route GENERATED from `route_defaults` for a compiled CPU file no
+    #: hand-listed route names. It has no body confinement; its safety is the lexical
+    #: refusal of every added line plus the oracle class's own gate (ppl_contract
+    #: layers, or whole-model identity), with the thresholds those gates already carry.
+    generated: bool = False
 
 
 CPU_SOURCE_ROUTES = (
@@ -1135,6 +1140,65 @@ def _route_symbol_names(target_symbol: str) -> list[str]:
     return list(dict.fromkeys(reversed([part for part in parts if part])))
 
 
+#: Flag for AKX-AUTO-9 live admission through generated default routes. On by default; set
+#: ``AK_DEFAULT_ROUTE_ADMISSION=0`` to restore hand-listed-only admission.
+DEFAULT_ROUTE_ADMISSION_ENV = "AK_DEFAULT_ROUTE_ADMISSION"
+
+
+def default_route_admission_enabled() -> bool:
+    return os.environ.get(DEFAULT_ROUTE_ADMISSION_ENV, "1").strip().lower() not in (
+        "0", "off", "false", "no", "")
+
+
+#: Files `affected_op_scope` governs with INLINE structural rules (not table routes): they
+#: keep those rules, never a generated route.
+_INLINE_RULE_PATHS = frozenset({"ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp",
+                                "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp",
+                                "ggml/src/ggml-cpu/ops.cpp"})
+
+
+def default_cpu_route(path: str) -> "CpuSourceRoute | None":
+    """The generated route for a compiled CPU kernel file NO hand-listed route names, or
+    None (flag off, hand-listed or multi-file path, refused file, flash-attention family:
+    its anchor-bits gate is wired only to the hand-listed `cpu_fa_schedule` route)."""
+    if not default_route_admission_enabled() or path in CPU_ROUTE_PATHS_ALL \
+            or path in _INLINE_RULE_PATHS:
+        return None
+    from . import route_defaults as rd
+    chosen = rd.default_route(path)
+    if chosen is None or chosen.oracle_class == rd.FA_ANCHOR_BITS:
+        return None
+    quant = chosen.oracle_class == rd.SCALAR_NMSE
+    return CpuSourceRoute(
+        route=chosen.route, path=chosen.path, symbols=(), bodies=(),
+        ops=("MUL_MAT", "MUL_MAT_ID") if quant else (),
+        numerics="ppl_contract" if quant else "bit_exact", model_identity=not quant,
+        identity_targets="peers", identity_repeats=3, generated=True,
+        admitted_text=(f"generated default route ({chosen.family}): any hunk in "
+                       f"{chosen.path} that passes the lexical refusal; judged by "
+                       + ("the ppl_contract layers (NMSE on served shapes, wikitext2 "
+                          "|delta ppl|, production-length coherence, 1k-token canary)"
+                          if quant else "whole-model greedy identity on this lane's target "
+                          "and every peer, 3 repetitions byte-identical")))
+
+
+def _generated_route_refusal(patch_text: str | None, source_text: str | None,
+                             pre_source_text: str | None) -> str | None:
+    """Scope refusal for a generated route: no confinement, but every added line must pass
+    the same lexical screen the hand-listed routes apply to code outside a helper."""
+    if not source_text or not pre_source_text or not patch_text:
+        return "HEAD source, candidate source or the -U0 patch is empty"
+    hunks = _parse_hunks(patch_text)
+    if not hunks:
+        return "the -U0 patch has no hunks"
+    for hunk in hunks:
+        for line in hunk[5]:
+            why = _lexical_refusal(line, file_scope_helper=False, new_helpers=False)
+            if why is not None:
+                return f"an added line is refused lexically ({why}): {line.strip()[:120]!r}"
+    return None
+
+
 def cpu_source_routes(path: str, target_symbol: str) -> tuple[CpuSourceRoute, ...]:
     """Every widened route a (single path, target symbol) pair names, most specific first.
 
@@ -1142,6 +1206,9 @@ def cpu_source_routes(path: str, target_symbol: str) -> tuple[CpuSourceRoute, ..
     are tried in this order and the FIRST that admits the patch governs it, so the
     stricter gate always wins when the patch fits it."""
     candidates = [route for route in CPU_SOURCE_ROUTES if route.path == path]
+    if not candidates:
+        generated = default_cpu_route(path)
+        return (generated,) if generated is not None else ()
     exact = tuple(route for route in candidates if target_symbol in route.symbols)
     if exact:
         return exact
@@ -1451,6 +1518,8 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
                              case_labels: frozenset[str] = frozenset()) -> str | None:
     """None when every -U0 hunk lies inside one admitted body on both sides (or is an
     admitted new helper/definition or line rewrite), obeying the body's own rule."""
+    if route.generated:
+        return _generated_route_refusal(patch_text, source_text, pre_source_text)
     if not source_text or not pre_source_text or not patch_text:
         return "HEAD source, candidate source or the -U0 patch is empty"
     old = _cpu_route_bounds(pre_source_text, "HEAD", route)
@@ -3397,8 +3466,14 @@ PPL_CONTRACT_ORACLE_PREFIX = "AK-Oracle: sha256:"
 
 def ppl_contract_relevant(path: str) -> bool:
     """Any iqk file, repack.cpp, or any path a ppl_contract route can edit."""
-    return (path.startswith("ggml/src/ggml-cpu/iqk/") or path == "ggml/src/ggml-cpu/repack.cpp"
-            or path in ppl_contract_paths())
+    if (path.startswith("ggml/src/ggml-cpu/iqk/") or path == "ggml/src/ggml-cpu/repack.cpp"
+            or path in ppl_contract_paths()):
+        return True
+    # AKX-AUTO-9: a quant-family file a generated route can admit under ppl_contract is
+    # relevant whether or not the admission flag is on (conservative: it only adds holds).
+    from . import route_defaults as rd
+    chosen = rd.default_route(path)
+    return chosen is not None and chosen.oracle_class == rd.SCALAR_NMSE
 
 
 #: Round-9 resolution A: DIAGNOSTIC ONLY. Candidate code runs unprivileged in the same
@@ -4415,6 +4490,7 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "check_cpu_fa_reference", "check_cpu_fa_real_mask_identity",
            "check_cpu_gdn_reference", "check_cpu_iqk_reference",
            "check_cpu_route_reference", "gpu_graph_pool_hold_refusal",
+           "default_cpu_route", "default_route_admission_enabled", "DEFAULT_ROUTE_ADMISSION_ENV",
            "no_fallback_dispatch", "op_correctness", "run_all",
            "PPL_CORPUS", "PPL_CORPUS_SHA256", "PPL_CHUNKS", "PPL_CTX", "PPL_BATCH",
            "PPL_REL_BAR", "PPL_CONTRACT_NO_OP_ORACLE", "PPL_CONTRACT_PROD_PROMPT_COUNT_MIN",
