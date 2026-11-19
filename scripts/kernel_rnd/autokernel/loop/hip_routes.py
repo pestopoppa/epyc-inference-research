@@ -17,7 +17,7 @@ import subprocess
 import sys
 from typing import Any, Callable, Mapping
 
-from . import census, instruments, residency
+from . import census, instruments, residency, tool_output
 
 SCHEMA = "epyc.autokernel.hip_route_aa.v1"
 OBSERVED = census.OBSERVED
@@ -47,7 +47,7 @@ def parse_hip_matmul_routes(log: str) -> dict[str, Any]:
     parse completely, so a changed/truncated producer format cannot silently
     disappear from the census.
     """
-    plain = census.ANSI.sub("", log)
+    plain = tool_output.strip_ansi(log)
     counts: Counter[tuple[str, str, int]] = Counter()
     errors: list[dict[str, Any]] = []
     for number, line in enumerate(plain.splitlines(), 1):
