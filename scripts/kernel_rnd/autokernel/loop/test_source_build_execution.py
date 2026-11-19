@@ -528,7 +528,6 @@ def test_genuine_profile_then_actor_consumer_runs_owned_build(tmp_path):
         transition = selected.transition_id
         children = controller.unified_driver_children(transition)
         assert [c["role"] for c in children] == ["planner", "critic", "build"]
-        assert lifecycle.unaccounted_children == [] and stage.unaccounted_children == []
         settled = controller._driver_settled[transition]
         assert settled["schema"] == journal.UNIFIED_DRIVER_SETTLED_SCHEMA_V2
         assert settled["outcome"] == "prerequisite"

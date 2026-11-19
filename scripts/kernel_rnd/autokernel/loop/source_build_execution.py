@@ -270,7 +270,6 @@ class SourceBuildStageExecutor:
         self._results: dict[str, worktree.BuildResult] = {}
         self._held: dict[str, scheduling.HeldClaimReceipt] = {}
         self._accounting_binding: Any = None
-        self.unaccounted_children: list[tuple[str, str, str]] = []
 
     def log_path_for(self, plan: worktree.BuildPlan) -> str:
         if not isinstance(plan, worktree.BuildPlan):
@@ -348,15 +347,8 @@ class SourceBuildStageExecutor:
         except Exception as exc:
             raise SourceBuildExecutionUncertain("build terminal lacks trusted held cost") from exc
         self._held[request_id] = held
-        if request.accounting_binding is not None:
-            try:
-                self.controller.unified_driver_account_child(
-                    binding=request.accounting_binding, terminal=terminal, receipt=held,
-                    role="build", operation="source_build")
-            except Exception as exc:
-                # Not a launch failure: the held cost stays chargeable via the lifecycle.
-                # The owner sees the gap and cannot settle the operation as a success.
-                self.unaccounted_children.append((request_id, "build", str(exc)))
+        actor_lifecycle.account_child(self.controller, request.accounting_binding, terminal,
+                                      held, role="build", operation="source_build")
         if not terminal.accepted or terminal.return_code != 0:
             raise SourceBuildExecutionRefused("owned build child failed; held cost remains chargeable")
         raw = self.controller.read_worker_stdout(
