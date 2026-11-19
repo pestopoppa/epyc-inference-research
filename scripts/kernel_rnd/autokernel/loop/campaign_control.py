@@ -1524,6 +1524,13 @@ class CampaignController:
         except worker_lifecycle_module.LifecycleRefused as exc:
             raise journal_module.JournalCorruption(
                 f"worker lifecycle replay is inconsistent: {exc}") from exc
+        # AKU-07k recovery consumer: re-check every durable accounting binding against
+        # the replayed issued catalog/transition/selection. Legacy unbound history passes.
+        binding_violations = journal_module.validate_worker_accounting_binding_history(
+            worker_events, self._driver_issued)
+        if binding_violations:
+            raise journal_module.JournalCorruption(
+                "worker accounting binding recovery refused: " + "; ".join(binding_violations))
         if self._worker_projection.active:
             active_id = next(iter(self._worker_projection.active))
             self._active_worker_events = [
@@ -1863,6 +1870,13 @@ class CampaignController:
             if self.snapshot_version not in {2, 3} or self._worker_lifecycle is None:
                 pre_engine_refusal(
                     ControlRefused("worker lifecycle requires explicit snapshot v2"))
+            if request.accounting_binding is not None:
+                try:
+                    request.accounting_binding.verify_issued(
+                        self._driver_issued.get(request.accounting_binding.catalog_digest))
+                except worker_lifecycle_module.LifecycleRefused as exc:
+                    pre_engine_refusal(ControlRefused(
+                        f"worker request accounting binding refused: {exc}"))
             if (self._worker_run_active or self._worker_projection.active
                     or self._acquisition_projection.pending is not None):
                 pre_engine_refusal(
@@ -3968,6 +3982,20 @@ class CampaignController:
         if len(matches) != 1:
             raise ControlRefused("actor request lacks one exact issued selected transition")
         return matches[0]
+
+    def actor_accounting_binding(self, *, request_digest: str, stage_plan_digest: str):
+        """AKU-07k: the typed binding of the exact issued actor transition (unified v3 only).
+
+        Returns None outside the unified scheduler path so legacy requests stay unbound."""
+        with self._mutex:
+            self._require_active_locked()
+            if self.snapshot_version != 3 or self._scheduler_engine is None:
+                return None
+            from .scheduling import Selection
+            issued, _work = self._selected_actor_work_locked(request_digest, stage_plan_digest)
+            return worker_lifecycle_module.AccountingBinding.from_selection(
+                catalog_id=issued["catalog_id"], transition_id=issued["transition_id"],
+                selection=Selection.from_dict(issued["selection"]))
 
     def _append_actor_event_locked(self, row: Mapping[str, Any]):
         self._require_active_locked()

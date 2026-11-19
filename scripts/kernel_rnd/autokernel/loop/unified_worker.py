@@ -1441,13 +1441,16 @@ class PlannedWorkerInvocation:
 
     def stage_request(self, *, request_id: str, lineage_id: str, stage_id: str,
                       control_revision: int, stage: str = "sampling",
-                      cwd: Path | None = None) -> wl.StageRequest:
+                      cwd: Path | None = None,
+                      accounting_binding: wl.AccountingBinding | None = None
+                      ) -> wl.StageRequest:
         return wl.StageRequest(
             request_id, self.prepared.plan.digest, lineage_id, stage_id, stage,
             self.argv, {"PYTHONDONTWRITEBYTECODE": "1"},
             Path(cwd) if cwd is not None else self.prepared.artifact_root,
             self.prepared.prepared_digest, self.prepared.max_stage_seconds,
-            self.prepared.teardown_seconds, control_revision)
+            self.prepared.teardown_seconds, control_revision,
+            accounting_binding=accounting_binding)
 
     def validate_request(self, request: wl.StageRequest) -> None:
         if self._launched or self._closed:

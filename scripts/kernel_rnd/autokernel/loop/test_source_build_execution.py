@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .. import journal
+from dataclasses import replace
 import copy
 import hashlib
 import json
@@ -54,7 +56,14 @@ class _ProfileActorBuildProvider(SyntheticSelectedProfileProvider):
     def close_held_receipt(self, **request):
         if request["request"].request_id in self.requests:
             return super().close_held_receipt(**request)
-        return FullHeldProvider.close_held_receipt(self, **request)
+        trusted = FullHeldProvider.close_held_receipt(self, **request)
+        binding = request["request"].accounting_binding
+        if binding is None:
+            return trusted
+        # AKU-07k: a real provider authors the receipt with the request binding identity.
+        return replace(trusted, receipt=replace(
+            trusted.receipt, proposal_id=binding.proposal_id, backend=binding.backend,
+            stage_class=binding.scheduler_stage_class))
 
 
 def _different_plan(_value):
@@ -519,6 +528,23 @@ def test_genuine_profile_then_actor_consumer_runs_owned_build(tmp_path):
         assert sum(row.kind == "ACTOR_PREPARATION" for row in events) >= 5
         assert sum(row.kind == "WORKER_LIFECYCLE" and
                    row.payload["event"] == "WORKER_RESULT_ACCEPTED" for row in events) >= 4
+        # AKU-07k: actor and build children carry the exact issued binding; the
+        # Journal-level validator accepts the whole history and refuses a tampered one.
+        launches = [row.payload for row in events if row.kind == "WORKER_LIFECYCLE"
+                    and row.payload["event"] == "OWNED_LAUNCH_INTENT"]
+        by_stage = {}
+        for launch in launches:
+            by_stage.setdefault(launch["data"]["contract"]["stage"], []).append(
+                "accounting_binding" in launch["data"]["contract"])
+        assert any(by_stage.get("setup", [])) and any(by_stage.get("build", []))
+        lifecycle_rows = [row.payload for row in events if row.kind == "WORKER_LIFECYCLE"]
+        assert journal.validate_worker_accounting_binding_history(
+            lifecycle_rows, controller._driver_issued) == []
+        tampered = copy.deepcopy(lifecycle_rows)
+        bound_held = next(r for r in tampered if r["event"] == "OWNED_HELD_RECEIPT_RETAINED"
+                          and "accounting_binding_digest" in r["data"])
+        bound_held["data"]["accounting_binding_digest"] = "0" * 64
+        assert journal.validate_worker_accounting_binding_history(tampered)
     finally:
         if store is not None:
             store.close()

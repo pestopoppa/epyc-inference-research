@@ -239,6 +239,23 @@ class AccountingBinding:
                 "request accounting binding")
 
 
+    def verify_issued(self, issued: Any) -> None:
+        """Refuse a binding that differs from the exact issued catalog/transition/selection."""
+        from .scheduling import SchedulingRefused, Selection
+        if not isinstance(issued, Mapping):
+            raise LifecycleRefused("accounting binding names a catalog that was never issued")
+        try:
+            expected = AccountingBinding.from_selection(
+                catalog_id=issued.get("catalog_id"), transition_id=issued.get("transition_id"),
+                selection=Selection.from_dict(issued.get("selection")))
+        except (SchedulingRefused, LifecycleRefused, TypeError, ValueError) as exc:
+            raise LifecycleRefused(
+                f"issued selection cannot yield an accounting binding: {exc}") from exc
+        if expected != self:
+            raise LifecycleRefused(
+                "accounting binding differs from the issued catalog/transition/selection")
+
+
 def _binding_from_contract(contract: Mapping[str, Any]) -> "AccountingBinding | None":
     raw = contract.get("accounting_binding")
     return None if raw is None else AccountingBinding.from_dict(raw)
@@ -1028,6 +1045,44 @@ def validate_event(value: Mapping[str, Any]) -> dict[str, Any]:
     row["data"] = _validate_event_data(row["event"], row["data"])
     _canonical(row)
     return row
+
+
+def validate_accounting_binding_history(
+        rows: Sequence[Mapping[str, Any]],
+        issued: Mapping[str, Mapping[str, Any]] | None = None) -> None:
+    """Journal-level AKU-07k check over validated lifecycle rows.
+
+    Every held-receipt row must carry exactly the digest of its launch contract's
+    binding and a receipt whose proposal/backend/stage class equals it; a legacy
+    unbound launch must have no binding digest.  With ``issued`` (catalog_id -> issued
+    row) each binding must also equal the issued catalog/transition/selection.
+    Unbound legacy histories are unchanged."""
+    from .scheduling import HeldClaimReceipt, SchedulingRefused
+    launches: dict[tuple[str, int], AccountingBinding | None] = {}
+    for row in rows:
+        key = (row["worker_id"], row["worker_generation"])
+        if row["event"] == "OWNED_LAUNCH_INTENT":
+            binding = _binding_from_contract(row["data"]["contract"])
+            launches[key] = binding
+            if binding is not None and issued is not None:
+                binding.verify_issued(issued.get(binding.catalog_digest))
+        elif row["event"] == "OWNED_HELD_RECEIPT_RETAINED":
+            if key not in launches:
+                continue
+            binding = launches[key]
+            data = row["data"]
+            if binding is None:
+                if "accounting_binding_digest" in data:
+                    raise LifecycleRefused(
+                        "durable held receipt carries a binding the launch did not")
+                continue
+            if data.get("accounting_binding_digest") != binding.digest:
+                raise LifecycleRefused(
+                    "durable held receipt lacks the launch accounting binding")
+            try:
+                binding.verify_receipt(HeldClaimReceipt.from_dict(data["receipt"]))
+            except SchedulingRefused as exc:
+                raise LifecycleRefused(str(exc)) from exc
 
 
 def validate_acquisition_transition(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -2697,5 +2752,6 @@ __all__ = ["ACCOUNTING_BINDING_SCHEMA", "ADMISSION_DENIAL_CLASSES", "AccountingB
            "monotonic_clock_domain", "project_acquisitions", "project_events",
            "prospective_identity_from_transition", "prospective_request_digest",
            "validate_acquisition_transition", "validate_command_result_v2",
+           "validate_accounting_binding_history",
            "validate_command_transition_v2", "validate_event",
            "validate_lifecycle_handoff"]

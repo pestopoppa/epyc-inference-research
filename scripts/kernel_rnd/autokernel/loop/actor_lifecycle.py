@@ -6,7 +6,7 @@ descendant cleanup are performed only below ``CampaignController.run_worker_stag
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from pathlib import Path
 from types import MappingProxyType
@@ -270,8 +270,15 @@ class ActorLifecycleAdapter:
             artifact_contract_digest=artifact_contract_digest,
             max_stage_seconds=self.config.max_stage_seconds,
             teardown_seconds=self.config.teardown_seconds,
-            control_revision=reservation.control_revision)
+            control_revision=reservation.control_revision,
+            accounting_binding=None)
         try:
+            # AKU-07k: bind the child to the exact issued transition (unified v3 only).
+            binding_for = getattr(self.controller, "actor_accounting_binding", None)
+            if callable(binding_for):
+                request = replace(request, accounting_binding=binding_for(
+                    request_digest=reservation.request_digest,
+                    stage_plan_digest=reservation.stage_plan_digest))
             returned = self.controller.run_worker_stage(request)
             terminal = self.controller.worker_terminal_for_request(
                 request_id=request.request_id, plan_digest=request.plan_digest,

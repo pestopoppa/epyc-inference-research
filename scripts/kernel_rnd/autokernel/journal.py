@@ -1208,6 +1208,25 @@ def retrieval_filter(
 # Native payload validators
 # =============================================================================
 
+def validate_worker_accounting_binding_history(
+        payloads: Sequence[Mapping[str, Any]],
+        issued: Mapping[str, Mapping[str, Any]] | None = None) -> list:
+    """AKU-07k: cross-event binding validator over WORKER_LIFECYCLE payloads.
+
+    Returns violations (empty = ok). Legacy unbound histories always pass; a held
+    receipt must carry its launch binding's digest and identity, and with ``issued``
+    the binding must equal the issued catalog/transition/selection."""
+    if __package__:
+        from .loop.worker_lifecycle import LifecycleRefused, validate_accounting_binding_history
+    else:
+        from autokernel.loop.worker_lifecycle import LifecycleRefused, validate_accounting_binding_history
+    try:
+        validate_accounting_binding_history(payloads, issued)
+    except LifecycleRefused as exc:
+        return [f"worker accounting binding: {exc}"]
+    return []
+
+
 def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
     out: list = []
     if not isinstance(payload, Mapping):
@@ -4195,6 +4214,7 @@ __all__ = [
     "KIND_RETENTION_CATALOG_INSTALLED",
     "KIND_UNIFIED_DRIVER_ISSUED", "UNIFIED_DRIVER_ISSUED_SCHEMA",
     "KIND_UNIFIED_DRIVER_SETTLED", "UNIFIED_DRIVER_SETTLED_SCHEMA",
+    "validate_worker_accounting_binding_history",
     "KIND_A2_RUNTIME_EXECUTION", "A2_RUNTIME_EXECUTION_SCHEMA", "A2_UNIT_RECORD_SCHEMA",
     "CANDIDATE_TRANSACTION_SCHEMA", "CANDIDATE_TRANSACTION_PHASES",
     "CANDIDATE_TRANSACTION_OPERATIONS",

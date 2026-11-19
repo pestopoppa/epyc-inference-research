@@ -832,7 +832,12 @@ class UnifiedDriverExecution:
             request = invocation.stage_request(
                 request_id=request_id,
                 lineage_id=f"driver:{transition_id}", stage_id=f"runtime:{transition_id}",
-                control_revision=readiness["control_revision"])
+                control_revision=readiness["control_revision"],
+                accounting_binding=(
+                    worker_lifecycle.AccountingBinding.from_selection(
+                        catalog_id=catalog.catalog_id, transition_id=transition_id,
+                        selection=selection)
+                    if getattr(self.controller, "snapshot_version", None) == 3 else None))
             producer.start()
         except BaseException:
             self._stop_producer(producer)

@@ -269,6 +269,7 @@ class SourceBuildStageExecutor:
         self.log_root = self.artifact_root / "source-build-logs"
         self._results: dict[str, worktree.BuildResult] = {}
         self._held: dict[str, scheduling.HeldClaimReceipt] = {}
+        self._accounting_binding: Any = None
 
     def log_path_for(self, plan: worktree.BuildPlan) -> str:
         if not isinstance(plan, worktree.BuildPlan):
@@ -319,7 +320,8 @@ class SourceBuildStageExecutor:
             artifact_contract_digest=artifact.sha256,
             max_stage_seconds=configure_timeout_s + build_timeout_s,
             teardown_seconds=min(30.0, configure_timeout_s),
-            control_revision=self.controller.control_revision)
+            control_revision=self.controller.control_revision,
+            accounting_binding=self._accounting_binding)
         lookup = dict(request_id=request.request_id, plan_digest=request.plan_digest,
                       lineage_id=request.lineage_id, stage_id=request.stage_id)
         try:
@@ -377,11 +379,22 @@ class SourceBuildStageExecutor:
                 env: Mapping[str, str], sandbox_cgroup_root: str,
                 production_trees=()) -> Mapping[str, Any]:
         snapshot = source_worktree.snapshot_digest()
-        result = source_build_preparation.delegate_build(
-            bound, campaign_driver=self.driver, runner=self,
-            source_worktree=source_worktree, log_path=log_path,
-            configure_timeout_s=configure_timeout_s, build_timeout_s=build_timeout_s,
-            env=env, sandbox_cgroup_root=sandbox_cgroup_root)
+        # AKU-07k: the build child carries the exact selected operation binding so the
+        # provider receipt is verified against it before retention. Unified v3 only.
+        chosen = bound.to_dict()["selected_work"]
+        self._accounting_binding = (
+            worker_lifecycle.AccountingBinding.from_selection(
+                catalog_id=chosen["catalog_id"], transition_id=chosen["transition_id"],
+                selection=scheduling.Selection.from_dict(chosen["selection"]))
+            if getattr(self.controller, "snapshot_version", None) == 3 else None)
+        try:
+            result = source_build_preparation.delegate_build(
+                bound, campaign_driver=self.driver, runner=self,
+                source_worktree=source_worktree, log_path=log_path,
+                configure_timeout_s=configure_timeout_s, build_timeout_s=build_timeout_s,
+                env=env, sandbox_cgroup_root=sandbox_cgroup_root)
+        finally:
+            self._accounting_binding = None
         after = source_worktree.snapshot_digest()
         if after != snapshot:
             raise SourceBuildExecutionRefused("source snapshot changed during owned build")
