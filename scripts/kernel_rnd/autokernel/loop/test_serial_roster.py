@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from . import campaign, claim, legacy_targets, run, serial_roster, serial_run as sr, resolved_recipe as rr
+from . import actor_wire_gate, campaign, claim, legacy_targets, run, serial_roster, serial_run as sr, resolved_recipe as rr
 from .test_campaign import _manifest, _registry, _target
 from .test_glm_frozen_requests import _recipe, _manifest as _prompts, _request
 from .test_legacy_targets import _forbid_execution
@@ -134,6 +134,7 @@ def test_ready_production_and_candidate_roster_preserves_original_inputs(tmp_pat
     assert not (tmp_path / "router").exists()
 
 
+@pytest.mark.usefixtures("real_store_guard")
 def test_lane_serving_preflight_accepts_native_roster_inputs_and_blocks_mismatched_store(
         tmp_path, monkeypatch, capsys):
     from . import lane_targets
@@ -276,12 +277,22 @@ def _assert_stdout_actor_wire_request(tmp_path, output):
     assert request["actor_config_digest"] == actor_wire_gate.digest(request["seats"])
 
 
+def _wire_gate_not_under_test(monkeypatch):
+    """Dry-run now evaluates the live actor-wire gate (0fe366b53) and refuses without a PASS
+    record or an override; these tests are about the roster reaching the owner, not that gate
+    (test_actor_wire_gate and test_dry_run_live_gates own it)."""
+    monkeypatch.setattr(actor_wire_gate, "evaluate", lambda *_a, **_k: {"status": "OVERRIDDEN"})
+    # Likewise the accumulator-recovery refusal (a production GPU lane needs bundle state).
+    monkeypatch.setattr(run, "_accumulator_startup_refusal", lambda *_a, **_k: None)
+
+
 @pytest.mark.parametrize("backend,experimental", [("cpu", True), ("gpu", False), ("gpu", True)])
 def test_generated_dry_run_reaches_actual_owner_without_side_effects(
         tmp_path, monkeypatch, capsys, backend, experimental):
     _, owners, argv = _inputs(tmp_path, backends=(backend,), unowned=True,
                              experimental_gpu=experimental)
     _forbid_execution(monkeypatch)
+    _wire_gate_not_under_test(monkeypatch)
     starts = []
     monkeypatch.setattr(run.champion, "verify_startup", lambda **kw: starts.append(kw) or "a" * 40)
     monkeypatch.setattr(run, "_git", lambda *_a: "a" * 40)
@@ -650,6 +661,7 @@ def test_shared_author_sandbox_reaches_owner_parser_with_default_unchanged(
               ["--actor-author-sandbox", sandbox])
     common.write_text(json.dumps(option))
     _forbid_execution(monkeypatch)
+    _wire_gate_not_under_test(monkeypatch)
     monkeypatch.setattr(run.champion, "verify_startup", lambda **_kw: "a" * 40)
     monkeypatch.setattr(run, "_git", lambda *_a: "a" * 40)
     monkeypatch.setattr(run.workload_contract, "read_census",

@@ -72,6 +72,12 @@ def _isolate_host_claims(tmp_path_factory):
         yield holds
 
 
+@pytest.fixture
+def real_store_guard():
+    """Request this (usefixtures) to keep the real, refusing experiments.require_existing_store
+    for a test that asserts a wrong --store is never created."""
+
+
 @pytest.fixture(autouse=True)
 def _loop_tests_may_create_stores(request):
     """C2a/C2b: production refuses a `--store` with no experiments.db and a missing
@@ -79,7 +85,8 @@ def _loop_tests_may_create_stores(request):
     permissive guard that materialises the inbox. Tests outside `loop/` (the guard's
     own tests live in controller/) see the real, refusing function."""
     from pathlib import Path as _P
-    if "/loop/" not in str(request.node.fspath):
+    if ("/loop/" not in str(request.node.fspath)
+            or "real_store_guard" in request.fixturenames):
         yield
         return
     from .controller import experiments
