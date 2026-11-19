@@ -29,6 +29,9 @@ from . import worker_lifecycle as wl
 
 ADAPTERS_SCHEMA = "epyc.autokernel.parent_scientific_witness_adapters.v1"
 ADAPTERS_SCHEMA_V2 = "epyc.autokernel.parent_scientific_witness_adapters.v2"
+# v3: additive. contention/residency slots may hold the concrete observation witness adapters
+# (native_observation_witnesses); `purpose` stays None (no sealed evidence carries it).
+ADAPTERS_SCHEMA_V3 = "epyc.autokernel.parent_scientific_witness_adapters.v3"
 T0_SCHEMA = "epyc.autokernel.parent_issued_t0_evidence.v1"
 WITNESS_SCHEMA = "epyc.autokernel.parent_scientific_witness.v1"
 ADAPTER_ID = "epyc.autokernel.native_t0_witness.v1"
@@ -187,7 +190,7 @@ class WitnessEvidenceReference:
     schema: str = WITNESS_SCHEMA
 
     def __post_init__(self) -> None:
-        if (type(self.artifact) is not mc.StoredArtifact or self.witness != "correctness"
+        if (type(self.artifact) is not mc.StoredArtifact or self.witness not in SLOTS
                 or self.schema != WITNESS_SCHEMA):
             raise ScientificWitnessRefused("unsupported scientific witness reference")
         wl._sha(self.digest, "scientific witness digest")
@@ -599,12 +602,23 @@ class NativeT0WitnessAdapter:
 class ParentScientificWitnessAdapters:
     correctness: NativeT0WitnessAdapter | None = None
     purpose: None = None
-    contention: None = None
-    residency: None = None
+    contention: Any = None
+    residency: Any = None
     schema: str = ADAPTERS_SCHEMA
 
     def __post_init__(self) -> None:
         from .native_server_t0_witness import NativeServerT0WitnessAdapter
+        from .native_observation_witnesses import ObservationWitnessAdapter
+        if self.contention is not None or self.residency is not None or self.schema == ADAPTERS_SCHEMA_V3:
+            if (self.purpose is not None or self.schema not in (ADAPTERS_SCHEMA, ADAPTERS_SCHEMA_V3)
+                    or self.correctness is not None and type(self.correctness) not in (
+                        NativeT0WitnessAdapter, NativeServerT0WitnessAdapter)
+                    or any(item is not None and (type(item) is not ObservationWitnessAdapter
+                           or item.witness != name) for name, item in
+                           (("contention", self.contention), ("residency", self.residency)))):
+                raise ScientificWitnessRefused("unsupported observation witness adapter registry slots")
+            object.__setattr__(self, "schema", ADAPTERS_SCHEMA_V3)
+            return
         if type(self.correctness) is NativeServerT0WitnessAdapter:
             if self.schema not in (ADAPTERS_SCHEMA, ADAPTERS_SCHEMA_V2) or any(
                     getattr(self, name) is not None for name in SLOTS[1:]):
@@ -634,7 +648,7 @@ class ParentScientificWitnessAdapters:
                 body = adapter.reopen(reference, context=context, native=native,
                     lifecycle_link=lifecycle_link, runtime_readbacks=runtime_readbacks, store=store)
                 result[name] = {"status": body["status"],
-                    "reason": (body["replay_coverage"] if self.schema == ADAPTERS_SCHEMA_V2
+                    "reason": (body["replay_coverage"] if self.schema in (ADAPTERS_SCHEMA_V2, ADAPTERS_SCHEMA_V3)
                                else REPLAY_COVERAGE), "facts": {"receipt": reference.to_dict(),
                     "report": ob._plain(body["report"]), "scope_defects": list(body["scope_defects"]),
                     "adapter_source": ob._plain(body["source"])}}
@@ -644,10 +658,29 @@ class ParentScientificWitnessAdapters:
         return ob._freeze(result)
 
 
+def _validate_v3_source(row: dict) -> Mapping[str, Any]:
+    from .native_observation_witnesses import validate_observation_source
+    from .native_server_t0_witness import ADAPTER_ID as SERVER_ADAPTER_ID, validate_server_source
+    if row["purpose"] is not None:
+        raise ScientificWitnessRefused("purpose slot carries no concrete adapter")
+    correctness = row["correctness"]
+    if correctness is not None:
+        kind = correctness.get("adapter_id") if isinstance(correctness, Mapping) else None
+        sub = {"schema": ADAPTERS_SCHEMA_V2 if kind == SERVER_ADAPTER_ID else ADAPTERS_SCHEMA,
+               "correctness": correctness, "purpose": None, "contention": None, "residency": None}
+        row["correctness"] = validate_scientific_source(sub)["correctness"]
+    for name in ("contention", "residency"):
+        if row[name] is not None:
+            row[name] = validate_observation_source(row[name], name)
+    return ob._freeze(ob._plain(row))
+
+
 def validate_scientific_source(value: Any) -> Mapping[str, Any]:
     """Closed historical grammar; no comparison with today's installation here."""
     from .native_producer_source import _closed, _identity, _callables
     row = _closed(value, ("schema", *SLOTS), "scientific adapter source")
+    if row["schema"] == ADAPTERS_SCHEMA_V3:
+        return _validate_v3_source(row)
     if row["schema"] == ADAPTERS_SCHEMA_V2:
         from .native_server_t0_witness import validate_server_source
         if row["correctness"] is None or any(row[name] is not None for name in SLOTS[1:]):
@@ -685,6 +718,16 @@ def validate_scientific_source(value: Any) -> Mapping[str, Any]:
 def scientific_source_identities(value: Any) -> tuple[Mapping[str, Any], ...]:
     row = validate_scientific_source(value)
     adapter = row["correctness"]
+    if row["schema"] == ADAPTERS_SCHEMA_V3:
+        from .native_observation_witnesses import observation_source_identities
+        found = ()
+        if adapter is not None:
+            found = scientific_source_identities({"schema": _v3_correctness_schema(adapter),
+                "correctness": adapter, "purpose": None, "contention": None, "residency": None})
+        for name in ("contention", "residency"):
+            if row[name] is not None:
+                found += observation_source_identities(row[name])
+        return found
     if row["schema"] == ADAPTERS_SCHEMA_V2:
         from .native_server_t0_witness import server_source_identities
         return server_source_identities(adapter)
@@ -694,10 +737,25 @@ def scientific_source_identities(value: Any) -> tuple[Mapping[str, Any], ...]:
         adapter["owning_source_pins"]["callables"])
 
 
+def _v3_correctness_schema(adapter: Mapping[str, Any]) -> str:
+    from .native_server_t0_witness import ADAPTER_ID as SERVER_ADAPTER_ID
+    return ADAPTERS_SCHEMA_V2 if adapter.get("adapter_id") == SERVER_ADAPTER_ID else ADAPTERS_SCHEMA
+
+
 def installed_scientific_adapters(value: Any) -> ParentScientificWitnessAdapters:
     """Reconstruct selected installed TYPE/CONFIG only; never restore its issuance."""
     row = validate_scientific_source(value)
     adapter = row["correctness"]
+    if row["schema"] == ADAPTERS_SCHEMA_V3:
+        from .native_observation_witnesses import ObservationWitnessAdapter
+        base = None if adapter is None else installed_scientific_adapters({
+            "schema": _v3_correctness_schema(adapter), "correctness": adapter,
+            "purpose": None, "contention": None, "residency": None}).correctness
+        selected = ParentScientificWitnessAdapters(correctness=base, schema=ADAPTERS_SCHEMA_V3,
+            **{name: ObservationWitnessAdapter(name) for name in ("contention", "residency")
+               if row[name] is not None})
+        _same(selected.source_identity(), row, "installed observation scientific adapter source")
+        return selected
     if row["schema"] == ADAPTERS_SCHEMA_V2:
         from .native_server_t0_witness import NativeServerT0WitnessAdapter
         config = adapter["configuration"]
