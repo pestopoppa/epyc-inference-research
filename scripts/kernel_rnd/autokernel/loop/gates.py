@@ -51,7 +51,9 @@ DEFAULT_TARGETS = ("llama-bench", "test-backend-ops")
 #: production… If we're not compiling llama-servers that's a problem." A superset of
 #: DEFAULT_TARGETS by construction, so the promoted artifact can never lack a binary
 #: the loop itself measured with.
-PROMOTION_TARGETS = (*DEFAULT_TARGETS, "llama-cli", "llama-server")
+#: llama-perplexity (AK-FUSE-GRAPH-KLD-1): the champion saves the graph_kld base logits with
+#: its OWN binary, so every promoted anchor carries it.
+PROMOTION_TARGETS = (*DEFAULT_TARGETS, "llama-cli", "llama-server", "llama-perplexity")
 
 
 def _correctness_detail(backend: str, counts, stdout: str, stderr: str,
@@ -2795,7 +2797,7 @@ def check_noise_relative_tolerance(incumbent_single, incumbent_batched, candidat
 def _numerics_chain(passed: "Verdict", output: str) -> "Verdict":
     """AKX-ALL-31: a passing op verdict stands unless the opt-in numerics chain refuses it.
 
-    Off (the default, `AK_NUMERICS_GATES` unset): `passed` is returned unchanged. On: the
+    Off (`AK_NUMERICS_GATES=0`; default ON since 2026-11-18): `passed` is returned unchanged. On: the
     planted controls must go red first, the run must carry an `AK_NUMERICS_V1` receipt, the
     AKX-ALL-31.EDGE receipts must sit within their calibrated bounds with every seeded-defect
     twin red (`numerics_edge.chain_verdicts`; only when a bounds file is configured or edge
@@ -4547,7 +4549,8 @@ GRAPH_KLD_TIMEOUT_S = 3600
 
 
 def graph_kld_run(anchor_build: Path, candidate_build: Path, *, model: str, corpus: str,
-                  base_logits: str, chunks: int = 16, timeout: int = GRAPH_KLD_TIMEOUT_S) -> str:
+                  base_logits: str, chunks: int = 16, timeout: int = GRAPH_KLD_TIMEOUT_S,
+                  extra: "tuple[str, ...]" = ()) -> str:
     """Execute the two llama-perplexity runs (champion saves base logits once, candidate
     compares) and return the candidate's output. Each binary gets its OWN build's libs on
     LD_LIBRARY_PATH (three-ggml-generations hazard). Needs a granted GPU window and the
@@ -4558,9 +4561,130 @@ def graph_kld_run(anchor_build: Path, candidate_build: Path, *, model: str, corp
             raise FileNotFoundError(f"{exe} missing: champion store must ship llama-perplexity")
         env = dict(os.environ, LD_LIBRARY_PATH=f"{Path(build) / 'bin'}")
         p = subprocess.run(graph_kld_argv(str(exe), model=model, corpus=corpus,
-                                          base_logits=base_logits, mode=mode, chunks=chunks),
+                                          base_logits=base_logits, mode=mode, chunks=chunks,
+                                          extra=extra),
                            capture_output=True, text=True, timeout=timeout, env=env)
         return p.stdout + p.stderr
     if not Path(base_logits).is_file():
         one(Path(anchor_build), "base")
     return one(Path(candidate_build), "kld")
+
+
+# --- AK-FUSE-GRAPH-KLD-1 keep-path policy (operator ruling 2026-11-18) ---------------------
+# The per-backend clauses live in GRAPH_KLD_POLICY_FILE, written by the operator's ratify
+# script (P-AK-SEARCH-1-A5 amendment); the values are human-only. Absent or malformed file
+# -> `threshold_unset` (a reported refusal). Clauses: GPU decides on 27B Q8_0 (KLD and |dPPL|)
+# with Q38FN report-only; CPU adds Q38FN |dPPL| and same-top. |dPPL| % = |exp(ln_ratio)-1|*100.
+GRAPH_KLD_POLICY_SCHEMA = "epyc.autokernel.graph_kld_policy.v1"
+GRAPH_KLD_POLICY_FILE = Path(__file__).with_name("graph_kld_policy.json")
+_GRAPH_KLD_LIMITS = ("max_mean_kld", "max_abs_dppl_pct", "min_same_top_pct")
+
+
+@dataclass(frozen=True)
+class GraphKldClause:
+    model: str
+    decisive: bool
+    max_mean_kld: float | None = None
+    max_abs_dppl_pct: float | None = None
+    min_same_top_pct: float | None = None
+
+
+@dataclass(frozen=True)
+class GraphKldPolicy:
+    backend: str
+    corpus: str
+    chunks: int
+    models: dict
+    clauses: tuple
+
+
+def load_graph_kld_policy(backend: str, path: "Path | None" = None) -> "GraphKldPolicy | None":
+    """The backend's ratified clauses, or None (-> threshold_unset) on any defect: missing
+    file, wrong schema, unknown model, a decisive clause without a limit, a non-numeric limit."""
+    try:
+        cfg = json.loads(Path(path or GRAPH_KLD_POLICY_FILE).read_text(encoding="utf-8"))
+        if cfg.get("schema") != GRAPH_KLD_POLICY_SCHEMA:
+            return None
+        models = {str(k): str(v) for k, v in cfg["models"].items()}
+        clauses = []
+        for row in cfg["backends"][backend]:
+            limits = {k: float(row[k]) for k in _GRAPH_KLD_LIMITS if row.get(k) is not None}
+            decisive = bool(row["decisive"])
+            if row["model"] not in models or (decisive and not limits):
+                return None
+            clauses.append(GraphKldClause(str(row["model"]), decisive, **limits))
+        if not any(c.decisive for c in clauses):
+            return None
+        return GraphKldPolicy(backend, str(cfg["corpus"]), int(cfg.get("chunks", 16)),
+                              models, tuple(clauses))
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def abs_dppl_pct(ln_ratio: float) -> float:
+    import math
+    return abs(math.expm1(ln_ratio)) * 100.0
+
+
+def graph_kld_policy_verdict(per_model: dict, policy: "GraphKldPolicy | None") -> Verdict:
+    """Decisive clauses decide; report-only clauses are printed, never judged. A decisive
+    clause whose metric did not parse refuses (kld_unparsed), never passes."""
+    if policy is None:
+        return Verdict(GRAPH_KLD_GATE, False, GRAPH_KLD_THRESHOLD_UNSET,
+                       "no ratified graph_kld_policy.json for this backend; measured "
+                       + json.dumps(per_model, sort_keys=True))
+    bad, notes = [], []
+    for c in policy.clauses:
+        m = per_model.get(c.model, {})
+        dppl = abs_dppl_pct(m["ln_ratio"]) if "ln_ratio" in m else None
+        notes.append(f"{c.model}{'' if c.decisive else ' (report-only)'}: KLD {m.get('kld_mean')}, "
+                     f"|dPPL| {None if dppl is None else round(dppl, 4)}%, "
+                     f"same-top {m.get('same_top_p_pct')}%")
+        if not c.decisive:
+            continue
+        need = {"max_mean_kld": m.get("kld_mean"), "max_abs_dppl_pct": dppl,
+                "min_same_top_pct": m.get("same_top_p_pct")}
+        for key in _GRAPH_KLD_LIMITS:
+            limit = getattr(c, key)
+            if limit is None:
+                continue
+            got = need[key]
+            if got is None:
+                return Verdict(GRAPH_KLD_GATE, False, "kld_unparsed",
+                               f"{c.model}: no {key} metric in llama-perplexity output; "
+                               + "; ".join(notes))
+            if (got < limit) if key.startswith("min_") else (got > limit):
+                bad.append(f"{c.model} {key} {got:.4f} vs {limit}")
+    if bad:
+        return Verdict(GRAPH_KLD_GATE, False, "graph_kld_exceeded",
+                       "; ".join(bad) + " -- " + "; ".join(notes))
+    return Verdict(GRAPH_KLD_GATE, True, "", f"{policy.backend}: " + "; ".join(notes))
+
+
+def graph_kld_keep_check(changed_paths, *, backend: str, anchor_build: Path,
+                         candidate_build: Path, base_dir: Path,
+                         policy_path: "Path | None" = None,
+                         run: "Callable[..., str] | None" = None) -> "Verdict | None":
+    """The keep-path gate (P-AK-SEARCH-1-A5). None when no graph-fusion file changed.
+    Otherwise run every clause's model (champion base logits saved once per `base_dir`,
+    which the caller keys by champion commit) and judge. Missing binary/model or a timeout
+    is oracle_unavailable (the instrument's fault, never a pass)."""
+    if not touches_graph_fusion(changed_paths):
+        return None
+    policy = load_graph_kld_policy(backend, policy_path)
+    if policy is None:
+        return graph_kld_policy_verdict({}, None)
+    run = run or graph_kld_run
+    extra = ("-ngl", "0") if backend == "cpu" else ("-ngl", "999")
+    per_model = {}
+    for key in dict.fromkeys(c.model for c in policy.clauses):
+        Path(base_dir).mkdir(parents=True, exist_ok=True)
+        try:
+            text = run(Path(anchor_build), Path(candidate_build), model=policy.models[key],
+                       corpus=policy.corpus, base_logits=str(Path(base_dir) / f"{key}.kld-base"),
+                       chunks=policy.chunks, extra=extra)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return Verdict("oracle_unavailable", False,
+                           f"graph_kld_run failed for {key}: {exc}; NOT evidence about the patch")
+        per_model[key] = {**parse_graph_kld(text), "kv_type": GRAPH_KLD_KV_TYPE}
+    return graph_kld_policy_verdict(per_model, policy)

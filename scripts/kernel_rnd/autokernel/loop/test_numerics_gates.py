@@ -54,9 +54,12 @@ class NumericsGateTests(unittest.TestCase):
         finally:
             ng.CONTROL_NAN_DROP = saved
 
-    def test_opt_in_default_off(self):
-        self.assertFalse(ng.NUMERICS_GATES_DEFAULT)
-        self.assertEqual(ng.chain_verdicts(ng.CONTROL_NAN_DROP, environ={}), [])
+    def test_default_on_env_can_opt_out(self):
+        # AKX-ALL-31.DEFAULT, operator ruling 2026-11-18: default ON; AK_NUMERICS_GATES=0 opts out.
+        self.assertTrue(ng.NUMERICS_GATES_DEFAULT)
+        self.assertTrue(ng.enabled(environ={}))
+        self.assertFalse(all(v.passed for v in ng.chain_verdicts(ng.CONTROL_NAN_DROP, environ={})))
+        self.assertEqual(ng.chain_verdicts(ng.CONTROL_NAN_DROP, environ={ng.ENV_FLAG: "0"}), [])
         self.assertTrue(ng.enabled(environ={ng.ENV_FLAG: "1"}))
         self.assertFalse(ng.enabled(flag=False, environ={ng.ENV_FLAG: "1"}))
 

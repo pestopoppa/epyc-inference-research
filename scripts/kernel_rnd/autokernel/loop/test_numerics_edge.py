@@ -284,12 +284,18 @@ class Wiring(unittest.TestCase):
     def test_edge_not_in_play_leaves_the_chain_unchanged(self):
         self.assertTrue(self.run_gate("", bounds=False).passed)
 
-    def test_default_off_ignores_edge_entirely(self):
+    def test_explicit_off_ignores_edge_entirely(self):
         bad = [dict(r, max_abs=1e30) for r in self.anchor]
-        self.assertFalse(ng.NUMERICS_GATES_DEFAULT)
-        self.assertTrue(self.run_gate(ne.receipt_text(bad), flag=None).passed)
+        self.assertTrue(self.run_gate(ne.receipt_text(bad), flag="0").passed)
         with mock.patch.dict("sys.modules", {"numpy": None}):
-            self.assertTrue(self.run_gate(ne.receipt_text(bad), flag=None, bounds=False).passed)
+            self.assertTrue(self.run_gate(ne.receipt_text(bad), flag="0", bounds=False).passed)
+
+    def test_default_on_judges_edge(self):
+        # AKX-ALL-31.DEFAULT (operator 2026-11-18): with AK_NUMERICS_GATES unset the
+        # chain runs, so an out-of-bound edge receipt is refused by default.
+        bad = [dict(r, max_abs=1e30) for r in self.anchor]
+        self.assertTrue(ng.NUMERICS_GATES_DEFAULT)
+        self.assertFalse(self.run_gate(ne.receipt_text(bad), flag=None).passed)
 
 
 if __name__ == "__main__":

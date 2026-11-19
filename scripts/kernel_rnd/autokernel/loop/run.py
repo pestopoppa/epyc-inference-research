@@ -4843,6 +4843,15 @@ def _main(argv: list[str] | None = None) -> int:
             # (`gates.ppl_contract_op_nmse`); this covers every other route and edit. Fails
             # closed: no manifest in `<store>/cpu_repack/` refuses the keep.
             repack_lane = gates._lane_for_model(args.model)
+            def graph_kld_check():
+                # AK-FUSE-GRAPH-KLD-1 / P-AK-SEARCH-1-A5: a patch fusing across graph nodes
+                # must pass the ratified graph-level KLD/PPL/same-top clauses (or refuse).
+                return gates.graph_kld_keep_check(
+                    changed + untracked, backend="cpu" if cpu_launch else "gpu",
+                    anchor_build=anchor_build[0], candidate_build=worker.build_dir,
+                    base_dir=Path(args.store) / "graph_kld" / archive._git(
+                        worker.worktree, "rev-parse", "HEAD").strip())
+            graph_kld_extra = gates.touches_graph_fusion(changed + untracked)
             repack_extra = bool(cpu_launch and cpu_repack_cases.lane_has_cases(repack_lane)
                                 and not (admitted_route is not None
                                          and admitted_route.numerics == "ppl_contract"))
@@ -4872,6 +4881,8 @@ def _main(argv: list[str] | None = None) -> int:
                     checks.extend(lambda ref=ref: ref(arm) for ref in route_references)
                 if repack_extra:
                     checks.append(lambda: repack_check(arm))
+                if graph_kld_extra:
+                    checks.append(graph_kld_check)
                 return gates.run_all(*checks)
             # Callables, so a failed build actually short-circuits: an eagerly
             # evaluated op_correctness ran the suite against a stale binary and blamed
@@ -4889,7 +4900,10 @@ def _main(argv: list[str] | None = None) -> int:
                                        cmake_defines=recipe.cmake_defines(),
                                        jobs=build_jobs, cpu_list=build_cpu_list,
                                        **({"targets": gates.PROMOTION_TARGETS}
-                                          if direct_launch else {})),
+                                          if direct_launch else
+                                          {"targets": gates.DEFAULT_TARGETS
+                                           + ("llama-perplexity",)}
+                                          if graph_kld_extra else {})),
             ]
             if cpu_launch:
                 checks.extend(lambda op=op: local_op_correctness(worker.build_dir, op=op,
@@ -4923,6 +4937,8 @@ def _main(argv: list[str] | None = None) -> int:
                     lambda: gates.no_fallback_dispatch(
                         worker.build_dir, args.model, pp=pp, tg=tg, ubatch=ubatch),
                 ))
+            if graph_kld_extra:
+                checks.append(graph_kld_check)
             # Build owns only its narrow CPU claim. Every GPU correctness /
             # dispatch invocation owns quiet separately, including anchor fallback.
             if not cpu_launch:

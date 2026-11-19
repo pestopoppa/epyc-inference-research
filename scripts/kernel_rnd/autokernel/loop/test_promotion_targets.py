@@ -160,7 +160,7 @@ class PromoteAnchorPplContractObligation(unittest.TestCase):
             self.assertEqual(calls, [(promoted, gates.PROMOTION_TARGETS)])
             body = json.loads((promoted / "provenance.json").read_text())
             self.assertEqual(body["targets"], list(gates.PROMOTION_TARGETS))
-            self.assertNotIn("llama-perplexity", body["targets"])
+            self.assertNotIn("llama-completion", body["targets"])  # perplexity is in PROMOTION_TARGETS (AK-FUSE-GRAPH-KLD-1)
 
     def test_a_new_run_with_an_admitted_ppl_contract_mechanism_widens(self):
         """A store carrying a ppl_contract ledger with at least one admitted mechanism

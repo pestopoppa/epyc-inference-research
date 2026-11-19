@@ -156,3 +156,11 @@ def _isolate_belief_reader(tmp_path_factory):
 def belief_answer():
     """`belief_ready_answer`, for tests that build their own canned reader answers."""
     return belief_ready_answer
+
+
+@pytest.fixture(autouse=True)
+def _numerics_chain_off_unless_asked(monkeypatch):
+    """AKX-ALL-31.DEFAULT (2026-11-18) turned the numerics chain ON by default. Unit tests that
+    fake a passing test-backend-ops run print no AK_NUMERICS_V1 receipt, so they opt out here;
+    the numerics tests set the flag (or clear the env to test the default) themselves."""
+    monkeypatch.setenv("AK_NUMERICS_GATES", "0")

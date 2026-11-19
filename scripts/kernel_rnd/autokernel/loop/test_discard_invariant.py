@@ -23,7 +23,7 @@ REVIEWED = {
     "pipeline.py": "19c6e37dc2aa7879bc8edceefcad99b6662c657e7fa0188b11415bd8b39832fc",  # custody review 2026-11-09: expected_head at validation, no disposition change
     "pool.py": "768e004884627cb611e5ebdc4a64c72c69fefaa631d89efe426b80766fe45985",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "resume.py": "f166268ed0546172869976df0eefcceabb1f1d05f74afc7f891d336e27c43d7b",  # custody review CUSTODY-REVIEW.md 2026-11-07 (fix)
-    "run.py": "96a42afbc9054430ab456c7fcb9e4fe32e3e5a70039b10d25a4d80d78c311790",  # custody review 2026-11-09: deadline reserve joins should_stop, no disposition change
+    "run.py": "d4090974838df4a43efa7736734bd3ea2c890cb79fa3f830e1dcec1201fd502d",  # custody review 2026-11-18 AutoKernel: AK-FUSE-GRAPH-KLD-1 appends graph_kld_check to the gate chain for graph-fusion patches (a refusal only, never a keep; no disposition change)
     "scratch.py": "22cc3536d195f17b39617982df3116c83b5c9f9c213233d59c8775d06badceb8",
 }
 

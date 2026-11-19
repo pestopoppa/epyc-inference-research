@@ -16,8 +16,8 @@ A candidate is an `Op`: `max_rows(rows) -> list[float]` (row-wise max) and
 inputs to the kernel and returns outputs through `AK_NUMERICS_V1 {json}` receipts
 (`parse_receipts`), judged by `verdict_from_receipt`; absence of a receipt is a failure.
 
-OPT-IN. `NUMERICS_GATES_DEFAULT` is False: the gates are NOT in the default gate chain
-until the operator ratifies it. `enabled()` honours an explicit flag or the
+DEFAULT ON. `NUMERICS_GATES_DEFAULT` is True since the operator ruling of 2026-11-18
+(AKX-ALL-31.DEFAULT); AK_NUMERICS_GATES=0 opts a run out. `enabled()` honours an explicit flag or the
 AK_NUMERICS_GATES env var; `chain_verdicts()` returns [] when disabled. Pure
 Python/numpy over host values; reuses guard_bands' receipt convention, not new machinery.
 """
@@ -38,8 +38,8 @@ GATE_FP32_ACCUM = "numerics_fp32_accum"
 GATE_CONTROLS = "numerics_controls"
 RECEIPT_PREFIX = "AK_NUMERICS_V1 "
 ENV_FLAG = "AK_NUMERICS_GATES"
-#: Ratification flips THIS line (see the AKX-ALL-31 report); nothing else enables the gates by default.
-NUMERICS_GATES_DEFAULT = False
+#: AKX-ALL-31.DEFAULT: flipped to True by operator ruling 2026-11-18 (.WIRE + .NATIVE passed on C10).
+NUMERICS_GATES_DEFAULT = True
 
 POWER_FACTOR = 100.0        # fp16/bf16 replays must miss by >= this x the fp32 bound
 FP32_EXACT_LIMIT = 1 << 24
@@ -274,7 +274,7 @@ def controls_gate() -> gates.Verdict:
 
 def chain_verdicts(op: Op | None = None, *, flag: bool | None = None,
                    environ: Mapping[str, str] | None = None) -> list[gates.Verdict]:
-    """The chain entry. Disabled (the default) -> []. Enabled -> controls first (a gate whose
+    """The chain entry. Disabled (AK_NUMERICS_GATES=0) -> []. Enabled -> controls first (a gate whose
     control passes cannot vouch for a candidate), then both gates on `op`; no `op` is a failure."""
     if not enabled(flag, environ):
         return []

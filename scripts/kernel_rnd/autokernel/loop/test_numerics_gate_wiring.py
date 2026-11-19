@@ -30,12 +30,23 @@ class Wiring(unittest.TestCase):
                     mock.patch.object(gates.subprocess, "run", return_value=done):
                 return gates.op_correctness(Path(tmp), op="MUL_MAT", backend="CPU")
 
-    def test_default_off_ignores_absent_receipts(self):
-        self.assertTrue(self.run_gate().passed)
+    def test_explicit_off_ignores_absent_receipts(self):
+        self.assertTrue(self.run_gate(flag="0").passed)
 
-    def test_default_off_does_not_need_numpy(self):
+    def test_explicit_off_does_not_need_numpy(self):
         with mock.patch.dict("sys.modules", {"numpy": None}):
-            self.assertTrue(self.run_gate().passed)
+            self.assertTrue(self.run_gate(flag="0").passed)
+
+    def test_default_on_refuses_a_run_without_receipt_as_oracle_fault(self):
+        # AKX-ALL-31.DEFAULT (operator 2026-11-18): unset flag = chain ON. A test-backend-ops
+        # run that prints no AK_NUMERICS_V1 receipt is a harness fault, never a pass.
+        verdict = self.run_gate()
+        self.assertEqual((verdict.passed, verdict.gate), (False, "oracle_unavailable"))
+        self.assertIn("numerics_receipt_missing", verdict.reason)
+
+    def test_default_on_refuses_a_planted_nan_dropping_candidate(self):
+        verdict = self.run_gate(receipt_line(NG.CONTROL_NAN_DROP))
+        self.assertEqual((verdict.passed, verdict.gate), (False, "correctness"))
 
     def test_a_planted_nan_dropping_candidate_is_refused(self):
         verdict = self.run_gate(receipt_line(NG.CONTROL_NAN_DROP), flag="1")
