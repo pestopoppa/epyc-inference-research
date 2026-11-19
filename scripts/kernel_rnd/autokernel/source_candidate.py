@@ -17,7 +17,7 @@ import re
 import stat
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 from . import schemas
 from .evaluator import correctness, integrity
@@ -59,6 +59,12 @@ _HUNK = re.compile(
 _FUNC = re.compile(r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\([^()]*\)\s*(?:const\s*)?(?:\{|$)")
 _TRUNCATED_FUNC = re.compile(
     r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\(\s*$")
+# git's default funcname heuristic copies the declaration's FIRST line, so a
+# multi-line parameter list reaches us unclosed: "static __global__ void
+# rms_norm_f32(const float * x,".  Accept an unclosed parameter list only after a
+# declaration-like prefix (return type / specifiers), never a call or assignment.
+_OPEN_PARAMS_FUNC = re.compile(
+    r"(?P<name>[A-Za-z_~][A-Za-z0-9_:~<>]*)\s*\([^()]*$")
 _CONTROL_WORDS = frozenset({"if", "for", "while", "switch", "catch"})
 _MODE_LINE = re.compile(r"^(?:old|new|deleted file|new file) mode (?P<mode>\d+)$")
 _ALLOWED_MODES = frozenset({"100644", "100755"})
@@ -104,6 +110,11 @@ def _symbol_from_context(context: str) -> str:
     match = _TRUNCATED_FUNC.search(normalized)
     if match is not None and match.group("name") not in _CONTROL_WORDS:
         return match.group("name")
+    match = _OPEN_PARAMS_FUNC.search(normalized)
+    if match is not None and match.group("name") not in _CONTROL_WORDS:
+        prefix = normalized[:match.start("name")].strip()
+        if prefix and not any(char in prefix for char in "=;{}(),"):
+            return match.group("name")
     return FILE_SCOPE
 
 
@@ -145,12 +156,37 @@ def _symbol_from_hunk(context: str, body: Sequence[str]) -> str:
     return header_symbol
 
 
-def _hunk_rows(diff_text: str) -> tuple[tuple[str, str, str], ...]:
+def _expand_context(context: str, lines: Optional[Sequence[str]], new_start: int) -> str:
+    """Recover the full source line a git hunk header was copied from.
+
+    git (xdiff) copies at most 80 bytes of the enclosing declaration into the
+    hunk header, so a long C++ signature arrives cut mid-name
+    ("... float vec_dot_q5_0_q8_1_imp").  The header is a literal prefix of a
+    real source line above the hunk; when the committed post-image is
+    available, use that line instead.  Only symbol derivation consumes this;
+    hunk identities still hash the header exactly as emitted.
+    """
+    if not context or lines is None:
+        return context
+    for index in range(min(new_start - 1, len(lines)) - 1, -1, -1):
+        candidate = lines[index].rstrip("\n")
+        if candidate.startswith(context):
+            return candidate.strip()
+    return context
+
+
+def _hunk_rows(
+        diff_text: str,
+        source_lines: Optional[Callable[[str], Optional[Sequence[str]]]] = None,
+) -> tuple[tuple[str, str, str], ...]:
     """Return stable hunk ids and content-derived enclosing symbols.
 
     Each id hashes file, old/new ranges, normalized context, and the complete
-    hunk body.  Caller labels never enter the identity.
+    hunk body.  Caller labels never enter the identity.  ``source_lines``
+    (path -> post-image lines) lets symbol derivation see the full declaration
+    behind a truncated header; it never changes the identity.
     """
+    current_new = 0
     current_file: Optional[str] = None
     current_header: Optional[str] = None
     current_context = ""
@@ -158,7 +194,7 @@ def _hunk_rows(diff_text: str) -> tuple[tuple[str, str, str], ...]:
     rows: list[tuple[str, str, str]] = []
 
     def flush() -> None:
-        nonlocal current_header, current_context, body
+        nonlocal current_header, current_context, body, current_new
         if current_header is None or current_file is None:
             return
         normalized = "\n".join(line.rstrip() for line in body) + "\n"
@@ -166,8 +202,12 @@ def _hunk_rows(diff_text: str) -> tuple[tuple[str, str, str], ...]:
             "file": current_file, "range": current_header,
             "context": " ".join(current_context.split()), "body": normalized,
         }
+        context = _expand_context(
+            current_context,
+            source_lines(current_file) if source_lines is not None else None,
+            current_new)
         rows.append((current_file, f"akhunk:{schemas.content_hash(material)}",
-                     _symbol_from_hunk(current_context, body)))
+                     _symbol_from_hunk(context, body)))
         current_header, current_context, body = None, "", []
 
     for line in diff_text.splitlines():
@@ -187,6 +227,7 @@ def _hunk_rows(diff_text: str) -> tuple[tuple[str, str, str], ...]:
                 f"-{match.group('old')},{match.group('oldn') or '1'}"
                 f"+{match.group('new')},{match.group('newn') or '1'}")
             current_context = match.group("context").strip()
+            current_new = int(match.group("new"))
             continue
         if current_header is not None:
             body.append(line)
@@ -203,8 +244,21 @@ def hunk_identities(diff_text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
             tuple(sorted(set(row[2] for row in rows))))
 
 
+def _post_image_reader(root: Any) -> Callable[[str], Optional[Sequence[str]]]:
+    base = Path(root)
+
+    def read(path: str) -> Optional[Sequence[str]]:
+        try:
+            return (base / _safe_path(path, "patch path")).read_text(
+                encoding="utf-8", errors="replace").splitlines()
+        except (OSError, SourceCandidateError):
+            return None
+    return read
+
+
 def _validate_patch_text(
         patch_bytes: bytes,
+        source_lines: Optional[Callable[[str], Optional[Sequence[str]]]] = None,
 ) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...],
            Mapping[str, tuple[str, ...]], tuple[str, ...]]:
     try:
@@ -228,7 +282,7 @@ def _validate_patch_text(
     if any(item.is_binary for item in parsed.files):
         raise SourceCandidateError("binary patch members are forbidden")
     paths = tuple(sorted(_safe_path(path, "patch path") for path in parsed.paths()))
-    rows = _hunk_rows(text)
+    rows = _hunk_rows(text, source_lines)
     hunk_ids = tuple(sorted(row[1] for row in rows))
     symbols = tuple(sorted({row[2] for row in rows}))
     symbols_by_file = {
@@ -621,7 +675,8 @@ def apply_source_candidate(manifest: SourcePatchManifest, *, proposal: Mapping[s
         raise SourceCandidateError("actor worktree is not clean after exact-path commit")
     diff_text = actor.unified_diff_from_source()
     text, paths, hunk_ids, symbols, symbols_by_file, _deleted = \
-        _validate_patch_text(diff_text.encode("utf-8"))
+        _validate_patch_text(diff_text.encode("utf-8"),
+                             _post_image_reader(actor.path.path))
     if paths != manifest.declared_files:
         raise SourceCandidateError("committed diff paths differ from the authorized manifest")
     for path in manifest.declared_files:

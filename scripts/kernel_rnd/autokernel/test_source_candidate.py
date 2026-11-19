@@ -57,6 +57,26 @@ class SourceCase(unittest.TestCase):
         self.assertEqual(symbols, (
             "vec_dot_q5_0_q8_1", "vec_dot_q5_0_q8_1_impl"))
 
+    def test_git_multiline_and_80_byte_headers_resolve_to_function(self):
+        # r11 (c6-admission-live-proof-r11): git copies the declaration's first
+        # line, cut at 80 bytes, so every rms_norm_f32 / vec_dot_q5_0_q8_1_impl
+        # authoring was refused as <file-scope> though each hunk sat in-body.
+        prefix = "diff --git a/n.cu b/n.cu\n--- a/n.cu\n+++ b/n.cu\n"
+        _h, symbols = S.hunk_identities(
+            prefix + "@@ -3,1 +3,1 @@ static __global__ void rms_norm_f32(const float * x,\n-a\n+b\n")
+        self.assertEqual(symbols, ("rms_norm_f32",))
+        _h, symbols = S.hunk_identities(
+            prefix + "@@ -3,1 +3,1 @@ x = call_it(a,\n-a\n+b\n")
+        self.assertEqual(symbols, (S.FILE_SCOPE,))
+        cut = "template <int vdr> static __device__ __forceinline__ float vec_dot_q5_0_q8_1_imp"
+        diff = prefix + f"@@ -3,1 +3,1 @@ {cut}\n-a\n+b\n"
+        _h, symbols = S.hunk_identities(diff)
+        self.assertEqual(symbols, (S.FILE_SCOPE,))
+        lines = [cut + "l(", "    const int * vl) {", "b"]
+        rows = S._hunk_rows(diff, lambda path: lines)
+        self.assertEqual({r[2] for r in rows}, {"vec_dot_q5_0_q8_1_impl"})
+        self.assertEqual([r[1] for r in rows], list(S.hunk_identities(diff)[0]))
+
     def test_truncated_control_flow_context_remains_file_scope(self):
         patch = (
             "diff --git a/ggml/src/ggml-cuda/x.cu b/ggml/src/ggml-cuda/x.cu\n"
