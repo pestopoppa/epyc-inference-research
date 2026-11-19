@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Any
 
 from . import gates
+from . import route_defaults
 
 SCHEMA = "epyc.autokernel.loop_roofline_coverage.v1"
 SCOPE_GAP_SCHEMA = "epyc.autokernel.loop_roofline_scope_gap.v1"
@@ -261,7 +262,11 @@ def route_is_admitted(file_path: str, symbol: str) -> bool:
         for route in multi:
             if file_path in {component.path for component in route.files}:
                 return True
-    return False
+    # AKX-AUTO-9: a file NO hand-listed route names gets a generated default route (file
+    # family -> oracle class). Hand-listed files keep their hand-listed verdict above,
+    # including standing refusals (repack.cpp).
+    return route_defaults.default_route_uncovered_by_hand_list(
+        file_path, gates.CPU_ROUTE_PATHS_ALL) is not None
 
 
 def route_coverage_map(gap_rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
