@@ -88,3 +88,32 @@ V1 has no trusted compatibility consumer, so a future due `full_region` reservat
 unreserved optional backfill slots to be explicitly skipped and persisted; earlier frozen seed or other
 reserved obligations retain their slots, followed by the exclusive proposal in its reserved slot.
 Caller labels and `compatibility_authority_refs` cannot relax that conservative rule.
+
+## AKU-07k / AKU-06l additive slice (2026-11-18)
+
+Operator approval: OP-AKU-BIND, OP-AKU-A2 (2026-11-18). Hermetic code only; no hardware claim.
+
+- **Native accounting binding (AKU-07k).** `worker_lifecycle.AccountingBinding`
+  (`epyc.autokernel.stage_accounting_binding.v1`: catalog/transition/selection/proposal digests,
+  proposal ID, backend, scheduler stage class) is an optional `StageRequest.accounting_binding`.
+  When present it joins the prospective request identity, the `OWNED_LAUNCH_INTENT` contract and the
+  held-receipt event (`accounting_binding_digest`). The provider's typed receipt is verified against it
+  before it is retained or indexed, and recovery re-verifies the durable held row before appending any
+  event. A request without a binding is byte-identical to v1 (digests, contract, events); an old reader's
+  closed contract/event validators refuse a bound record. Identity is never inferred from argv, the
+  `setup` stage name or a digest. The profile producer derives the binding from the exact
+  `SelectedProfileWork`; the former strict xfail on the actual-driver profile settlement now passes.
+- **Typed admission denial (AKU-06l).** `StageAdmission.denial_class` (`retryable` | `terminal` |
+  `None`=legacy untyped) surfaces as `AdmissionDenied` (a `WaitingAuthority`); a denial has no held
+  interval and no receipt.
+- **Original multi-child settlement (AKU-06l).** `SchedulerEngine.account_operation` accounts one selected
+  operation from separate original `OperationChild` receipts (ordered planner/critic/build prefix, unique
+  receipt IDs, no cross-role reuse): one attempt, one slot, every receipt recorded, charged seconds are
+  occupancy (sum of held intervals). Overlap is admitted only as provably disjoint CPU affinity partitions
+  within aggregate capacity; GPU/shared-claim overlap refuses. Validation precedes all mutation.
+- **Explicit no-launch cancellation.** `cancel_operation_before_launch` (terminal denial only): one failed
+  attempt, zero seconds, no receipt, recorded as `cancelled_operations` (additive operational-projection
+  key, absent for legacy state); idempotent per denial reference.
+- **Not done:** the Journal child-record kind, `UNIFIED_DRIVER_SETTLED.v2`, durable persistence of
+  `cancelled_operations` in `SchedulerState`, the actor/source-build/standalone wiring, and the live
+  startup-to-settlement proof through the installed entrypoint.

@@ -193,9 +193,13 @@ class ReceiptProvider(MockProvider):
                            worker_generation, container_identity,
                            lifecycle_started_at, released_at, deadline):
         del container_identity, deadline
+        binding = request.accounting_binding
         receipt = scheduling.HeldClaimReceipt(
             f"receipt:{authorization.grant.grant_id}:{worker_generation}",
-            request.request_id, "cpu", "search", lifecycle_started_at,
+            request.request_id if binding is None else binding.proposal_id,
+            "cpu" if binding is None else binding.backend,
+            "search" if binding is None else binding.scheduler_stage_class,
+            lifecycle_started_at,
             released_at, worker_generation, authorization.grant.generation,
             (f"claim:{authorization.container_id}",), 0.5, (), 1024,
             ("0",), {request.request_id: 1.0})
@@ -1351,3 +1355,189 @@ def test_held_record_validator_is_closed_and_binds_receipt_interval():
             lifecycle.project_events(stream)
     finally:
         harness.close()
+
+
+# ---- AKU-07k: versioned native accounting binding; AKU-06l: typed admission denial ----
+
+def _binding(**changes):
+    row = dict(catalog_digest="1" * 64, transition_digest="2" * 64,
+               selection_digest="3" * 64, proposal_digest="4" * 64,
+               proposal_id="profile:fixture", backend="cpu",
+               scheduler_stage_class="prerequisite")
+    row.update(changes)
+    return lifecycle.AccountingBinding(**row)
+
+
+def _bound_request(harness, **changes):
+    return replace(harness.request("pass"), accounting_binding=_binding(**changes))
+
+
+def test_binding_is_additive_and_v1_request_identity_is_byte_exact():
+    harness = Harness()
+    try:
+        plain = harness.request("pass")
+        bound = replace(plain, accounting_binding=_binding())
+        assert "accounting_binding" not in plain.contract_body
+        assert bound.contract_body["accounting_binding"] == _binding().to_dict()
+
+        def digest(request):
+            return lifecycle.prospective_request_digest(
+                harness.binding, request, worker_id="w", worker_generation=1,
+                container_id="epyc-autokernel-x")
+        assert digest(plain) != digest(bound)
+        # every binding field participates in the prospective identity
+        for name, value in (("catalog_digest", "9" * 64), ("transition_digest", "9" * 64),
+                            ("selection_digest", "9" * 64), ("proposal_digest", "9" * 64),
+                            ("proposal_id", "other"), ("backend", "gpu"),
+                            ("scheduler_stage_class", "search")):
+            assert digest(replace(plain, accounting_binding=_binding(**{name: value}))) \
+                != digest(bound), name
+        with pytest.raises(lifecycle.LifecycleRefused):
+            _binding(scheduler_stage_class="not-a-class")
+        with pytest.raises(lifecycle.LifecycleRefused):
+            lifecycle.AccountingBinding.from_dict({**_binding().to_dict(), "extra": 1})
+        with pytest.raises(lifecycle.LifecycleRefused):
+            replace(plain, accounting_binding={"schema": "x"})
+    finally:
+        harness.close()
+
+
+def test_bound_launch_contract_and_held_event_carry_the_binding_closed():
+    harness = _receipt_harness()
+    try:
+        request = _bound_request(harness)
+        terminal = harness.engine.run_stage(request)
+        launch = next(r for r in harness.events if r["event"] == "OWNED_LAUNCH_INTENT")
+        assert launch["data"]["contract"]["accounting_binding"] == _binding().to_dict()
+        held = next(r for r in harness.events if r["event"] == "OWNED_HELD_RECEIPT_RETAINED")
+        assert held["data"]["accounting_binding_digest"] == _binding().digest
+        receipt = harness.engine.trusted_held_claim_receipt(terminal)
+        assert (receipt.proposal_id, receipt.backend, receipt.stage_class) == (
+            "profile:fixture", "cpu", "prerequisite")
+        lifecycle.validate_event(launch)
+        lifecycle.validate_event(held)
+        bad = json.loads(json.dumps(launch))
+        bad["data"]["contract"]["accounting_binding"]["extra"] = 1
+        with pytest.raises(lifecycle.LifecycleRefused):
+            lifecycle.validate_event(bad)
+        bad = json.loads(json.dumps(held))
+        bad["data"]["accounting_binding_digest"] = "nothex"
+        with pytest.raises(lifecycle.LifecycleRefused):
+            lifecycle.validate_event(bad)
+    finally:
+        harness.close()
+
+
+class _WrongClassProvider(ReceiptProvider):
+    def close_held_receipt(self, **kwargs):
+        supplied = super().close_held_receipt(**kwargs)
+        wrong = replace(supplied.receipt, stage_class="search")
+        return replace(supplied, receipt=wrong)
+
+
+def test_provider_receipt_disagreeing_with_binding_is_refused_before_indexing():
+    harness = Harness()
+    provider = _WrongClassProvider(harness.path / "containers")
+    harness.provider = provider
+    harness.engine.provider = provider
+    try:
+        with pytest.raises(lifecycle.LifecycleRefused, match="accounting binding"):
+            harness.engine.run_stage(_bound_request(harness))
+        assert all(r["event"] != "OWNED_HELD_RECEIPT_RETAINED" for r in harness.events)
+        assert harness.engine._held_receipts == {}
+    finally:
+        harness.close()
+
+
+def test_receipt_identity_is_never_inferred_from_request_id_when_bound():
+    # A v1 provider that authors proposal_id=request_id/stage "search" fails a bound request
+    # and still succeeds for an unbound one (legacy behaviour unchanged).
+    class V1Provider(ReceiptProvider):
+        def close_held_receipt(self, **kwargs):
+            return super().close_held_receipt(**{**kwargs, "request": replace(
+                kwargs["request"], accounting_binding=None)})
+    harness = Harness()
+    provider = V1Provider(harness.path / "containers")
+    harness.provider = provider
+    harness.engine.provider = provider
+    try:
+        with pytest.raises(lifecycle.LifecycleRefused, match="accounting binding"):
+            harness.engine.run_stage(_bound_request(harness))
+    finally:
+        harness.close()
+    legacy = _receipt_harness()
+    try:
+        terminal = legacy.engine.run_stage(legacy.request("pass"))
+        assert legacy.engine.trusted_held_claim_receipt(terminal).stage_class == "search"
+    finally:
+        legacy.close()
+
+
+@pytest.mark.parametrize("phase", ["OWNED_TERMINAL", "OWNED_HELD_RECEIPT_RETAINED"])
+def test_recovery_revalidates_bound_request_and_held_receipt(phase):
+    harness = _receipt_harness()
+    fired = False
+
+    def crash(current):
+        nonlocal fired
+        if current == phase and not fired:
+            fired = True
+            raise lifecycle.SimulatedCrash(current)
+
+    harness.engine.fault_hook = crash
+    try:
+        with pytest.raises(lifecycle.SimulatedCrash):
+            harness.engine.run_stage(_bound_request(harness))
+        held_rows = [r for r in harness.events if r["event"] == "OWNED_HELD_RECEIPT_RETAINED"]
+        if held_rows:
+            forged = json.loads(json.dumps(harness.events))
+            for row in forged:
+                if row["event"] == "OWNED_HELD_RECEIPT_RETAINED":
+                    row["data"]["receipt"]["stage_class"] = "search"
+            with pytest.raises(lifecycle.ContainmentFailure, match="accounting binding"):
+                _recovery_engine(harness).reconcile(forged)
+            unbound = json.loads(json.dumps(harness.events))
+            for row in unbound:
+                if row["event"] == "OWNED_HELD_RECEIPT_RETAINED":
+                    row["data"].pop("accounting_binding_digest")
+            with pytest.raises(lifecycle.ContainmentFailure, match="lacks"):
+                _recovery_engine(harness).reconcile(unbound)
+        before = len(harness.events)
+        terminal = _recovery_engine(harness).reconcile(harness.events)
+        assert terminal is not None and terminal.accepted is False
+        assert [r["event"] for r in harness.events[before:]] == ["WORKER_RESULT_STALE"]
+    finally:
+        harness.close()
+
+
+def test_stage_admission_denial_class_is_closed_and_typed_denial_surfaces():
+    assert lifecycle.StageAdmission(True, "ok").denial_class is None
+    assert lifecycle.StageAdmission(False, "legacy").denial_class is None
+    assert lifecycle.StageAdmission(False, "busy", "retryable").denial_class == "retryable"
+    for bad in (lifecycle.StageAdmission, ):
+        with pytest.raises(lifecycle.LifecycleRefused):
+            bad(True, "ok", "terminal")
+        with pytest.raises(lifecycle.LifecycleRefused):
+            bad(False, "no", "maybe")
+    for klass in ("retryable", "terminal"):
+        harness = Harness()
+        harness.engine.admission_fence = (
+            lambda _r, _g, _n, _u, k=klass: lifecycle.StageAdmission(False, "denied", k))
+        try:
+            with pytest.raises(lifecycle.AdmissionDenied) as caught:
+                harness.engine.run_stage(harness.request("pass"))
+            assert caught.value.denial_class == klass
+            assert isinstance(caught.value, lifecycle.WaitingAuthority)
+            # no launch, no held receipt, no worker events: a denial has no cost record
+            assert all(r["event"] not in {"OWNED_LAUNCH_INTENT", "OWNED_HELD_RECEIPT_RETAINED"}
+                       for r in harness.events)
+        finally:
+            harness.close()
+    legacy = Harness()
+    legacy.engine.admission_fence = lambda *_a: lifecycle.StageAdmission(False, "untyped")
+    try:
+        with pytest.raises(lifecycle.WaitingAuthority) as caught:
+            legacy.engine.run_stage(legacy.request("pass"))
+        assert not isinstance(caught.value, lifecycle.AdmissionDenied)
+    finally:
+        legacy.close()

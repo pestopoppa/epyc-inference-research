@@ -305,11 +305,6 @@ def test_controller_selected_intent_finish_and_restart_projection(tmp_path):
                 budgets=changed_budgets, now=now, clock_domain=receipt.clock_domain)
 
 
-@pytest.mark.xfail(
-    raises=scheduling.SchedulingRefused,
-    reason=("StageRequest/provider receipt lacks selected proposal_id/backend/stage_class "
-            "binding required for unified settlement"),
-    strict=True)
 def test_actual_driver_profile_requires_native_scheduler_binding(tmp_path):
     driver, _fixture_engine, enrolled, target, target_digest = runtime_driver()
     base_config, _ = make_scheduler()

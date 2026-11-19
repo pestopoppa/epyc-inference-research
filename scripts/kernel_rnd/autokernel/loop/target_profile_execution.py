@@ -160,7 +160,12 @@ class TargetProfileExecution:
                 "loaded_identity": dict(mechanism.loaded_identity)}),
             max_stage_seconds=mechanism.max_stage_seconds,
             teardown_seconds=mechanism.teardown_seconds,
-            control_revision=self.controller.control_revision)
+            control_revision=self.controller.control_revision,
+            accounting_binding=(
+                None if selected_work is None else
+                worker_lifecycle.AccountingBinding.from_selection(
+                    catalog_id=catalog_id, transition_id=transition_id,
+                    selection=selected_work.selection)))
         terminal = self.controller.run_worker_stage(worker_request)
         exact = self.controller.worker_terminal_for_request(
             request_id=worker_request.request_id, plan_digest=worker_request.plan_digest,

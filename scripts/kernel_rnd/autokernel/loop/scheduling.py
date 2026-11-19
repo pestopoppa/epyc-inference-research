@@ -614,6 +614,27 @@ class SeedAccount:
             "boosted")}
 
 
+OPERATION_ROLES = ("planner", "critic", "build")
+
+
+@dataclass(frozen=True, slots=True)
+class OperationChild:
+    """One original provider receipt bound to a selected operation role (AKU-06l)."""
+
+    role: str
+    selection_digest: str
+    receipt: HeldClaimReceipt
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "role", _enum(self.role, frozenset(OPERATION_ROLES),
+                                               "operation child role"))
+        value = _text(self.selection_digest, "operation child selection_digest")
+        if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
+            raise SchedulingRefused("operation child selection_digest must be a SHA-256")
+        if not isinstance(self.receipt, HeldClaimReceipt):
+            raise SchedulingRefused("operation child receipt must be a HeldClaimReceipt")
+
+
 @dataclass(frozen=True, slots=True)
 class AccountedReceipt:
     receipt_id: str
@@ -1189,12 +1210,13 @@ class SchedulerEngine:
         self._seed_commitment = 0
         for seed in self.seed_accounts:
             self._seed_commitment ^= int(digest(seed.to_dict()), 16)
+        self.cancelled_operations: dict[str, str] = {}
         self._outstanding_preview: SelectionPreview | None = None
         self._outstanding_accounting: AccountingPreview | None = None
         self._seed_preview_undo: list[tuple[str, Any]] | None = None
 
     def _operational_body(self) -> dict[str, Any]:
-        return {
+        body = {
             "schema": OPERATIONAL_SCHEMA,
             "scheduler_id": self.scheduler_id,
             "config_digest": self.config_digest,
@@ -1220,6 +1242,10 @@ class SchedulerEngine:
             "existing_stage_until": self.existing_stage_until,
             "accounting_view": self.accounting_view().to_dict(),
         }
+        if self.cancelled_operations:
+            # AKU-06l: additive; absent (legacy digests unchanged) until used.
+            body["cancelled_operations"] = dict(sorted(self.cancelled_operations.items()))
+        return body
 
     def operational_projection(self) -> OperationalProjection:
         """Return state whose size is independent of receipt-history length."""
@@ -1252,6 +1278,7 @@ class SchedulerEngine:
         self.successor_fences = list(body["successor_fences"])
         self.issued_selection_digests = tuple(body["issued_selection_digests"])
         self.existing_stage_until = body["existing_stage_until"]
+        self.cancelled_operations = dict(body.get("cancelled_operations", {}))
 
     def preview_selection(self, proposals: Sequence[StageProposal | Mapping[str, Any]], *,
                           now: float,
@@ -1796,6 +1823,113 @@ class SchedulerEngine:
                       receipt: HeldClaimReceipt | Mapping[str, Any], *, outcome: str) -> bool:
         return self.account_stage_components(selection, (receipt,), outcome=outcome)
 
+    def _check_operation_partitions(self, receipts: Sequence[HeldClaimReceipt]) -> None:
+        """Admit overlapping child receipts only as provably disjoint CPU partitions.
+
+        Uses only provider-authored fields. A shared physical claim, a GPU device
+        or an unproven affinity partition refuses; aggregate capacity is swept."""
+        for index, left in enumerate(receipts):
+            for right in receipts[index + 1:]:
+                if not (left.started_at < right.ended_at and right.started_at < left.ended_at):
+                    continue
+                if left.gpu_device_ids or right.gpu_device_ids:
+                    raise SchedulingRefused("overlapping GPU children are not partitionable")
+                if (not left.affinity_cores or not right.affinity_cores
+                        or set(left.affinity_cores) & set(right.affinity_cores)):
+                    raise SchedulingRefused(
+                        "overlapping children lack disjoint CPU affinity partitions")
+                if set(left.physical_claim_ids) & set(right.physical_claim_ids):
+                    raise SchedulingRefused(
+                        "overlapping children share a physical claim without disjoint evidence")
+        points = sorted({edge for item in receipts for edge in (item.started_at, item.ended_at)})
+        for edge in points:
+            live = [item for item in receipts if item.started_at <= edge < item.ended_at]
+            if (sum(item.physical_region_fraction for item in live)
+                    > self.capacity.physical_region_fraction + 1e-12
+                    or sum(item.memory_reservation_bytes for item in live)
+                    > self.capacity.memory_reservation_bytes):
+                raise SchedulingRefused("aggregate concurrent child claims exceed capacity")
+
+    def account_operation(self, selection: Selection | Mapping[str, Any],
+                          children: Sequence[OperationChild], *, outcome: str) -> bool:
+        """Atomically account one selected operation from separate original child receipts.
+
+        One attempt, one slot consumption; every original receipt is kept and
+        recorded separately (never summed into a synthetic receipt); charged seconds
+        are occupancy (sum of held intervals). Validation precedes all mutation."""
+        children = tuple(children)
+        if any(not isinstance(item, OperationChild) for item in children):
+            raise SchedulingRefused("operation children must be typed")
+        selection = _normalize(selection, Selection)
+        if any(item.selection_digest != selection.digest for item in children):
+            raise SchedulingRefused("operation child is bound to a different selection")
+        return self.account_stage_components(
+            selection, tuple(item.receipt for item in children), outcome=outcome,
+            operation_roles=tuple(item.role for item in children))
+
+    def cancel_operation_before_launch(self, selection: Selection | Mapping[str, Any], *,
+                                       denial_ref: str, denial_class: str = "terminal") -> bool:
+        """Explicit terminal no-launch cancellation: one failed attempt, zero seconds.
+
+        No held receipt exists and none is fabricated. Idempotent for the exact same
+        denial reference; a different reference or a later settlement refuses."""
+        selection = _normalize(selection, Selection)
+        ref = _text(denial_ref, "denial_ref")
+        if len(ref) != 64 or any(char not in "0123456789abcdef" for char in ref):
+            raise SchedulingRefused("denial_ref must be a lowercase SHA-256")
+        if denial_class != "terminal":
+            raise SchedulingRefused("only a terminal denial may cancel an operation")
+        prior = self.cancelled_operations.get(selection.digest)
+        if prior is not None:
+            if prior != ref:
+                raise SchedulingRefused("selection was cancelled with a different denial")
+            return False
+        if self._records_by_selection.get(selection.digest):
+            raise SchedulingRefused("selection already has accounted receipts")
+        if (selection.status != "selected" or selection.proposal is None
+                or selection.digest not in self.issued_selection_digests):
+            raise SchedulingRefused("cancellation is not an issued selection")
+        if (selection.scheduler_id != self.scheduler_id
+                or selection.config_digest != self.config_digest
+                or selection.accounting_epoch != self.accounting_epoch
+                or selection.capacity_digest != self.capacity_digest
+                or selection.round_number != self.round_number
+                or selection.service_bound_seconds != self._bound()):
+            raise SchedulingRefused("cancellation selection differs from scheduler state")
+        proposal = selection.proposal
+        if selection.slot_kind == "coverage":
+            frontier = proposal.frontier_id
+            if (frontier is None or selection.slot_index is None
+                    or selection.slot_index >= len(self.frozen_frontier)
+                    or self.frozen_frontier[selection.slot_index] != frontier
+                    or frontier in self.used_coverage):
+                raise SchedulingRefused("coverage selection does not match its unused frozen slot")
+            self.used_coverage[frontier] = proposal.proposal_id
+            self.coverage_debt.pop(frontier, None)
+        else:
+            if selection.slot_index != self._next_noncoverage_slot():
+                raise SchedulingRefused("noncoverage slot is not the next durable slot")
+            self.used_noncoverage.append(proposal.proposal_id)
+        if proposal.seed_id is not None:
+            seed = self._seed_for(proposal)
+            comparisons = seed.valid_comparisons
+            boosted = (seed.boosted and seed.attempts + 1 < self.config.seed_attempt_cap
+                       and seed.charged_seconds < self.config.seed_charged_seconds_cap
+                       and comparisons < self.config.seed_valid_comparison_cap)
+            self._replace_seed(seed, SeedAccount(
+                seed_id=seed.seed_id, backend=seed.backend,
+                target_revision=seed.target_revision, alias_identity=seed.alias_identity,
+                seed_ids=seed.seed_ids, first_submitted_at=seed.first_submitted_at,
+                attempts=seed.attempts + 1, charged_seconds=seed.charged_seconds,
+                valid_comparisons=comparisons, boosted=boosted))
+            if not boosted:
+                self._promote_seed(seed.backend)
+        self.round_seed_used = self.round_seed_used or proposal.seed_id is not None
+        self.campaign_attempts += 1
+        self.cancelled_operations[selection.digest] = ref
+        self.issued_selection_digests = ()
+        return True
+
     def fail_stage_before_claim(self, selection: Selection | Mapping[str, Any]) -> None:
         """Settle an issued launch that failed before any resource claim existed."""
         selection = _normalize(selection, Selection)
@@ -1816,15 +1950,25 @@ class SchedulerEngine:
     def account_stage_components(
             self, selection: Selection | Mapping[str, Any],
             receipts: Sequence[HeldClaimReceipt | Mapping[str, Any]], *, outcome: str,
-            cpu_stage_elapsed=None) -> bool:
-        """Account one selected stage from exact non-overlapping held intervals."""
+            cpu_stage_elapsed=None, operation_roles: Sequence[str] | None = None) -> bool:
+        """Account one selected stage from exact non-overlapping held intervals.
+
+        ``operation_roles`` (AKU-06l, via ``account_operation`` only) accounts one
+        selected operation from separate original child receipts, one per role."""
+        operation = operation_roles is not None
         selection = _normalize(selection, Selection)
         receipts = tuple(_normalize(receipt, HeldClaimReceipt) for receipt in receipts)
         if not receipts:
             raise SchedulingRefused("stage accounting requires at least one held receipt")
         outcome = _enum(outcome, OUTCOMES, "stage outcome")
-        cpu_segments = all(receipt.schema == RECEIPT_SCHEMA_V2 and receipt.backend == "cpu"
-                           and not receipt.gpu_device_ids for receipt in receipts)
+        cpu_segments = (not operation) and all(
+            receipt.schema == RECEIPT_SCHEMA_V2 and receipt.backend == "cpu"
+            and not receipt.gpu_device_ids for receipt in receipts)
+        if operation:
+            roles = tuple(operation_roles)
+            if (len(roles) != len(receipts) or roles != OPERATION_ROLES[:len(roles)]):
+                raise SchedulingRefused(
+                    "operation child roles must be an ordered planner/critic/build prefix")
         if cpu_segments:
             elapsed = validate_cpu_stage_elapsed(cpu_stage_elapsed)
             prefix = "direct-cpu-generation:" + digest(elapsed) + ":"
@@ -1850,6 +1994,8 @@ class SchedulerEngine:
         if self._records_by_selection.get(selection.digest):
             raise SchedulingRefused(
                 "selection already has a different original component receipt set")
+        if selection.digest in self.cancelled_operations:
+            raise SchedulingRefused("selection was already cancelled before launch")
         if (selection.status != "selected" or selection.proposal is None
                 or selection.digest not in self.issued_selection_digests):
             raise SchedulingRefused("selection was not issued by this scheduler round")
@@ -1861,22 +2007,23 @@ class SchedulerEngine:
                 or selection.service_bound_seconds != self._bound()):
             raise SchedulingRefused("selection does not match scheduler/config/epoch/round")
         proposal = selection.proposal
-        if any(receipt.proposal_id != proposal.proposal_id
-               or receipt.stage_class != proposal.stage_class
-               or receipt.backend != proposal.backend for receipt in receipts):
-            raise SchedulingRefused("receipt does not match selected proposal identity")
-        ordered = tuple(sorted(receipts, key=lambda item: (item.started_at, item.ended_at,
-                                                            item.receipt_id)))
-        if ordered != receipts or any(
-                (left.ended_at > right.started_at if cpu_segments
-                 else left.ended_at != right.started_at)
-                for left, right in zip(receipts, receipts[1:])):
-            raise SchedulingRefused(
-                "component receipts must form ordered original CPU v2 segments "
-                "or one contiguous held interval")
-        if any(receipt.beneficiary_shares != receipts[0].beneficiary_shares
-               for receipt in receipts[1:]):
-            raise SchedulingRefused("component beneficiary shares differ")
+        if not operation:
+            if any(receipt.proposal_id != proposal.proposal_id
+                   or receipt.stage_class != proposal.stage_class
+                   or receipt.backend != proposal.backend for receipt in receipts):
+                raise SchedulingRefused("receipt does not match selected proposal identity")
+            ordered = tuple(sorted(receipts, key=lambda item: (
+                item.started_at, item.ended_at, item.receipt_id)))
+            if ordered != receipts or any(
+                    (left.ended_at > right.started_at if cpu_segments
+                     else left.ended_at != right.started_at)
+                    for left, right in zip(receipts, receipts[1:])):
+                raise SchedulingRefused(
+                    "component receipts must form ordered original CPU v2 segments "
+                    "or one contiguous held interval")
+            if any(receipt.beneficiary_shares != receipts[0].beneficiary_shares
+                   for receipt in receipts[1:]):
+                raise SchedulingRefused("component beneficiary shares differ")
         if selection.slot_kind == "coverage":
             frontier = proposal.frontier_id
             if (frontier is None or selection.slot_index is None
@@ -1898,12 +2045,15 @@ class SchedulerEngine:
                 raise SchedulingRefused("proposal does not satisfy the frozen slot reservation")
             if reservation is None and selection.slot_kind not in {"seed", "noncoverage"}:
                 raise SchedulingRefused("unreserved slot cannot be relabelled as reserved")
-        if len(receipts) > 1:
+        if operation:
+            self._check_operation_partitions(receipts)
+        elif len(receipts) > 1:
             _check_receipt_overlaps(receipts)
         for receipt in receipts:
             self._check_new_intervals(receipt)
         duration = (elapsed["ended_at"] - elapsed["started_at"] if cpu_segments
-                    else receipts[-1].ended_at - receipts[0].started_at)
+                    else sum(item.ended_at - item.started_at for item in receipts)
+                    if operation else receipts[-1].ended_at - receipts[0].started_at)
         violations = []
         # D is an admission forecast, not a reason to poison an otherwise valid
         # continuous campaign after the resources have already been released.
@@ -2130,7 +2280,7 @@ __all__ = [
     "ACCOUNTING_SCHEMA", "CONFIG_SCHEMA", "OUTAGE_SCHEMA", "PROPOSAL_SCHEMA",
     "RECEIPT_RECORD_SCHEMA", "RECEIPT_SCHEMA", "SEED_SCHEMA", "SELECTION_SCHEMA", "STATE_SCHEMA",
     "VECTOR_SCHEMA", "AccountedReceipt", "AccountingView", "HeldClaimReceipt", "Outage",
-    "ResourceVector", "SchedulerConfig", "SchedulerEngine", "SchedulerState",
+    "OPERATION_ROLES", "OperationChild", "ResourceVector", "SchedulerConfig", "SchedulerEngine", "SchedulerState",
     "SchedulingRefused", "SeedAccount", "Selection", "StageProposal",
     "account_stage", "account_stage_components", "adaptive_weights", "change_capacity",
     "fail_stage_before_claim",

@@ -40,6 +40,11 @@ ACQUISITION_SCHEMA = "epyc.autokernel.worker_acquisition_transition.v1"
 ACTIVE_OBSERVATION_CLAIM_SCHEMA = "epyc.autokernel.active_observation_claim.v1"
 RESULT_SCHEMA = "epyc.autokernel.worker_terminal_result.v1"
 HELD_RECEIPT_SCHEMA = "epyc.autokernel.worker_held_receipt.v1"
+# AKU-07k: additive native accounting binding carried by a StageRequest.
+ACCOUNTING_BINDING_SCHEMA = "epyc.autokernel.stage_accounting_binding.v1"
+_ACCOUNTING_BINDING_FIELDS = frozenset({
+    "schema", "catalog_digest", "transition_digest", "selection_digest",
+    "proposal_digest", "proposal_id", "backend", "scheduler_stage_class"})
 COMMAND_TRANSITION_SCHEMA = "epyc.autokernel.campaign_command_transition.v2"
 COMMAND_RESULT_SCHEMA = "epyc.autokernel.campaign_command_result.v2"
 COMMAND_RESULT_FIELDS = frozenset({
@@ -71,6 +76,17 @@ class LifecycleRefused(RuntimeError):
 
 class WaitingAuthority(LifecycleRefused):
     """No trusted grant/containment provider can currently authorize launch."""
+
+
+class AdmissionDenied(WaitingAuthority):
+    """Typed pre-launch admission denial (AKU-06l).
+
+    Carries a closed classification so accounting never decides from free text.
+    A denial happens before any held interval exists: it has no receipt."""
+
+    def __init__(self, reason: str, denial_class: str) -> None:
+        super().__init__(reason)
+        self.denial_class = denial_class
 
 
 class ContainmentFailure(LifecycleRefused):
@@ -161,6 +177,79 @@ class CampaignBinding:
 
 
 @dataclass(frozen=True)
+class AccountingBinding:
+    """Typed selected-work identity a provider receipt must carry (AKU-07k).
+
+    Never inferred from argv, the setup stage name or an opaque digest."""
+
+    catalog_digest: str
+    transition_digest: str
+    selection_digest: str
+    proposal_digest: str
+    proposal_id: str
+    backend: str
+    scheduler_stage_class: str
+    schema: str = ACCOUNTING_BINDING_SCHEMA
+
+    def __post_init__(self) -> None:
+        if self.schema != ACCOUNTING_BINDING_SCHEMA:
+            raise LifecycleRefused("accounting binding schema is unsupported")
+        for name in ("catalog_digest", "transition_digest", "selection_digest",
+                     "proposal_digest"):
+            _sha(getattr(self, name), f"accounting binding {name}")
+        _text(self.proposal_id, "accounting binding proposal_id")
+        _text(self.backend, "accounting binding backend")
+        if self.scheduler_stage_class not in _scheduler_stage_classes():
+            raise LifecycleRefused("accounting binding scheduler stage class is invalid")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"schema": self.schema, "catalog_digest": self.catalog_digest,
+                "transition_digest": self.transition_digest,
+                "selection_digest": self.selection_digest,
+                "proposal_digest": self.proposal_digest, "proposal_id": self.proposal_id,
+                "backend": self.backend, "scheduler_stage_class": self.scheduler_stage_class}
+
+    @property
+    def digest(self) -> str:
+        return _digest(self.to_dict())
+
+    @classmethod
+    def from_dict(cls, value: Any) -> "AccountingBinding":
+        if not isinstance(value, Mapping) or set(value) != _ACCOUNTING_BINDING_FIELDS:
+            raise LifecycleRefused("accounting binding has missing/unknown fields")
+        return cls(**dict(value))
+
+    @classmethod
+    def from_selection(cls, *, catalog_id: str, transition_id: str,
+                       selection: Any) -> "AccountingBinding":
+        """Derive the binding from the exact issued scheduler selection."""
+        proposal = getattr(selection, "proposal", None)
+        if getattr(selection, "status", None) != "selected" or proposal is None:
+            raise LifecycleRefused("accounting binding requires a selected proposal")
+        return cls(catalog_id, transition_id, selection.digest, proposal.digest,
+                   proposal.proposal_id, proposal.backend, proposal.stage_class)
+
+    def verify_receipt(self, receipt: Any) -> None:
+        """Refuse a provider receipt whose typed identity differs from this binding."""
+        if (getattr(receipt, "proposal_id", None) != self.proposal_id
+                or getattr(receipt, "backend", None) != self.backend
+                or getattr(receipt, "stage_class", None) != self.scheduler_stage_class):
+            raise LifecycleRefused(
+                "provider receipt proposal/backend/stage class differs from the "
+                "request accounting binding")
+
+
+def _binding_from_contract(contract: Mapping[str, Any]) -> "AccountingBinding | None":
+    raw = contract.get("accounting_binding")
+    return None if raw is None else AccountingBinding.from_dict(raw)
+
+
+def _scheduler_stage_classes() -> frozenset[str]:
+    from .scheduling import STAGE_CLASSES
+    return frozenset(STAGE_CLASSES)
+
+
+@dataclass(frozen=True)
 class StageRequest:
     request_id: str
     plan_digest: str
@@ -174,8 +263,12 @@ class StageRequest:
     max_stage_seconds: float
     teardown_seconds: float
     control_revision: int
+    accounting_binding: AccountingBinding | None = None
 
     def __post_init__(self) -> None:
+        if self.accounting_binding is not None and not isinstance(
+                self.accounting_binding, AccountingBinding):
+            raise LifecycleRefused("accounting binding is untyped")
         for name in ("request_id", "lineage_id", "stage_id"):
             _text(getattr(self, name), name)
         for name in ("plan_digest", "artifact_contract_digest"):
@@ -210,9 +303,12 @@ class StageRequest:
 
     @property
     def contract_body(self) -> dict[str, Any]:
-        return {"argv": list(self.argv), "env": dict(self.env), "cwd": str(self.cwd),
+        body = {"argv": list(self.argv), "env": dict(self.env), "cwd": str(self.cwd),
                 "artifact_contract_digest": self.artifact_contract_digest,
                 "stage": self.stage}
+        if self.accounting_binding is not None:
+            body["accounting_binding"] = self.accounting_binding.to_dict()
+        return body
 
 
 @dataclass(frozen=True)
@@ -393,6 +489,9 @@ def prospective_request_digest(binding: CampaignBinding, request: StageRequest, 
             "control_revision": request.control_revision,
         },
     }
+    if request.accounting_binding is not None:
+        # AKU-07k: v1 (binding-less) digests stay byte-identical.
+        body["request"]["accounting_binding"] = request.accounting_binding.to_dict()
     return _digest(body)
 
 
@@ -438,15 +537,24 @@ class TrustedGrantProvider(Protocol):
             deadline: float) -> Mapping[str, Any]: ...
 
 
+ADMISSION_DENIAL_CLASSES = frozenset({"retryable", "terminal"})
+
+
 @dataclass(frozen=True)
 class StageAdmission:
     allowed: bool
     reason: str
+    # AKU-06l: closed classification of a denial; None keeps the legacy untyped
+    # denial (which is never treated as terminal accounting authority).
+    denial_class: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.allowed) is not bool:
             raise LifecycleRefused("stage admission allowed must be boolean")
         _text(self.reason, "stage admission reason")
+        if self.denial_class is not None and (
+                self.allowed or self.denial_class not in ADMISSION_DENIAL_CLASSES):
+            raise LifecycleRefused("stage admission denial class is invalid")
 
 
 @dataclass(frozen=True)
@@ -724,8 +832,9 @@ def _validate_event_data(event: str, supplied: Mapping[str, Any]) -> dict[str, A
                                      "clock_domain", "max_stage_seconds", "teardown_seconds",
                                      "stage_plus_teardown_deadline"}, event)
         contract = data["contract"]
-        if not isinstance(contract, Mapping) or set(contract) != {
-                "argv", "env", "cwd", "artifact_contract_digest", "stage"}:
+        closed = {"argv", "env", "cwd", "artifact_contract_digest", "stage"}
+        if not isinstance(contract, Mapping) or set(contract) not in (
+                closed, closed | {"accounting_binding"}):
             raise LifecycleRefused("launch intent contract is not closed")
         # Reuse StageRequest's bounded primitives without accepting a second loose shape.
         if (not isinstance(contract["argv"], list) or not contract["argv"]
@@ -758,6 +867,9 @@ def _validate_event_data(event: str, supplied: Mapping[str, Any]) -> dict[str, A
                             "cwd": contract["cwd"],
                             "artifact_contract_digest": contract["artifact_contract_digest"],
                             "stage": contract["stage"]}
+        if "accounting_binding" in contract:
+            data["contract"]["accounting_binding"] = AccountingBinding.from_dict(
+                contract["accounting_binding"]).to_dict()
         return data
     if event == "OWNED_CONTAINER_CREATED":
         data = _exact_data(supplied, {"identity"}, event)
@@ -842,8 +954,12 @@ def _validate_event_data(event: str, supplied: Mapping[str, Any]) -> dict[str, A
         return data
     if event == "OWNED_HELD_RECEIPT_RETAINED":
         from .scheduling import HeldClaimReceipt, SchedulingRefused
+        bound = isinstance(supplied, Mapping) and "accounting_binding_digest" in supplied
         data = _exact_data(supplied, {"schema", "clock_domain", "held_started_at",
-                                     "held_ended_at", "receipt"}, event)
+                                     "held_ended_at", "receipt"}
+                           | ({"accounting_binding_digest"} if bound else set()), event)
+        if bound:
+            _sha(data["accounting_binding_digest"], "accounting_binding_digest")
         if data["schema"] != HELD_RECEIPT_SCHEMA:
             raise LifecycleRefused("held receipt record schema is invalid")
         _text(data["clock_domain"], "clock_domain")
@@ -990,7 +1106,8 @@ def validate_lifecycle_handoff(acquisition: Mapping[str, Any],
         launch_row["stage_id"], contract["stage"], tuple(contract["argv"]),
         contract["env"], Path(contract["cwd"]), contract["artifact_contract_digest"],
         launch_row["data"]["max_stage_seconds"],
-        launch_row["data"]["teardown_seconds"], launch_row["control_revision"])
+        launch_row["data"]["teardown_seconds"], launch_row["control_revision"],
+        _binding_from_contract(contract))
     identity = prospective_identity_from_transition(acquisition_row)
     actual_digest = prospective_request_digest(
         identity.binding, request, worker_id=identity.worker_id,
@@ -1471,6 +1588,8 @@ class WorkerLifecycle:
         if not isinstance(decision, StageAdmission):
             raise LifecycleRefused("control fence returned an untyped admission")
         if not decision.allowed:
+            if decision.denial_class is not None:
+                raise AdmissionDenied(decision.reason, decision.denial_class)
             raise WaitingAuthority(decision.reason)
         if grant.revoked:
             raise WaitingAuthority("grant_revoked")
@@ -1498,7 +1617,8 @@ class WorkerLifecycle:
             request.request_id, request.plan_digest, request.lineage_id, request.stage_id,
             request.stage, tuple(request.argv), dict(request.env), Path(str(request.cwd)),
             request.artifact_contract_digest, request.max_stage_seconds,
-            request.teardown_seconds, request.control_revision)
+            request.teardown_seconds, request.control_revision,
+            request.accounting_binding)
         if planned_invocation is not None:
             from .unified_worker import PlannedWorkerInvocation
             if type(planned_invocation) is not PlannedWorkerInvocation:
@@ -1830,6 +1950,12 @@ class WorkerLifecycle:
                                 or supplied.held_ended_at != released_at):
                             raise WaitingAuthority(
                                 "trusted provider held receipt binding differs")
+                        if request.accounting_binding is not None:
+                            # AKU-07k: verify before the receipt can be indexed/retained.
+                            try:
+                                request.accounting_binding.verify_receipt(supplied.receipt)
+                            except LifecycleRefused as exc:
+                                raise WaitingAuthority(str(exc)) from exc
                         held_receipt = supplied
                         returned_at = _finite(
                             self.monotonic(), "held receipt return time")
@@ -1865,7 +1991,10 @@ class WorkerLifecycle:
                              "clock_domain": held_receipt.clock_domain,
                              "held_started_at": held_receipt.held_started_at,
                              "held_ended_at": held_receipt.held_ended_at,
-                             "receipt": held_receipt.receipt.to_dict()})
+                             "receipt": held_receipt.receipt.to_dict(),
+                             **({"accounting_binding_digest":
+                                 request.accounting_binding.digest}
+                                if request.accounting_binding is not None else {})})
         event = "WORKER_RESULT_ACCEPTED" if accepted else "WORKER_RESULT_STALE"
         stdout_identity = self._stdout_identity(worker_id, generation)
         stdout_proof = None if result is None else {
@@ -2377,7 +2506,7 @@ class WorkerLifecycle:
             intent["stage_id"], contract["stage"], tuple(contract["argv"]),
             contract["env"], Path(contract["cwd"]), contract["artifact_contract_digest"],
             intent["data"]["max_stage_seconds"], intent["data"]["teardown_seconds"],
-            intent["control_revision"])
+            intent["control_revision"], _binding_from_contract(contract))
         old_grant = GrantReceipt(
             intent["grant_id"], intent["grant_generation"],
             intent["data"]["provider_deadline"], intent["data"]["clock_domain"])
@@ -2506,6 +2635,22 @@ class WorkerLifecycle:
         retained = next((row for row in rows if row["event"] == "WORKER_RESULT_RETAINED"), None)
         result_digest = retained["data"]["result_digest"] if retained else None
         return_code = retained["data"]["return_code"] if retained else None
+        if held_row is not None:
+            # AKU-07k: validate the durable binding BEFORE any recovery event is appended.
+            data = held_row["data"]
+            if request.accounting_binding is not None:
+                if data.get("accounting_binding_digest") != request.accounting_binding.digest:
+                    raise ContainmentFailure(
+                        "durable held receipt lacks the launch accounting binding")
+                from .scheduling import HeldClaimReceipt
+                try:
+                    request.accounting_binding.verify_receipt(
+                        HeldClaimReceipt.from_dict(data["receipt"]))
+                except LifecycleRefused as exc:
+                    raise ContainmentFailure(str(exc)) from exc
+            elif "accounting_binding_digest" in data:
+                raise ContainmentFailure(
+                    "durable held receipt carries a binding the launch did not")
         reason = "recovered old/uncertain worker result is diagnostic only"
         terminal = TerminalWorker(
             worker_id, generation, request.request_id, request.plan_digest,
@@ -2537,7 +2682,8 @@ class WorkerLifecycle:
             "planned-serving callback placement is not proven inside the owned worker")
 
 
-__all__ = ["ACQUISITION_SCHEMA", "ACTIVE_OBSERVATION_CLAIM_SCHEMA",
+__all__ = ["ACCOUNTING_BINDING_SCHEMA", "ADMISSION_DENIAL_CLASSES", "AccountingBinding",
+           "AdmissionDenied", "ACQUISITION_SCHEMA", "ACTIVE_OBSERVATION_CLAIM_SCHEMA",
            "AcquisitionProjection", "AuthorizationDenied",
            "AuthorizedLaunch", "CampaignBinding", "COMMAND_RESULT_FIELDS",
            "COMMAND_RESULT_SCHEMA", "COMMAND_TRANSITION_SCHEMA", "ContainmentFailure",
