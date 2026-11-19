@@ -130,6 +130,42 @@ class SealedEvidenceRefusal(EvidenceProducerError):
         self.receipt_sha256 = receipt_sha256
 
 
+class C6SplitPolicyRefusal(EvidenceProducerError):
+    """The native C6 split evaluator refused a candidate by policy.
+
+    A typed C6 disposition (the name starts with C6) instead of the generic
+    EvidenceProducerError, so a live proof can tell a candidate refusal from a
+    carrier failure.  ``failed_legs`` names which policy leg(s) refused:
+    oracle_exit, numerics, precision_equivalence, determinism, semantic_judge.
+    It carries no durable receipt of its own (the legs are in the message).
+    """
+
+    def __init__(self, failed_legs: Sequence[str]) -> None:
+        self.failed_legs = tuple(failed_legs)
+        super().__init__(
+            "native C6 split correctness/determinism/semantic policy refused: "
+            + ",".join(self.failed_legs))
+
+
+def _c6_policy_failed_legs(*, oracle_exit_code: int, numerical: Sequence[Any],
+                           precision_equivalence: Sequence[Any],
+                           determinism_correct: bool,
+                           semantic_gating: bool) -> tuple[str, ...]:
+    """Name every C6 split policy leg that refuses; empty means all pass."""
+    failed = []
+    if oracle_exit_code != 0:
+        failed.append("oracle_exit")
+    if not all(row.correct for row in numerical):
+        failed.append("numerics")
+    if not all(row.correct for row in precision_equivalence):
+        failed.append("precision_equivalence")
+    if not determinism_correct:
+        failed.append("determinism")
+    if semantic_gating:
+        failed.append("semantic_judge")
+    return tuple(failed)
+
+
 class CorrectnessParseRefusal(SealedEvidenceRefusal):
     """The authoritative backend-op parser could not prove the targeted run."""
 
@@ -2427,12 +2463,13 @@ def _evaluate_c6_oracle_and_candidate_outputs(
         raw_outputs)
     semantic = c6_reward_integrity.calibrate_semantic_judge(
         c6.semantic_judge_verdicts)
-    if (oracle_capture.exit_code != 0
-            or not all(row.correct for row in numerical)
-            or not all(row.correct for row in precision_equivalence)
-            or not determinism.correct or semantic.gating):
-        raise EvidenceProducerError(
-            "native C6 split correctness/determinism/semantic policy refused")
+    failed_legs = _c6_policy_failed_legs(
+        oracle_exit_code=oracle_capture.exit_code, numerical=numerical,
+        precision_equivalence=precision_equivalence,
+        determinism_correct=determinism.correct,
+        semantic_gating=semantic.gating)
+    if failed_legs:
+        raise C6SplitPolicyRefusal(failed_legs)
     _verify_plan_files(plan)
     dispatch_sha = schemas.content_hash(_expectations(plan))
     ordered_inputs = [by_name[name] for name in _C6_INPUT_ORDER[operation]]
