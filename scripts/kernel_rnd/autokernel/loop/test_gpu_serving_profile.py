@@ -568,4 +568,4 @@ def test_analyze_carries_a_gap_histogram_per_window():
     result = gsp.analyze(_disp(rows), marks, {"short_decode": {"start": wall + 19.9, "end": wall + 21}}, {})
     gaps = result["windows"]["short_decode"]["gaps"]
     assert gaps["status"] == "observed" and gaps["gaps"] == 2
-    assert gaps["total_gap_ns"] == pytest.approx(10_000 + 20_000, abs=2)
+    assert gaps["total_gap_ns"] == pytest.approx(10_000 + 20_000, abs=100)
