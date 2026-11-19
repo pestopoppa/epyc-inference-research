@@ -326,6 +326,70 @@ def test_gated_series_is_fold_checked_by_the_peer_then_folds(world):
     assert ct.check_one(q38, repo=repo, measure=approve) is None
 
 
+def _approved_peer_fold_of_a_ppl_contract_series(world, monkeypatch, evidence_for):
+    """Drive check_one on a gated series whose commits are ppl_contract-relevant, with the
+    originating lane's cross-lane evidence supplied by `evidence_for(gate_commit)`."""
+    from . import cross_lane_gate, gates
+    from .test_cross_lane_gate import ev
+    repo, q38, store = world["repo"], world["q38"], world["store"]
+    monkeypatch.setattr(gates, "ppl_contract_range_requires_gate",
+                        lambda *a, **k: True)
+    keep, held_row = _hold(world)
+    gate, _ = _gate(world, held_row["patch_id"])
+    evidence = evidence_for(gate, ev("lane0"))
+    if evidence is not None:
+        directory = store / cross_lane_gate.EVIDENCE_DIR
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "lane0.json").write_text(json.dumps(evidence), encoding="utf-8")
+
+    def approve(series):
+        _git(world["worker"], "checkout", "-q", "--detach", Q38_WB)
+        for commit in series["commits"]:
+            assert ct.apply_in_worktree(world["worker"], commit)
+        return {"row": {"effect": 0.001, "decisive": False}, "passed": True,
+                "reason": "within", "coverage": UNCHANGED["q38-t"]}
+
+    old = _git(repo, "rev-parse", CHAMPION)
+    event = ct.check_one(q38, repo=repo, measure=approve, fold_check=g0_pass, store=store)
+    return keep, gate, old, event
+
+
+@pytest.mark.parametrize("variant", ["no_evidence", "evidence_for_another_commit",
+                                     "worse_perplexity"])
+def test_gated_series_without_admissible_cross_lane_evidence_stays_held_not_dropped(
+        world, monkeypatch, variant):
+    """AKX-AUTO-3 custody: the peer approved the series, but a ppl_contract series folds only
+    when the originating lane's own evidence covers the promoted commit. Otherwise the hold
+    stands: champion unmoved, BOTH commits still held on the origin's working branch (so a
+    later retry can fold them), and the refusal is recorded on the event."""
+    def evidence_for(gate, good):
+        if variant == "no_evidence":
+            return None
+        if variant == "evidence_for_another_commit":
+            return good                                  # candidate_commit is not `gate`
+        good["candidate_commit"] = gate
+        good["ppl"]["candidate_ppl"] = 12.0              # a real quality regression
+        return good
+    keep, gate, old, event = _approved_peer_fold_of_a_ppl_contract_series(
+        world, monkeypatch, evidence_for)
+    assert event["result"] == "approve"
+    assert event["fold"]["result"] == "ppl_contract_held" and event["fold"]["commit"] is None
+    assert _git(world["repo"], "rev-parse", CHAMPION) == old
+    assert ct.held(world["repo"], CHAMPION, DS41_WB) == [keep, gate]
+
+
+def test_gated_series_with_admissible_cross_lane_evidence_folds_and_records_it(
+        world, monkeypatch):
+    def evidence_for(gate, good):
+        good["candidate_commit"] = gate
+        return good
+    keep, gate, old, event = _approved_peer_fold_of_a_ppl_contract_series(
+        world, monkeypatch, evidence_for)
+    assert event["fold"]["result"] == "folded" and event["fold"]["cross_lane"]["admissible"]
+    assert _git(world["repo"], "rev-parse", CHAMPION) != old
+    assert ct.held(world["repo"], CHAMPION, DS41_WB) == []
+
+
 def test_rejected_series_requeues_the_gate_then_exhausts(world):
     repo, ds41, q38 = world["repo"], world["ds41"], world["q38"]
     keep, held_row = _hold(world)

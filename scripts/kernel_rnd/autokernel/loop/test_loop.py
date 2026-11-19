@@ -55,6 +55,29 @@ class OutcomeAttempt(unittest.TestCase):
         self.assertIn("comparison", row)
         self.assertIsNone(row["comparison"])
 
+    def test_reflexion_is_observe_only_and_never_costs_the_attempt_its_record(self):
+        # AK-PM-17 custody: `reflexion.build` runs inside `to_attempt`, so a hostile
+        # declaration must degrade to recorded lint violations, never raise (a raise here
+        # would lose the whole attempt row), and must not move any disposition field.
+        plain = loop.Outcome("kept", _hypothesis(), comparison=_comparison(0.05)).to_attempt()
+        hostile = [None, {}, {"expected_outcome": "improve"},
+                   {"expected_outcome": {"direction": "sideways", "min_effect_fraction": -1,
+                                         "extra": 1}, "lessons": "not a list",
+                    "avoid_patterns": ["x" * 400, "", 3] * 4, "try_patterns": object()}]
+        for declared in hostile:
+            row = loop.Outcome("kept", _hypothesis(), comparison=_comparison(0.05),
+                               reflexion_declared=declared).to_attempt()
+            self.assertEqual(row["status"], "kept")
+            self.assertEqual({k: v for k, v in row.items()
+                              if k not in ("reflexion", "turn_recorded_at")},
+                             {k: v for k, v in plain.items()
+                              if k not in ("reflexion", "turn_recorded_at")})
+            self.assertEqual(row["reflexion"]["schema"], "reflexion.v1")
+        self.assertTrue(row["reflexion"]["lint_violations"])
+        self.assertIsNone(row["reflexion"]["expected_outcome"])
+        # No comparison and nothing declared: no reflexion object is invented.
+        self.assertNotIn("reflexion", loop.Outcome("rejected", _hypothesis()).to_attempt())
+
 
 class _Planner:
     """Records what it was told, so a lost reason is visible."""

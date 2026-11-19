@@ -1761,9 +1761,11 @@ class TheTailTimesTheHeaviestKernelFirst(unittest.TestCase):
                                target_surface="ggml/src/ggml-cuda/mmq.cu",
                                target_symbol=symbol)
 
-    def _order(self, weights, arrivals):
-        tail = pipeline.SerializedTail(lambda: _sha(0), priority=lambda h: weights.get(
-            h.target_symbol))
+    def _order(self, weights, arrivals, demote=None, priority=True):
+        tail = pipeline.SerializedTail(
+            lambda: _sha(0),
+            priority=(lambda h: weights.get(h.target_symbol)) if priority else None,
+            demote=demote)
         admitted, release = [], threading.Event()
 
         def holder():
@@ -1798,6 +1800,40 @@ class TheTailTimesTheHeaviestKernelFirst(unittest.TestCase):
         self.assertEqual(admitted, ["heavy", "middle", "light", "unscored-1", "unscored-2"])
         heavy = next(row for row in tail.admission_log if row["mechanism_id"] == "heavy")
         self.assertEqual(heavy["launch_weighted_ns_per_token"], 900.0)
+
+    def test_a_demoted_candidate_is_admitted_last_never_refused_or_lost(self):
+        """AK-AMDAHL-PRUNE custody: `demote` only reorders. Every candidate, demoted or not,
+        still reaches the tail and is recorded in the admission log, even with no priority."""
+        arrivals = [("low-1", "d"), ("keep-1", "k"), ("low-2", "d"), ("keep-2", "k")]
+        for priority in (True, False):
+            admitted, tail = self._order({"k": 5.0, "d": 900.0}, arrivals,
+                                         demote=lambda h: h.target_symbol == "d",
+                                         priority=priority)
+            self.assertEqual(sorted(admitted), sorted(m for m, _ in arrivals))
+            self.assertEqual(admitted[:2].count("keep-1") + admitted[:2].count("keep-2"), 2)
+            self.assertEqual(admitted[2:], ["low-1", "low-2"])
+            self.assertEqual({row["mechanism_id"] for row in tail.admission_log},
+                             {"holder"} | {m for m, _ in arrivals})
+            self.assertTrue(all(row["amdahl_demoted"] for row in tail.admission_log
+                                if row["mechanism_id"].startswith("low")))
+            self.assertFalse(tail._admitted)
+
+    def test_a_failing_demote_is_not_a_demotion_and_not_a_failed_attempt(self):
+        def boom(_h):
+            raise RuntimeError("no profile")
+        tail = pipeline.SerializedTail(lambda: _sha(0), demote=boom)
+        with tail.session(_sha(0), hypothesis=self._hyp("a", "x")):
+            pass
+        self.assertFalse(tail.admission_log[0]["amdahl_demoted"])
+
+    def test_a_superseded_demoted_candidate_releases_admission(self):
+        tail = pipeline.SerializedTail(lambda: _sha(1), demote=lambda h: True)
+        with self.assertRaises(pipeline.Superseded):
+            with tail.session(_sha(0), hypothesis=self._hyp("stale", "x")):
+                pass
+        with tail.session(_sha(1), hypothesis=self._hyp("fresh", "x")):
+            pass                      # would deadlock if admission had leaked
+        self.assertFalse(tail._admitted)
 
     def test_a_failing_priority_is_arrival_order_not_a_failed_attempt(self):
         def boom(_h):

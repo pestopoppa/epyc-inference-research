@@ -356,6 +356,39 @@ class PlannerContract(unittest.TestCase):
         self.assertIsInstance(got, actors.Abstain)
         self.assertEqual(got.reason, "profile has no reachable hot path")
 
+    def test_an_abstention_survives_its_belief_receipt_either_way(self):
+        """Custody: the receipt only ADDS accepted reliance to an abstention. A receipt that
+        could not be written (None) or that accepts nothing never turns the abstention into
+        an error or drops its reason / identity."""
+        body = ('{"abstain": "already implemented", "mechanism_id": "akm-x", '
+                '"relies_on_claims": ["clm_a"]}')
+        cases = ((None, ()),
+                 ({"reliance": {"accepted": []}, "receipt_id": "r0"}, ()),
+                 ({"reliance": {"accepted": ["clm_a"]}, "receipt_id": "r1"}, ("clm_a",)))
+        for receipt, accepted in cases:
+            planner = actors.AgentPlanner(workspace=Path("/tmp"))
+            with mock.patch.object(actors, "_run_agent", return_value=body), \
+                    mock.patch.object(actors.AgentPlanner, "_belief_receipt",
+                                      return_value=receipt):
+                got = planner.propose({})
+            self.assertIsInstance(got, actors.Abstain)
+            self.assertEqual(got.reason, "already implemented")
+            self.assertEqual(got.mechanism_id, "akm-x")
+            self.assertEqual(got.relies_on_claims, accepted)
+
+    def test_an_unbounded_local_critic_is_refused_before_any_agent_call(self):
+        """OAB-32 custody: with default budgets on, a local backend with no wall bound is
+        refused BEFORE a review is attempted: no verdict is fabricated and nothing is run."""
+        from autokernel.loop import call_budget
+        backend = actors.Backend(kind="opencode", model="m", effort="high", binary="opencode")
+        with tempfile.TemporaryDirectory() as workspace:
+            critic = actors.AgentCritic(workspace=Path(workspace), backend=backend,
+                                        timeout_s=0, default_budgets=True)
+            with mock.patch.object(actors, "_run_agent") as run:
+                with self.assertRaises(call_budget.UnboundedBackendRefused):
+                    critic._review("subject", "grounds", {})
+            run.assert_not_called()
+
     def test_unconfigured_runtime_treatment_is_not_a_provider_transient(self):
         planner = actors.AgentPlanner(workspace=Path("/tmp"))
         context = {"target": {"resource_class": "cpu"},
