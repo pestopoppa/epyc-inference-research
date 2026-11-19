@@ -8,6 +8,7 @@ T0 or T1 witness; UNKNOWN always decides as TOUCHED. Pinned by the AKX-P1d contr
 from __future__ import annotations
 
 import hashlib
+import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -222,6 +223,62 @@ def record_keep_screen(store_root: Path | str, *, keep_id: str,
         campaign_manifest_sha256=manifest_digest, source_path=str(source),
         source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
         workload_signatures=workloads, observed_at=stamp, screen=screen, rows=rows)
+
+
+def workload_record_from_census(census: Mapping[str, Any], *, expected_freshness_key: str,
+                                effective_env: Mapping[str, str] | None = None,
+                                is_author_target: bool = False,
+                                t0_dso_anchor: Optional[Mapping[str, str]] = None,
+                                t0_dso_candidate: Optional[Mapping[str, str]] = None,
+                                t1_profiles: Optional[tuple] = None) -> tuple:
+    """Adapt one stored ``workload_census.v1`` document to ``(WorkloadRecord, key)``.
+
+    The census states are the ones `census.census_state` decides, so a stale
+    (freshness key differs), partial or vacuous record gives an UNOBSERVED / stale record
+    (-> UNKNOWN -> TOUCHED), never an INERT. Backend is rocm only when a probe saw a device.
+    Witnesses (T0 DSO digests, T1 profiles) are never read from the census: they come from
+    the caller's own anchor/candidate builds, and absent means no witness."""
+    from . import census as CE
+    if not isinstance(census, Mapping) or not expected_freshness_key:
+        raise ValueError("a census mapping and the expected freshness key are required")
+    state = CE.census_state(census, expected_freshness_key)
+    ident = census.get("identity") or {}
+    wid = ident.get("workload_id")
+    if not isinstance(wid, str) or not wid:
+        raise ValueError("census has no workload_id")
+    stored_key = (census.get("validity") or {}).get("freshness_key")
+    types = (census.get("weights") or {}).get("tensor_types") or {}
+    per_shape = (census.get("graph") or {}).get("per_shape") or []
+    backend = "rocm" if any(isinstance(r, Mapping) and r.get("device_seen") for r in per_shape) else "cpu"
+    record = WorkloadRecord(
+        wid, backend, frozenset(str(t) for t in types),
+        census_observed=state == CE.OBSERVED,
+        census_stale=stored_key != expected_freshness_key,
+        effective_env=dict(effective_env or {}), is_author_target=is_author_target,
+        t0_dso_anchor=t0_dso_anchor, t0_dso_candidate=t0_dso_candidate, t1_profiles=t1_profiles)
+    return record, expected_freshness_key
+
+
+def load_censuses(store: Path | str, expected_keys: Mapping[str, str]) -> dict[str, tuple]:
+    """Map workload_id -> ``(WorkloadRecord, key)`` for `record_keep_screen(censuses=...)`.
+
+    ``expected_keys`` = workload_id -> the freshness key the CURRENT champion/recipe would
+    give (the caller computes it from live identity). A missing, unreadable or key-mismatched
+    file yields no entry, which the screen treats as an absent census (UNKNOWN -> TOUCHED)."""
+    found: dict[str, tuple] = {}
+    root = Path(store)
+    for wid, key in expected_keys.items():
+        if not key or not root.is_dir():
+            continue
+        for path in sorted(root.glob(f"{wid}-{key[:16]}.json")):
+            try:
+                doc = json.loads(path.read_text())
+                if (doc.get("validity") or {}).get("freshness_key") != key:
+                    continue
+                found[wid] = workload_record_from_census(doc, expected_freshness_key=key)
+            except (OSError, ValueError, AttributeError):
+                continue
+    return found
 
 
 def footprint_for_commit(repo: Path, child: str) -> Optional[FP.PatchFootprint]:
