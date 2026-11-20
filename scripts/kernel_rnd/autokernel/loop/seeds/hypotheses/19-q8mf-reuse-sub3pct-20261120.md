@@ -1,0 +1,12 @@
+# Seeds: small-M Q8_0 GEMM reuse outside tree verify, sub-3% levers (2026-11-20)
+
+Source: autokernel session, Q8MF reuse filing. Root boxes for the >=3% levers: Q8MF-REUSE-NP-DECODE (rocm-kernel-authoring.md), Q8MF-REUSE-CHAIN-VERIFY / -DFLASH2-DRAFTER / -MOE-EXPERTS (speculative-decoding.md). Grade: `design_prior`. Gate class: futility-only. Gate: DTREE-0-Q8MF-V3 (speculative-decoding.md) landing; both seeds start from the V3 build.
+Common KEEP gates: GPU W2 floor 0.84% (CPU seeds: the CPU quiet-host noise floor of the row's region); 27B KLD <= 0.003 if numerics change.
+
+## Q8MF-PREFILL-TAIL (proposed) -- route the last partial ubatch through the small-M Q8_0 kernel
+Mechanism: a prompt of length L leaves a final ubatch of L mod ubatch tokens; when that remainder is 1-16 (M range 1-16) it runs on MMVQ/wvsk/MMQ at a shape where V3 at >= 1.2 TB/s is flat. Expected gain: one tail pass per prompt, about 15-19 ms saved on the 27B (V2 GEMMs 38.8-42.6 ms at W4-16 vs ~23 ms at 1.2 TB/s, ATTRIB-V2) out of a multi-second prefill: < 1% TTFT for prompts >= 2k tokens, only visible on short prompts and in the DFlash2/MTP re-prefill paths. Compounded-gain rule: it unblocks nothing larger (the decode and verify routes are separate boxes), so it is judged alone -> seed, not box.
+**Falsifier:** llama-bench -p {512+4, 512+12, 2048+8} MF on vs off at V3; no cell faster by > 0.84% -> drop. Effort S (route only).
+
+## IQK-NY16-CPU (proposed) -- Zen 5 analogue of "decode weights once, apply to all columns" for CPU np>1 and verify
+Check done: iqk already does this. `mul_mat_NxM` decodes each weight block once per tile and applies it to up to `IQK_MAX_NY = 8` columns (ggml/src/ggml-cpu/iqk/iqk_common.h:151, iqk_mul_mat.cpp:82/609 on the v10 tree). Residual lever: at np or verify width 9-16 the activation columns go in two passes of <= 8, so weights are decoded and streamed twice. M range 9-16. Expected gain: CPU decode is bandwidth-bound; a second weight pass mostly hits L2/L3 for the current tile rather than DRAM, so the saving is decode ALU, not bytes. Estimated < 3% at np 9-16 and 0 at np <= 8 (inferred; no measurement in the handoffs), and CPU np>8 serving is not a current lane. Raising NY to 16 costs registers (16 accumulators x 4 rows on AVX-512 = 64 zmm, over the 32 available), so it needs a 2-row x 16-col tile variant.
+**Falsifier:** perf counters on an existing CPU np16 or verify-16 trace: if the per-step weight-decode share is < 10%, drop; else a 16-column tile microbench must show >= 1.05x on the Q8_0 GEMM at M=16. Effort M.
