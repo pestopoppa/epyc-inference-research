@@ -6,7 +6,7 @@
   "ngl": 99,
   "spec_decode": {
     "type": "draft-mtp",
-    "draft_n_max": 4
+    "draft_n_max": 2
   },
   "np": 4,
   "ctx": 786432,

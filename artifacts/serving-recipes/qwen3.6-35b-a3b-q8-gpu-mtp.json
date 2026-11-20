@@ -4,7 +4,7 @@
   "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
   "device": "ROCm0",
   "ngl": 99,
-  "spec_decode": {"type": "draft-mtp", "draft_n_max": 4},
+  "spec_decode": {"type": "draft-mtp", "draft_n_max": 2},
   "np": 4,
   "ctx": 16384,
   "threads": 8,
