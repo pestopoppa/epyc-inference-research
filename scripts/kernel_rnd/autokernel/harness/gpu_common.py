@@ -1,7 +1,8 @@
 """Canonical shared helpers for autokernel GPU measurement rows.
 
-New rows IMPORT this file (sys.path.insert(0, '/mnt/raid0/llm/epyc-inference-research/scripts/kernel_rnd/autokernel/harness')) and pin
-its sha256 in the row's SOURCE.sha256 instead of vendoring a copy. The five pre-2026-11-20 row dirs carry byte-identical vendored copies
+This file at research origin/main is the single source. `row_scaffold.py new --lane gpu` (root row-owner-loop skill) copies it and
+gpuproof_row.py from origin/main (git fetch + git show) into each new row dir, sha256-pinned in job.py and SOURCE.sha256, so rows stay
+self-contained; fix bugs HERE, never in a row copy. The five pre-2026-11-20 row dirs carry byte-identical vendored copies
 (md5 f7e8f3e8...) and are left as they are. 2026-11-20 change: run_sampled runs children under LD_DEBUG=libs and records wall time, and
 residency_from_proof gates sub-second processes (< SHORT_S) on the in-process witness + LD_DEBUG library proof, with the VRAM sampler
 kept as supplementary evidence (origin: ak-akx-all-29-4-guardband-gpu-20261119-r2, FUTILITY_RESIDENCY from a 2-sample miss).
