@@ -679,10 +679,11 @@ and `progress/2026-11/2026-11-20-autokernel.md` (wrap-ups 5-7).
   MF=3) both sit flat at ~0.70-0.77 TB/s in n, while the wvsk/MMVQ route reaches ~1.15 TB/s at n1 on
   the same 27B weights; multi-column kernels spend occupancy on activation and accumulator state.
   Row `ak-dtree0-q8mf3-gate-gpu-20261120` (NO_GAIN; A3 slope 0.23 ms/row, W12 47.8 / W16 49.8 ms vs
-  wvsk16 53.0 / 60.7). **Apply:** judge a kernel against the MEASURED streaming ceiling of the best
-  existing route on the same tensor (op GB/s at n1), not the 1.6 TB/s HBM peak; a new kernel that
-  cannot beat the old route's GB/s only wins where the old route's per-row slope is bad, so ship it
-  as a routed composite (old route at small W, new at large W; V4 = X at W<=8 + A3 MF_MIN=9). Root
+  wvsk16 53.0 / 60.7). **Apply:** report every kernel as achieved GB/s vs the 1.6 TB/s HBM peak and
+  rank work by the utilization gap it closes (HBM bandwidth is the target, never "the limit"); the
+  best existing route's op GB/s on the same tensor is the bar a new kernel must beat to ship, and
+  one that cannot beat it only wins where the old route's per-row slope is bad, so ship it as a
+  routed composite (old route at small W, new at large W; V4 = X at W<=8 + A3 MF_MIN=9). Root
   cause of the plateau is open: DTREE-0-Q8MF-HBM-CEILING (row `ak-dtree0-q8mf-hbm-gpu-20261120`).
 - **A route boundary can masquerade as a per-row cost step.** A jump in ms/row between W values may
   be the dispatcher switching kernels at a threshold (MF_MIN, MMVF_*_MAX), not a cost of the rows
