@@ -292,7 +292,9 @@ def gpu_proof():
 
 
 SHORT_S = 2.0  # below this wall time the VRAM sampler is supplementary evidence, not a gate
-WITNESS_LINES = ('ggml_cuda_init: found 1 ROCm devices', 'Backend ROCm0: OK')
+WITNESS_INIT = 'ggml_cuda_init: found 1 ROCm devices'
+# the backend RAN on ROCm0: OK or FAIL both prove it (an expected-failure control prints FAIL; requiring OK refused it, r3)
+WITNESS_BACKEND = re.compile(r'Backend ROCm0: (OK|FAIL)\b')
 _ANSI = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]')
 
 
@@ -314,12 +316,14 @@ def ld_debug_libs(ld_prefix, bdir, lib='libggml-hip.so'):
 
 
 def witness_residency(txt, etxt, ld_prefix, bdir):
-    """In-process witness (ROCm init + backend OK lines, ANSI stripped) plus the LD_DEBUG library proof."""
+    """In-process witness (ROCm init line + 'Backend ROCm0: OK|FAIL', ANSI stripped) plus the LD_DEBUG library proof."""
     clean = _ANSI.sub('', (txt or '') + '\n' + (etxt or ''))
-    w = {s: s in clean for s in WITNESS_LINES}
+    w_init = WITNESS_INIT in clean
+    m = WITNESS_BACKEND.search(clean)
     lines, pids = ld_debug_libs(ld_prefix, bdir) if ld_prefix else ([], [])
-    return {'witness_rocm_init': w[WITNESS_LINES[0]], 'witness_backend_ok': w[WITNESS_LINES[1]], 'ld_debug_hip_from_row_build': bool(lines),
-            'ld_debug_pids': pids, 'ld_debug_lines': lines[:4], 'witness_ok': all(w.values()) and bool(lines)}
+    return {'witness_rocm_init': w_init, 'witness_backend_ran': bool(m), 'witness_backend_status': m.group(1) if m else None,
+            'ld_debug_hip_from_row_build': bool(lines), 'ld_debug_pids': pids, 'ld_debug_lines': lines[:4],
+            'witness_ok': w_init and bool(m) and bool(lines)}
 
 
 def residency_from_proof(pr, bdir):

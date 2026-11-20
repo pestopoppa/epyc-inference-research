@@ -35,10 +35,10 @@ def row(tmp_path, monkeypatch):
     return str(bdir)
 
 
-def fake_tbo(lib, witness=True):
+def fake_tbo(lib, witness=True, status='OK'):
     body = f"import ctypes; ctypes.CDLL({lib!r})"
     if witness:
-        body += "; import sys; print('ggml_cuda_init: found 1 ROCm devices', file=sys.stderr); print('\\x1b[1;32mBackend ROCm0: OK\\x1b[0m')"
+        body += "; import sys; print('ggml_cuda_init: found 1 ROCm devices', file=sys.stderr); print('\\x1b[1;32mBackend ROCm0: " + status + "\\x1b[0m')"
     return [sys.executable, '-I', '-c', body]
 
 
@@ -47,7 +47,7 @@ def test_subsecond_process_passes_on_witness(row):
     r = G.residency_from_proof(pr, row)
     assert rc == 0 and pr['_elapsed_s'] < G.SHORT_S
     assert r['gate'] == 'witness' and r['ok'] and not r['sampler_ok']
-    assert r['witness_rocm_init'] and r['witness_backend_ok'] and r['ld_debug_hip_from_row_build']
+    assert r['witness_rocm_init'] and r['witness_backend_status'] == 'OK' and r['ld_debug_hip_from_row_build']
     assert 'libggml-hip' not in etxt  # LD_DEBUG went to its own file, not into the receipts stream
 
 
@@ -76,3 +76,10 @@ def test_long_process_still_needs_sampler(row):
 def test_legacy_proof_without_witness_data_unchanged(row):
     r = G.residency_from_proof(dict(EMPTY_PROOF), row)
     assert r['gate'] == 'sampler' and not r['ok'] and 'witness_ok' not in r
+
+
+def test_expected_failure_control_still_witnessed(row):
+    """A positive control is meant to fail (rc != 0, 'Backend ROCm0: FAIL'); it still ran on ROCm0 (r3 refused it on 'OK')."""
+    _, _, pr, _, _ = G.run_sampled(fake_tbo(row + '/bin/libggml-hip.so', status='FAIL'), 'ctl-positive', row)
+    r = G.residency_from_proof(pr, row)
+    assert r['witness_backend_status'] == 'FAIL' and r['ok']
