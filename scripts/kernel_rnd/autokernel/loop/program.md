@@ -663,8 +663,71 @@ Each of these cost a gate re-run. Design the measurement around them up front.
   real-model witness (route line at WARN) **plus** a PPL/KLD check before it counts.
 - **The keeper VRAM residency sampler needs ONE VRAM-resident process for >= 40 s** — a smoke
   that finishes faster, or splits across short processes, reads 0 VRAM and fails residency.
+  For sub-second processes (op gates, short benches) prove residency in-process instead: an
+  in-process HIP witness plus `LD_DEBUG=libs` showing `libggml-hip.so` loaded, and disclose it as
+  the narrower reading (AKX-ALL-29.4 r4, root `e7ad3456d`).
 - **INT8 MFMA = f16 rate on MI210** (same shapes, same 181 TOPS/TFLOPS peak). Int8 arms can only
   win by removing bytes or conversions, never by compute headroom (H4 0.48x, H9 0.52x).
+
+## Learnings 2026-11-20 (AK-DTREE verify cost, Q38FN CPU, PFXC) — distilled, not a log
+
+Each: lesson · evidence · how to apply. Evidence is in epyc-root `handoffs/active/speculative-decoding.md`
+(DTREE-*), `autokernel-akx-program.md` (Q38FN-*, AKX-*), `kernel-champion-and-promotion.md` (PFXC-*),
+and `progress/2026-11/2026-11-20-autokernel.md` (wrap-ups 5-7).
+
+- **Small-M (n 1..16) GEMMs plateau far below paper peak.** Q8MF V2 (`5ccc76716`) and V3 (`0289ac321`
+  MF=3) both sit flat at ~0.70-0.77 TB/s in n, while the wvsk/MMVQ route reaches ~1.15 TB/s at n1 on
+  the same 27B weights; multi-column kernels spend occupancy on activation and accumulator state.
+  Row `ak-dtree0-q8mf3-gate-gpu-20261120` (NO_GAIN; A3 slope 0.23 ms/row, W12 47.8 / W16 49.8 ms vs
+  wvsk16 53.0 / 60.7). **Apply:** judge a kernel against the MEASURED streaming ceiling of the best
+  existing route on the same tensor (op GB/s at n1), not the 1.6 TB/s HBM peak; a new kernel that
+  cannot beat the old route's GB/s only wins where the old route's per-row slope is bad, so ship it
+  as a routed composite (old route at small W, new at large W; V4 = X at W<=8 + A3 MF_MIN=9). Root
+  cause of the plateau is open: DTREE-0-Q8MF-HBM-CEILING (row `ak-dtree0-q8mf-hbm-gpu-20261120`).
+- **A route boundary can masquerade as a per-row cost step.** A jump in ms/row between W values may
+  be the dispatcher switching kernels at a threshold (MF_MIN, MMVF_*_MAX), not a cost of the rows
+  (ATTRIB-V2). **Apply:** before attributing a step, log the route taken per W (WARN witness) and
+  sweep the threshold knob; fit slopes only within one route.
+- **A3B F32 route cliff at 3->4 rows.** Raising `MMVF_F32_MAX` to 8 gives -18 to -21% verify time
+  (1.28 ms/row; A3B MMVF=8 KEEP_CANDIDATE). **Apply:** for every small-batch path, find each route
+  cliff in the served W range and test moving it before writing a new kernel.
+- **Tree-mask attention is a small lever.** FA is 2-9% of the marginal verify cost on the 27B and A3B;
+  the served kernel is `gv_fattn` (the TILE-kernel inference was refuted, ATTN-SHARE). Split + LSE-merge
+  (ROUTE v1 `888470ff3`: +1.2-2.4%) and ROUTE-V2 (both candidates) were LOSS against the fused path.
+  **Apply:** profile the marginal cost split per op before choosing a lever; never add launches or a
+  merge pass to save mask reads; the obvious-looking target is often not where the time is.
+- **GDN verify has a snapshot-write floor.** Per-row state snapshots are ~3.1 MB/layer/row on the 27B,
+  an unavoidable ~0.12 ms/row; `llama-bench` at K=1 never writes them. **Apply:** measure GDN verify
+  cost inside the real verify path (np/K>1 or server), never extrapolate from K=1 bench; budget the
+  floor in any tree cost model (GDN-ROWS `ba89d5047`).
+- **Tree cost model.** gain = (1+a)/(1+dW*s/R) - 1, with a = extra accepted tokens per step, dW =
+  extra verify rows, s = marginal ms/row, R = baseline step ms. On the 27B breakeven is s ~1.5 ms/row
+  and +3% needs s <= 1.15. Vendor claims such as Infernix "+12-17%" count accepted drafts, not tok/s.
+  **Apply:** compute s from the measured W-sweep slope and plug it in before any tree build; convert
+  any literature acceptance gain to tok/s with this formula before citing it.
+- **Parallel top-k must reproduce serial tie order.** Row-split parallel TOP_K (`GGML_CPU_TOPK_PAR`,
+  fork `aaec7962a`) saved ~33 ms/step at 32k on Q38FN but broke greedy identity: ties inside indexer
+  blocks resolve differently. **Apply:** any parallel selection/sort replacing a serial one must return
+  the identical set AND order (Q38FN-INDEXER-TOPK-EXACT: prefix-threshold filter + same partial_sort);
+  gate with greedy token identity, not only set equality.
+- **Context-dependent wins need context-adaptive designs.** Q38FN MTP draft-FA window W4096 (fork
+  `3c80eb453`): +27% tok/s at 64k, -5.5% at 32k (acceptance 0.607 < 0.713). **Apply:** gate every
+  context-sensitive lever at >=2 context points and, when signs differ, design an adaptive arm (window
+  only past a position threshold) instead of a fixed constant (Q38FN-DRAFT-FA-W8192).
+- **Prefix cache on hybrid models.** On the hybrid A3B `--cache-reuse` is a no-op; checkpoint spacing
+  dominates reuse; a synthetic trace understates it (probe r2: +3.0 pt hit rate, prefill 0.914x vs a
+  +8-12 pt estimate). **Apply:** evaluate prefix-cache levers on real request traces (PFXC-R8-REPLAY),
+  tune checkpoint spacing first, and do not rely on cache-reuse for recurrent/hybrid layers.
+- **Compounded-gain threshold.** Small independent KEEPs compound; a lever below the act-now bar is
+  seeded (hypothesis store) rather than dropped, and promoted when stacked expected gain crosses the
+  threshold (research `0d86d13f9`). **Apply:** never discard a correct small win; seed it.
+- **Measurement hygiene (each cost a re-run this session):**
+  - Strip ANSI colour codes before counting `OK` lines from test-backend-ops; coloured output
+    undercounts.
+  - The test-backend-ops CPU reference is scalar at ~4 threads; huge shapes (e.g. the 248320 vocab
+    head) make GPU gates take hours. Drop them from GPU gates and cover them separately.
+  - A smoke predicate copied from another row can pass vacuously (it checks the other row's
+    output); re-derive each predicate from the row's own artefacts.
 
 ## gfx90a low-level tier — ISA-schedule operator catalogue
 
