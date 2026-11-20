@@ -45,3 +45,23 @@ def test_truncated_bin(tmp_path):
     _mk(str(tmp_path))
     open(os.path.join(str(tmp_path), 'w_ffn_up.bin'), 'wb').write(b'\0' * 10)
     assert any(e.startswith('w_ffn_up: size') for e in check(str(tmp_path))['errors'])
+
+
+def _mk_head(d, hidden_rows=2):
+    t = []
+    _w(d, 'head_hidden', 'f32', [8, hidden_rows, 1, 1], b'\0' * 4 * 8 * hidden_rows, t)
+    _w(d, 'head_w.f32', 'f32', [8, 10, 1, 1], b'\0' * 4 * 80, t)
+    _w(d, 'head_topk_ids', 'i32', [4, 2, 1, 1], b'\0' * 4 * 8, t)
+    _w(d, 'head_topk_val', 'f32', [4, 2, 1, 1], b'\0' * 4 * 8, t)
+    json.dump({'head_mode': True, 'vocab': 10, 'n_tokens': 2, 'tensors': t}, open(os.path.join(d, 'manifest.json'), 'w'))
+
+
+def test_head_mode_valid(tmp_path):
+    _mk_head(str(tmp_path))
+    r = check(str(tmp_path))
+    assert r['ok'] and r['head_mode'], r['errors']
+
+
+def test_head_mode_row_mismatch(tmp_path):
+    _mk_head(str(tmp_path), hidden_rows=3)
+    assert not check(str(tmp_path))['ok']

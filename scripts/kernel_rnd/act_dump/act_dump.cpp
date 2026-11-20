@@ -9,12 +9,23 @@
 // bytes, basic stats); manifest.json lists all of them.
 //
 // FA is matched by node name "*-<L>" or by its K operand being a view of "cache_k_l<L>".
+//
+// --head mode (DRAFT-HEAD-APPROX-RECALL): instead of layer L, match every MUL_MAT whose weight is the LM head
+// ("output.weight", or any "*shared_head_head*" / "*shared_head.head*" tensor, or --head-name NAME). The batch requests
+// logits for EVERY token so the head runs on all N rows. Per matched head node it writes
+//   head_hidden.bin   f32 [n_embd, N]   the pre-head hidden state (src1)
+//   head_w.f32.bin    f32 [n_embd, V]   the head weight dequantized with ggml to_float (raw blocks too with --weights)
+//   head_topk_ids.bin i32 [K, N]        top-K vocab ids of the model's own head logits, descending (K = --head-topk, 16)
+//   head_topk_val.bin f32 [K, N]        their logits
+//   head_logits.bin   f32 [V, N]        only with --head-logits-full
 // Usage: act_dump -m model.gguf -o outdir [--layer L] [-n 512] [-ngl 0] [-t 8] [--prompt-file f] [--weights]
-// Exit: 0 ok | 1 usage | 2 load/decode failure | 3 nothing matched (no MUL_MAT or no FA at layer L)
+//                 [--head [--head-name NAME] [--head-topk K] [--head-logits-full]]
+// Exit: 0 ok | 1 usage | 2 load/decode failure | 3 nothing matched (no MUL_MAT or no FA at layer L; --head: no head MUL_MAT)
 #include "ggml.h"
 #include "ggml-backend.h"
 #include "llama.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -32,6 +43,11 @@ struct dump_state {
     int layer = 3;
     bool weights = false;
     bool list = false;  // --list: print candidate nodes (debug)
+    bool head = false;  // --head: dump the LM-head MUL_MAT instead of layer L
+    std::string head_name;
+    int head_topk = 16;
+    bool head_logits_full = false;
+    int n_head = 0;
     std::map<std::string, int> seen;
     std::vector<std::string> manifest;  // JSON objects
     int n_mm = 0, n_fa = 0;
@@ -138,8 +154,76 @@ static void dump(dump_state & st, const ggml_tensor * t, std::string key, const 
             (long long) t->ne[1], (long long) t->ne[2], (long long) t->ne[3], b.size());
 }
 
+static bool is_head_weight(const dump_state & st, const ggml_tensor * w) {
+    if (!w) return false;
+    const std::string n = w->name;
+    if (!st.head_name.empty()) return n == st.head_name;
+    return n == "output.weight" || n.find("shared_head_head") != std::string::npos || n.find("shared_head.head") != std::string::npos;
+}
+
+static void write_bin(dump_state & st, const std::string & key, const void * p, size_t bytes, const std::string & type,
+                      const std::vector<int64_t> & ne, const ggml_tensor * node) {
+    std::ofstream(st.out + "/" + key + ".bin", std::ios::binary).write((const char *) p, (std::streamsize) bytes);
+    std::ostringstream j;
+    j << "{\"key\":\"" << key << "\",\"file\":\"" << key << ".bin\",\"tensor\":\"" << node->src[0]->name << "\",\"node\":\"" << node->name
+      << "\",\"op\":\"" << ggml_op_name(node->op) << "\",\"type\":\"" << type << "\",\"ne\":[";
+    for (size_t i = 0; i < 4; i++) j << (i ? "," : "") << (i < ne.size() ? ne[i] : 1);
+    j << "],\"contiguous_src\":true,\"bytes\":" << bytes << ",\"stats\":null}";
+    std::ofstream(st.out + "/" + key + ".json") << j.str() << "\n";
+    st.manifest.push_back(j.str());
+    fprintf(stderr, "act_dump: %-18s %s %zu B\n", key.c_str(), type.c_str(), bytes);
+}
+
+// LM-head node: hidden (src1), dequantized weight (src0), and top-K of the node's own f32 output.
+static void dump_head(dump_state & st, ggml_tensor * t) {
+    std::string sfx = st.n_head ? "_" + std::to_string(st.n_head) : "";
+    const ggml_tensor * w = t->src[0];
+    dump(st, t->src[1], "head_hidden" + sfx, t);
+    if (st.weights) dump(st, w, "head_w_raw" + sfx, t);
+    std::vector<uint8_t> wb;
+    if (!fetch_contig(w, wb)) { fprintf(stderr, "act_dump: cannot fetch head weight %s\n", w->name); return; }
+    const int64_t d = w->ne[0], V = w->ne[1];
+    {
+        std::vector<float> wf((size_t) d * V);
+        const size_t rb = ggml_row_size(w->type, d);
+        if (w->type == GGML_TYPE_F32) memcpy(wf.data(), wb.data(), wf.size() * 4);
+        else {
+            const auto * tr = ggml_get_type_traits(w->type);
+            if (!tr->to_float) { fprintf(stderr, "act_dump: no to_float for %s\n", ggml_type_name(w->type)); return; }
+            for (int64_t r = 0; r < V; r++) tr->to_float(wb.data() + r * rb, wf.data() + r * d, d);
+        }
+        write_bin(st, "head_w.f32" + sfx, wf.data(), wf.size() * 4, "f32", {d, V}, t);
+    }
+    std::vector<uint8_t> lb;
+    if (t->type != GGML_TYPE_F32 || !fetch_contig(t, lb)) { fprintf(stderr, "act_dump: cannot fetch head logits\n"); return; }
+    const int64_t N = t->ne[1], K = std::min<int64_t>(st.head_topk, V);
+    const float * L = (const float *) lb.data();
+    std::vector<int32_t> ids((size_t) K * N);
+    std::vector<float> vals((size_t) K * N);
+    std::vector<int32_t> idx(V);
+    for (int64_t c = 0; c < N; c++) {
+        const float * col = L + c * V;
+        for (int64_t i = 0; i < V; i++) idx[i] = (int32_t) i;
+        std::partial_sort(idx.begin(), idx.begin() + K, idx.end(), [&](int32_t a, int32_t b) { return col[a] > col[b] || (col[a] == col[b] && a < b); });
+        for (int64_t k = 0; k < K; k++) { ids[c * K + k] = idx[k]; vals[c * K + k] = col[idx[k]]; }
+    }
+    write_bin(st, "head_topk_ids" + sfx, ids.data(), ids.size() * 4, "i32", {K, N}, t);
+    write_bin(st, "head_topk_val" + sfx, vals.data(), vals.size() * 4, "f32", {K, N}, t);
+    if (st.head_logits_full) write_bin(st, "head_logits" + sfx, lb.data(), lb.size(), "f32", {V, N}, t);
+    st.n_head++;
+}
+
 static bool cb_eval(ggml_tensor * t, bool ask, void * ud) {
     auto & st = *(dump_state *) ud;
+    if (st.head) {
+        const bool hm = t->op == GGML_OP_MUL_MAT && is_head_weight(st, t->src[0]);
+        if (ask) {
+            if (st.list && t->op == GGML_OP_MUL_MAT) fprintf(stderr, "act_dump: node %s src0=%s\n", t->name, t->src[0] ? t->src[0]->name : "-");
+            return hm;
+        }
+        if (hm) dump_head(st, t);
+        return true;
+    }
     const std::string pre = "blk." + std::to_string(st.layer) + ".";
     bool mm = t->op == GGML_OP_MUL_MAT && t->src[0] && strncmp(t->src[0]->name, pre.c_str(), pre.size()) == 0;
     bool fa = t->op == GGML_OP_FLASH_ATTN_EXT && (ends_with(t->name, "-" + std::to_string(st.layer)) || kv_layer(t->src[1], st.layer));
@@ -189,6 +273,10 @@ int main(int argc, char ** argv) {
         else if (a == "--prompt-file") prompt_file = next();
         else if (a == "--weights") st.weights = true;
         else if (a == "--list") st.list = true;
+        else if (a == "--head") st.head = true;
+        else if (a == "--head-name") { st.head_name = next(); st.head = true; }
+        else if (a == "--head-topk") st.head_topk = atoi(next());
+        else if (a == "--head-logits-full") st.head_logits_full = true;
         else { fprintf(stderr, "unknown arg %s\n", a.c_str()); return 1; }
     }
     if (model.empty() || out.empty() || n_tok < 1) {
@@ -230,13 +318,22 @@ int main(int argc, char ** argv) {
     llama_context * ctx = llama_init_from_model(m, cp);
     if (!ctx) { fprintf(stderr, "act_dump: context init failed\n"); return 2; }
 
-    if (llama_decode(ctx, llama_batch_get_one(batch.data(), (int32_t) batch.size())) != 0) {
+    llama_batch lb = llama_batch_init((int32_t) batch.size(), 0, 1);
+    for (size_t i = 0; i < batch.size(); i++) {  // --head: logits for every row so the head MUL_MAT sees all N tokens
+        lb.token[i] = batch[i]; lb.pos[i] = (llama_pos) i; lb.n_seq_id[i] = 1; lb.seq_id[i][0] = 0;
+        lb.logits[i] = st.head || i + 1 == batch.size();
+    }
+    lb.n_tokens = (int32_t) batch.size();
+    const int drc = llama_decode(ctx, lb);
+    llama_batch_free(lb);
+    if (drc != 0) {
         fprintf(stderr, "act_dump: decode failed\n");
         return 2;
     }
     std::ofstream mf(out + "/manifest.json");
     mf << "{\"tool\":\"act_dump\",\"model\":\"" << model << "\",\"layer\":" << st.layer << ",\"n_tokens\":" << batch.size()
-       << ",\"n_gpu_layers\":" << ngl << ",\"mul_mat_nodes\":" << st.n_mm << ",\"fa_nodes\":" << st.n_fa << ",\"tensors\":[";
+       << ",\"n_gpu_layers\":" << ngl << ",\"head_mode\":" << (st.head ? "true" : "false") << ",\"head_nodes\":" << st.n_head
+       << ",\"vocab\":" << llama_vocab_n_tokens(vocab) << ",\"mul_mat_nodes\":" << st.n_mm << ",\"fa_nodes\":" << st.n_fa << ",\"tensors\":[";
     for (size_t i = 0; i < st.manifest.size(); i++) mf << (i ? "," : "") << "\n " << st.manifest[i];
     mf << "\n]}\n";
     mf.close();
@@ -245,5 +342,6 @@ int main(int argc, char ** argv) {
     llama_free(ctx);
     llama_model_free(m);
     llama_backend_free();
+    if (st.head) return st.n_head > 0 ? 0 : 3;
     return (st.n_mm > 0 && st.n_fa > 0) ? 0 : 3;
 }

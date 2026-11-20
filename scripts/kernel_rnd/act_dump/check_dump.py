@@ -7,7 +7,7 @@ see the identical input; FA q/k/v share head dim and k/v share kv length (>= n_t
 """
 import json, os, sys
 
-TS = {'f32': (4, 1), 'f16': (2, 1), 'bf16': (2, 1), 'q8_0': (34, 32), 'q4_0': (18, 32), 'q6_K': (210, 256), 'q4_K': (144, 256)}
+TS = {'i32': (4, 1), 'f32': (4, 1), 'f16': (2, 1), 'bf16': (2, 1), 'q8_0': (34, 32), 'q4_0': (18, 32), 'q6_K': (210, 256), 'q4_K': (144, 256)}
 
 
 def check(d, require_fa=True):
@@ -30,6 +30,19 @@ def check(d, require_fa=True):
         s = t.get('stats')
         if s and s.get('nonfinite'):
             errs.append(f'{k}: {s["nonfinite"]} non-finite values')
+    if m.get('head_mode'):  # --head dump: hidden [d,N], dequantized weight [d,V], top-K ids/vals [K,N]
+        h, w, i, v = (by.get(x) for x in ('head_hidden', 'head_w.f32', 'head_topk_ids', 'head_topk_val'))
+        if not (h and w and i and v):
+            errs.append('head mode: missing head_hidden / head_w.f32 / head_topk_ids / head_topk_val')
+        else:
+            if h['ne'][1] != n_tok or i['ne'][1] != n_tok or v['ne'] != i['ne']:
+                errs.append('head mode: row count != n_tokens or ids/vals shape differ')
+            if h['ne'][0] != w['ne'][0]:
+                errs.append('head mode: hidden width != head weight ne0')
+            if m.get('vocab') and w['ne'][1] != m['vocab']:
+                errs.append(f'head mode: head rows {w["ne"][1]} != vocab {m["vocab"]}')
+        return {'ok': not errs, 'errors': errs, 'n_tensors': len(by), 'n_tokens': n_tok, 'head_mode': True,
+                'shapes': {k: by[k]['ne'] for k in sorted(by)}}
     acts = [k for k in by if k.startswith('act_')]
     if not acts:
         errs.append('no act_* tensors')
