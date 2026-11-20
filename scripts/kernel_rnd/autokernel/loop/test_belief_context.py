@@ -754,6 +754,11 @@ def test_integration_real_root_child_ready_then_recheck_after_a_retraction(tmp_p
     for source in VIDYA.glob("*.py"):
         shutil.copyfile(source, vidya / source.name)
     (vidya / "sync.py").write_text(FAKE_SYNC)         # never the real plumbing sync
+    # The reader's C1 pin refuses a ROOT that is not a git checkout holding origin/main.
+    for git_args in (("init", "-q"), ("add", "-A"),
+                     ("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "fixture"),
+                     ("update-ref", "refs/remotes/origin/main", "HEAD")):
+        subprocess.run(["git", "-C", str(fake_root), *git_args], check=True, capture_output=True)
     ledger_path = tmp_path / "ledger.jsonl"
     led = ledger_mod.Ledger(ledger_path)
     tuples = _kvq_run()

@@ -443,6 +443,8 @@ def test_same_inode_dso_modification_invalidates_prepared_metadata(tmp_path):
     dso.write_bytes(b"old")
     artifact = lo.prepare_artifact_identity(dso, max_bytes=1024)
     dso.write_bytes(b"new")
+    # same inode and size: a coarse mtime tick can leave the identity unchanged
+    os.utime(dso, ns=(artifact["mtime_ns"] + 10**9,) * 2)
     assert dso.stat().st_ino == artifact["ino"]
     session, *_ = _session(tmp_path, backend="gpu", artifact=artifact)
     record = _complete(session)

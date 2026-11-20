@@ -33,6 +33,8 @@ def test_hold_cpu_bootstraps_root_worktree_owner_without_pythonpath_glue(tmp_pat
     research_root = Path(__file__).parents[4]
     environment = os.environ.copy()
     environment.update(EPYC_ROOT_REPO=str(lane_root), PYTHONPATH=".")
+    # conftest names a real orchestrator checkout; an explicit one outranks EPYC_ROOT_REPO.
+    environment.pop("EPYC_ORCHESTRATOR_REPO", None)
     result = subprocess.run(
         [sys.executable, "-c", (
             "from scripts.kernel_rnd.autokernel.loop import claim\n"
