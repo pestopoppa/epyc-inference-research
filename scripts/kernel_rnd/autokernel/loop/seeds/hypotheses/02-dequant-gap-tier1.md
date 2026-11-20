@@ -72,3 +72,7 @@ Deliberately omitted from this seed: the handoff's Tier-3 lever 6 (n-gram specul
 "do this FIRST" ranking. It is a serving-configuration change, not a kernel patch, so it is
 outside what this loop measures — and our own record retracts the headline ngram result as a
 warm-context self-copy artifact.
+
+## Compounded-gain check (2026-11-20, operator rule: sub-3% levers judged on lever + what they unlock)
+- L1 (quantize_q8_1 5.68%): standalone >= 3%, not a sub-3% case; its live form is the queued C15-EPI-Q8 row (est 1.6-2.4%), so not re-boxed; KEPT.
+- L2/L4/L5/L7: standalone levers with no named unlock; L4 is now AK-RESGRID-1 (box exists, gated on AK-GAP-1 (a)); KEPT. L3, L8 closed.

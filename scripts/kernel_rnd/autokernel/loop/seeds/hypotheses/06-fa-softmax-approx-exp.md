@@ -12,3 +12,6 @@ DF2-9 all-NaN-feature reproducer required alongside `test-backend-ops`.
 
 **Falsifier:** `test-backend-ops -o FLASH_ATTN_EXT` NMSE exceeds the gate or the DF2-9 reproducer
 refuses the build, **or** the decode/prefill gain is inside the noise-floor unit.
+
+## Compounded-gain check (2026-11-20, operator rule: sub-3% levers judged on lever + what they unlock)
+- AK-H-FAE-1: FA share grows with context and verify width, but even the whole 0.39 ms/row attention residual does not cross the tree breakeven (seed 17 check); compounded ~= standalone; KEPT.

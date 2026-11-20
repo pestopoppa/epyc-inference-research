@@ -19,3 +19,6 @@ gfx90a substitutes:
 **Falsifier:** AK-GAP-1 (a) is below 5% of the step, or the fused-pair op A/B is below 1.10x.
 **Expected served-model gain [inferred]:** at most about half of the (a) share on Qwen3.8-27B decode. The
 upstream 1.64x included cross-GPU overlap that a single MI210 lacks. So >= 5% e2e only if (a) >= 10%.
+
+## Compounded-gain check (2026-11-20, operator rule: sub-3% levers judged on lever + what they unlock)
+- AK-H-RESGRID-1: box AK-RESGRID-1 exists (gated on AK-GAP-1 (a)); no unlock beyond its own share; KEPT.

@@ -117,3 +117,6 @@ Ordering (prerequisites):
   repeated activation samples) -> it may seed a converter/kernel hypothesis (`arithmetic` or `layout`).
   **Stop-on-futility / falsifier:** no arm beats control beyond noise -> record the null.
 - **Citation:** intake-2648#record, intake-2645#record.
+
+## Compounded-gain check (2026-11-20, operator rule: sub-3% levers judged on lever + what they unlock)
+- AK-GDN-S1 / AK-GDN-O1: measurement and oracle prerequisites; they gate AK-GDN-PREFILL (seed 10) whose standalone value is set by S1, not sub-3%; KEPT. AK-QH-A/B -> QUANT-HEAD-1 and AK-QR-1 -> QUANT-ROT-1 (existing boxes).

@@ -10,3 +10,6 @@ Root box: AK-PROF-SCLK (epyc-root `handoffs/active/autokernel-loop.md`).
 **Falsifier:** the sampled sclk delta between the two input arms is within sampling noise (2 arms x 5 reps).
 **Expected served-model gain:** none directly. It concerns measurement validity and can only re-rank existing
 op-gate verdicts. Not promoted to a runnable task beyond AK-PROF-SCLK.
+
+## Compounded-gain check (2026-11-20, operator rule: sub-3% levers judged on lever + what they unlock)
+- AK-H-SCLK-1: answered by AK-PROF-SCLK-CAPT (CAPTURED_LIKE_RANDOM); measurement validity only; KEPT as closed context.

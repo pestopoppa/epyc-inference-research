@@ -20,3 +20,6 @@ row at batch 1 under greedy-identical output.
 **Falsifier:** a sweep of nwarps x rows_per_cuda_block per IQ type finds no cell beating the table by
 more than the noise-floor unit (same unit, same window discipline as the Q8_0 result). Respect
 `GGML_USE_VMM`/residency proofs and the op-test gate (`test-backend-ops` MUL_MAT).
+
+## Compounded-gain check (2026-11-20, operator rule: sub-3% levers judged on lever + what they unlock)
+- AK-H-IQG-1: IQ batch-1 GEMV only; no served GPU model uses IQ weights; unlocks nothing; KEPT.

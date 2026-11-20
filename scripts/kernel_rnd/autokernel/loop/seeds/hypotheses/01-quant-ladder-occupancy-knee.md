@@ -42,3 +42,6 @@ the one place where the occupancy story and the unpacking-cost story disagree in
 
 Scope note: IQ1 is stubbed in the CPU iqk path. This is a GPU MMVQ question and does not
 depend on that.
+
+## Compounded-gain check (2026-11-20, operator rule: sub-3% levers judged on lever + what they unlock)
+- AK-H-QL-1/2/3: mechanism tests; would unlock a sub-4-bpw GPU decode lane, but no served GPU model is sub-4-bpw (Q4-not-on-key-roles policy), so no measured compounded gain; KEPT.

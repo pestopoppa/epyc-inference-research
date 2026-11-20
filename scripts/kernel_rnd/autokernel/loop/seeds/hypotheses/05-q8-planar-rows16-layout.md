@@ -16,3 +16,6 @@ with a matching batch-1 GEMV, raises achieved bandwidth over the current q8pf pa
 **Falsifier:** an isolated-op bench shows no gain above the noise-floor unit, **or** a coalescing
 measurement shows the current path is already healthy (the standing reason this lever is conditional).
 A repack changes residency and load time; those must be reported with any throughput claim.
+
+## Compounded-gain check (2026-11-20, operator rule: sub-3% levers judged on lever + what they unlock)
+- AK-H-Q8P-1: conditional on poor coalescing (deemed healthy); no unlock; KEPT.

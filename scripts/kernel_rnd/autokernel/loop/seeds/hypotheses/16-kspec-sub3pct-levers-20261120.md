@@ -10,6 +10,8 @@ Serving floors for any keep: CPU W5 4.15%, GPU W2 0.84% (end-to-end, same-window
 Where numerics change: 27B KLD <= 0.003, |dPPL| <= 0.5%, Q38FN top-1 >= 93%. All gains below are `inferred`
 or `derived` as marked; none is measured.
 
+Tree model used below (operator compounded-gain rule, 2026-11-20): an unlocked 27B tree is worth (1+a)/(1+dW*s/R)-1 with R = 52.5 ms chain round (DF2-VERIFY-SLOPE), a = +12% at W12 (dW 4) / +17% at W16 (dW 8) (Infernix, intake-2705#record). At today's floor s = 2.01 ms/row: W12 -2.9%, W16 -10.4%; breakeven s ~1.5 (W12 +0.5%); the tree clears +3% only at s <= ~1.15 ms/row (s = 1.0: W12 +4.1%). P5 measured 0.862x (27B auto) and 0.881x (A3B auto).
+
 ## AK-H-Q6KHEAD-1 — Q6_K lm_head call cost on CPU: is an AVX-512 Q6_K GEMV worth writing?
 Root box: Q6K-HEAD-CALLCOST (`handoffs/active/cpu-decode-roofline-program.md`). Source: intake-2718#record.
 **Mechanism:** split the Q6_K result_output call at t48 into per-thread compute vs straggler/dispatch cost
@@ -23,6 +25,7 @@ a GEMV patch only opens on a dequant-bound verdict; then CPU W5 4.15% end-to-end
 (numerics unchanged, so KLD gates not triggered).
 **Code:** C14 `eee3da838` (`/mnt/raid0/llm/worktrees/llama-c14-pin-20261119`), GGML_CPU_PROF build; head borrowed in
 `src/models/qwen4exp.cpp` L582-584; head sizing in cpu-decode-roofline-program.md L386, L393.
+**Compounded-gain check (2026-11-20): KEPT.** Unlocks nothing; it is a substitute, not a complement, for the clustered-vocab CPU arm (DRAFT-HEAD-APPROX-RECALL): if that arm passes, the draft-head copy leaves the full Q6_K GEMV and this lever shrinks to the trunk head only. Compounded <= standalone <= ~2.0% of the Q38FN step. Root box Q6K-HEAD-CALLCOST stays (zero-compute verdict step).
 
 ## AK-H-IQ4NLZMM-1 — widen the IQ4_NL repack GEMV from 256-bit AVX2 LUT to 512-bit vpshufb + vpdpbusd
 Root box: IQ4NL-GEMV-ZMM (`handoffs/active/cpu-decode-roofline-program.md`). Source: intake-2718#record.
@@ -34,6 +37,7 @@ only worth a keep as part of a composite; the loop should weigh it as a composit
 **Gate:** bit-exact unit test vs the AVX2 GEMV on expert-down shapes, strings proof of the new symbol, decode micro A/B,
 then CPU W5 4.15% end-to-end (numerics bit-exact, KLD gates not triggered).
 **Code:** C14 `ggml/src/ggml-cpu/arch/x86/repack.cpp` (`ggml_gemv_iq4_nl_8x8_q8_0`); experimental branch from fresh C14.
+**Compounded-gain check (2026-11-20): KEPT.** Unlocks nothing; gated on XFER-4b, additive composite ingredient only. Compounded = standalone ~0.8%.
 
 ## AK-H-DF2FLOOR-1 — fuse the 27B DFlash2 drafter tiny-kernel floor into a few HIP kernels
 Root box: DFLASH2-DRAFT-FLOOR-FUSE (`handoffs/active/autokernel-loop.md`). Source: intake-2725#record.
@@ -48,6 +52,7 @@ default-off knob, after a zero-compute attribution step (GGML_SCHED_DEBUG node d
 0.84% floor (5 interleaved reps); fused subgraph >= 1.30x and e2e above 0.84% carries to the champion gate.
 **Code:** C14 `src/models/dflash.cpp` build_dflash2_conv L775 (calls L1146/1203/1216/1229), selector loop L1312-1378;
 trace input `/mnt/raid0/llm/tmp/ak-gap-1-trace-gpu-20261119/out/trace/27B-dflash2/k_kernel_trace.csv`.
+**Compounded-gain check (2026-11-20): KEPT.** Unlocks nothing. DFlash2 drafts a whole block per pass, so a faster drafter does not allow a longer draft; it shrinks R and so makes added tree-verify rows slightly MORE expensive relative to the round (no tree unlock). It is additive with AK-GAP-1-SAMPLE (27B 9.8%) and AK-GAP-1-IDSORT (27B top-k 3.1%), which are their own boxes. Compounded = standalone +1.5..+2.5% (upper 3.4%). Root box DFLASH2-DRAFT-FLOOR-FUSE stays as filed.
 
 ## AK-H-CLUSTVOCAB-GPU-1 — training-free clustered vocab projection for the GPU draft heads (A3B MTP, 27B DFlash2)
 Root box: DRAFT-HEAD-APPROX-RECALL (`handoffs/active/speculative-decoding.md`); the box's CPU Q38FN arm is >= 3% and
@@ -64,3 +69,4 @@ low-margin quartile at >= 79% MACs removed), or the extra router launch costs mo
 acceptance length reported; target output unchanged by construction (greedy token identity vs full head under verify).
 **Code:** A3B/27B heads via act_dump capture (research `123ec088e`, matcher on the MUL_MAT whose weight is
 output.weight); drafter graphs in C14 `src/models/dflash.cpp` and the MTP graph builders.
+**Compounded-gain check (2026-11-20): KEPT.** The only >= 3% compounding is the drafter vocab top-k: A3B-mtp `k_top_k_radix` is 9.9% of decode wall time (68 dispatches x 1.29 ms, AK-GAP-1), 27B-dflash2 3.1%; a top-C head would shrink that top-k input. But that same time is AK-GAP-1-IDSORT's target, removed directly (two-stage top-k or skip-sort-when-greedy), so counting it here would double-count. Marginal over IDSORT = standalone (A3B +0.5..+2.6%, 27B -0.3..+1.4%) minus 1-2% acceptance. No tree unlock (a tree needs per-position top-k, which an approximate head degrades). Re-check if IDSORT step 1 closes the drafter top-k as verifier-needed; the offline A3B/27B recall is already measured inside DRAFT-HEAD-APPROX-RECALL.

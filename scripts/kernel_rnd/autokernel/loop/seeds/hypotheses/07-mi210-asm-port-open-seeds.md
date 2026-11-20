@@ -102,3 +102,7 @@ MoE layer), with and without HIP graphs; (b) a GPU-assists-prefill-only mode vs 
 **Output:** a decision table (t/s decode, pp t/s, per-split cost) vs the CPU-only production baseline.
 No champion claim, no promotion gate; informational only.
 Effort M.
+
+## Compounded-gain check (2026-11-20, operator rule: sub-3% levers judged on lever + what they unlock)
+- AK-ASM-H16 (M 12..16 MFMA Q8_0 GEMM): this IS the tree unlock lever (27B verify floor 2.01 ms/row vs 1.5 breakeven, the GEMM side). **promoted -> DTREE-0-Q8MF** (existing epyc-root box, `handoffs/active/speculative-decoding.md`; gate DTREE-0-Q8MF-GATE; reopen AK-DTREE-2e-REOPEN). Not duplicated. The M=36 rescope closed as C8-2-H16-M36.
+- AK-ASM-H17: superseded by the DTREE-0 rocprof attribution (filed 2026-11-20). H18 -> C8-4-H18 and H19 -> C8-3-H19-ZEROSPLIT (done). H20/H21/H22/T1-SPILL: standalone or informational, no unlock; KEPT.
