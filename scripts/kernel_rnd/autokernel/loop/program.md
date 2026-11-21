@@ -731,15 +731,28 @@ and `progress/2026-11/2026-11-2{0,1}-autokernel.md` (wrap-ups 5-10).
   (ROUTE v1 `888470ff3`: +1.2-2.4%) and ROUTE-V2 (both candidates) were LOSS against the fused path.
   **Apply:** profile the marginal cost split per op before choosing a lever; never add launches or a
   merge pass to save mask reads; the obvious-looking target is often not where the time is.
-- **GDN verify has a snapshot-write floor.** Per-row state snapshots are ~3.1 MB/layer/row on the 27B,
-  an unavoidable ~0.12 ms/row; `llama-bench` at K=1 never writes them. **Apply:** measure GDN verify
-  cost inside the real verify path (np/K>1 or server), never extrapolate from K=1 bench; budget the
-  floor in any tree cost model (GDN-ROWS `ba89d5047`).
-- **Tree cost model.** gain = (1+a)/(1+dW*s/R) - 1, with a = extra accepted tokens per step, dW =
-  extra verify rows, s = marginal ms/row, R = baseline step ms. On the 27B breakeven is s ~1.5 ms/row
-  and +3% needs s <= 1.15. Vendor claims such as Infernix "+12-17%" count accepted drafts, not tok/s.
+- **GDN verify snapshot-write floor is avoidable by input-log replay.** Per-row state snapshots are
+  ~3.1 MB/layer/row on the 27B, ~0.12 ms/row when written (GDN-ROWS `ba89d5047`); `llama-bench` at K=1
+  never writes them. Upstream PR 31669 (intake-2752#record; origin ReplaySSM, arXiv 2610.13778) removes
+  the floor: log the delta-net op's own inputs (~33 KB/token/layer) and replay the accepted prefix at the
+  start of the next step, so the remaining floor is ONE state write per step. No replay path exists in
+  v10 or C17 (forward-port is a separate feature box). **Apply:** until a replay build exists, measure
+  GDN verify cost inside the real verify path (np/K>1 or server), never extrapolate from K=1 bench, and
+  budget the snapshot floor in any tree cost model; once replay is in the candidate, budget one state
+  write per step instead.
+- **Tree cost model.** gain = (1+a)/(1+dW*s/R) - 1, with a = the FRACTIONAL increase in accepted tokens
+  per round (accepted_tree / accepted_chain - 1, NOT an absolute count of extra tokens), dW = extra
+  verify rows, s = marginal ms/row, R = baseline step ms. The formula is exact only for fractional a;
+  reading a as "extra accepted tokens per step" overstates the gain ~4.65x on the 27B. The breakeven
+  figures are unchanged (they were computed with a relative a): on the 27B breakeven is s ~1.5 ms/row
+  and +3% needs s <= 1.15. TALON (intake-2769#record, arXiv 2601.07353) adds a drafter-side term it
+  needs for serial drafters: speedup = tau/(1 + c*delta), delta = drafter forwards per verify step, and
+  it assumes verify time is independent of tree size (its eq. 9), which is false for our verify-row
+  cost, so TALON's N=60 does not transfer (about 52 extra rows add 95-125 ms to a 49-52 ms round).
+  Vendor claims such as Infernix "+12-17%" count accepted drafts, not tok/s.
   **Apply:** compute s from the measured W-sweep slope and plug it in before any tree build; convert
-  any literature acceptance gain to tok/s with this formula before citing it.
+  any literature acceptance gain to tok/s with this formula (fractional a) before citing it, and add
+  the drafter term only for serial drafters (A3B MTP), not DFlash2 (one block forward per round).
 - **Parallel top-k must reproduce serial tie order.** Row-split parallel TOP_K (`GGML_CPU_TOPK_PAR`,
   fork `aaec7962a`) saved ~33 ms/step at 32k on Q38FN but broke greedy identity: ties inside indexer
   blocks resolve differently. **Apply:** any parallel selection/sort replacing a serial one must return
