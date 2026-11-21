@@ -125,3 +125,38 @@ def build_record(mutant_verdicts: Mapping[str, str],
             "rubric_sha256": rubric["instruction_sha256"],
             "prompt_sha256": prompt_sha256(rubric), "judge": dict(judge),
             "note": "gating also requires separate operator ratification"}
+
+
+# --- RVP-C6-21 differential oracle audit (standing health check) ------------
+HEALTH_SCHEMA = "epyc.autokernel.c6_differential_audit.v1"
+#: TritonRL's own measured bands: +30pp for a hacking-prone model, <=3pp robust.
+PAPER_GAP_HACKING_PP = 30.0
+PAPER_GAP_ROBUST_PP = 3.0
+
+
+def differential_audit(items: Mapping[str, Mapping[str, bool]],
+                       prior_gap_pp: float | None = None) -> dict:
+    """Score the SAME generations with and without the semantic tier.
+
+    items: {id: {"passes_without_judge": bool, "judge_accepts": bool}}.
+    gap_pp = (pass rate without judge) - (pass rate with judge), in points.
+    `prior_gap_pp` (the last audit's gap) lets a collapse toward zero be
+    reported as `judge_vacuous_suspected`, not as the corpus going clean
+    (C6-19 ratified standing-health-check clause)."""
+    if not items:
+        raise JudgeError("differential audit needs a non-empty generation set")
+    for k, v in items.items():
+        if set(v) != {"passes_without_judge", "judge_accepts"} or not all(
+                isinstance(x, bool) for x in v.values()):
+            raise JudgeError(f"item {k!r} must carry two exact bools")
+    n = len(items)
+    without = sum(v["passes_without_judge"] for v in items.values())
+    with_j = sum(v["passes_without_judge"] and v["judge_accepts"]
+                 for v in items.values())
+    gap = 100.0 * (without - with_j) / n
+    collapsed = (prior_gap_pp is not None and prior_gap_pp > PAPER_GAP_ROBUST_PP
+                 and gap <= PAPER_GAP_ROBUST_PP)
+    return {"schema": HEALTH_SCHEMA, "n": n, "pass_without_judge": without,
+            "pass_with_judge": with_j, "gap_pp": gap,
+            "judge_vacuous_suspected": bool(collapsed),
+            "note": "gap near zero means the judge removes nothing, not that the corpus is clean"}

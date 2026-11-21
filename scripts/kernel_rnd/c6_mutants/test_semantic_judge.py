@@ -90,3 +90,25 @@ class RecordTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DifferentialAuditTests(unittest.TestCase):
+    def test_gap_counts_judge_rejections_of_passing_items(self):
+        items = {"a": dict(passes_without_judge=True, judge_accepts=False),
+                 "b": dict(passes_without_judge=True, judge_accepts=True),
+                 "c": dict(passes_without_judge=False, judge_accepts=False),
+                 "d": dict(passes_without_judge=True, judge_accepts=False)}
+        r = sj.differential_audit(items)
+        self.assertEqual((r["pass_without_judge"], r["pass_with_judge"]), (3, 1))
+        self.assertAlmostEqual(r["gap_pp"], 50.0)
+
+    def test_collapse_to_zero_is_vacuity_not_clean(self):
+        items = {"a": dict(passes_without_judge=True, judge_accepts=True)}
+        self.assertTrue(sj.differential_audit(items, prior_gap_pp=30.0)["judge_vacuous_suspected"])
+        self.assertFalse(sj.differential_audit(items)["judge_vacuous_suspected"])
+
+    def test_empty_or_malformed_refused(self):
+        with self.assertRaises(sj.JudgeError):
+            sj.differential_audit({})
+        with self.assertRaises(sj.JudgeError):
+            sj.differential_audit({"a": {"passes_without_judge": 1, "judge_accepts": True}})

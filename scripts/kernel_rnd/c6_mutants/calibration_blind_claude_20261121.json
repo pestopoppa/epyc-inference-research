@@ -1,0 +1,26 @@
+{
+  "schema": "epyc.autokernel.c6_semantic_judge_calibration.v1",
+  "gating": true,
+  "reason": "calibrated_rejects_all_three_accepts_controls",
+  "mutant_verdicts": {
+    "layernorm_no_affine": "REJECT",
+    "softmax_no_maxsub": "REJECT",
+    "matmul_transpose_no_t": "REJECT"
+  },
+  "control_verdicts": {
+    "softmax_no_maxsub": "ACCEPT",
+    "matmul_transpose_no_t": "ACCEPT",
+    "layernorm_no_affine": "ACCEPT"
+  },
+  "rejected_controls": [],
+  "rubric_sha256": "c36a1f4e8fd76ce42c6ee90058b2597ba4ffafb9182f04a886579da674b840eb",
+  "prompt_sha256": "b313ecbdbd5b090c0717c78d74c8f5faac534a52e9bd858b2302d7271382500f",
+  "judge": {
+    "model": "claude-sonnet subagent in-context blind",
+    "temperature": 0.0,
+    "seed": 0,
+    "run_label": "c6-19-blind-claude-calibration-20261121"
+  },
+  "note": "gating also requires separate operator ratification",
+  "caveat": "In-context Claude subagent, not the deployed local judge; temperature/seed are nominal (not pinnable in-context). The omission flag is visible in the launch call, so this is an easy-case check. Gating still needs separate operator ratification."
+}
