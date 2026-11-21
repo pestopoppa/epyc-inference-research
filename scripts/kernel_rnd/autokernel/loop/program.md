@@ -669,11 +669,11 @@ Each of these cost a gate re-run. Design the measurement around them up front.
 - **INT8 MFMA = f16 rate on MI210** (same shapes, same 181 TOPS/TFLOPS peak). Int8 arms can only
   win by removing bytes or conversions, never by compute headroom (H4 0.48x, H9 0.52x).
 
-## Learnings 2026-11-20 (AK-DTREE verify cost, Q38FN CPU, PFXC) — distilled, not a log
+## Learnings 2026-11-20/21 (AK-DTREE verify cost, Q8MF V5, Q38FN CPU, PFXC) — distilled, not a log
 
 Each: lesson · evidence · how to apply. Evidence is in epyc-root `handoffs/active/speculative-decoding.md`
 (DTREE-*), `autokernel-akx-program.md` (Q38FN-*, AKX-*), `kernel-champion-and-promotion.md` (PFXC-*),
-and `progress/2026-11/2026-11-20-autokernel.md` (wrap-ups 5-7).
+and `progress/2026-11/2026-11-2{0,1}-autokernel.md` (wrap-ups 5-10).
 
 - **Small-M (n 1..16) GEMMs plateau far below paper peak.** Q8MF V2 (`5ccc76716`) and V3 (`0289ac321`
   MF=3) both sit flat at ~0.70-0.77 TB/s in n, while the wvsk/MMVQ route reaches ~1.15 TB/s at n1 on
@@ -684,7 +684,41 @@ and `progress/2026-11/2026-11-20-autokernel.md` (wrap-ups 5-7).
   best existing route's op GB/s on the same tensor is the bar a new kernel must beat to ship, and
   one that cannot beat it only wins where the old route's per-row slope is bad, so ship it as a
   routed composite (old route at small W, new at large W; V4 = X at W<=8 + A3 MF_MIN=9). Root
-  cause of the plateau is open: DTREE-0-Q8MF-HBM-CEILING (row `ak-dtree0-q8mf-hbm-gpu-20261120`).
+  cause found 2026-11-21: weight layout and occupancy (next two bullets).
+- **Weight layout first: repack weights stage-contiguous.** The in-place Q8_0 repack (`0689c70ee`) so
+  each pipeline stage reads one contiguous run gave +13-26% op bandwidth before any kernel change.
+  **Apply:** before tuning a bandwidth-bound kernel, check that each wave's loads are contiguous in the
+  stored layout; a load-time repack is cheaper than any schedule trick (repack once, serve forever).
+- **Occupancy beats prefetch depth on small-M Q8.** Q8MF V5 (fork `1778cda76`, MF=6 SLC=1): 4 WG/CU at
+  118 VGPR, half-tile work units, atomic tail, nontemporal (slc) weight loads; cost flat across n1-16
+  (27B 34.3/37.8/40.0/41.7 ms at p1/8/12/16 vs X 32.7/44.0/55.4/62.0). Served: `ak-v5i-27b-dflash2-e2e-gpu-20261121`
+  +9.95% tok/s [1.078,1.121], `ak-v5i-27b-kld-gpu-20261121` KLD 0.000387 = X/X noise. **Apply:** for
+  multi-column bandwidth kernels, budget VGPRs to hit >=4 WG/CU first, split work into units small
+  enough to balance CUs (atomic tail), and use nontemporal loads for single-use weights.
+- **More prefetch stages did not help (V6 negative).** V6 3-stage fits at 128 VGPR but is slower than
+  V5 (row `ak-dtree0-q8v6-gate-gpu-20261121`, `4180a4b8a`). **Apply:** do not propose deeper
+  software pipelining for Q8 small-M on gfx90a unless occupancy stays >=4 WG/CU; latency is already hidden.
+- **Measure against both ceilings: 1.6 TB/s paper peak and the 1498 GB/s measured stream ceiling.**
+  Best op is V5I-slc 1205 GB/s = 80% of stream (75% of peak). **Apply:** report op GB/s against both;
+  the gap to 1498 is the reachable headroom, the gap to 1600 is not a target for a load-only kernel.
+- **Tree round overhead is state-save copies, not verify GEMMs.** 27B T16 vs L profile 68.4 vs 51.6
+  ms/round: GDN tree snapshot scatter 3.85 ms (unfused D2D blits) + conv per-column copies 3.3 ms
+  dominate; GEMMs +2.1 (DTREE-ROUND-OVERHEAD, `f3d9bc5a0`). Fixes `5916360ea` + `efaecfc5d` moved G12/L
+  0.920 -> 0.972. **Apply:** profile the whole server round (copies, blits, host) before optimizing the
+  verify kernel; a kernel-only cost model predicted 1.10x round cost, the server paid 1.32x.
+- **Measured acceptance, not borrowed acceptance.** Simulated/literature tree gains overstate: measured
+  27B acceptance +5.8% at T12, +11% at T16; the greedy builder +16-20% mean length (rows
+  `ak-dtree-greedy-27b-gpu-20261120`, r4). **Apply:** plug the row-measured mean length into the tree
+  cost model; never a vendor or simulator number.
+- **Draft-swap bookkeeping bug class.** The greedy builder broke because the server rolled the prompt
+  back by the winner length after a spec_draft swap (HTTP 500 'inconsistent sequence positions'; fix
+  `15bec7cd0` + regression test). **Apply:** any change that swaps or reorders drafts must have a test
+  asserting KV/prompt positions after accept/rollback, for every tree width.
+- **Evaluate approximate heads with faithful arithmetic.** Draft-head SVD recall r1 went VOID because
+  an f32 recompute disagreed with the quantized CPU head on near-ties (0.995); emulating the served
+  Q6_K/Q8_0 arithmetic (research `e06dcc3c9`) gave 1.000 and r2 PASS (`630e1275d`). **Apply:** the
+  reference for a recall/agreement gate is the served kernel's arithmetic, and sanity checks exclude
+  rows below a margin epsilon.
 - **A route boundary can masquerade as a per-row cost step.** A jump in ms/row between W values may
   be the dispatcher switching kernels at a threshold (MF_MIN, MMVF_*_MAX), not a cost of the rows
   (ATTRIB-V2). **Apply:** before attributing a step, log the route taken per W (WARN witness) and
@@ -729,6 +763,15 @@ and `progress/2026-11/2026-11-20-autokernel.md` (wrap-ups 5-7).
     head) make GPU gates take hours. Drop them from GPU gates and cover them separately.
   - A smoke predicate copied from another row can pass vacuously (it checks the other row's
     output); re-derive each predicate from the row's own artefacts.
+  - Smoke failures are silent: 4 GPU rows failed smoke and never queued (2026-11-21). Watch the
+    dry-run FAIL-*.json files, not only `.ended`.
+  - Job stderr is tail-truncated (tail-20000): witness lines at start-up vanish, and chainverify r3
+    was nearly filed inconclusive. Job templates keep the first 4 KB of stderr too; gate witnesses
+    from results.jsonl, not logs.
+  - Verify a subagent's claim on disk: chainverify r2 was reported as V5 but job.py set MF=3 (V3I).
+  - Build-pocket starvation: long CPU rows on q0-q2 and stale build-wait records (pid null) blocked
+    every compile; pause a resumable row (STOP, rc75) or use the q3 build pocket, and clear dead
+    build-wait records (pipeline `5dc723189`).
 
 ## gfx90a low-level tier — ISA-schedule operator catalogue
 
