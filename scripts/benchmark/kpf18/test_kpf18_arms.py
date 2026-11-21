@@ -1314,3 +1314,53 @@ def test_read_back_unpinned_skips_enforcement(tmp_path, monkeypatch):
     with pytest.raises(_AfterLayer2):
         srv.read_back()
     assert "launch_affinity" not in srv.env_note
+
+
+# ---------------------------------------------------------------- KPF-RS-1-ZERO-STATE: restore detector control arms
+_REF = [0.0, 1.0, 2.0, 3.0]
+_FLOOR = 0.01
+
+
+def _arms(honest=None, stale=None, zero=None, **kw):
+    return {"honest": {"logits": honest if honest is not None else [0.0, 1.002, 2.0, 3.0]},
+            "stale": {"logits": stale if stale is not None else [0.0, 1.3, 2.0, 2.6]},
+            "zero": {"logits": zero if zero is not None else [0.0, 0.0, 0.0, 0.0]}, **kw}
+
+
+def test_restore_detector_honest_passes_stale_and_zero_fail():
+    r = A.judge_restore_arms(_REF, _FLOOR, _arms())
+    assert r["per_arm"]["honest"]["detected"] is False
+    assert r["per_arm"]["stale"]["detected"] is True      # unchanged stale-state mutation arm
+    assert r["per_arm"]["zero"]["detected"] is True       # new zero-state arm: gross error fires
+    assert r["zero_arm_present"] and r["detector_ok"] is True
+
+
+def test_restore_detector_zero_arm_is_gross_not_marginal():
+    r = A.judge_restore_arms(_REF, _FLOOR, _arms())
+    assert r["per_arm"]["zero"]["maxabs"] > r["per_arm"]["stale"]["maxabs"] > _FLOOR
+
+
+def test_restore_detector_blind_detector_fails_the_suite():
+    # a detector that misses the zero arm (logits equal to the reference) must not report detector_ok
+    r = A.judge_restore_arms(_REF, _FLOOR, _arms(zero=list(_REF)))
+    assert r["controls_fire"] == {"stale": True, "zero": False} and r["detector_ok"] is False
+    # honest arm flagged (false positive) also fails
+    r = A.judge_restore_arms(_REF, _FLOOR, _arms(honest=[0.0, 1.5, 2.0, 3.0]))
+    assert r["honest_clean"] is False and r["detector_ok"] is False
+
+
+def test_restore_detector_refusal_nonfinite_and_missing_zero_arm():
+    r = A.judge_restore_arms(_REF, _FLOOR, _arms(zero=[float("nan")] * 4))
+    assert r["per_arm"]["zero"]["reason"] == "non-finite logit" and r["detector_ok"] is True
+    a = _arms(); a["stale"] = {"refused": True}
+    assert A.judge_restore_arms(_REF, _FLOOR, a)["per_arm"]["stale"]["reason"] == "refused"
+    no_zero = {k: v for k, v in _arms().items() if k != "zero"}
+    r = A.judge_restore_arms(_REF, _FLOOR, no_zero)
+    assert r["zero_arm_present"] is False and r["detector_ok"] is False   # the suite requires the zero arm
+    assert A.RESTORE_ARMS == ("honest", "stale", "zero")
+
+
+def test_restore_detector_no_floor_is_unjudgeable_not_pass():
+    r = A.judge_restore_arms(_REF, None, _arms())
+    assert r["detector_ok"] is None
+    assert A.judge_restore_arms(_REF, float("nan"), _arms())["detector_ok"] is None

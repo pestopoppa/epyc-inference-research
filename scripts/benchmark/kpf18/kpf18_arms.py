@@ -261,6 +261,50 @@ def floor_stats(floors: list[dict]) -> dict:
             "prefix_median": statistics.median(pre) if pre else None, "prefix_min": pre[0] if pre else None}
 
 
+# ---------------------------------------------------------------- KPF-RS-1-ZERO-STATE: restore-detector control arms
+# Mirrors the detector of tests/test-save-load-state.cpp Test 6 (KPF-17 partial restore) as a pure function so the
+# KPF-RS-1 / KPF-18 restore tests can be exercised offline.  Arms: honest (real recurrent state restored), stale
+# (state checkpointed one token early), zero (hybrid recurrent state zeroed, attention KV kept: a GROSS state error).
+RESTORE_ARMS = ("honest", "stale", "zero")
+
+
+def restore_detects(logits, ref_logits, floor: float | None, *, refused: bool = False) -> dict:
+    """Did the restore detector flag this arm?  `refused` = the restore or the following decode was refused (an accepted
+    detection, as in Test 6).  Otherwise flagged iff max|logit - ref| > floor, or any logit is non-finite / the wrong
+    length (a zeroed state can blow up or collapse the logits).  No finite A/A floor => abstain (None), never a pass."""
+    if refused:
+        return {"detected": True, "reason": "refused", "maxabs": None}
+    if floor is None or floor != floor or floor == float("inf"):
+        return {"detected": None, "reason": "no finite A/A floor", "maxabs": None}
+    if logits is None or ref_logits is None or len(logits) != len(ref_logits) or not len(ref_logits):
+        return {"detected": True, "reason": "missing or wrong-length logits", "maxabs": None}
+    d = 0.0
+    for a, b in zip(logits, ref_logits):
+        if a != a or b != b or a in (float("inf"), float("-inf")) or b in (float("inf"), float("-inf")):
+            return {"detected": True, "reason": "non-finite logit", "maxabs": float("inf")}
+        d = max(d, abs(a - b))
+    return {"detected": d > floor, "reason": "maxabs > floor" if d > floor else "within floor", "maxabs": d}
+
+
+def judge_restore_arms(ref_logits, floor: float | None, arms: dict) -> dict:
+    """arms: {"honest"|"stale"|"zero": {"logits": [...], "refused": bool}}.  The detector is shown to work iff the honest
+    arm is NOT flagged and every present control arm (stale, zero) IS flagged.  The honest and stale judgements are
+    unchanged from Test 6; `zero` is additive.  A missing honest arm or missing floor makes the result None
+    (unjudgeable), and the suite requires the zero arm to be present (`zero_arm_present`)."""
+    per = {name: restore_detects(a.get("logits"), ref_logits, floor, refused=bool(a.get("refused")))
+           for name, a in arms.items() if name in RESTORE_ARMS}
+    out: dict = {"per_arm": per, "zero_arm_present": "zero" in per, "floor": floor}
+    if "honest" not in per or any(v["detected"] is None for v in per.values()):
+        out["detector_ok"] = None
+        return out
+    controls = [n for n in ("stale", "zero") if n in per]
+    out["honest_clean"] = per["honest"]["detected"] is False
+    out["controls_fire"] = {n: per[n]["detected"] is True for n in controls}
+    out["detector_ok"] = bool(out["honest_clean"] and controls and all(out["controls_fire"].values())
+                              and out["zero_arm_present"])
+    return out
+
+
 # ---------------------------------------------------------------- KPF-18.0e: item 2 judged at the A/A floor
 ITEM2_MIN_AA = 3   # fewer A/A pairs than this is recorded as a thin floor (still judged, flagged)
 ITEM2_RULE = (
