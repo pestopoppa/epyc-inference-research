@@ -773,6 +773,54 @@ and `progress/2026-11/2026-11-2{0,1}-autokernel.md` (wrap-ups 5-10).
     every compile; pause a resumable row (STOP, rc75) or use the q3 build pocket, and clear dead
     build-wait records (pipeline `5dc723189`).
 
+## Learnings 2026-11-21 (overnight: A3B nondeterminism, V5I scope, TOPK_FAST, H11, device-accept, SVD head) — distilled, not a log
+
+- **A3B on the MI210 is nondeterministic across launches AND within one launch, and no kernel knob fixes
+  it** (row `ak-a3b-nondet-gpu-20261121`: no knob, `all0` included, makes it deterministic). A token-identity
+  gate on A3B is therefore meaningless, and an OFF-vs-OFF baseline already differs. Identity gates run on
+  27B-dflash2 (deterministic); A3B gates on oracle/KLD plus speed. Two keeps (IDSORT, device-accept) were
+  first filed inconclusive purely because of this baseline noise.
+- **V5I only fires for M 9-16.** The in-place packed n1 MMVQ loses at M=1 (27B np1 -6%, long-context ~-3%),
+  so C17 must default `GGML_HIP_Q8IP_MMVQ_MAX=0`. V5I helps the 27B (+10% at 1 stream, +16% at np2) but hurts
+  A3B (0.988 [0.983, 0.992]): V5I is a 27B-only route; keep A3B on the X route. The packed prefill convert
+  alone is free (p512 0.999x) and fold-ready.
+- **Profile-led gap hunting pays (TOPK_FAST).** The vocab-wide top-k over 248320 was 13% of A3B-mtp decode;
+  `GGML_HIP_TOPK_FAST` took the op 1297 -> 26 us (49.7x, exact 467/467) and e2e +13.8% (1.138 [1.104, 1.173]).
+  Look for the op that is cheap per call but wide, before tuning GEMMs.
+- **H11 (topk-moe unique ids): a witness defect and a bypass both cost time.**
+  - The first FAIL was the witness, not the kernel: it read a strided k-column view of the ids tensor flat,
+    so the "duplicate ids" were logit float bits (0.5f and NaN).
+  - The real defect is asm-only: the AITER asm kernels pick ids by max-equality, so all-`-inf`/all-NaN rows
+    repeat the last index. They are prebuilt code objects, so the fix is a post-pass; on a single row it costs
+    3.3%, so it runs only when there is more than one row.
+  - The r3 "fix" silently bypassed the asm kernel (speed 0.967, FAIL). Always witness that the INTENDED kernel
+    ran (`fix_asm_ran`), not just that the result is right; r4 PASS = 48/48 unique ids on both paths, asm ran,
+    speed 0.999.
+  - `llama-bench` hides the asm-ran log line unless run with `-v`.
+- **`ignore_eos` adds a `-inf` logit bias on EOG tokens, which silently disabled the device-accept path**
+  (flush=skip). A feature gated on "no logit bias" never engages under that flag; witness the eligible-with-ban
+  case. After the fix: lazy_skipped=25, flushed=0. Speed was still only 1.027 [1.007, 1.047] on the 27B
+  (CI-lo misses the 1.0084 bar): NO_WIN until the 27B-only r4 confirm decides the C17 default.
+- **Library INFO maps to TRACE: the server needs `-lv 4` to emit witness lines.** idxk-cache r2 was filed
+  FUTILITY_NOT_ENGAGED on a missing log line while the feature had run (+8-11%). Also keep the first 4 KB of
+  stderr in job templates; a tail-only capture drops witness lines.
+- **Cloning a row: regenerate `SOURCE.sha256`.** A stale hash makes the job exit in about 5 s with no log
+  (lsa-r2 failed twice before this was found).
+- **Keeper `max_hold` 7200 s cap ignores `min_window`.** lsa r1 was granted 7260 s against a 12500 s
+  min-window (rc=12) and c16-fold-cpu was refused twice; reported to Pipeline, fix in progress. Until live,
+  keep estimates under the cap or make rows resumable with `min_window` below it.
+- **Quiet-guard quarters get flagged UNDERUSED.** Contention-probe quarters are intentionally idle; the fix
+  is the row spec field `quiet_guard_regions` (e.g. `["q0","q2"]`), declared on CPU rows that carry a probe
+  once Pipeline confirms the syntax is live.
+- **SVD draft head works on Q38FN CPU:** MTP D1K +7.79% [2.73, 12.92], acceptance UP (0.683 -> 0.720),
+  D32K +1.75% n.s. Recall is measured with faithful arithmetic (see the 2026-11-20/21 section); A3B recall
+  failed (0.9917), the 27B passes at rank 512.
+- **A drafter window of 8192 fails on acceptance** (Q38FN: 0.76 -> 0.71 at 32K, 0.53 -> 0.45 at 64K; speed
+  gains +7.5%/+10.9% not significant). A fixed window is not the answer; the adaptive arm is the open test.
+- **Dtree: the greedy builder beats the chain only at G12 (+2.7%, 1.0266 [1.0100, 1.0432]).** G16 (0.997) and
+  T16 (0.959) do not. Round cost 1.144 vs break-even 1.175 after the two round-overhead fixes; static trees
+  lose, and depth beats width.
+
 ## gfx90a low-level tier — ISA-schedule operator catalogue
 
 Sub-tier (a), source-only: a text diff to HIP source (builtins / pragmas / attributes). Its
