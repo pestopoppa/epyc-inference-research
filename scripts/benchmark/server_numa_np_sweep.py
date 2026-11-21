@@ -1506,11 +1506,15 @@ def summarize_cell(
     )
     decision_grade_blockers: list[str] = []
     decision_grade_warnings: list[str] = []
-    if cell.decision_grade_intent and not trimmed_window_ready:
-        decision_grade_warnings.append(
+    trimmed_window_empty = bool(cell.decision_grade_intent and not trimmed_window_ready)
+    caveats: list[str] = []
+    if trimmed_window_empty:
+        _msg = (
             "empty_trimmed_window: secondary tasks/hour_trimmed fell back to raw "
             "ramp+drain (non-gating)"
         )
+        decision_grade_warnings.append(_msg)
+        caveats.append(_msg)
     capture_failures = [
         record
         for record in records
@@ -1612,6 +1616,8 @@ def summarize_cell(
         "host_health_warnings_at_cell": list(cell_host_warnings or []),
         "throttle_check": throttle_check,
         "trimmed_window_ready": trimmed_window_ready,
+        "trimmed_window_empty": trimmed_window_empty,
+        "caveats": caveats,
         "response_capture_failure_count": len(capture_failures),
         "cache_reset_policy": (cache_reset or {}).get("policy", resolve_policy(cell.manifest)),
         "cache_reset_method": (cache_reset or {}).get("method"),
@@ -2502,7 +2508,8 @@ def _apply_basis_caveat(entry: dict[str, Any]) -> dict[str, Any]:
         return entry
     mixed_tps = bool(entry.get("mixed_throughput_basis"))
     mixed_metric = bool(entry.get("mixed_metric_basis"))
-    if not (mixed_tps or mixed_metric):
+    empty_cells = [str(c) for c in (entry.get("trimmed_window_empty_cells") or [])]
+    if not (mixed_tps or mixed_metric or empty_cells):
         return entry
     entry["status"] = "decision_grade_caveated"
     reasons = []
@@ -2515,6 +2522,12 @@ def _apply_basis_caveat(entry: dict[str, Any]) -> dict[str, Any]:
         reasons.append(
             "mixed metric basis (trimmed vs raw_fallback): raw includes "
             "ramp+drain and understates steady-state (review F3)"
+        )
+    if empty_cells:
+        reasons.append(
+            "empty trimmed window in member cell(s) " + ", ".join(empty_cells)
+            + ": secondary tasks/hour_trimmed fell back to raw (primary decode "
+            "tok/s unaffected)"
         )
     entry["basis_note"] = (
         "; ".join(reasons)
@@ -2958,6 +2971,11 @@ def evaluate_r2(rows: list[dict[str, Any]]) -> dict[str, Any]:
         verdict["mixed_throughput_basis"] = len(set(tps_bases.values())) > 1
         verdict["metric_basis"] = bases
         verdict["mixed_metric_basis"] = len(set(bases.values())) > 1
+        verdict["trimmed_window_empty_cells"] = [
+            str(r.get("cell_id"))
+            for r in {id(x): x for x in (peak, base, holder) if x is not None}.values()
+            if r.get("trimmed_window_empty")
+        ]
         _apply_basis_caveat(verdict)
         verdicts[model_label] = verdict
     return {
@@ -3188,6 +3206,9 @@ def evaluate_r4(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 },
             }
         )
+        output[-1]["trimmed_window_empty_cells"] = [
+            str(row.get("cell_id")) for row in canonical_rows if row.get("trimmed_window_empty")
+        ]
         _apply_basis_caveat(output[-1])
     return output
 

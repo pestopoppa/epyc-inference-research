@@ -1,0 +1,112 @@
+[
+  {
+    "banked_steady_count": 0,
+    "banked_tasks_per_hour_trimmed": 0.0,
+    "cell_id": "qwen36_q8_0-C1-np32",
+    "hard_gates_passed": true,
+    "new_blockers": [],
+    "new_decision_grade": true,
+    "note": "run_overrides_active not persisted in the row; assumed False (banked blocker list had no override entry)",
+    "old_blockers": [
+      "empty_trimmed_window: raw ramp+drain fallback is observation-only"
+    ],
+    "old_decision_grade": false,
+    "primary_decode_tps_after": 8.8193889084632,
+    "primary_decode_tps_banked": 8.8193889084632,
+    "primary_unchanged": true,
+    "recomputed_steady_count": 0,
+    "recomputed_tasks_per_hour_trimmed": 0.0,
+    "run": "e5-w1-qwen36-20260729T154725Z",
+    "tasks_per_hour_raw": 428.37822498591254,
+    "trimmed_numbers_unchanged": true,
+    "trimmed_window_empty": true
+  },
+  {
+    "banked_steady_count": 0,
+    "banked_tasks_per_hour_trimmed": 0.0,
+    "cell_id": "qwen36_q8_0-C2-np16",
+    "hard_gates_passed": true,
+    "new_blockers": [],
+    "new_decision_grade": true,
+    "note": "run_overrides_active not persisted in the row; assumed False (banked blocker list had no override entry)",
+    "old_blockers": [
+      "empty_trimmed_window: raw ramp+drain fallback is observation-only"
+    ],
+    "old_decision_grade": false,
+    "primary_decode_tps_after": 14.047129195287052,
+    "primary_decode_tps_banked": 14.047129195287052,
+    "primary_unchanged": true,
+    "recomputed_steady_count": 0,
+    "recomputed_tasks_per_hour_trimmed": 0.0,
+    "run": "e5-w1-qwen36-20260729T154725Z",
+    "tasks_per_hour_raw": 578.6310802103342,
+    "trimmed_numbers_unchanged": true,
+    "trimmed_window_empty": true
+  },
+  {
+    "banked_steady_count": 0,
+    "banked_tasks_per_hour_trimmed": 0.0,
+    "cell_id": "gemma4_26b_a4b_q4km_mtp-C1-np32",
+    "hard_gates_passed": true,
+    "new_blockers": [],
+    "new_decision_grade": true,
+    "note": "run_overrides_active not persisted in the row; assumed False (banked blocker list had no override entry)",
+    "old_blockers": [
+      "empty_trimmed_window: raw ramp+drain fallback is observation-only"
+    ],
+    "old_decision_grade": false,
+    "primary_decode_tps_after": 64.13631766362232,
+    "primary_decode_tps_banked": 64.13631766362232,
+    "primary_unchanged": true,
+    "recomputed_steady_count": 0,
+    "recomputed_tasks_per_hour_trimmed": 0.0,
+    "run": "e5-w2-gemma-20260729T183151Z",
+    "tasks_per_hour_raw": 2212.1884969538182,
+    "trimmed_numbers_unchanged": true,
+    "trimmed_window_empty": true
+  },
+  {
+    "banked_steady_count": 0,
+    "banked_tasks_per_hour_trimmed": 0.0,
+    "cell_id": "qwen3_next_80b-C1-np32",
+    "hard_gates_passed": true,
+    "new_blockers": [],
+    "new_decision_grade": true,
+    "note": "run_overrides_active not persisted in the row; assumed False (banked blocker list had no override entry)",
+    "old_blockers": [
+      "empty_trimmed_window: raw ramp+drain fallback is observation-only"
+    ],
+    "old_decision_grade": false,
+    "primary_decode_tps_after": 10.406866604674315,
+    "primary_decode_tps_banked": 10.406866604674315,
+    "primary_unchanged": true,
+    "recomputed_steady_count": 0,
+    "recomputed_tasks_per_hour_trimmed": 0.0,
+    "run": "e5-w4-80b-20260729T165639Z",
+    "tasks_per_hour_raw": 380.84703319233665,
+    "trimmed_numbers_unchanged": true,
+    "trimmed_window_empty": true
+  },
+  {
+    "banked_steady_count": 0,
+    "banked_tasks_per_hour_trimmed": 0.0,
+    "cell_id": "qwen3_next_80b-C1b-np16",
+    "hard_gates_passed": true,
+    "new_blockers": [],
+    "new_decision_grade": true,
+    "note": "run_overrides_active not persisted in the row; assumed False (banked blocker list had no override entry)",
+    "old_blockers": [
+      "empty_trimmed_window: raw ramp+drain fallback is observation-only"
+    ],
+    "old_decision_grade": false,
+    "primary_decode_tps_after": 10.792870158341998,
+    "primary_decode_tps_banked": 10.792870158341998,
+    "primary_unchanged": true,
+    "recomputed_steady_count": 0,
+    "recomputed_tasks_per_hour_trimmed": 0.0,
+    "run": "e5-w4-80b-20260729T165639Z",
+    "tasks_per_hour_raw": 394.87976849712624,
+    "trimmed_numbers_unchanged": true,
+    "trimmed_window_empty": true
+  }
+]

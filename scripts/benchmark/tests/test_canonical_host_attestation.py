@@ -74,10 +74,32 @@ class CanonicalHealthTest(unittest.TestCase):
             self.assertLessEqual(json.loads(raw)["capture_started_monotonic_ns"], json.loads(raw)["capture_ended_monotonic_ns"])
             (scripts / "server_np_sweep.py").write_text("def collect_attestation():\n raise RuntimeError(\"fixture failure\")\ndef host_health_warnings(a):\n return []\n")
             failed = run(root / "failed")
-            self.assertNotEqual(failed.returncode, 0)
-            self.assertIn("refusing benchmark", failed.stdout)
-            self.assertFalse((root / "failed" / "host-health.json").exists())
-            self.assertFalse((root / "launched").exists())
+            # S-11 fail-closed: the artifact is still emitted, marked missing and never decision-grade.
+            self.assertEqual(failed.returncode, 0, failed.stderr)
+            missing = json.loads((root / "failed" / "host-health.json").read_text())
+            self.assertEqual(missing["attestation_status"], "missing")
+            self.assertIs(missing["decision_grade"], False)
+            self.assertIn("attestation_missing", missing["decision_grade_blockers"])
+            self.assertIn("fixture failure", missing["attestation_error"])
+            self.assertTrue((root / "launched").exists())
+
+    def test_decision_grade_requires_known_uptime_below_one_week(self):
+        cases = [(0, [], True), (604799, [], True), (604800, ["uptime"], False),
+                 (604801, ["uptime"], False), (None, [], False), (float("nan"), [], False)]
+        for uptime, warns, expect in cases:
+            with self.subTest(uptime=uptime), patch.object(health, "collect_attestation", return_value={"uptime_seconds": uptime}), patch.object(health, "host_health_warnings", return_value=warns):
+                r = health.capture("cpu_region_claim")
+                self.assertEqual(r["attestation_status"], "present")
+                self.assertIs(r["decision_grade"], expect)
+                self.assertEqual(bool(r["decision_grade_blockers"]), not expect)
+
+    def test_uptime_warning_boundary_is_inclusive(self):
+        import server_np_sweep as sns
+        limit = sns.MAX_DECISION_GRADE_UPTIME_SECONDS
+        self.assertEqual(limit, 604800)
+        for uptime, flagged in ((limit - 1, False), (limit, True), (limit + 1, True)):
+            w = sns.host_health_warnings({"uptime_seconds": uptime})
+            self.assertEqual(any("uptime" in x for x in w), flagged, uptime)
 
 
 if __name__ == "__main__":

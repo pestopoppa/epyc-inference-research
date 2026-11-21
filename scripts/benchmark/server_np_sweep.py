@@ -300,9 +300,9 @@ def collect_attestation() -> dict[str, Any]:
 def host_health_warnings(attestation: dict[str, Any]) -> list[str]:
     warnings: list[str] = []
     uptime = attestation.get("uptime_seconds")
-    if isinstance(uptime, (int, float)) and uptime > MAX_DECISION_GRADE_UPTIME_SECONDS:
+    if isinstance(uptime, (int, float)) and uptime >= MAX_DECISION_GRADE_UPTIME_SECONDS:
         warnings.append(
-            "uptime exceeds 1 week; MEASUREMENT.md P-BENCH-1/P-BENCH-3 policy requires reboot "
+            "uptime is at or above 1 week (>= 1 week, Annex B); MEASUREMENT.md P-BENCH-1/P-BENCH-3 policy requires reboot "
             "before decision-grade claims"
         )
     numa_balancing = attestation.get("numa_balancing")
