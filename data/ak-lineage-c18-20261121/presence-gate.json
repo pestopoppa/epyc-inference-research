@@ -1,0 +1,8496 @@
+{
+ "base": "ak/champion/llama-cpp-ffc1bac82eec",
+ "candidate": "C18",
+ "defects": [],
+ "entries": [
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "3062ac98705abf8de65b3e29b487cdb23d45a4f3",
+      "8aa938930b959ce056242e239f2ece32ee94eb21",
+      "de1059e81307a69a4333f9a79f1441cd33ba92cd",
+      "9e43279702a94d6f40619e8fd4888667cadb91b9"
+     ],
+     "shas": [
+      "37ad5c4e930fa8be58e787ab9a53fcc0000c9035",
+      "b353187c0576c5adfcd32e12ead11fe992dc48c6",
+      "14372feebcbb15d0d8fd7a2c637d882453290106",
+      "671584db04df79d053c0b6a0b40cc21062b7cdd5"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_SKINNY_REDUCE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_SKINNY"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_SKINNY_KC"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_SKINNY_WAVES"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_SKINNY_MAX_BYTES"
+    }
+   ],
+   "id": "AK-ASM-H1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "72f4274571ac0cfcc558ceb1258cdd3a304c1fa5",
+      "5e84f8a9158715f602e90d2238a5ef3c540c3683",
+      "4c8ef4370d23b55ef1337f04d8529d4338f8e397",
+      "af28931e3dcb79701934d7268828e0c338da7b73"
+     ],
+     "shas": [
+      "fcf8832215a2d7cf848111d5918f1b5aefe2f384",
+      "4455268fcd26b27256e8fe7a181a95c52f894256",
+      "58ddd6803769a2454c48f6bb96d06802397ecc62",
+      "58367a3a9d2db7efd806d29bc66ec742d255d9fd"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_GQA_VERIFY"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_GQA_VERIFY_MIN_NQ"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_GQA_VERIFY_PIPE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_GQA_VERIFY_DEBUG"
+    }
+   ],
+   "id": "AK-ASM-H10",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "1da7725521f3dc2a4f1fe1d2220c3b0d6254fd50",
+      "3f5b13a34010a1f02cfbc5921d0b5ac1578ff614",
+      "0d3da3b7c678aba9c3f200b232bf52497ca59337",
+      "66e91f2d2ab2abbbc603c119e609a9f5839ea3c9"
+     ],
+     "shas": [
+      "702634c9bfb0d6abd0ef9bfe08c646aae9396660",
+      "c650d06e01ee06083d4199d11dea3ac9b9a903ea",
+      "f5a4351ca7e15b37bac0c40d1465249b097008b2",
+      "36ea8ae1d1d95a4d7f976e5b3c12c4d9638549ad"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_TOPK_ASM_GFX90A"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_TOPK_ASM"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_TOPK_ASM_LOG"
+    }
+   ],
+   "id": "AK-ASM-H11",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "7394d2f6883ceb4cc6dae69929bc2946cd8065ec",
+      "50166c22f96ef54971f3664fcb0e81f4412f2c52",
+      "adff3115a690e72b96f87524edbbb17fe515feeb",
+      "bb972d689521ae1460260bf2b0d80ebd9239007a"
+     ],
+     "shas": [
+      "941b4cbcb22963d92e4e7f2f40cff105fe60e379",
+      "9faf822518e15174a4385c7c7ffccce4f10c64ed",
+      "5eb8f5e2bdc228c96392ea72cbb71cb70873a988",
+      "ba5a0c6cd8745796382bb36e51082e945be32f53"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_QSA_SPARSE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_QSA_SPARSE_MAX_TOKENS"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_TOPK_RADIX"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_QSA_SPARSE_DEBUG"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_QSA_SPARSE_MIN_KV_RATIO"
+    }
+   ],
+   "id": "AK-ASM-H12",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c3bdf5dc85cfcc9e0c1e55a99a3f5cb330b39b13",
+      "a2ab571784b8de9bfca12855df7462148d404a34"
+     ],
+     "shas": [
+      "bd950e2dc0c1110f7d78435d65a6d4ce467f7950",
+      "c420b9d1aff85555e966b9633cc841b3c48416a3"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_AK_H14"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_AK_H15"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_AK_FUSE_LOG"
+    }
+   ],
+   "id": "AK-ASM-H14",
+   "manifest_ids": [
+    "V11-124"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "1a62047cff6513ec157ca4356efcf343af794428",
+      "93a5eb75b89ea1c3b53d15ede6c67cf589beae0b"
+     ],
+     "shas": [
+      "236a269065279869eeec3b05d7195d4c486eff6e",
+      "23ace5fcd88ff01153ce41d9e813ec8c3f1ff525"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_AK_FUSE_DEBUG"
+    }
+   ],
+   "id": "AK-ASM-H15",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "28da9fcf97c03c482e3e1bc029b0c8576abd0ca5"
+     ],
+     "shas": [
+      "bd87cd49dce738f296608845d0a49fe135e59d89"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_FA_ASM_GFX90A"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_FA_ASM_MIN_BATCH"
+    }
+   ],
+   "id": "AK-ASM-H5-PORT",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "76245abeb5566f9ec02bb864b516f4032733d108"
+     ],
+     "shas": [
+      "62cb6a6af31ec047b2f202d2f25330981124ba49"
+     ]
+    },
+    {
+     "file": "test-hc-fuse-plan",
+     "kind": "test"
+    },
+    {
+     "file": "test-backend-ops",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_FA_ASM"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_FA_ASM"
+    }
+   ],
+   "id": "AK-ASM-H5-PORT-R5",
+   "manifest_ids": [
+    "V11-124",
+    "V11-125"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "075795438b590e0142bf1efa76e0123681f7d2a1"
+     ],
+     "shas": [
+      "6148b1333f3fa7c476ee1f53a209f3a053574ecc"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_FA_ASM_GRAPH"
+    }
+   ],
+   "id": "AK-ASM-T0",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ed5f6131c40fa77e89f43b10154aa670591fcc10",
+      "4d0dc3187bf4a3718d8fa47274d97b83360615b4"
+     ],
+     "shas": [
+      "10d962353fa34fe1f66187408162bf8495db6afc",
+      "4ffe32abd77e89f14612738080da0d93179fccd9"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_CK_FMHA_HD256"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_CK_FMHA_DIR"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_FA_CK_HD256"
+    }
+   ],
+   "id": "AK-CK-HD256",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "5841b35828f7e937212edf85e946166a6f5f1492"
+     ],
+     "shas": [
+      "7f1bd044b1e49a88b33460977bd96feae3db8e5c"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "AK-H5-VERIFY",
+   "manifest_ids": [
+    "V11-136",
+    "V11-137",
+    "V11-138",
+    "V11-139",
+    "V11-141"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "43cb8eeeefb8a0dde4e717b75d084c608d106928"
+     ],
+     "shas": [
+      "bda43aa17c11b671e0e203e7eb7bf4f1303bc273"
+     ]
+    },
+    {
+     "file": "tests/test-iqk-fa-sinks.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "AKX-ALL-10.1",
+   "manifest_ids": [
+    "V11-143",
+    "V11-144"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "172b6627a2d2565b8dc4c09897f9de825b859d05"
+     ],
+     "shas": [
+      "7c3fd2111f0018be2ed9f2e5c1862403ab822d6c"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "AKX-ALL-29.4",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "4c6bf705256a2a9ccaad962ceadf96a565d22eab"
+     ],
+     "shas": [
+      "e5214bf8fe83d17f299b4e53b093bc63604a361d"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "AKX-ALL-29.5",
+   "manifest_ids": [
+    "V11-046"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "67bb75a09b1a6526d411376cdb350b76b9b69fc8"
+     ],
+     "shas": [
+      "a7d0f3919ede410895db01787112c0cd4075b98d"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_PROF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_PROF_EVAL_FILE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_PROF_VERBOSE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_PROF_VERBOSE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_PROF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_PROF"
+    }
+   ],
+   "id": "AKX-ALL-LB3",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "921208dddca62ff54489df260fac6d166ffcbd80",
+      "8f4fdbb5365811510893155554bb4fb98149cf68",
+      "38e7227b9bffebae5db72dcbcf869d3e151842a1",
+      "c1d865a091d4fce5bfe01d5054f2dd3f570bbb7a",
+      "2588546060c03a43c312a8e3106b00fa38eb4f08",
+      "a2add62937125cf4bacf9c3f9f7b98470750c76a"
+     ],
+     "shas": [
+      "287733cf68a25d612187e24128c131596142fb2a",
+      "3d2eb1b1962121694f41f78bf66ac2a8bc9c64b7",
+      "38135dc99872207581a75492d9255ddd14aac104",
+      "1b7b4bdc19fa0cf376d30f09abd497b8cfa15846",
+      "f9b088bf52dc504564128252346e606281d21df9",
+      "f67109a5ea8934d5a0ee12f34c76434044732edd"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-fa-rowexact.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK_FLASH_ATTENTION"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK_FLASH_ATTENTION"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK_FLASH_ATTENTION"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ABORT"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK_FA"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_TYPE_Q8_KV"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_TYPE_Q6_0"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_COMMON_DECL_CPP"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_COMMON_AGGR_U"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_COMMON_AGGR_S"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ASSERT"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_OP_FLASH_ATTN_EXT"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_F32"
+    }
+   ],
+   "id": "AKX-ALL-LB4",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c792b811fd2f6060984471da635a54b315d8d904"
+     ],
+     "shas": [
+      "794db50f801d4cb697e78db9aa281327da3b57cb"
+     ]
+    },
+    {
+     "file": "tests/test-fa-rowexact.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_F32"
+    }
+   ],
+   "id": "AKX-ALL-LB4.2",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "f2d13be8f1af5dfb15a83100dbaac8f4b8c9d859"
+     ],
+     "shas": [
+      "09248b12fb89741b9028ada6d9233e15df4a3426"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK_FA"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK_FA"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK_FA"
+    }
+   ],
+   "id": "AKX-ALL-LB4.5",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "aeaa15c76055873a4839a8fe74fec00b2c9867cc"
+     ],
+     "shas": [
+      "54c1f1318243d0e32f02707c0fc0e2b2747dfcac"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-iqk-fa-worksize.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "AKX-ALL-LB4.6",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "aea274ec4bf4eea6242bc54954f92a44004bafdf"
+     ],
+     "shas": [
+      "55a7ca65c7ee0d21e5172b9cf7baa9c7580160e2"
+     ]
+    },
+    {
+     "file": "tests/test-fa-rowexact.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "AKX-ALL-LB4.7",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "19eba56f378f44393928e0e65a4ded47781849e3"
+     ],
+     "shas": [
+      "901106524047746cfce386b4e6a18de5aa9163f4"
+     ]
+    },
+    {
+     "file": "tests/test-fa-rowexact.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "AKX-ALL-LB4.8",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "3fdd0a7cca7d9f1f4706eed4ae0a369f88a93636"
+     ],
+     "shas": [
+      "127d4337e7ff64e48b1973a5bd7a15d2a820b79c"
+     ]
+    },
+    {
+     "file": "tests/test-iqk-fa-sinks.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK_FA_SINKS"
+    }
+   ],
+   "id": "AKX-ALL-LB4.9",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "e7150bef1413908fee6ec7cad7037d82a65fe8a4"
+     ],
+     "shas": [
+      "65da39eb1fe7fddbfa7de81cc2f39d54a6b2a428"
+     ]
+    },
+    {
+     "file": "test-hc-fuse-plan",
+     "kind": "test"
+    }
+   ],
+   "id": "C6-IQKQ8PF-FP16S",
+   "manifest_ids": [
+    "V11-122",
+    "V11-123",
+    "V11-124"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "5d08ea6c7fc8f631f3c22b97cccc0ecaf2a13ca9",
+      "042a66a55aca6a7abdd399238caa0895c398f2ab",
+      "990dc74c85bdad3c5b1bf79a1c27cf44989d00b2",
+      "b751a6fab27a8eb23f376801ddadf8bfd95ca784"
+     ],
+     "shas": [
+      "0bccaa85d7f0de90c05130f06fee34492cd801bf",
+      "409607b5fe510ca6fd09e4b38998b7a0e91a88ad",
+      "f9f872ebc99775dbbf539b593916bb267fd48934",
+      "9e9d7f29124e093156e1d2d6b5dcbfba9ac73d56"
+     ]
+    }
+   ],
+   "id": "C6-Q4-MMVQ-FIX",
+   "manifest_ids": [
+    "V11-123"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "305cb24f974cd4ce4129e606b78c235d2ffeb755",
+      "e5ac494ea5b408c92008b2940dbeb3c3b99c601b"
+     ],
+     "shas": [
+      "73ad4ed95d060782ab9c913ed741015a51bb5326",
+      "68e3cbd3aef2fddf586a61e3a206251aeee8986f"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GV_MULTISEQ"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GV_MULTISEQ_MAX_NQ"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_FA_VEC_LONGCTX_PB"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_FA_VEC_LONGCTX_MIN_KV"
+    }
+   ],
+   "id": "C8-1-LCATTN",
+   "manifest_ids": [
+    "V11-126"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c2f633788cdab775a9563d9162cdcc86670e6d2f"
+     ],
+     "shas": [
+      "e3185067c4280fdc7139a77f7a29b41d8e406173"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_FA_CK_HD256_CO"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_FA_CK_HD256_Q8"
+    }
+   ],
+   "id": "C8-4-H18",
+   "manifest_ids": [
+    "V11-129"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "a9e18fd12a13ca629adf4ffee88125ed6df94e4d",
+      "81ac8227b216b848ed43e580ed2aa7af10f7e69c"
+     ],
+     "shas": [
+      "7885c0cf64b16b94eb082e99af8bf327f9dd8275",
+      "09aaaab6468398454df2ee27e6ebd34798e13e9a"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_H20"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_H20_REUSE"
+    }
+   ],
+   "id": "C8-5-H20",
+   "manifest_ids": [
+    "V11-130"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "02b73e7c004337908267f745fda694a7df3801ba"
+     ],
+     "shas": [
+      "eabe74ee4a2dbe8fc1e1f6c0f8ae83e86a72827c"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_OP_GATED_DELTA_NET"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_GDN_CHUNKED_MIN_TOKENS"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_GDN_CHUNKED"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_GDN_CHUNKED_NC"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_GDN_CHUNKED_DEBUG"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_LOG_WARN"
+    }
+   ],
+   "id": "C8-6-GDN-CHUNKED",
+   "manifest_ids": [
+    "V11-125"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "a94d4dfaca90311de59a9bf84054d8d5154798ca"
+     ],
+     "shas": [
+      "ab3fc54dc79f350ac1f189d122025dc5e1e7d90c"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_GQA_VERIFY_MIN_NQ"
+    }
+   ],
+   "id": "C8-FOLD3",
+   "manifest_ids": [
+    "V11-127"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "f5165a06e61c70f2d696c2e88b88aa2a871d5fa2"
+     ],
+     "shas": [
+      "e1d9ba2f6d619bb2e5e8e8a0f029ed7b7986d57d"
+     ]
+    },
+    {
+     "file": "test-backend-ops",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_FA_VEC_LONGCTX_PB"
+    }
+   ],
+   "id": "C8-LCATTN",
+   "manifest_ids": [
+    "V11-126"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "879e3e4ae7cf96343f5eebafde0dd2b999ba4cf7"
+     ],
+     "shas": [
+      "cdb4d8c77c2300f61c404a3df6d1950934b39c98"
+     ]
+    },
+    {
+     "file": "tests/test-llama-archs.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "CH-20.2",
+   "manifest_ids": [
+    "V11-104",
+    "V11-106"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "f151ab3861891092cd219212057993cb3f2eb5eb"
+     ],
+     "shas": [
+      "82a3496797d6b41a0b314b46b9fbfacdb511b20e"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-gdn-state-guard.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_GDN_STATE_BF16"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ABORT"
+    }
+   ],
+   "id": "CH-LB1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "80cbdaef03643fc89039309f8df0dd613f0e4e02"
+     ],
+     "shas": [
+      "001b14eaffeafb9981e8c00e06b8182fa0cf5696"
+     ]
+    }
+   ],
+   "id": "COMMIT-001b14eaf",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "59e521d050ff77f7eecf8ae416361c388fea0dba"
+     ],
+     "shas": [
+      "0d270f99bcccf9f1f09fed8a0b4c6b8815660078"
+     ]
+    }
+   ],
+   "id": "COMMIT-0d270f99b",
+   "manifest_ids": [
+    "V11-036"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "973b3e01ca774bf5f903bd6681a975510a337076"
+     ],
+     "shas": [
+      "1290448d27aa901dba511927d178a8f079ac50ad"
+     ]
+    }
+   ],
+   "id": "COMMIT-1290448d2",
+   "manifest_ids": [
+    "V11-030"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "1e663c27b5df53e5ad5b93e0a0b22e4968a0fb17"
+     ],
+     "shas": [
+      "130155f10f7a3b62047e5da91f81736d7bcfd2fb"
+     ]
+    }
+   ],
+   "id": "COMMIT-130155f10",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "8546e9aae9d6b38f817c9d52dce3ba155276f1c6"
+     ],
+     "shas": [
+      "141e4bcf5ae023bd3b871edcd32ad493e6c4d58e"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-llama-bench-params-init.py",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-141e4bcf5",
+   "manifest_ids": [
+    "V11-103",
+    "V11-104"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "bdbdf9f96d55b03a181576e365fb3e40bb59bf8f"
+     ],
+     "shas": [
+      "143987519b2fac773bc972e155bad36b6d81e3be"
+     ]
+    },
+    {
+     "file": "tests/test-iqk-fa-sinks.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-143987519",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "332a035cc0f9fea960ca98c0eef5794959dd99ff"
+     ],
+     "shas": [
+      "1597677880b5ac00ae558428e633678083fcdfb0"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-memory-can-shift.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_TEST_HYBRID_GGUF"
+    }
+   ],
+   "id": "COMMIT-159767788",
+   "manifest_ids": [
+    "V11-097",
+    "V11-098"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "55fe3eb785349401391e4c2bc9e607c60ce29e65"
+     ],
+     "shas": [
+      "1a558c6e506a90d297c011fdc4361a5dc46c76bc"
+     ]
+    }
+   ],
+   "id": "COMMIT-1a558c6e5",
+   "manifest_ids": [
+    "V11-043"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "568f121405aed949167ce0bab004167873660a49"
+     ],
+     "shas": [
+      "1b2a1eb33a64574715ae98862677dec0e300f592"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-1b2a1eb33",
+   "manifest_ids": [
+    "V11-046"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "721f1c91b4a27ff9828bc3af4b76171071cdfcec"
+     ],
+     "shas": [
+      "1b71dd6d9dedd985448e4414b18444e36e20b291"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-chunk-kv.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-server-chunk-store.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-1b71dd6d9",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "995d0fdc73c50dd7a43d6aa1854df6f4d9abf4b4"
+     ],
+     "shas": [
+      "1bceceb0514d423ad220888313eafcddc30e485e"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_MASK_SKIP_MIN_KV"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_SEQ_ROWS"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_MASK_SKIP"
+    }
+   ],
+   "id": "COMMIT-1bceceb05",
+   "manifest_ids": [
+    "V11-013",
+    "V11-085"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "e813780cba89d2282b04829ba0fa6007cd33b090"
+     ],
+     "shas": [
+      "1bda248e37843f8bb58b6604a1b4c939e4e88cc1"
+     ]
+    },
+    {
+     "file": "test-backend-ops",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-recurrent-rollback-guards",
+     "kind": "test"
+    },
+    {
+     "file": "test-recurrent-state-rollback",
+     "kind": "test"
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-1bda248e3",
+   "manifest_ids": [
+    "V11-125",
+    "V11-126",
+    "V11-127",
+    "V11-128",
+    "V11-129",
+    "V11-130",
+    "V11-131",
+    "V11-132",
+    "V11-133"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "a5dbf7a7a9d46d9ff89ae993d36656e4dc45e786"
+     ],
+     "shas": [
+      "1c999e15b9a2514753a2d142d217b6d7a32d4ddd"
+     ]
+    },
+    {
+     "file": "tests/unit/test_slot_save.py",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-1c999e15b",
+   "manifest_ids": [
+    "V11-021"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "3bbcc51e9f4801ac14f41d191431ee9ecae9acd3"
+     ],
+     "shas": [
+      "1de8870c36ec0538bdf67487f960051c5c98a842"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-cpy-balance.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-1de8870c3",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "e6b62c6ee8c05e314e61d7d2fb1ec2b7dd36fb27"
+     ],
+     "shas": [
+      "1e36e1bb21be2aefe0267eaee8f1a3f44f6c3d76"
+     ]
+    }
+   ],
+   "id": "COMMIT-1e36e1bb2",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "d22364d3f41663e3a198ce723953002001b7754f"
+     ],
+     "shas": [
+      "1e862af535174de1254afdb37b5e5f1a52223def"
+     ]
+    }
+   ],
+   "id": "COMMIT-1e862af53",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "6ed837349cb5c1525b599dc630661c8d743fb41e"
+     ],
+     "shas": [
+      "21232569a88ab106b89c543205bf2102b6388dbc"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-21232569a",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "e523ab86f035104f8a8a4cf99019d42584f49973"
+     ],
+     "shas": [
+      "25132e04259fa9c31351bc94134b924e9da7e036"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-repack-parallel.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_REPACK_THREADS"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK"
+    }
+   ],
+   "id": "COMMIT-25132e042",
+   "manifest_ids": [
+    "V11-001"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "6641cb7a5bf821129a657a27446db6c5c9fb0500"
+     ],
+     "shas": [
+      "253e50c3251e6694974f5d847a8200fc8191b4a6"
+     ]
+    }
+   ],
+   "id": "COMMIT-253e50c32",
+   "manifest_ids": [
+    "V11-038",
+    "V11-074",
+    "V11-077"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "1132011898cd3c7be8de24bb1671899e071b0039"
+     ],
+     "shas": [
+      "254b7d7184bca7e0e418ff85014ef6e385763c34"
+     ]
+    }
+   ],
+   "id": "COMMIT-254b7d718",
+   "manifest_ids": [
+    "V11-029"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "6eef8b0ec630879071a224f09768e06877c80298"
+     ],
+     "shas": [
+      "2a6c1201c18aae94bf6f24ccb5d1c78dabf5cfc8"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_GRAPH_MEMLOG"
+    }
+   ],
+   "id": "COMMIT-2a6c1201c",
+   "manifest_ids": [
+    "V11-104"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "20771068d83001806ba75c5701e77caa765dd9e9"
+     ],
+     "shas": [
+      "2afec80444cc5f627a670afd51f3270c8f8040b6"
+     ]
+    }
+   ],
+   "id": "COMMIT-2afec8044",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "f1c74378838bd171f2609fbc6d4dd53fac0359f1"
+     ],
+     "shas": [
+      "2b57340bf89fc2d435645c862e92dd91b95621f2"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_SPEC_EXACT"
+    }
+   ],
+   "id": "COMMIT-2b57340bf",
+   "manifest_ids": [
+    "V11-003"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "37bdb8bc974144c45f6e9752143477f1d779df65"
+     ],
+     "shas": [
+      "30275794fd8bd3f743b56d72406bc92707b3f49b"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-server-prefill-order.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-30275794f",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "91c14c5f7e058a7b68d24fb59196fb4e360ffe37"
+     ],
+     "shas": [
+      "3167e4a3e69fe914aa825884b324a2965b0aa3f6"
+     ]
+    }
+   ],
+   "id": "COMMIT-3167e4a3e",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "fe2e62d36c3947a99fbb27f8ede2dfc1648e68e9"
+     ],
+     "shas": [
+      "32a4ceac7d51c03b7e74b0ab44020dda93ab033b"
+     ]
+    }
+   ],
+   "id": "COMMIT-32a4ceac7",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "a23092e9ca3a2f199f3022999301b82ad110c814"
+     ],
+     "shas": [
+      "387c4d9e1c3accb46b483f18bb9dd3ad4e39e965"
+     ]
+    }
+   ],
+   "id": "COMMIT-387c4d9e1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c69498f3db8a0b841e12fe04d42933c5d0cff8aa"
+     ],
+     "shas": [
+      "39c365475db43c9f8525b5ab68627344939efd1c"
+     ]
+    },
+    {
+     "file": "tests/test-exl3.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-39c365475",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "b2fc85dd1364a92cb0d910704b0f5a650181ccba"
+     ],
+     "shas": [
+      "39c7209e4683174a83b7a671bbda6e33730cbe00"
+     ]
+    },
+    {
+     "file": "tests/test-qwen4exp-fused-rope",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_TRACE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_TRACE"
+    }
+   ],
+   "id": "COMMIT-39c7209e4",
+   "manifest_ids": [
+    "V11-019"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "a375246c57cec7cc0d25da6101ed3ec6c871982f"
+     ],
+     "shas": [
+      "3a6fd54ae9bd939374193c14d6270036b21cca23"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-recurrent-rollback-guards.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-recurrent-state-rollback.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-3a6fd54ae",
+   "manifest_ids": [
+    "V11-131",
+    "V11-112"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "62a7b31c273042a4c9a9373461914c859061c495"
+     ],
+     "shas": [
+      "3a9b4d4af125d7f761a8e8ddd86517f9b9b4af86"
+     ]
+    }
+   ],
+   "id": "COMMIT-3a9b4d4af",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "1098764b6c7712919b1f53eab6b10fc80c3b109e"
+     ],
+     "shas": [
+      "3bfc774b2098ed4f6e50a7725d98d74f6975921b"
+     ]
+    }
+   ],
+   "id": "COMMIT-3bfc774b2",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "2eb2f406c12e9a0decb3410db5a60b6a0178fecf"
+     ],
+     "shas": [
+      "3df0e9bcd96419744b4facbec1cb16ab68508e6b"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GV_PREFETCH_LATE"
+    }
+   ],
+   "id": "COMMIT-3df0e9bcd",
+   "manifest_ids": [
+    "V11-135"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "20ed0099622639a0c142f3b5aea0d09cccd1b324"
+     ],
+     "shas": [
+      "3e8ced0c642a718dd511d413c4ae931caeaaed42"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-3e8ced0c6",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "2e9836a28b9bb47ce4774fbc87146ca2772eb4f8"
+     ],
+     "shas": [
+      "3e9baf7ad3dcd96f88559256f419605ec8ea7bc1"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_EXAMPLE_COMMON"
+    }
+   ],
+   "id": "COMMIT-3e9baf7ad",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "94fea575fb76cbcd0e98995b06d680012badd1b9"
+     ],
+     "shas": [
+      "417eace44ad11deadbf15342b690536bf296efbe"
+     ]
+    }
+   ],
+   "id": "COMMIT-417eace44",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "d93d7358ac7325032b73bf465dd7e8e4668e9534"
+     ],
+     "shas": [
+      "421465adbfd9f7ee159cadea22eaaf8c242baa0f"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-421465adb",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "cca6c23de22e34ea9e865063019385a0af2208e6"
+     ],
+     "shas": [
+      "422a07b77ed02f36a3c8b44f305a7ffb99f0db42"
+     ]
+    },
+    {
+     "file": "tests/unit/test_speculative.py",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_SPEC_EXACT"
+    }
+   ],
+   "id": "COMMIT-422a07b77",
+   "manifest_ids": [
+    "V11-134"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ef5af5a346cd71abc2b5c489052d6e98a7d8ed8d"
+     ],
+     "shas": [
+      "423aa1b274b6760591ea0232a35310638baf41ab"
+     ]
+    }
+   ],
+   "id": "COMMIT-423aa1b27",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "93d4524da5e332ba23ad2a55e14bc0620ae62a57"
+     ],
+     "shas": [
+      "4348de400191c0b4c5127047037bf9ad83da19b6"
+     ]
+    }
+   ],
+   "id": "COMMIT-4348de400",
+   "manifest_ids": [
+    "V11-040",
+    "V11-058",
+    "V11-073",
+    "V11-083"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "f48ee1544e2694c117bc3d939958483329263c35"
+     ],
+     "shas": [
+      "457d5fc523ba5cc687a333a588c1dc15db9346f4"
+     ]
+    },
+    {
+     "file": "test-cpy-balance",
+     "kind": "test"
+    },
+    {
+     "file": "test-backend-ops",
+     "kind": "test"
+    },
+    {
+     "file": "test-iqk-fa-sinks",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-457d5fc52",
+   "manifest_ids": [
+    "V11-141",
+    "V11-142",
+    "V11-143"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "6ed3671a0daca191eb89920f414692912c2c2649"
+     ],
+     "shas": [
+      "48375277f16d7480fe2686c76639afdca653a35f"
+     ]
+    }
+   ],
+   "id": "COMMIT-48375277f",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "cd8e0f59c7b862974f0b0cacd10925d17d9d655b"
+     ],
+     "shas": [
+      "48df021d823e576a76f721e575a060f16b4ab655"
+     ]
+    }
+   ],
+   "id": "COMMIT-48df021d8",
+   "manifest_ids": [
+    "V11-081"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "f33e52d91f9c055fb54e2abb8a4e0259c468e522"
+     ],
+     "shas": [
+      "4d71330eb8b15fed5eb2701a9695333f0cbb68e9"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/dca_reference.py",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-dca.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_ARG_DCA_"
+    }
+   ],
+   "id": "COMMIT-4d71330eb",
+   "manifest_ids": [
+    "V11-057"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "bb2be0494c81cd84893142d1eebe55fc63ab61e9"
+     ],
+     "shas": [
+      "4ed6c4caac1752e532858f7789855f848392c80b"
+     ]
+    }
+   ],
+   "id": "COMMIT-4ed6c4caa",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "37d84a9fbbfc11ca9dcb827c222689c4f62b1110"
+     ],
+     "shas": [
+      "4ee0e09546379898dec5e1e0a040ef55d3d7465b"
+     ]
+    }
+   ],
+   "id": "COMMIT-4ee0e0954",
+   "manifest_ids": [
+    "V11-028"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "d92a5ed923663c7ae7a42aad5bd9d0eb443abe77"
+     ],
+     "shas": [
+      "4f2a4f107c9d07da715a64be681d610c5391a279"
+     ]
+    }
+   ],
+   "id": "COMMIT-4f2a4f107",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "05783f693791d283f79d90697e4b26907aabdd1f"
+     ],
+     "shas": [
+      "4fca49e828496000ab44fde56212d5f1c0f2b82d"
+     ]
+    },
+    {
+     "file": "tests/test-mmap-evict.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-4fca49e82",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "5b42aa6f2ac894ec1a3303ebb9af78f828b4237c"
+     ],
+     "shas": [
+      "50782945c428dc1303276223de9cba43b34168a6"
+     ]
+    }
+   ],
+   "id": "COMMIT-50782945c",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ca7f00be6d75c0dcad336ed8a1f3b2ac4d924d81"
+     ],
+     "shas": [
+      "51ac82da6c81937acf93c142a8514691eea57491"
+     ]
+    }
+   ],
+   "id": "COMMIT-51ac82da6",
+   "manifest_ids": [
+    "V11-078"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ebbea202869694170e8baa336d3f7833d9cc2368"
+     ],
+     "shas": [
+      "5251e5cc67d51faec0386b4f00cf5f1e4230a997"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-rowexact-backend-toggle.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-5251e5cc6",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "044023fc0489aa0682c7c930332a50c53aae4298"
+     ],
+     "shas": [
+      "53182975eb7a06e4dbe1081cddbf3dab0708d1e0"
+     ]
+    }
+   ],
+   "id": "COMMIT-53182975e",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "9e3ef211f4879ef0142697169c62b0c29a5aa148"
+     ],
+     "shas": [
+      "541108fb80a32b26c687f7b6126497353965f6aa"
+     ]
+    }
+   ],
+   "id": "COMMIT-541108fb8",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "4b14efe4823e723a25fc87bf14831fc155185f68"
+     ],
+     "shas": [
+      "5538756848dc80e72a026792daca2959b16dbb52"
+     ]
+    },
+    {
+     "file": "tests/test-exl3.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-553875684",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "a59b17a55fed7fa9a96d1675283b07efa83aa5ff"
+     ],
+     "shas": [
+      "55c4f98336956c12525237753cdf2994906a1e49"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_GQA_VERIFY_MIN_NQ"
+    }
+   ],
+   "id": "COMMIT-55c4f9833",
+   "manifest_ids": [
+    "V11-127"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "6ab2c0c8030372377723a5a0703eb8d901af705b"
+     ],
+     "shas": [
+      "5b9757361fcbf45131a5b636f9535bf0178f7f8c"
+     ]
+    }
+   ],
+   "id": "COMMIT-5b9757361",
+   "manifest_ids": [
+    "V11-027"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "717f1af73b671e9be84868243f3e7f5f30219e44"
+     ],
+     "shas": [
+      "5c9cf602a8f94b630b2959b9a2c023a6b76f2557"
+     ]
+    }
+   ],
+   "id": "COMMIT-5c9cf602a",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "3649b04a31de5bc0833d3165fff0922a4fc9b530"
+     ],
+     "shas": [
+      "600d05904eae218f016b10d548d74c11dd016181"
+     ]
+    }
+   ],
+   "id": "COMMIT-600d05904",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "f953d3d72df6c1eed964216c3a0225eeb3c0c748"
+     ],
+     "shas": [
+      "61b1f78e73745e7e20d8febafc357d9fb6cabee9"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-mmap-evict.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-61b1f78e7",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "322b7e97f21c5c6b0dc3abcae5ca546dbcb8a00a"
+     ],
+     "shas": [
+      "61bdb185c5f270d2c06c6a7bfb2f49c0facf3d91"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_NO_VMM"
+    }
+   ],
+   "id": "COMMIT-61bdb185c",
+   "manifest_ids": [
+    "V11-014"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "9131886ce113cb5b63e72637907524a95e3cf552"
+     ],
+     "shas": [
+      "621d57bd62a8ef9a6316b97775f893172a954bec"
+     ]
+    },
+    {
+     "file": "tests/test-mmap-evict.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-621d57bd6",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "3f3d86272d00e96d828653226ddab175367481cf"
+     ],
+     "shas": [
+      "63c2afabb3cac276714942bc32b132782b42dc97"
+     ]
+    }
+   ],
+   "id": "COMMIT-63c2afabb",
+   "manifest_ids": [
+    "V11-060"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "b476538b9b1f48c4dfa5721ba344310dd2156ba4"
+     ],
+     "shas": [
+      "63e5180dbe736e1831cb9cd40e802c4ae818e641"
+     ]
+    }
+   ],
+   "id": "COMMIT-63e5180db",
+   "manifest_ids": [
+    "V11-055"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "567003ee024b49a006d323d1cb44dd49d257f937"
+     ],
+     "shas": [
+      "682f4bfae0c243af8c8dffb95d8a5e97176555ad"
+     ]
+    }
+   ],
+   "id": "COMMIT-682f4bfae",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "031080152d61b7b007d7ded15b73787286f4bade"
+     ],
+     "shas": [
+      "68338c9259385d0b602ab553160d516d60f8aa0a"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-68338c925",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "9456d31e5c12e094c868ac041e5399d75802312f"
+     ],
+     "shas": [
+      "6b23be6210d54bdcd55030bcc44bf5a5ac1fbcaf"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_USE_HIP"
+    }
+   ],
+   "id": "COMMIT-6b23be621",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "e8f88e4258eaf323bb930b43b38050d9c5f31cf8"
+     ],
+     "shas": [
+      "6b95102700cfe9faa3d158e6b7977d3e27641150"
+     ]
+    }
+   ],
+   "id": "COMMIT-6b9510270",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "566a7af8d1457ae35e64a2be6ae2f2a8a322d668"
+     ],
+     "shas": [
+      "6cc2941572637a8f661e899409b71b87a46a1c6c"
+     ]
+    }
+   ],
+   "id": "COMMIT-6cc294157",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "0109ac0f22ec7a62bdb280ee2a7d21b22a95fac1"
+     ],
+     "shas": [
+      "6dcf8ab0d61d0f0c6e5226ed593f589ae48c3df1"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_TYPE_EXL3_"
+    }
+   ],
+   "id": "COMMIT-6dcf8ab0d",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "52c8d3d78d9d1d2ce85213fe98144300edcffd93"
+     ],
+     "shas": [
+      "6dd06d5faa3c006b90e8de15474633b424cdfb9f"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_TOKEN_EMBD_ON_CPU"
+    }
+   ],
+   "id": "COMMIT-6dd06d5fa",
+   "manifest_ids": [
+    "V11-128"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "5fe884ec47657dc8a9b98be710322a2c2ff37f02"
+     ],
+     "shas": [
+      "7052e26dfc1a56894d2aa901b952c93e7e6cfceb"
+     ]
+    }
+   ],
+   "id": "COMMIT-7052e26df",
+   "manifest_ids": [
+    "V11-016"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "5b346ddc35f415d5ccca256060229ed9d978ce3f"
+     ],
+     "shas": [
+      "706028a5766a31250683375afc6e68ed6ad5ed05"
+     ]
+    }
+   ],
+   "id": "COMMIT-706028a57",
+   "manifest_ids": [
+    "V11-137"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "378909cfe879c82be7b71b0c3dd3721bb612093c"
+     ],
+     "shas": [
+      "729599d69871181d67af715a4c2f9162d5153a2e"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-729599d69",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "235d1d1cd9d0a70eb69568f5504135678f5c26e9"
+     ],
+     "shas": [
+      "7387dbf5cc71268bbae132740766d6a51e557550"
+     ]
+    }
+   ],
+   "id": "COMMIT-7387dbf5c",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "e4205188ac9a3a4676c18e315dbbcc071aa771fa"
+     ],
+     "shas": [
+      "74781f9bbded3f7aebce130e3837f49156bd26e2"
+     ]
+    }
+   ],
+   "id": "COMMIT-74781f9bb",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "779fec510e5d4bab969f15d0d669f5e1c0299b9d"
+     ],
+     "shas": [
+      "760a756097f8d315391d4206937a1132fb559cee"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_WVSK_M12_MIN_ROWS"
+    }
+   ],
+   "id": "COMMIT-760a75609",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "0b1e648a1d582a1ab9f3d775116175a5dfd09258"
+     ],
+     "shas": [
+      "7960776977858b16184cc263ef44fc6dea39829d"
+     ]
+    },
+    {
+     "file": "tests/test-llama-archs.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-796077697",
+   "manifest_ids": [
+    "V11-097"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "4e53cdf2ec0c9f3341c8c398b029463aeabf2be2"
+     ],
+     "shas": [
+      "7a037857b5a44edffee806212d6f459b0cae18fb"
+     ]
+    },
+    {
+     "file": "tests/test-exl3.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_TYPE_EXL3M_1"
+    }
+   ],
+   "id": "COMMIT-7a037857b",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "30a0e3fe7398461e438585f9474c28f3d04f5841"
+     ],
+     "shas": [
+      "7a5db485e381e2719704fdb91837884946ed3431"
+     ]
+    }
+   ],
+   "id": "COMMIT-7a5db485e",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "d1ddbceac856268e5ad536cd0471328a23a37bb3"
+     ],
+     "shas": [
+      "7bcf6218bc4849dd47276078d1dd052e77e17fe1"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GEMM_DOWN_TILE"
+    }
+   ],
+   "id": "COMMIT-7bcf6218b",
+   "manifest_ids": [
+    "V11-136"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "d8e7e6de3969a38e251f1f8dd4ce177a6c0f577a"
+     ],
+     "shas": [
+      "7e8aa3665a145dc2e9f7116347af38d70cfcd05d"
+     ]
+    }
+   ],
+   "id": "COMMIT-7e8aa3665",
+   "manifest_ids": [
+    "V11-041"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "e77061c5b9f9c9226f4642bbe62a40e700ff1967"
+     ],
+     "shas": [
+      "821fce89f568ea13f56379871471d6d54b2f84b0"
+     ]
+    }
+   ],
+   "id": "COMMIT-821fce89f",
+   "manifest_ids": [
+    "V11-137"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "277d76677f534302eaebb53243d229d0a59635cb"
+     ],
+     "shas": [
+      "83e612d4c9314fe4790f4e9a4a2bca5f0d775270"
+     ]
+    }
+   ],
+   "id": "COMMIT-83e612d4c",
+   "manifest_ids": [
+    "V11-043"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "28c7ff6ced23005855cba47c4797b8f42483b6d5"
+     ],
+     "shas": [
+      "866850e4035e597d2dfe8f87124566c82e06238e"
+     ]
+    }
+   ],
+   "id": "COMMIT-866850e40",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "0a939c48cbf567c8de168714414b1ce53b9caf52"
+     ],
+     "shas": [
+      "86fd98e25403b45b791ba5a4b12483693dde0698"
+     ]
+    }
+   ],
+   "id": "COMMIT-86fd98e25",
+   "manifest_ids": [
+    "V11-033"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "f47ea1b914f201c7d8675731622004965aa6b5e8"
+     ],
+     "shas": [
+      "892ddd95d1fc265cfe96405f6b7a9df6ebf3c65c"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-chunk-kv.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-892ddd95d",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "03240589a6a401c82a33434bdc1fd27a1530ae28"
+     ],
+     "shas": [
+      "8ad11a9629022b56b9a48b530e9456b3eea96744"
+     ]
+    }
+   ],
+   "id": "COMMIT-8ad11a962",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "2f83514834dc0bc8f7fc5c47ca3bc081a14ace14"
+     ],
+     "shas": [
+      "8b8d2871184a79cc2fd524cf23b7e8bd41291eb7"
+     ]
+    }
+   ],
+   "id": "COMMIT-8b8d28711",
+   "manifest_ids": [
+    "V11-035"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "41bcbf509f30c6b605ed936409a57a67fc3d81ce"
+     ],
+     "shas": [
+      "8b9bf3031f315be84f68cbde658cabc71b081f46"
+     ]
+    },
+    {
+     "file": "tests/test-cpy-balance.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPY_BALANCE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPY_BALANCE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPY_BALANCE_MIN_BYTES"
+    }
+   ],
+   "id": "COMMIT-8b9bf3031",
+   "manifest_ids": [
+    "V11-141",
+    "V11-142"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "6f076254ad30aca7e24c4901c2f23281bee0cb4f"
+     ],
+     "shas": [
+      "8cb8691f03e06b5604c48a6d14dd7f4efb51128d"
+     ]
+    }
+   ],
+   "id": "COMMIT-8cb8691f0",
+   "manifest_ids": [
+    "V11-071"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "7275257d38c311a89460056316503a137b3f73c1"
+     ],
+     "shas": [
+      "8df1b5cf26d5fe8fae4fc4557e67a3046ec4b91a"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_OP_COUNT"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_RPC"
+    }
+   ],
+   "id": "COMMIT-8df1b5cf2",
+   "manifest_ids": [
+    "V11-004"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "dc426ca98b086a234ec29f223270366d0792b152"
+     ],
+     "shas": [
+      "90c12df4247e417053ffc59e2188294826d04ca2"
+     ]
+    },
+    {
+     "file": "test-dca",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_ARG_LOAD_THREADS"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_NOHUGEPAGE"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_ARG_LOAD_THREADS"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_ARG_LOAD_THREADS"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK"
+    }
+   ],
+   "id": "COMMIT-90c12df42",
+   "manifest_ids": [
+    "V11-002",
+    "V11-057",
+    "V11-059",
+    "V11-064",
+    "V11-070",
+    "V11-071",
+    "V11-072",
+    "V11-073",
+    "V11-074",
+    "V11-075",
+    "V11-076",
+    "V11-077",
+    "V11-078",
+    "V11-079",
+    "V11-080",
+    "V11-081",
+    "V11-082",
+    "V11-083",
+    "V11-086"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c50f8cf9717c40b54e3a448718a661b1e10fc540"
+     ],
+     "shas": [
+      "9422960da8e34ff2e497fbfcb63cde4c83edfbcf"
+     ]
+    }
+   ],
+   "id": "COMMIT-9422960da",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "f385b9941cc604d07a3e6c49c78bc6236696c85b"
+     ],
+     "shas": [
+      "951b1aa42bb10818a97e39566dd5d692dfd281a2"
+     ]
+    }
+   ],
+   "id": "COMMIT-951b1aa42",
+   "manifest_ids": [
+    "V11-080"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "338c17885b109dcb1074336d210bee9ab981b73b"
+     ],
+     "shas": [
+      "96870b11c0d21046cf68be5064fcc2c08b47097c"
+     ]
+    }
+   ],
+   "id": "COMMIT-96870b11c",
+   "manifest_ids": [
+    "V11-037"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "4a4f466e2b9341f8276629e8daf577a769597bbc"
+     ],
+     "shas": [
+      "97a1ce14013e893072541b2006b38560b4f3cc32"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-hc-fuse-plan.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-97a1ce140",
+   "manifest_ids": [
+    "V11-124"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "7de685fe9d49252bc24481cdd7166caec54747de"
+     ],
+     "shas": [
+      "98ab72f85cc386567fdc1f55c69dffa7b69723c4"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_REPACK_THREADS"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_ARG_LOAD_THREADS"
+    }
+   ],
+   "id": "COMMIT-98ab72f85",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "61bcaa50354714ca50dd6d6f986445af7649702f"
+     ],
+     "shas": [
+      "98e298ed550b03e72e4e20736e27d34dc5dbebc3"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_OP_MEAN_D1"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_MEAN_D1"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_HC_FUSE"
+    }
+   ],
+   "id": "COMMIT-98e298ed5",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "26302ca2af8c0e8df96b2be6567961c4ba85b870"
+     ],
+     "shas": [
+      "9902130884c0626a7e76eb406fbd1421eacea598"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-dsv41-dspark-mask.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-dsv41-dspark-rollback.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-dsv41-dspark-width.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_SPEC_EXACT"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_PROF"
+    }
+   ],
+   "id": "COMMIT-990213088",
+   "manifest_ids": [
+    "V11-009"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "d7546ba14d5f4d7ea95784b08ad519b50bc1190c"
+     ],
+     "shas": [
+      "990e0e1167794a2c855819b4ea33173487002c5b"
+     ]
+    }
+   ],
+   "id": "COMMIT-990e0e116",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "952f6011bd008848aa2e500cc2f58e2a14431343"
+     ],
+     "shas": [
+      "99ff7749662ce81a280f09753fbc07d82ac84a58"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_CDNA_D256_MAX_COLS"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_CDNA_D256_MAX_COLS"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_CDNA_D256_TUNE"
+    }
+   ],
+   "id": "COMMIT-99ff77496",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "744ef9f5099c6d509593e76f0fdbb658800b9a8c"
+     ],
+     "shas": [
+      "9c7c7849ac189abf64f623316dd495f0cd5a5eb8"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_TEST_RNG_MODEL"
+    }
+   ],
+   "id": "COMMIT-9c7c7849a",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ee708a923b9aad3d513e3990fdf4899fffb6cfed"
+     ],
+     "shas": [
+      "a0d0ae238e714aaab04e973ef4b5a4b7c9917744"
+     ]
+    },
+    {
+     "file": "test-backend-ops",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-a0d0ae238",
+   "manifest_ids": [
+    "V11-012"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "8bfad6c90230f77d11a20804eb4c3579682e5bd6"
+     ],
+     "shas": [
+      "a331665d410ae80ff3357399d02f22f72a8ac680"
+     ]
+    }
+   ],
+   "id": "COMMIT-a331665d4",
+   "manifest_ids": [
+    "V11-039"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "573dea169a234c40c653311b4a8b449d691f6228"
+     ],
+     "shas": [
+      "a3dbd6232036338500d3272a64182be659130127"
+     ]
+    }
+   ],
+   "id": "COMMIT-a3dbd6232",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "e2e95e83e4e486ae0b66173e56c3b0f857fda74b"
+     ],
+     "shas": [
+      "a7cc96dd9dee81d8e5e372509badf004aa2c42f0"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_SERVER_DEBUG_TIMINGS"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_SERVER_DEBUG_TIMINGS"
+    }
+   ],
+   "id": "COMMIT-a7cc96dd9",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "0b80840dcbdc2c47e632e0170a3bee77b725a95f"
+     ],
+     "shas": [
+      "a9c38f8e056f1884819e8d4297f740347094caa1"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_DISABLE_GRAPHS"
+    }
+   ],
+   "id": "COMMIT-a9c38f8e0",
+   "manifest_ids": [
+    "V11-104"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ca4b13a4e634eb0ee6a28d7e4e3230c7d0b04759"
+     ],
+     "shas": [
+      "aa0be8f9cd67bfaade321540f0d8d428c9fa59d8"
+     ]
+    }
+   ],
+   "id": "COMMIT-aa0be8f9c",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "176c29e75da0df861956c6718f44da6a73fc2046"
+     ],
+     "shas": [
+      "ac97e305a26a11b1bf486d8c9118f4633011a01a"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_MASK_SKIP"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_MASK_SKIP_MIN_KV"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_MASK_SKIP"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_MASK_SKIP_MIN_KV"
+    }
+   ],
+   "id": "COMMIT-ac97e305a",
+   "manifest_ids": [
+    "V11-011"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "f800dc1aaef8e9df100485cc4ac15578d80ce042"
+     ],
+     "shas": [
+      "acca40c35c1d3ffece316e53f2ff3e5de793d23b"
+     ]
+    }
+   ],
+   "id": "COMMIT-acca40c35",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c2bcbc506a35562c59dfd32ce3bfd168d37b65ce"
+     ],
+     "shas": [
+      "ae99be0e7a44e7ae9bc1df1a85874d65e0827c60"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_PROF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_PROF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_PROF"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_ENGRAM_PROF_JSON_FILE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_PROF"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_ENGRAM_PROF_JSON_FILE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_PROF_JSON_FILE"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_HOST_PROF_JSON_FILE"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_ENGRAM_PROFILE"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_ENGRAM_PROFILE_LEVEL"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_GATHER_PROF"
+    }
+   ],
+   "id": "COMMIT-ae99be0e7",
+   "manifest_ids": [
+    "V11-010"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "79f930cb1dda98faa619ddc6a97087403786542e"
+     ],
+     "shas": [
+      "afd556eb83f560c8a7f2031e8b203b17c8b44246"
+     ]
+    },
+    {
+     "file": "tests/test-iqk-fa-sinks.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-afd556eb8",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "42dd5580cc80ff58a3d089691b5fff1f29d5adf0"
+     ],
+     "shas": [
+      "affe1097f386b58e2c9c2702bcdd422a425340ee"
+     ]
+    }
+   ],
+   "id": "COMMIT-affe1097f",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "6ee40fe7d13d425253d0f60db593aba1b5ad6473"
+     ],
+     "shas": [
+      "b078b5f0c07f41bb383b8448c9b42cf2f2fa41a6"
+     ]
+    },
+    {
+     "file": "test-backend-ops",
+     "kind": "test"
+    },
+    {
+     "file": "test-llama-archs",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-b078b5f0c",
+   "manifest_ids": [
+    "V11-097"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "7d48153e5ca48296088c0e54f565f664e0a187d9"
+     ],
+     "shas": [
+      "b2a1b91e73fa28d9d050a931790032fc23352aa0"
+     ]
+    }
+   ],
+   "id": "COMMIT-b2a1b91e7",
+   "manifest_ids": [
+    "V11-070"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "49ad269fd3ab8ddf8ab4f01227a13d63f2330309"
+     ],
+     "shas": [
+      "b63375f9934edcf1047ebeb03abf8d8c17bc0aee"
+     ]
+    }
+   ],
+   "id": "COMMIT-b63375f99",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "11d90f728d2525f1d460d48c5d2cb4b92468115f"
+     ],
+     "shas": [
+      "b86c725e26dd7493b616990fc835536b8d224337"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-qwen4exp-fused-rope.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-b86c725e2",
+   "manifest_ids": [
+    "V11-019"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "679e59c5169502e0c0a32a98d58b10a924fbb81d"
+     ],
+     "shas": [
+      "b8788b75e167087effd28b775522b4e906b1fe6c"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-b8788b75e",
+   "manifest_ids": [
+    "V11-045"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "3164aa6af5a69df4010f7b118d585ef43eecf74e"
+     ],
+     "shas": [
+      "bae820fb40ce11896daecce1edb670de0133ff91"
+     ]
+    }
+   ],
+   "id": "COMMIT-bae820fb4",
+   "manifest_ids": [
+    "V11-102"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "3455c18b04ec2768c33a00c087b7deb3e1ec282c"
+     ],
+     "shas": [
+      "c08cd5df7e10e30b15ca587865c7c4ad219df14c"
+     ]
+    }
+   ],
+   "id": "COMMIT-c08cd5df7",
+   "manifest_ids": [
+    "V11-075"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c6dd0fc68fecb1bdf8969738e1a28dc384937d1f"
+     ],
+     "shas": [
+      "c1e12c3416e36d2ae70c3f05e3b647f9fd881758"
+     ]
+    }
+   ],
+   "id": "COMMIT-c1e12c341",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "0f5e932e3eb340f993e8cfcf25b29ba4b1f333af"
+     ],
+     "shas": [
+      "c26447813597d665f4e86d88bcc4c2965e8139be"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-c26447813",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "8ac4d5f1a418be9f2496ae85cc8488c169b034f4"
+     ],
+     "shas": [
+      "c271c8a09c48f6836d0cb5bfe01154d37dd7fb00"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_WVSK_MAX"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_WVSK_MAX"
+    }
+   ],
+   "id": "COMMIT-c271c8a09",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "33cb38f52cfdaac3aaf6299208aa58f573eac290"
+     ],
+     "shas": [
+      "c2a012749f43cdac24bb3218d5e264ede1f689ea"
+     ]
+    }
+   ],
+   "id": "COMMIT-c2a012749",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "6fb08baabb68269588d9dcf7e07f458a2d70dc92"
+     ],
+     "shas": [
+      "c49a768fe54d7d76f456c8ad24b4b0c83f0c0dc2"
+     ]
+    }
+   ],
+   "id": "COMMIT-c49a768fe",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "1a5c11a981c4fed567f13ad93cfe3f57bb5776b3"
+     ],
+     "shas": [
+      "c5c61e5ab49d4fc8a6fde8713845592e690ad190"
+     ]
+    }
+   ],
+   "id": "COMMIT-c5c61e5ab",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "58f0367e0fc0a6b158fb0987f5e26134c50c6bef"
+     ],
+     "shas": [
+      "c635c410198190690ff630ca2698b74f2856cb56"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-c635c4101",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "36ff0a83d381f38b6a041e98d38a0487a305beac"
+     ],
+     "shas": [
+      "c67f400c57b35a46035ecf48b239ae0c950f965e"
+     ]
+    }
+   ],
+   "id": "COMMIT-c67f400c5",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "08fd620940ba3c3325b850cdf1f951996a4629cb"
+     ],
+     "shas": [
+      "c7435cc772e812d099d3ed3ca07a9516be0ccffb"
+     ]
+    },
+    {
+     "file": "tests/test-recurrent-rollback-guards.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-c7435cc77",
+   "manifest_ids": [
+    "V11-131",
+    "V11-112"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "eced6736c7e91be666116bce3ad2765ea7660373"
+     ],
+     "shas": [
+      "c78e6091a2cecce54c95d012da981d1b48207e9b"
+     ]
+    }
+   ],
+   "id": "COMMIT-c78e6091a",
+   "manifest_ids": [
+    "V11-032"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "49f2d9b0e27a9ca081157517dd4c83b59f04fb24"
+     ],
+     "shas": [
+      "c82b5b8f86d2066b71ce5f58cc00b62ddcb9c396"
+     ]
+    }
+   ],
+   "id": "COMMIT-c82b5b8f8",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "044c4777fc585f2becf95bbc8e2171121a39d83f"
+     ],
+     "shas": [
+      "cc1f33d9a82a3c91edce467b277d61d4f56b4185"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-fused-decode-prev-logits.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-cc1f33d9a",
+   "manifest_ids": [
+    "V11-138"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "8b93cb802b396a80b3cfa9d6857233c12721b798"
+     ],
+     "shas": [
+      "cd30aaea5cf9c849e17ba8ba6fa7e1b9eafa4624"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-cd30aaea5",
+   "manifest_ids": [
+    "V11-060"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "5b7026d14b2518b0790bbb23311c456e89c237ad"
+     ],
+     "shas": [
+      "ce2943a03a2fa92a2c855e9cf12ca01b7a069d08"
+     ]
+    }
+   ],
+   "id": "COMMIT-ce2943a03",
+   "manifest_ids": [
+    "V11-034"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ecad77ad694d22ceafa86788316d143810351676"
+     ],
+     "shas": [
+      "d0f9fab7bfb7ce52cf65985c8ab87eed9d812e53"
+     ]
+    }
+   ],
+   "id": "COMMIT-d0f9fab7b",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "13ae26c07749bca9e182d9c4dc682c4513e5fc15"
+     ],
+     "shas": [
+      "d210f85c2cc8abb1c67cf79ed12582efd9e0026c"
+     ]
+    },
+    {
+     "file": "test-backend-ops",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-recurrent-rollback-guards",
+     "kind": "test"
+    },
+    {
+     "file": "test-recurrent-state-rollback",
+     "kind": "test"
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/unit/test_speculative.py",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GV_PREFETCH_LATE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GV_PREFETCH_LATE"
+    }
+   ],
+   "id": "COMMIT-d210f85c2",
+   "manifest_ids": [
+    "V11-125",
+    "V11-126",
+    "V11-127",
+    "V11-128",
+    "V11-129",
+    "V11-130",
+    "V11-131",
+    "V11-132",
+    "V11-133",
+    "V11-134",
+    "V11-135",
+    "V11-112"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "82f318569e9c011950f870f15b414601dcd5142b"
+     ],
+     "shas": [
+      "d2af93745b7b86e4d83b5c107f68fe781cedabd5"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-d2af93745",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "d0a61d080ab9cb6e9e424426ba78defe209e776a"
+     ],
+     "shas": [
+      "d3db65e4cf80675339e595933b5a8c30ad7ada7b"
+     ]
+    }
+   ],
+   "id": "COMMIT-d3db65e4c",
+   "manifest_ids": [
+    "V11-054"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "0e1f196932c554438592afe614e10fc3b6fc0868"
+     ],
+     "shas": [
+      "d40927c4da007fdcc65e4fbeebad73d24a3b7650"
+     ]
+    }
+   ],
+   "id": "COMMIT-d40927c4d",
+   "manifest_ids": [
+    "V11-053"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "d9e4e76fdf29704aebb39273e5dd9d3f474d395c"
+     ],
+     "shas": [
+      "d4e6c395260a4a2d41ac9fc74b99c284c3a3267b"
+     ]
+    },
+    {
+     "file": "tests/test-exl3.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_EXL3_SPLITK_TARGET"
+    }
+   ],
+   "id": "COMMIT-d4e6c3952",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "f00788a6633cedf82d7a10fa86136698c5efdee1"
+     ],
+     "shas": [
+      "d82eb975a67785250d0238519e299744f494e31b"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-d82eb975a",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "19471c4a9b713995bbf449925fbdf9c7b9973a1a"
+     ],
+     "shas": [
+      "dd3d9721ca37321ad9159520bbd9616e3d0d6228"
+     ]
+    },
+    {
+     "file": "tests/test-repack-parallel",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-gather-rows-e4m3-e8m0",
+     "kind": "test"
+    },
+    {
+     "file": "test-backend-ops",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-qwen4exp-fused-rope",
+     "kind": "test"
+    },
+    {
+     "file": "tests/unit/test_slot_save.py",
+     "kind": "test"
+    },
+    {
+     "file": "test-chat-input-spans",
+     "kind": "test"
+    },
+    {
+     "file": "tests/unit/test_chat_special_tokens.py",
+     "kind": "test"
+    },
+    {
+     "file": "test-llama-archs",
+     "kind": "test"
+    },
+    {
+     "file": "test-memory-can-shift",
+     "kind": "test"
+    },
+    {
+     "file": "test-memory-can-shift-qwen35",
+     "kind": "test"
+    },
+    {
+     "file": "tests/unit/test_cache_reuse_recurrent.py",
+     "kind": "test"
+    },
+    {
+     "file": "test-server-reorder",
+     "kind": "test"
+    },
+    {
+     "file": "tests/unit/test_kv_reorder.py",
+     "kind": "test"
+    },
+    {
+     "file": "test-yarn-kshift",
+     "kind": "test"
+    },
+    {
+     "file": "test-rope",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-dd3d9721c",
+   "manifest_ids": [
+    "V11-001",
+    "V11-002",
+    "V11-003",
+    "V11-004",
+    "V11-005",
+    "V11-006",
+    "V11-007",
+    "V11-008",
+    "V11-009",
+    "V11-010",
+    "V11-011",
+    "V11-012",
+    "V11-013",
+    "V11-014",
+    "V11-015",
+    "V11-016",
+    "V11-017",
+    "V11-018",
+    "V11-019",
+    "V11-020",
+    "V11-021",
+    "V11-022",
+    "V11-023",
+    "V11-024",
+    "V11-025",
+    "V11-026",
+    "V11-027",
+    "V11-028",
+    "V11-029",
+    "V11-030",
+    "V11-031",
+    "V11-032",
+    "V11-033",
+    "V11-034",
+    "V11-035",
+    "V11-036",
+    "V11-037",
+    "V11-038",
+    "V11-039",
+    "V11-040",
+    "V11-041",
+    "V11-042",
+    "V11-043",
+    "V11-044",
+    "V11-095",
+    "V11-096",
+    "V11-097",
+    "V11-098",
+    "V11-099",
+    "V11-100",
+    "V11-102"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "939b92aabe9892e25de8322ee113f1e94f1d5daf"
+     ],
+     "shas": [
+      "dd5645e3c39a525537108cf63ebf8f9ba2ce1e76"
+     ]
+    }
+   ],
+   "id": "COMMIT-dd5645e3c",
+   "manifest_ids": [
+    "V11-132"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c50af4d501f876dbc52eeb264cf2d20bf810eb7f"
+     ],
+     "shas": [
+      "deb387b8ba5dcf00a13d5b9a8886c2ec0b41a079"
+     ]
+    }
+   ],
+   "id": "COMMIT-deb387b8b",
+   "manifest_ids": [
+    "V11-022"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ea982353b204d6bc189a78b97cd300685d20d013"
+     ],
+     "shas": [
+      "e2c38731b5158088d2e3a9382098e316edf1a464"
+     ]
+    }
+   ],
+   "id": "COMMIT-e2c38731b",
+   "manifest_ids": [
+    "V11-031"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "4d38dd02872f13b0a6787aa3d361e62f3aba2232"
+     ],
+     "shas": [
+      "e33229348635731cad66dba8d121854024b6f5d2"
+     ]
+    }
+   ],
+   "id": "COMMIT-e33229348",
+   "manifest_ids": [
+    "V11-042",
+    "V11-045",
+    "V11-082",
+    "V11-091",
+    "V11-092"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "08440c88bfa6218752af1ee8dabdd6bf5966587d"
+     ],
+     "shas": [
+      "e3b5c5b02697fb20ca36311d10b3aa24becb1ce1"
+     ]
+    }
+   ],
+   "id": "COMMIT-e3b5c5b02",
+   "manifest_ids": [
+    "V11-076"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c8f2150ecda2b0c58d97351e194a602f58f5fb61"
+     ],
+     "shas": [
+      "e3fa9c19410ec8eb435c09c9423d2eff6ad71b36"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-e3fa9c194",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "252b982a35473d2d42b1e73a4964915753ab03ea"
+     ],
+     "shas": [
+      "e3fd08d194f08541d1f24fe026bd1f2699eb4de2"
+     ]
+    }
+   ],
+   "id": "COMMIT-e3fd08d19",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c4371eed9edc6854d44d8c2e767c362a8c134494"
+     ],
+     "shas": [
+      "e438cc1208b9cbb0369edbb9b92833cbd13ec45f"
+     ]
+    }
+   ],
+   "id": "COMMIT-e438cc120",
+   "manifest_ids": [
+    "V11-026"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "1872e5330c6ba466314ea13ec26a935e6e196e45"
+     ],
+     "shas": [
+      "e4d460c16e334a7c31f6ce1d217249af7d46f514"
+     ]
+    },
+    {
+     "file": "test-hc-fuse-plan",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_HC_FUSE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_LOG_INFO"
+    }
+   ],
+   "id": "COMMIT-e4d460c16",
+   "manifest_ids": [
+    "V11-124"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "59247f7ef03a1a72715fd9e0356539a59730549f"
+     ],
+     "shas": [
+      "ea6efcdde293a6a9df8bd85d11b45787c7eda823"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_TYPE_EXL3_5"
+    }
+   ],
+   "id": "COMMIT-ea6efcdde",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "02813a9bc127d543c7f320adc66175dc3acdfc6c"
+     ],
+     "shas": [
+      "ea922d61f49ffe7734c7f2fb9e772554576ac567"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_WVSK"
+    }
+   ],
+   "id": "COMMIT-ea922d61f",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "bea1e3b5e46fc664e8b99eaf5c895d3b0194d771"
+     ],
+     "shas": [
+      "ead706a632a448d32d8667cc5b6df5aed107d8af"
+     ]
+    }
+   ],
+   "id": "COMMIT-ead706a63",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "250c77d1f62312ac07642e05b3589ac14656a723"
+     ],
+     "shas": [
+      "eee3da838e3c8306a856f2c72c4b04048fded698"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-eee3da838",
+   "manifest_ids": [
+    "V11-144"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "8aaa5af976111cb251841a2b0f3e99775031db1d"
+     ],
+     "shas": [
+      "f07671130ce47f05571572bda82ed5d370450964"
+     ]
+    }
+   ],
+   "id": "COMMIT-f07671130",
+   "manifest_ids": [
+    "V11-072"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "9dc0c6ee7b3e2c89f1b0dca9788dccb5b6535ca2"
+     ],
+     "shas": [
+      "f078ed84ef5e320dd604fe85b0c111bbd033f2ff"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_CDNA_D256_TUNE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_CDNA_D256_MMA_MIN_ROWS"
+    }
+   ],
+   "id": "COMMIT-f078ed84e",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "7d491daa806e1ab01753dec8160fa9f2d8d291a9"
+     ],
+     "shas": [
+      "f0c96dc1fc90a0257061db41dd95844763630969"
+     ]
+    },
+    {
+     "file": "test-backend-ops",
+     "kind": "test"
+    },
+    {
+     "file": "test-dca",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ROWEXACT_N"
+    }
+   ],
+   "id": "COMMIT-f0c96dc1f",
+   "manifest_ids": [
+    "V11-043",
+    "V11-045",
+    "V11-046",
+    "V11-049",
+    "V11-053",
+    "V11-054",
+    "V11-055",
+    "V11-056",
+    "V11-057",
+    "V11-058",
+    "V11-059",
+    "V11-060",
+    "V11-070",
+    "V11-071",
+    "V11-072",
+    "V11-075",
+    "V11-076",
+    "V11-078",
+    "V11-079",
+    "V11-080",
+    "V11-081",
+    "V11-086",
+    "V11-096"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "1c7a7e352ea0a98effecb2a6791fe13d6de50b57"
+     ],
+     "shas": [
+      "f13ab7669c65ac1438d8177394dde773f206e3d9"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-gather-rows-e4m3-e8m0.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-f13ab7669",
+   "manifest_ids": [
+    "V11-005"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c8002a17c50f2122a478c5512130b5d43a2cb8d1"
+     ],
+     "shas": [
+      "f27f9e3255f4d424a2c890ad035355cd7465df6a"
+     ]
+    }
+   ],
+   "id": "COMMIT-f27f9e325",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "71fda7b831785876ad2c34b3abe3d10fa677e409"
+     ],
+     "shas": [
+      "f2b4d3acd5098d494c524060ee10460ccd98fdc5"
+     ]
+    }
+   ],
+   "id": "COMMIT-f2b4d3acd",
+   "manifest_ids": [
+    "V11-079"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "b10cbf92cf09935a547922c9cfe7c75e1c4ebf36"
+     ],
+     "shas": [
+      "f3a6a4baa8f293baffe1f730d9b0ddf8a87f8316"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK_Q8_0_PREFILL"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK_Q8_0_PREFILL_MIN_ROWS"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK_Q8_0"
+    }
+   ],
+   "id": "COMMIT-f3a6a4baa",
+   "manifest_ids": [
+    "V11-123"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "2603c813b50ac440f2523bb2fd9a1d7d8686f63c"
+     ],
+     "shas": [
+      "f48f4d98901e1d18b171474da5c77ec9a931da85"
+     ]
+    },
+    {
+     "file": "tests/test-exl3.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-f48f4d989",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "88edff23a694251aee75494097a41bc7aaf23331"
+     ],
+     "shas": [
+      "f51efe63e791209a599d75d4f4c47feec1752a54"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_CDNA_D256_TUNE"
+    }
+   ],
+   "id": "COMMIT-f51efe63e",
+   "manifest_ids": [
+    "V11-144"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "271376d6648455118e95549e5b9ee30653c98daa"
+     ],
+     "shas": [
+      "f533200288545551e8951ff0e9e68985ddb5c93a"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-f53320028",
+   "manifest_ids": [
+    "V11-056"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "747af624ca2ffc0ec4c54b232f93b6cce5a165f7"
+     ],
+     "shas": [
+      "f62fcd0db865e6e9fd5429f4c381c5b5e266c136"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_HC_RMS_FUSE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_TOPK_LARGE"
+    }
+   ],
+   "id": "COMMIT-f62fcd0db",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "e383cc4073ba4a960569a09c0b71313b054bba96"
+     ],
+     "shas": [
+      "f756400eb2cdac85adfc4d436c6893c33a00ac4b"
+     ]
+    }
+   ],
+   "id": "COMMIT-f756400eb",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "07d74c01e6ade23a875833686ff68edd1b9589b7"
+     ],
+     "shas": [
+      "f7caf4903246b1f3721eb5a2f16ed42ba8989611"
+     ]
+    },
+    {
+     "file": "tests/glm53/runtime/README.md",
+     "kind": "test"
+    },
+    {
+     "file": "tests/glm53/runtime/compare_server_arms.py",
+     "kind": "test"
+    },
+    {
+     "file": "tests/glm53/runtime/make_test_fixtures.py",
+     "kind": "test"
+    },
+    {
+     "file": "tests/glm53/runtime/probe_server.py",
+     "kind": "test"
+    },
+    {
+     "file": "tests/glm53/runtime/validate_glm53.py",
+     "kind": "test"
+    },
+    {
+     "file": "tests/glm53/serve/README.md",
+     "kind": "test"
+    },
+    {
+     "file": "tests/glm53/serve/generate_serve_plan.py",
+     "kind": "test"
+    },
+    {
+     "file": "tests/glm53/serve/test_generate_serve_plan.py",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-f7caf4903",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "be622732082bc4e2c6b69ddf797503f3046ed930"
+     ],
+     "shas": [
+      "f7cbe3a35fdb15f7a584a2e20ac47092b7ed69d0"
+     ]
+    }
+   ],
+   "id": "COMMIT-f7cbe3a35",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "4afc4a09b7536926476b675c2bb7b07232df19a1"
+     ],
+     "shas": [
+      "f9c01ce0ea9d8076b57bcf078e919d5d949c8ac5"
+     ]
+    },
+    {
+     "file": "tests/test-llama-archs.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-f9c01ce0e",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "3f1a338b18acef6c9c26d602e385498256d41ceb"
+     ],
+     "shas": [
+      "f9e58adf33fe4c191c18320b66993d40d1b168c0"
+     ]
+    }
+   ],
+   "id": "COMMIT-f9e58adf3",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "d380de13bacc89abe5821d84b8f3bbfb3f2d6137"
+     ],
+     "shas": [
+      "fbd5eff65bb763c6e87654e444f88ea8e138377e"
+     ]
+    }
+   ],
+   "id": "COMMIT-fbd5eff65",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "84fc24c641b587685840cc35b8e97d61595981a7"
+     ],
+     "shas": [
+      "fc431c4f5e43e29f69e4c9088ce930ad9b91aecd"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-moe-fused-upgate-gate.sh",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-moe-fused-upgate.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-fc431c4f5",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "4fb73e13044eb0f930ac078620d5736b032bcf50"
+     ],
+     "shas": [
+      "fcbb0cf2ee88c5c4e5df995a4f93289bbf524519"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-server-reorder.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-fcbb0cf2e",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ef1a1765f9f99fe2b39de658a3524484d763a5e8"
+     ],
+     "shas": [
+      "ffa43a5edec41548ad06347e9a7098e9126673d7"
+     ]
+    }
+   ],
+   "id": "COMMIT-ffa43a5ed",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "792cf2acf11a37f02f0184431e579412b9b31e24"
+     ],
+     "shas": [
+      "9a44414c4d502733e95ff39fd1968f4dc93205d9"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-chat-input-spans.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_TEST_CHATML_MODEL"
+    }
+   ],
+   "id": "CT-12",
+   "manifest_ids": [
+    "V11-095"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "71830b0697138473a37c05598b7d0975e2009a57"
+     ],
+     "shas": [
+      "0fdb1962692f1cb3faa2d115160c0179136c8a02"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "DS41-1017",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "b129d9c549fa5490de64d9ad20b4796fd50ff90c"
+     ],
+     "shas": [
+      "58980a4c1cdebef8b8454dc47f3ce22ce4154f8e"
+     ]
+    }
+   ],
+   "id": "DS41-B10",
+   "manifest_ids": [
+    "V11-006"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "6053506d8db9dbfa4180bfd879fe87c0728156a3"
+     ],
+     "shas": [
+      "7ca7a352b24ff8166a20fe403635e7c3ac6eeaa9"
+     ]
+    }
+   ],
+   "id": "DS41-B11",
+   "manifest_ids": [
+    "V11-008"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "0b7bbd27bf4b07fcb214a8c7bb95842887c0be07"
+     ],
+     "shas": [
+      "7c0b4ae4ccb9606633ccbfbc7ed0613ce82ebb7b"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-dsv41-engram-gate.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "DS41-B3.1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "515fc5981a1aa6e9392a934ffa2b415579c820c2"
+     ],
+     "shas": [
+      "5b137b0458603fd11d287b0c402215145908e57d"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-dsv41-engram-hash-vectors.inc",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-dsv41-engram-hash.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "DS41-B8",
+   "manifest_ids": [
+    "V11-007"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "fec08707f414c0f6b119266b4c485590ce8c528e"
+     ],
+     "shas": [
+      "862a081a2a3d232ae261f4dcb8fc298195e3d068"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_SPEC_EXACT"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_SPEC_EXACT"
+    }
+   ],
+   "id": "DS41-T4.1.2",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "05672cfd7c78572118e7650d20c65b12fd7f0636"
+     ],
+     "shas": [
+      "79d1e13fefa577ce251fce83d93a5dcba7764389"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-dsa-sparse-attn-oracle.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "DSA-IDX.1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "211a1d03fc404852abd372d06a9f525b765c815e"
+     ],
+     "shas": [
+      "f73285fdb7474ee573293ce0823c2c956f7daddb"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-exl3.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_TYPE_EXL3_1"
+    }
+   ],
+   "id": "EXL3-6",
+   "manifest_ids": [
+    "V11-059"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "dda87e1f1bd309a2e0c3145feb8bbb5dc88361bb"
+     ],
+     "shas": [
+      "9618766bcf01d20c0d5bb47061e9c9f4e6bae519"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-kld-ear.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "EXL3-EAR1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "976c0f620aed26f8d2fef52b9fd143f2be7eb334"
+     ],
+     "shas": [
+      "9a3f1392a74d22f50e093791d14ea207a6170368"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_REG"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_F32"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_F16"
+    }
+   ],
+   "id": "F16-V",
+   "manifest_ids": [
+    "V11-015"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "4efadce77db01f33a516a284b8bd128eadbd35f1",
+      "e575a9bfe49cde69dc284ad106b56df91fed0438",
+      "90adc307800d3718a433a2a3cb464ad209a344f7"
+     ],
+     "shas": [
+      "2152c39b1a6f081d0829db6cf5a5d32ffe71ab11",
+      "f345e177c6f688deb7c134ed51a3b96a50086fdd",
+      "3c9b0bb4fb749fe7bc45ed6d3583a41d5ae8ca55"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "FA-INT64-OFFSET",
+   "manifest_ids": [
+    "V11-017",
+    "V11-018"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "aae602c3726a41f97de9d3958ff29263fcd3deb5"
+     ],
+     "shas": [
+      "4976a189f29f573a557f57fe9fcf785ffbb4bd83"
+     ]
+    },
+    {
+     "file": "tests/test-qwen4exp-fused-rope.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_ON"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_OFF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_OFF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_ON"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_OFF"
+    }
+   ],
+   "id": "FD-OFF-PROD",
+   "manifest_ids": [
+    "V11-106"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "fb8f077ff74ccb25c3db82067b04a3bbe35c8980"
+     ],
+     "shas": [
+      "2b27b831868a05500a4e83d422500ac1bd35071d"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-sampling-greedy-fast.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_ZOS2"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_ZOS2"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_ZOS2"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_SPEC_EXACT"
+    }
+   ],
+   "id": "GPU-ZOS-2.1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "042392694b64dce07c2e5d8b6845c1465b48f038"
+     ],
+     "shas": [
+      "0853ef66a62572d932074825d73d2670eb15f926"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-kv-host-mirror.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "HSF-5.P",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "915c2289756436636501b53042d03dec437ae616"
+     ],
+     "shas": [
+      "b0ba1d42783585e15b0a0464715fd1fb6a808888"
+     ]
+    },
+    {
+     "file": "tests/test-qwen4exp-fused-rope.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_OFF"
+    }
+   ],
+   "id": "INF-64",
+   "manifest_ids": [
+    "V11-020"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "0872f3b084915b7a100d2d3f51e52dd4ca9f8d2a"
+     ],
+     "shas": [
+      "77f0ac97bb05ed3797d4ea65eabd24a7e9fb7a59"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_BUILD_MOE_TRACE"
+    }
+   ],
+   "id": "INF-72",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "7282315d180eb1bc5aac11b50c176e1beb912839"
+     ],
+     "shas": [
+      "787d9d354fd4b6ba183a9ff0f74472f772b921de"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "INF48-FA-ALLMASK-NAN",
+   "manifest_ids": [
+    "V11-144"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ccaadd9881104b7606726c1a2da1c06e313cc70b",
+      "a0f84a21f5acf1af698d1de1f90cffa76785a117"
+     ],
+     "shas": [
+      "fbec843bb7bbd514da3a6b9cca77b63b94caa970",
+      "169cd63d8e67e43d9b2e6cca5b9003cb24f343ce"
+     ]
+    },
+    {
+     "file": "tests/test-chunk-kv.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "KPF-62",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "03a5272b89fa5890d769e79aabce2c6122f3a0f0"
+     ],
+     "shas": [
+      "28426950f3d14c4940f1e66075ac276834e7bb9d"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-chunk-kv-recompute.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "KPF-62.4",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ec425ef3ae4015679bab45ee6cf6aef91a4c965c"
+     ],
+     "shas": [
+      "2ebbc1a35ca9071de69a379196e1d3b7777eff76"
+     ]
+    }
+   ],
+   "id": "KPF-62.5",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "a9f64acd0757da621ba1ce1de2942ab3dffd5f03"
+     ],
+     "shas": [
+      "f5bbae106fe54e388c282ab7542f788c0f7593f2"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-chunk-kv-g3.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "KPF-62.6",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "360499fd6d92d04a4fe1ef27540dbc3c3d3f0156"
+     ],
+     "shas": [
+      "99c72dafa6b678584be12e159220b6b267be10d7"
+     ]
+    },
+    {
+     "file": "tests/test-chunk-kv.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "KPF-62.8",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "dd2082ce22d9973ce8681d8a5c0cae3f4948d730"
+     ],
+     "shas": [
+      "c72ec82f5417bb2937310326120f149b665e8400"
+     ]
+    },
+    {
+     "file": "test-qwen4exp-fused-rope",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_LOG_WARN"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ABORT"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_TRACE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_OFF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_TRACE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_TRACE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DUMP_"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_LAYER_CMP"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_OFF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_ON"
+    }
+   ],
+   "id": "NEW-10",
+   "manifest_ids": [
+    "V11-120",
+    "V11-121",
+    "V11-122",
+    "V11-104",
+    "V11-106",
+    "V11-107"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "849186c6a4c65be655511674eef53bb0fdb288af"
+     ],
+     "shas": [
+      "dc281111bbde2a53e8986fc2983a55d7f4f12e33"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FUSED_DECODE_OFF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_IQK"
+    }
+   ],
+   "id": "NEW-13",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "561af6dca85714b06f8734ee6ceb77138560f7e0",
+      "987bf2fe2c80971c14dacce151b5026b44ffc68c"
+     ],
+     "shas": [
+      "53fb04f206c312c66c40929774f3219a9e59ac62",
+      "2f01155b608e27d2dcfb06148f2b88511309eed0"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/bench-grammar-sampler.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "SPEC-GRAM.1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "e1db612c16669eb4627ae1165e800d7888c3e6e3"
+     ],
+     "shas": [
+      "bf902b7a1a56add3d74444f333b4f94628246368"
+     ]
+    },
+    {
+     "file": "tests/bench-grammar-sampler.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "SPEC-GRAM.2",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "29071d1d9780f633f764bec33435dff5433d9413"
+     ],
+     "shas": [
+      "a9e67bca4f026f58313318a57b1a036cb76786c4"
+     ]
+    },
+    {
+     "file": "tests/bench-grammar-sampler.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "SPEC-GRAM.3",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ce3b58a181b0d2b48460cab87fe5c4b003d98391"
+     ],
+     "shas": [
+      "87e5266d81787d9e9882174e0c93fd94fc007162"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-spec-rng-poskey.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_RNG_POSKEY"
+    }
+   ],
+   "id": "SPEC-RNG.1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "535cd6348e75341a37fbcda30d13c80d0027761a"
+     ],
+     "shas": [
+      "dcd2dcf9b21be87e415ec2bf8bfc2c979649a7e4"
+     ]
+    },
+    {
+     "file": "tests/test-spec-rng-poskey.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_RNG_POSKEY"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_RNG_POSKEY"
+    }
+   ],
+   "id": "SPEC-RNG.1.1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "9d4d51ddad365fbae3882124c81e77cdff84c5b9"
+     ],
+     "shas": [
+      "62d712ed249f4d81fa02bc64d4270993ff60644f"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_LLGUIDANCE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ABORT"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_LLGUIDANCE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ABORT"
+    }
+   ],
+   "id": "UFH14-LB1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "13eb300dd98c9cf6496635ab909b1a9ad1163ce5"
+     ],
+     "shas": [
+      "6405676866fc18313fd1091d9a1c7ab86698ffba"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-chat-parse-truncation.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "UFH14-LB4",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "228a2b5b674a9dea62a8fa90043031ca46f6f3f3"
+     ],
+     "shas": [
+      "522e1236c7a2c24ebde57131fb25cc95962a5061"
+     ]
+    },
+    {
+     "file": "tests/test-chat.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "UFH14-LB4.1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "7c9209c87e05d4b190906cdf9470394e51ea878c"
+     ],
+     "shas": [
+      "f672d35735ad1128c0f0755a818a9ab0b4bb42e8"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_LB7_PROBES"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_LB7_PROBES"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_LB7_PROBES"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ASSERT"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ABORT"
+    }
+   ],
+   "id": "UFH14-LB7.1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c7778df4234746a8f16e3c1a76b8f0deecf5beb7"
+     ],
+     "shas": [
+      "6cc5602c8123cff33aa3bbc45e87021bd0af6f11"
+     ]
+    },
+    {
+     "file": "tests/test-llama-archs.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "UPSTREAM-26693",
+   "manifest_ids": [
+    "V11-097"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "5c9f3a15dae8321d7bc1e2fd97bb2c8ba7169418"
+     ],
+     "shas": [
+      "65293028285d67ccca268a6c2803ad8e686dff5b"
+     ]
+    }
+   ],
+   "id": "UPSTREAM-26771",
+   "manifest_ids": [
+    "V11-104"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "cc9f82c9c9f498eb378b5ae6b6eee77a60423abf"
+     ],
+     "shas": [
+      "f88127a86ef97c90b294e957018a5a34b86288f8"
+     ]
+    }
+   ],
+   "id": "UPSTREAM-27870",
+   "manifest_ids": [
+    "V11-049"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "8632a792971bc1783b3c40725ce870f9cd7afede"
+     ],
+     "shas": [
+      "44251d0b7e3c29da6b8c18a695c49e4b35a2a450"
+     ]
+    }
+   ],
+   "id": "UPSTREAM-28576",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "64710bafc13e5e7852a2aaff6f29506203c0a6ab",
+      "d214d9a15e66d85c04afb79e616737f68e6c7dac"
+     ],
+     "shas": [
+      "7d5fd6a2c072dacff7e433181bf24f14f1a5f77d",
+      "7277f7e6f8382475a483c4c93a7c65d629194e06"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_REG"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_REG"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_REG"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_F32"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_F16"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_F32"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_REG"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_REG"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_"
+    }
+   ],
+   "id": "V11-086",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "af78fe78558d2e2534130c9e14e9b9ba131cc9cf"
+     ],
+     "shas": [
+      "9d19e83e47d29b914828f46bf65b9fa9d56e8be1"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_REG"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_F32"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_VKQ_REG"
+    }
+   ],
+   "id": "V11-086-D512",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "fafefe9141b4c1d60e5270eebdf4bcb81a45c78d"
+     ],
+     "shas": [
+      "49550eda5a9c98f4f31b4cdaeeecadb355bbb8c3"
+     ]
+    },
+    {
+     "file": "test-backend-ops",
+     "kind": "test"
+    },
+    {
+     "file": "test-dca",
+     "kind": "test"
+    },
+    {
+     "file": "test-chat-input-spans",
+     "kind": "test"
+    },
+    {
+     "file": "tests/unit/test_chat_special_tokens.py",
+     "kind": "test"
+    },
+    {
+     "file": "test-llama-archs",
+     "kind": "test"
+    },
+    {
+     "file": "test-memory-can-shift",
+     "kind": "test"
+    },
+    {
+     "file": "test-memory-can-shift-qwen35",
+     "kind": "test"
+    },
+    {
+     "file": "tests/unit/test_cache_reuse_recurrent.py",
+     "kind": "test"
+    },
+    {
+     "file": "test-llama-bench-params-init",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_TEST_HYBRID_GGUF"
+    }
+   ],
+   "id": "V11-098",
+   "manifest_ids": [
+    "V11-043",
+    "V11-045",
+    "V11-046",
+    "V11-049",
+    "V11-053",
+    "V11-054",
+    "V11-055",
+    "V11-056",
+    "V11-057",
+    "V11-058",
+    "V11-059",
+    "V11-060",
+    "V11-070",
+    "V11-071",
+    "V11-072",
+    "V11-075",
+    "V11-076",
+    "V11-078",
+    "V11-079",
+    "V11-080",
+    "V11-081",
+    "V11-095",
+    "V11-097",
+    "V11-098",
+    "V11-102",
+    "V11-103"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "32016b71cea25ba39bb0f2b29e6eead31e29da2b"
+     ],
+     "shas": [
+      "dcc853b5559bef4e50acf251f4910f7f4e0ba538"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-llama-archs.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "V11-100",
+   "manifest_ids": [
+    "V11-100",
+    "V11-104",
+    "V11-105"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "603b7817a46ee145a278f40233b77d4c6a6e2516"
+     ],
+     "shas": [
+      "c061d0a126dbd13a81062030e48e95993e77c9e1"
+     ]
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_LLGUIDANCE_SOURCE_DIR"
+    }
+   ],
+   "id": "V11-122",
+   "manifest_ids": [
+    "V11-122"
+   ],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "9d09d1de7128d34ba9095ee73a429238aed0861f"
+     ],
+     "shas": [
+      "892b2f884bfc63c8e4600ff0131a4670f950f2e6"
+     ]
+    }
+   ],
+   "id": "ZOS-2",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "990fa3629da6b3d91b9948c888a8902c95ee8945",
+      "f9d435c9673772f77e8a844469aa6350baf024c9",
+      "ec187838ae9fa5efcb9a2f6a4c26d65e57fb6b40"
+     ],
+     "shas": [
+      "230fc02595ec3485f59a7347ef245b7aa0b03d36",
+      "67bcc066cfc7046b19a65693c8d3469e161b0745",
+      "b10f91e328be5951d5e8f2e5b485a668e47d6171"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_ROWS_GATHER"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ASSERT"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_ROWS_ANY_KERNEL"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_ROWS_VERIFY"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_KV_ROWS_NO_ATTACH"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FA_ROWS_NO_REUSE"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_KV_ROWS_ATTACH_MODE"
+    }
+   ],
+   "id": "UP-FAROWS-HIP",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "2700a8f261353a96d8394e472d7ee085017e5656",
+      "e3bfac02f9d74bb399950d6775720fed69a1597a",
+      "9b84c80424d20a2e51861d5125a6478036066ee6"
+     ],
+     "shas": [
+      "9a2cb02b059e3fa7c711ac6a22a86471b0b22c7c",
+      "b67125fbdaf08710cf52e213f691c13235a702f8",
+      "13d6fc1500dd5d09d91e91fc0a119346cd3e0150"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_FA_SPLIT_KV"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CPU_FA_SPLIT_KV_MAX_N"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_FA_SPLIT_KV"
+    }
+   ],
+   "id": "AKX-ALL-24",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "fa0004676a71baa1528bf1c912bc9ab80261ee1e"
+     ],
+     "shas": [
+      "066e817964ac3ec0891898b2d635224d7b1d4ae2"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-066e81796",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c8a8e5ae9d9d6ed7405acd725d427bc15076c66c",
+      "b631a2da0343de91765e052090169c0e75cc437d"
+     ],
+     "shas": [
+      "bd23bc055e636db247844e6917199c466d024de9",
+      "84310c7f865d70461ccbc7b81286f53ab9190863"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ASSERT"
+    }
+   ],
+   "id": "AKX-ALL-31",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "4e4d2c97a4c43dddbf34f6de60a5d204504e0522"
+     ],
+     "shas": [
+      "0fda493407ebb84a23dca3b3fd9cc2f23603e1fe"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "AKX-ALL-31.EDGE-HIP-NONFINITE",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "f9307e3494395786be4f98fb31b854a57c9125de",
+      "9c0846e27581fd3056f9518098d16e3c6ebfb2d3"
+     ],
+     "shas": [
+      "f30fedcd376733da5b53715068c7aec3ead8604a",
+      "98764e143e7bb15b16e76992e957ee968094d856"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-akx-numerics.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_OP_POOL_2D"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_OP_MUL_MAT"
+    }
+   ],
+   "id": "AKX-ALL-31.NATIVE",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "2f72724fb47e81cd897334f514b9d465cd7563df",
+      "c5d80af11ea8183975f5aa3501140ab6d00ead01",
+      "597ae79a55c8879af75b22867146c43604200977"
+     ],
+     "shas": [
+      "51af8558f574ef25da03cbe7399d23ab2fd289a5",
+      "68864e14337cceac6a959571313324b06b6439d2",
+      "b0570da4e59515ee840005b01b9536b943137eef"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-spec-dtree-paths.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-spec-dtree-verify.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_SPEC_EXACT"
+    }
+   ],
+   "id": "AK-DTREE-1",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "b56e234242a64703c477099ddd4dbbbdb1fadca1"
+     ],
+     "shas": [
+      "fb1cd406f2ef9ffe711c29307e1c3529ab2310af"
+     ]
+    },
+    {
+     "file": "tests/test-spec-dtree-verify.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_AK_H15"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_DISABLE_FUSION"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_WVSK"
+    }
+   ],
+   "id": "AK-DTREE",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "aeaf76fc3014a07bb1f874ebd51d35b83f305fac"
+     ],
+     "shas": [
+      "197e56fea61b414485393ddea3e2009d32d6a3a7"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-dtree-batch.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-197e56fea",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "05e640fe8d422a4f86cc85e7bcf1b6454bd0f6c9"
+     ],
+     "shas": [
+      "330d3d604febd974cbd246a7a7f9376a2539053d"
+     ]
+    },
+    {
+     "file": "tests/test-dtree-batch.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-330d3d604",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "3c850eb0f81a24e6e0c978497525e38f1624c382"
+     ],
+     "shas": [
+      "52ceee96ad02e0920dad875adc3b3e4c3d958055"
+     ]
+    },
+    {
+     "file": "tests/test-dtree-batch.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-52ceee96a",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "3711695bf98e3eadb53bda587cb4a04b5669909d"
+     ],
+     "shas": [
+      "98041cdfce1fd03541798d2baa4b3b25b1508341"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-dtree-batch.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-98041cdfc",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "3bf38bec07b4bc428773df127aabb8de453ecffa"
+     ],
+     "shas": [
+      "c6e2e1cab8cb56e09f364971b2e1709510d6eba6"
+     ]
+    },
+    {
+     "file": "tests/test-dtree-batch.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-c6e2e1cab",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "668d87fd7b75a032c835c5d6379be1dea6393446"
+     ],
+     "shas": [
+      "d44f2406591205abb6c5532739b70a802e9d33c7"
+     ]
+    },
+    {
+     "file": "tests/test-dtree-batch.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-d44f24065",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "0d5b21e952c5a0875e181c6832d5c35750e35f76"
+     ],
+     "shas": [
+      "d77bf6474847ad44d73672c040a796d80de9c8fd"
+     ]
+    },
+    {
+     "file": "tests/test-dtree-batch.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-d77bf6474",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "460a1253b3f7c13a6671b6f90615cdae6f7d3c0a"
+     ],
+     "shas": [
+      "e5d7697195723fa3ee6962676270e544448fa881"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-dtree-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-e5d769719",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "bcb90b4eac8b0a339e290fb2ffdcd81290c16c3a"
+     ],
+     "shas": [
+      "fc1fab6d7efb806f63e130a9b487bb4065913fa3"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GDN_ROWS"
+    }
+   ],
+   "id": "DTREE-0-GDN-ROWS",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "d402b4b5393e7ca70520bca5c0198688036def46"
+     ],
+     "shas": [
+      "7aa97c263857237f76fb43c0fee368d0fce54776"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF"
+    }
+   ],
+   "id": "DTREE-0-Q8MF",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "9082e4849b793f18c5d2839945408ec6345d05b4"
+     ],
+     "shas": [
+      "87cf9c016448c0d708f4376a0a60001cbabcacb6"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF_INPLACE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF_INPLACE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF_INPLACE"
+    }
+   ],
+   "id": "DTREE-0-Q8MF-REPACK-INPLACE",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "e63cb229c2fc4150a82e066d958c6f8e22b458e7"
+     ],
+     "shas": [
+      "b39e11f1b0b20ced29813d5d6731ec7e7f454937"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF"
+    }
+   ],
+   "id": "DTREE-0-Q8MF-V2",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "027186fb54a3cb585276198b168d6edafe8743ed"
+     ],
+     "shas": [
+      "339c40373890116293a103f3fca7106aa3dc9278"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ASSERT"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GDN_ROWS"
+    }
+   ],
+   "id": "GDN-ROWS",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "369efb988be75cfeda8f9e170fc8e18ebf10970e"
+     ],
+     "shas": [
+      "1d9df0812b038ba66dd50b3fd12d9b6617831318"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-multiseq-ubatch.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_AK_H15"
+    }
+   ],
+   "id": "COMMIT-1d9df0812",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "7070d1e4209fba78af5cab96d75bda340c218eff"
+     ],
+     "shas": [
+      "a8cb3a83941cc9199a67ab3f883e94a0613ef025"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF_INPLACE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF_SLC"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF"
+    }
+   ],
+   "id": "DTREE-0-Q8MF-V5",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "6dc8f1ddd939e93fd991c910ffb8a589c1715953",
+      "962254e192cdd909b93ac5dc0aac3988318ea361",
+      "848c64fed0c62dbcc12e56ac903f0b52fa54dc55"
+     ],
+     "shas": [
+      "d3afcd6e58cf312822ee31c0f5ad59fc283ef036",
+      "d7fabe9493eab337405ec9c7c742f6fb7e5537a3",
+      "519c40774a0dc32b8cb2d39777c66438bb423868"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8_MF_INPLACE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8IP_MMVQ_MAX"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8IP_MMQ"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_Q8IP_BLAS"
+    }
+   ],
+   "id": "DTREE-0-Q8MF-PACKED-CONSUMERS",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "9477bf7b03a559e50fe951778c3399f22860ae6e"
+     ],
+     "shas": [
+      "86936f47392986b6dbdee743e4e8f210dfc3898f"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-86936f473",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "06d16b753173a985d6b94568f7613b6e7a014eb3"
+     ],
+     "shas": [
+      "bf14c0d35d529677250ff977c9e046fd2c169e2a"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-bf14c0d35",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "ba495d6c5ec838644d2cc2512dd88c4784a372e9",
+      "f19760a2f13cb6c0a7fdb6b604d6c60592efcab3"
+     ],
+     "shas": [
+      "c602b49572c95955ac8c386bc4e66bae876922a2",
+      "a177c970b45611b1ac85c7e54cd887e17dccb984"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GDN_TREE_FUSE"
+    }
+   ],
+   "id": "DTREE-ROUND-OVERHEAD",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "b145a8589565a7a8e5d2ba501d31645f4509558d"
+     ],
+     "shas": [
+      "a54bda270004380e95d695a9c91484e47282c13c"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-dtree-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_DTREE_CONV_FUSED"
+    }
+   ],
+   "id": "DTREE-ROUND-OVERHEAD-2",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "0d62e077fdd4f88d05c97c7ce34d535cd442b661",
+      "dca51d1bc4e8e5d5218a84dbd376da05851d8722",
+      "b8897e0e3249265885351ea176b399c8cf5664f2",
+      "4cf297f5c94003888ff05b5616bb25bbbdd89f20",
+      "49b9600e9602b808983440bf69bef3e3cff7610e",
+      "9383947c11d7c1787663055b2d93534c72a1b131",
+      "ee298d7aa923c816fd012f91d96b7674ebee6d77",
+      "367af7a00029bc5c38bb7c54f06ad1ba3b174975",
+      "ee136c20cec8ebb892807bfcb6384bbe168b15d9"
+     ],
+     "shas": [
+      "9401697b4e0da73e29270b4c7a46a73aa12030d3",
+      "2108dccffe60fb03dafca1640cb9e2643a5de236",
+      "f023026177e50a531ddcef5a220d5db68cc95d1d",
+      "1c5eeb077af61c93ee23d6c0cb335c1c7b46f3ba",
+      "59f4275e7196c4296ccad8def69090f2a6cb3631",
+      "cb9765586ecf7c3e5ac02f23d9ca565c6b2e83e6",
+      "31b0ee03fcac4c0946d16010feb264bb5fcdb2b9",
+      "8fa3f90c7c3f318ca14114d7e606bfa39f4c0bff",
+      "ed5d949695a3daaa9f1b3c857014ab5e4e3e6924"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-device-accept.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_DEVICE_ACCEPT"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_DEVICE_ACCEPT"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_DEVICE_ARGMAX"
+    }
+   ],
+   "id": "AK-GAP-1-SAMPLE",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "7742735c8adb5d4a6093ca569bd5348475e97801",
+      "1c831a080024580d4421663c7652e1899d9279ae"
+     ],
+     "shas": [
+      "9d5ff35ff2ba0b4f31462f39616dd40962441458",
+      "2e263b23dc14b8a76b699a5d6abe425508795ab6"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_DEVICE_ARGMAX"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_DEVICE_ARGMAX"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_TOKEN_NULL"
+    }
+   ],
+   "id": "DTREE-A",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "78a08c672a0a7f44c694e270c6e857403814dbc5",
+      "8eafe0f41191266df5e686ed87e3cd12ad9a7e3a"
+     ],
+     "shas": [
+      "cb6f90e2d770f09d16ac8dbc9b5d9e934d463372",
+      "7201a7bde9b594ce0c0778a8df7ffa99fe9ae442"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-chat-toolparse-strict.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_TEST_TOOLPARSE_GGUF"
+    }
+   ],
+   "id": "PFXC-TOOLPARSE",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "8642a83dfb6f02498d6c55d1362ee04cc19ebf29",
+      "8f361ecae94a322369a81890a8f372f32a165727",
+      "84651449a2e39a9a9e1f220679b80b793a613408",
+      "bf6405ffd062520ad05a5a40b0eb183d23f4e0f3",
+      "6da91c99699b5a4b616da6bc22144f76eb2ace71",
+      "4aa444e7aee9bdb0a835881dd20460b64055392c"
+     ],
+     "shas": [
+      "856ff303d17de8ed89f0ff7fab4058616539f2eb",
+      "9e67602127086a9c586542fefdc0262fb028b4a2",
+      "692398a2b4576327b85be716664a2f0b2b6945f5",
+      "942bf56f2aebacb252cdc49c141b46e8167d7cd1",
+      "991425a07a2f2ebe50e630ddc1b43dca0ccd5b33",
+      "6ca173c827830e1128f35743a88cc7f12cb7de96"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_TOPK_ASM"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_TOPK_ASM"
+    }
+   ],
+   "id": "AK-ASM-H11-UNIQ-FIX",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "5c2c1fe5c34f779b0ab87026bf8392c044eb67ed",
+      "509f074a3e35576510df3bc103faf5100abcf283"
+     ],
+     "shas": [
+      "771ba5b915245bcc7a17cca3288c7e0c112f6209",
+      "2944feaff50257f2ecd0fc42b9981fd8b1868666"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_TOPK_FAST"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_TOPK_FAST"
+    }
+   ],
+   "id": "AK-GAP-1-IDSORT",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "94cad8cb57d19043b706990874d0dda0ab997f5d"
+     ],
+     "shas": [
+      "4bc50bd6518703341b32388ce87aaf97fd4aeeaa"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-mtp-svd-head.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_MTP_DRAFT_HEAD_SVD"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_MTP_DRAFT_HEAD_SVD"
+    },
+    {
+     "kind": "strings",
+     "needle": "LLAMA_MTP_DRAFT_HEAD_SVD_C"
+    }
+   ],
+   "id": "COMMIT-4bc50bd65",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "bdc231816028a68af252e84595087a1c1b8c5d00"
+     ],
+     "shas": [
+      "1b83c69671a3fc0193fdf5baf929e27240478e40"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-device-accept-multiseq.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_ASSERT"
+    }
+   ],
+   "id": "C17-FIX-LAZY",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "6e880c10eb8933e4ae3d66c77efddba9e005987e",
+      "b1038cf922370680449007401e81f2e2f573efff"
+     ],
+     "shas": [
+      "7b0314f3b7a7dad5c5bbb2b9eded6933ecd6865b",
+      "e0b5d2637858411bfb8b27609a2e7e199dc6f38c"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_EPILOGUE_Q8"
+    }
+   ],
+   "id": "C15-EPI-Q8",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "217528e80eac8578b8036e08b031f798fa36c73a"
+     ],
+     "shas": [
+      "dfcaa42ffd11edc145f868d9f78cbb7a81ad4cb4"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GV_PREFETCH_DEPTH"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GV_LDS_ALIAS"
+    }
+   ],
+   "id": "C15-GV-BW",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "2eb4d8fdcf239d49812a4dff5614aaf158af50c9"
+     ],
+     "shas": [
+      "bb3294c71b9d02fb8040a4d71dfec75f5522b4dc"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_ROUTER_WIDE"
+    }
+   ],
+   "id": "COMMIT-bb3294c71",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "411873831fd6bcdad61e92576726008846010189"
+     ],
+     "shas": [
+      "2e1e5191a65e72b2a0553653198cad854c3582d2"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GV_COALESCE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GV_PREFETCH_DEPTH"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_HIP_GV_LDS_ALIAS"
+    }
+   ],
+   "id": "C15-GV-COALESCE",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "c760fe47bba5d2ab505ed1aed837177d8b68b113"
+     ],
+     "shas": [
+      "bb25700426937666b28e578d85ee5fb43c51d2b2"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_TBO_OUTPUT_DIGEST"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_TBO_OUTPUT_DIGEST"
+    }
+   ],
+   "id": "COMMIT-bb2570042",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "b95818ebd159dab2f7a90a19b4af430c308dc608"
+     ],
+     "shas": [
+      "efff7cf6cf63de098a26c30267fd4f9b1914889b"
+     ]
+    },
+    {
+     "file": "tests/CMakeLists.txt",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    },
+    {
+     "file": "tests/test-gdn-colsplit.cpp",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_GDN_COLSPLIT"
+    }
+   ],
+   "id": "COMMIT-efff7cf6c",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "a635cf2e731d132e6d92e7d740c47052088628fd"
+     ],
+     "shas": [
+      "32b7983263ed94cf8e5e3edf6d69dc7576e16669"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "COMMIT-32b798326",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "a2f52d17e72306085fc0abab4e9dce7397b3e814"
+     ],
+     "shas": [
+      "1686eb029bc5f35f690f59573b51cd89eb650d5e"
+     ]
+    },
+    {
+     "file": "tests/test-mmq-tile-env.sh",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_MMQ_FORCE"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_FORCE_MMQ"
+    }
+   ],
+   "id": "COMMIT-1686eb029",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "2a49a771c5e3fd8838ae21f3cb7895400287383a"
+     ],
+     "shas": [
+      "66b0b7362f2d10c18def7c07452f1959807657f9"
+     ]
+    },
+    {
+     "file": "tests/test-mmq-tile-env.sh",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_MMQ_J"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_MMQ_J"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_MMQ_J"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_MMQ_FORCE"
+    }
+   ],
+   "id": "COMMIT-66b0b7362",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "063f00074dc01122bddb656f5559456a152feac1"
+     ],
+     "shas": [
+      "b3bcc3dd3db7bb7a98e3dee635aadc9cdb9ec943"
+     ]
+    },
+    {
+     "file": "tests/test-mmq-tile-env.sh",
+     "kind": "test"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_MMQ_STREAM_K"
+    },
+    {
+     "kind": "strings",
+     "needle": "GGML_CUDA_MMQ_STREAM_K"
+    }
+   ],
+   "id": "COMMIT-b3bcc3dd3",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "patch-equivalent",
+     "patch_ids": [
+      "7603bfa336aebaf104f3197254f0a523a6b7cbb2"
+     ],
+     "shas": [
+      "9d679fabc5afb81d0274f4ae321732780b45f730"
+     ]
+    },
+    {
+     "file": "tests/test-backend-ops.cpp",
+     "kind": "test"
+    }
+   ],
+   "id": "MMID-HELPER-N10",
+   "manifest_ids": [],
+   "source": "ledger"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`tests/test-repack-parallel` 150/150 bit-exact; G-ANC; V6R-4a requires full-pair decode A/B on the candidate"
+    }
+   ],
+   "id": "V11-001",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:21"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`strings bin/libllama-common.so"
+    }
+   ],
+   "id": "V11-002",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:22"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`strings bin/llama-server"
+    }
+   ],
+   "id": "V11-121",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:24"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`strings bin/libllama-common.so"
+    }
+   ],
+   "id": "V11-122",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:25"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "CPU store `/mnt/raid0/llm/kernels/builds/cpu-20261105-65da39eb1-c6fold2` (BUILD-OK binds `65da39eb1`); `strings libggml-cpu.so"
+    }
+   ],
+   "id": "V11-123",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:26"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `git merge-base --is-ancestor 62cb6a6af <candidate>`; stores `gpu-20261106-62cb6a6af-c7r`, `cpu-20261106-62cb6a6af-c7r` (BUILD-OK binds `62cb6a6af`, SHA256SUMS.c7r verify, PROVENANCE = CHAMPION); `test-hc-fuse-plan` target present"
+    }
+   ],
+   "id": "V11-124",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:27"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `git merge-base --is-ancestor eabe74ee4 <candidate>`; `strings lib/libggml-hip.so` lists `GGML_CUDA_GDN_CHUNKED` (4 in `gpu-20261109-d210f85c2-c9fold`); `test-backend-ops -o GATED_DELTA_NET` with the `GDN_CHUNKED_WITNESS` cases (route witness) on a GPU build"
+    }
+   ],
+   "id": "V11-125",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:28"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `73ad4ed95`; `strings lib/libggml-hip.so` lists `GGML_HIP_GV_MULTISEQ` (3 in c9fold) and the server log witness \"GGML_HIP_GV_MULTISEQ row-group variant ran\" on an np4 DFlash2 launch; `test-backend-ops -o FLASH_ATTN_EXT` multi-seq hd256 unified cases; target B: `GGML_HIP_FA_VEC_LONGCTX_PB` string present and a default launch does NOT print the \"long-context split ran\" witness"
+    }
+   ],
+   "id": "V11-126",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:29"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `ab3fc54dc`; `strings lib/libggml-hip.so` lists `GGML_CUDA_FA_GQA_VERIFY_MIN_NQ`; log witness \"GQA-packed verify attention ran\" on a q8_0-KV n_q=1 decode with no env set; llama-bench tg@d131072 on q8_0 KV >= 1.15x C7r (fold3 clause)"
+    }
+   ],
+   "id": "V11-127",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:30"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `6dd06d5fa`; `strings lib/libllama.so` contains `LLAMA_TOKEN_EMBD_ON_CPU` (1 in c9fold); split census: 1 split / 0 CPU nodes with no `-ot` flag (gate clause `one_split_zero_cpu`)"
+    }
+   ],
+   "id": "V11-128",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:31"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `e3185067c`; `test-backend-ops` fa_ck_hd256 set (q8_0 cases, code-object and q8_0 path witnesses); `strings lib/libggml-hip.so` lists `GGML_HIP_FA_CK_HD256_CO` (1 in c9fold) and the \"CK-tile hd256 fp16 path ran ... kv=q8_0\" log witness in a long-prefill run; build needs `GGML_HIP_CK_FMHA_HD256=ON` with the `.co` present"
+    }
+   ],
+   "id": "V11-129",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:32"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `09aaaab64`; `strings lib/libggml-hip.so` lists `GGML_HIP_H20_REUSE` (2 in c9fold); `test-backend-ops -o MUL_MAT` q8_0 prefill cases with the convert witness"
+    }
+   ],
+   "id": "V11-130",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:33"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `3a6fd54ae` and `c7435cc77`; `tests/test-recurrent-rollback-guards` and `test-recurrent-state-rollback` built and passing (`tests/CMakeLists.txt` lists both); `git cherry`"
+    }
+   ],
+   "id": "V11-131",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:34"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `dd5645e3c`; np4 DFlash2 serving smoke with no server abort on a refused rollback (`c9-np4-parity-20261109` 0/120 garbage, no HTTP 500 class from aborts)"
+    }
+   ],
+   "id": "V11-132",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:35"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `1bda248e3`; `c9-np4-parity`-style 40-request np4 DFlash2 `--kv-unified` run with 0 garbage (the behavioural gate; no `strings` symbol exists). Code-presence caveat: the commit leaves a stray comment inside the `ubatch = balloc.` expression (line 89 of `src/llama-memory-hybrid.cpp`); it compiles, but reads oddly"
+    }
+   ],
+   "id": "V11-133",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:36"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `422a07b77`; `tools/server/tests/unit/test_speculative.py` serial case; np4 DFlash2 `LLAMA_SPEC_EXACT=serial` 32-request run with 0 asserts"
+    }
+   ],
+   "id": "V11-134",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:37"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `d210f85c2`; `strings lib/libggml-hip.so` lists `GGML_HIP_GV_PREFETCH_LATE` (2 in `gpu-20261109-d210f85c2-c9fold`) and the \"prefetch-overlap path ran\" witness on every q8_0 decode bench with no env set (gate clause `prefetch_default_on_witness`; never on C8)"
+    }
+   ],
+   "id": "V11-135",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:38"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC `7bcf6218b`; `strings lib/libggml-hip.so` lists `GGML_HIP_GEMM_DOWN_TILE`; log witness \"GGML_HIP_GEMM_DOWN_TILE rocBLAS override installed\"; TENSILE_DB trace shows MT160x256x64 on a real pp2048 graph; champion presence gate: G-ANC `git merge-base --is-ancestor 7bcf6218b ak/champion/llama-cpp-ffc1bac82eec` and `strings gpu-20261109-7f1bd044b-c10fold/lib/libggml-hip.so"
+    }
+   ],
+   "id": "V11-136",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:39"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-AK via `c10-fold-cpu-gate-20261109` (identity + q38 tg64 cell against the candidate without the keep); champion presence gate: G-ANC `821fce89f` and `706028a57` ancestors of the champion ref"
+    }
+   ],
+   "id": "V11-137",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:40"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`tests/test-fused-decode-prev-logits` passes (run by the build row); champion presence gate: G-ANC `cc1f33d9a` ancestor of the champion ref"
+    }
+   ],
+   "id": "V11-138",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:41"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC; champion presence gate: G-ANC `7f1bd044b` ancestor of the champion ref (tip)"
+    }
+   ],
+   "id": "V11-139",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:42"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`git merge-base --is-ancestor 8b9bf3031 457d5fc52`; test-cpy-balance"
+    }
+   ],
+   "id": "V11-141",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:44"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`git merge-base --is-ancestor 457d5fc52 <candidate>`; test-backend-ops CPU/ROCm0 fail set subset of fold"
+    }
+   ],
+   "id": "V11-142",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:45"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`git merge-base --is-ancestor bda43aa17 <candidate>`; test-iqk-fa-sinks op-case fixture"
+    }
+   ],
+   "id": "V11-143",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:46"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`git merge-base --is-ancestor eee3da838 <candidate>`; stores `kernels/builds/{cpu,gpu}-20261118-eee3da838-c14`"
+    }
+   ],
+   "id": "V11-144",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:47"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "draft-mtp `n_probs>0` returns probs on every token (`ab_probe.py` sw9 check); `nm -D libllama-common.so` exports both `out_dists` overloads of `common_sampler_sample_and_accept_n`"
+    }
+   ],
+   "id": "V11-003",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:48"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "build with `GGML_RPC=ON` compiles"
+    }
+   ],
+   "id": "V11-004",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:49"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`tests/test-gather-rows-e4m3-e8m0` (bit-exact, 3 geometries); G-ANC"
+    }
+   ],
+   "id": "V11-005",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:50"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`strings bin/libllama.so"
+    }
+   ],
+   "id": "V11-006",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:51"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "as above; G-ANC"
+    }
+   ],
+   "id": "V11-007",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:52"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "as above; G-ANC"
+    }
+   ],
+   "id": "V11-008",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:53"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`strings bin/libllama-common.so"
+    }
+   ],
+   "id": "V11-009",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:54"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "release build must contain NO `GGML_CPU_PROF` symbols (`strings` = 0 hits in cpu-20261020-dd3d9721c); profiling build is a separate `build-prof/`"
+    }
+   ],
+   "id": "V11-010",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:55"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "GPU `test-backend-ops -o FLASH_ATTN_EXT` (2949 at fold) + KVU-19a 64-case exactness harness; P3 v2 L3 bench cell"
+    }
+   ],
+   "id": "V11-011",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:56"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "CPU `test-backend-ops -o FLASH_ATTN_EXT` + 86/141-case harness hash equality"
+    }
+   ],
+   "id": "V11-012",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:57"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "GPU FA exactness E1-E8; `ab_probe` serving cell"
+    }
+   ],
+   "id": "V11-013",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:58"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "GPU 27B greedy Y == X byte-identical 3/3; VRAM-growth probe during a graph-capture run"
+    }
+   ],
+   "id": "V11-014",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:59"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "KVU-19 FA harness hash equality (86 + 141 cases) + stack owner's 84-case overflow harness"
+    }
+   ],
+   "id": "V11-015",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:60"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`strings bin/libllama-common.so"
+    }
+   ],
+   "id": "V11-016",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:61"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "GPU FA 2953/2953 incl. `mask_ne0` 4/4 (test commit `f345e177c`); CPU FA 5182/5182"
+    }
+   ],
+   "id": "V11-017",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:62"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`test-backend-ops -o FLASH_ATTN_EXT` includes the `mask_ne0` cases"
+    }
+   ],
+   "id": "V11-018",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:63"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`tests/test-qwen4exp-fused-rope` 3/3; `strings bin/libllama.so"
+    }
+   ],
+   "id": "V11-019",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:64"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC"
+    }
+   ],
+   "id": "V11-020",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:65"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`tools/server/tests/unit/test_slot_save.py` 15/15; KPF-19.1 rebase check on any pulled tree"
+    }
+   ],
+   "id": "V11-021",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:66"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`test_slot_save.py` 15/15; greedy identity candidate == champion, MTP on, 3 prompts x 256 tokens"
+    }
+   ],
+   "id": "V11-022",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:67"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`test_slot_save.py` imports clean"
+    }
+   ],
+   "id": "V11-023",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:68"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`grep -E '^(GGML_IQK"
+    }
+   ],
+   "id": "V11-024",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:69"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`strings bin/libggml-cpu.so"
+    }
+   ],
+   "id": "V11-025",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:70"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:ds41-00d118d44-cpu-t48-dspark-b2)"
+    }
+   ],
+   "id": "V11-026",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:71"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:ds41-00d118d44-cpu-t48-dspark-b2)"
+    }
+   ],
+   "id": "V11-027",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:72"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:ds41-00d118d44-cpu-t48-dspark-b2)"
+    }
+   ],
+   "id": "V11-028",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:73"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:ds41-00d118d44-cpu-t48-dspark-b2)"
+    }
+   ],
+   "id": "V11-029",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:74"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:ds41-00d118d44-cpu-t48-dspark-b2)"
+    }
+   ],
+   "id": "V11-030",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:75"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:ds41-00d118d44-cpu-t48-dspark-b2)"
+    }
+   ],
+   "id": "V11-031",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:76"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:ds41-00d118d44-cpu-t48-dspark-b2)"
+    }
+   ],
+   "id": "V11-032",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:77"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:q38fn-b0ba1d427-cpu-t48-mtp-d4)"
+    }
+   ],
+   "id": "V11-033",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:78"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:ds41-00d118d44-cpu-t48-dspark-b2)"
+    }
+   ],
+   "id": "V11-034",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:79"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:ds41-00d118d44-cpu-t48-dspark-b2)"
+    }
+   ],
+   "id": "V11-035",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:80"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:q38fn-802bf9ac6-cpu-t48-mtp-d4)"
+    }
+   ],
+   "id": "V11-036",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:81"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:ds41-00d118d44-cpu-t48-dspark-b2)"
+    }
+   ],
+   "id": "V11-037",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:82"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:ds41-00d118d44-cpu-t48-dspark-b2)"
+    }
+   ],
+   "id": "V11-038",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:83"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:q38fn-802bf9ac6-cpu-t48-mtp-d4)"
+    }
+   ],
+   "id": "V11-039",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:84"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:q38fn-802bf9ac6-cpu-t48-mtp-d4)"
+    }
+   ],
+   "id": "V11-040",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:85"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:q38fn-802bf9ac6-cpu-t48-mtp-d4)"
+    }
+   ],
+   "id": "V11-041",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:86"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:q38fn-802bf9ac6-cpu-t48-mtp-d4)"
+    }
+   ],
+   "id": "V11-042",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:87"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`strings bin/libllama.so"
+    }
+   ],
+   "id": "V11-043",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:88"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`-o FLASH_ATTN_EXT` includes the 25 shared-trunk cases"
+    }
+   ],
+   "id": "V11-045",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:90"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`strings bin/test-backend-ops"
+    }
+   ],
+   "id": "V11-046",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:91"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "GPU 27B DFlash probe on ROCWMMA OFF route 10/10; `fattn-mma-f16.cuh` diff present"
+    }
+   ],
+   "id": "V11-049",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:94"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:q38fn-b0ba1d427-cpu-t48-mtp-d4)"
+    }
+   ],
+   "id": "V11-053",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:98"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:q38fn-802bf9ac6-cpu-t48-mtp-d4)"
+    }
+   ],
+   "id": "V11-054",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:99"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "G-ANC + G-AK (serving:q38fn-802bf9ac6-cpu-t48-mtp-d4)"
+    }
+   ],
+   "id": "V11-055",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:100"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "AK served-shape cases present in `test-backend-ops` list (`-o MUL_MAT_ID --list`)"
+    }
+   ],
+   "id": "V11-056",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:101"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`test-dca` on CPU and ROCm0; YaRN native-window no-regression hard gate (memory 2026-10-05)"
+    }
+   ],
+   "id": "V11-057",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:102"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "MTP exact-trajectory gates on an MTP role + cross-workload keep gate on current CPU roles (DS41-K1); G-ANC"
+    }
+   ],
+   "id": "V11-058",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:103"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "per-quant bit-exact decode vs EXL3-1 fixtures; `strings libggml-cpu.so"
+    }
+   ],
+   "id": "V11-059",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:104"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "capture hook present only when opt-in env set; default run unchanged"
+    }
+   ],
+   "id": "V11-060",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:105"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "Port ancestry; `--kv-streaming-sink` / `--kv-streaming-window` flags and context-shift regression"
+    }
+   ],
+   "id": "V11-062",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:107"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-070",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:115"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-071",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:116"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-072",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:117"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-073",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:118"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-074",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:119"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-075",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:120"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-076",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:121"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-077",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:122"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-078",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:123"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-079",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:124"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-080",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:125"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-081",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:126"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-082",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:127"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "n/a; if re-gated: bundle gate on the new base + C112 shape gate (`2c4a1f2d2`, rows <= 8)"
+    }
+   ],
+   "id": "V11-083",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:128"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`test-chat-input-spans`; `tools/server/tests/unit/test_chat_special_tokens.py` 7 passed; CT-12.4 renders byte-identical and clean prompts token-identical vs the champion; 27B greedy identity C2 == champion (GPU, queued); `strings` shows `--chat-input-parse-special` in `libllama-common.so`"
+    }
+   ],
+   "id": "V11-095",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:140"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`git merge-base --is-ancestor d14ce3dab <candidate>`; each launcher passes `--spec-draft-p-min` explicitly or records that the default 0.0 is intended (CH-18 2026-10-20 note: frontdoor and :8083 pass n-max but no p-min; registry has no draft_p_min)"
+    }
+   ],
+   "id": "V11-096",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:141"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "Qwen3.6-35B-A3B MTP greedy byte-identical 3/3 vs champion; CPU and ROCm0 `test-backend-ops` MUL_MAT_ID/MUL_MAT/ADD/ARGSORT/TOP_K/GET_ROWS/SSM_SCAN/SSM_CONV pass; `test-llama-archs` over 139 archs no regression; MI210 coherent 8/8 (reasoning on and off), 21.5 GiB VRAM, KFD residency proven"
+    }
+   ],
+   "id": "V11-097",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:142"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`test-memory-can-shift` (ctest `test-memory-can-shift-qwen35` and `-nemotron-h`; recurrent or hybrid model must report can_shift=0, dense must report 1); `tools/server/tests/unit/test_cache_reuse_recurrent.py::test_hybrid_disables_cache_reuse` (log line `cache_reuse is not supported by this context, it will be disabled`, `n_cache_reuse` 0); G-ANC"
+    }
+   ],
+   "id": "V11-098",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:143"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`test-yarn-kshift` (ctest, = `test-llama-archs --yarn-kshift -s 1234`). On the champion tip it FAILS: YaRN x4 round-trip K NMSE 8.79e-2 (= (m^2-1)^2, m = 1.1386), shifted-vs-fresh K NMSE 1.92e-2; non-YaRN attn_factor 1.1 round trip 4.41e-2; non-YaRN m = 1 round trips at 3e-15. With the fix all six configs (llama and qwen3 tiny, YaRN, plain, plain+attn_factor) pass at <= 2e-9. Non-YaRN K and logits digests bit-identical before and after on llama and qwen3. CPU `test-backend-ops -o ROPE` 448/448, `test-rope` pass. HIP not run (no GPU slot; no rope kernel touched); G-ANC"
+    }
+   ],
+   "id": "V11-100",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:145"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "ctest `test-llama-bench-params-init` (hardware-free structural contract: value-init, defaults copy of all 17 non-vector fields before the argv loop, no wholesale pre-seed, fill-if-empty for every defaulted vector; FAILS on `49550eda5` with 8 violations, passes on `141e4bcf5`); `-fsyntax-only` clean with -Wall -Wextra; runtime: 50 tiny-model runs without the flag never emit a hardened row; G-ANC"
+    }
+   ],
+   "id": "V11-103",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:148"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "3c4ca599, GPU-LEAK-1c-V `/mnt/raid0/llm/tmp/gpu-leak-1c-v/RESULT.json` 2026-10-23"
+    }
+   ],
+   "id": "V11-104",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:149"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`strings libllama.so` has `GGML_FUSED_DECODE_ON`; `test-qwen4exp-fused-rope` prints 5 `knob ... OK` lines; Q38FN greedy identity default env == champion OFF=1"
+    }
+   ],
+   "id": "V11-106",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:151"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "`strings libllama.so` has `fused decode disabled for this model`; `ch24_src_audit.py` PASS and no ungated `/tmp/qwen4exp-builds` literal"
+    }
+   ],
+   "id": "V11-107",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:152"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "Recorded fix commit ancestry plus rollback-bound tests and CH-37/DF2-12.1 zero-divergence gate"
+    }
+   ],
+   "id": "V11-112",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:158"
+  },
+  {
+   "gates": [
+    {
+     "kind": "manifest",
+     "text": "Local or upstream equivalent present; verify `HIP_VERSION >= 60300000` guard and ROCm 6.2 HIP compile"
+    }
+   ],
+   "id": "V11-115",
+   "source": "docs/reference/kernel-manifests/llama-v11-manifest.md:161"
+  }
+ ],
+ "schema": "epyc.autokernel.presence_gate.v1"
+}

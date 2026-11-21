@@ -1,0 +1,1054 @@
+{
+ "base": "ak/champion/llama-cpp-ffc1bac82eec",
+ "candidate": "C18",
+ "current_fold": "llama.cpp-experimental-c17-20261121",
+ "entries": [
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "230fc02595ec3485f59a7347ef245b7aa0b03d36",
+    "67bcc066cfc7046b19a65693c8d3469e161b0745",
+    "b10f91e328be5951d5e8f2e5b485a668e47d6171"
+   ],
+   "commit_message": "ggml-cuda/llama: UP-FAROWS-HIP C15: GGML_CUDA_FA_ROWS_GATHER defaults ON (=0 disables)\n\nFold of UP-FAROWS-HIP: 3 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda/llama: UP-FAROWS-HIP C15: GGML_CUDA_FA_ROWS_GATHER defaults ON (=0 disables)",
+   "knobs": [
+    "GGML_CUDA_FA_ROWS_GATHER",
+    "GGML_ASSERT",
+    "GGML_CUDA_FA_ROWS_ANY_KERNEL",
+    "GGML_CUDA_FA_ROWS_VERIFY",
+    "LLAMA_KV_ROWS_NO_ATTACH",
+    "GGML_CUDA_FA_ROWS_NO_REUSE",
+    "LLAMA_KV_ROWS_ATTACH_MODE"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "UP-FAROWS-HIP",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "9a2cb02b059e3fa7c711ac6a22a86471b0b22c7c",
+    "b67125fbdaf08710cf52e213f691c13235a702f8",
+    "13d6fc1500dd5d09d91e91fc0a119346cd3e0150"
+   ],
+   "commit_message": "ggml-cpu: GGML_CPU_FA_SPLIT_KV=1 also routes N=1 through the split path (AKX-ALL-24)\n\nFold of AKX-ALL-24: 3 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cpu: GGML_CPU_FA_SPLIT_KV=1 also routes N=1 through the split path (AKX-ALL-24)",
+   "knobs": [
+    "GGML_CPU_FA_SPLIT_KV",
+    "GGML_CPU_FA_SPLIT_KV_MAX_N",
+    "GGML_FA_SPLIT_KV"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "AKX-ALL-24",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "066e817964ac3ec0891898b2d635224d7b1d4ae2"
+   ],
+   "commit_message": "C15 LIGHTNING_INDEXER: fix -inf mask NMSE flake in test, explicit bf16 K load in HIP vec kernel\n\nFold of COMMIT-066e81796: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "C15 LIGHTNING_INDEXER: fix -inf mask NMSE flake in test, explicit bf16 K load in HIP vec kernel",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-066e81796",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "bd23bc055e636db247844e6917199c466d024de9",
+    "84310c7f865d70461ccbc7b81286f53ab9190863"
+   ],
+   "commit_message": "ggml-cuda: MMQ DS4 q8_1 carries the exact int8 block sum as int16 bits, computed once at quantize (AKX-ALL-31 v2)\n\nFold of AKX-ALL-31: 2 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [
+    {
+     "row": "c13-q81-sum-overflow-gpu-20261117-r2",
+     "verdict": "cited"
+    },
+    {
+     "row": "c13-q81-sum-overflow-gpu-20261118-r4",
+     "verdict": "cited"
+    }
+   ],
+   "hypothesis": "ggml-cuda: MMQ DS4 q8_1 carries the exact int8 block sum as int16 bits, computed once at quantize (AKX-ALL-31 v2)",
+   "knobs": [
+    "GGML_ASSERT"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "AKX-ALL-31",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "0fda493407ebb84a23dca3b3fd9cc2f23603e1fe"
+   ],
+   "commit_message": "ggml-cuda: q8_1 offset/min corrections use exact int8 block sums, not the f16 ds.y sum (AKX-ALL-31.EDGE-HIP-NONFINITE)\n\nFold of AKX-ALL-31.EDGE-HIP-NONFINITE: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda: q8_1 offset/min corrections use exact int8 block sums, not the f16 ds.y sum (AKX-ALL-31.EDGE-HIP-NONFINITE)",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "AKX-ALL-31.EDGE-HIP-NONFINITE",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "f30fedcd376733da5b53715068c7aec3ead8604a",
+    "98764e143e7bb15b16e76992e957ee968094d856"
+   ],
+   "commit_message": "tests: test-akx-numerics, native producer of AK_NUMERICS_V1 receipts (AKX-ALL-31.NATIVE)\n\nFold of AKX-ALL-31.NATIVE: 2 source commit(s) squashed (V6R-4b).\nTests: tests/CMakeLists.txt, tests/test-akx-numerics.cpp",
+   "gate_results": [],
+   "hypothesis": "tests: test-akx-numerics, native producer of AK_NUMERICS_V1 receipts (AKX-ALL-31.NATIVE)",
+   "knobs": [
+    "GGML_OP_POOL_2D",
+    "GGML_OP_MUL_MAT"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "AKX-ALL-31.NATIVE",
+   "tests": [
+    "tests/CMakeLists.txt",
+    "tests/test-akx-numerics.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "51af8558f574ef25da03cbe7399d23ab2fd289a5",
+    "68864e14337cceac6a959571313324b06b6439d2",
+    "b0570da4e59515ee840005b01b9536b943137eef"
+   ],
+   "commit_message": "common: AK-DTREE-1 path decomposition for DFlash2 tree verify (+ unit test)\n\nFold of AK-DTREE-1: 3 source commit(s) squashed (V6R-4b).\nTests: tests/CMakeLists.txt, tests/test-spec-dtree-paths.cpp, tests/test-spec-dtree-verify.cpp",
+   "gate_results": [],
+   "hypothesis": "common: AK-DTREE-1 path decomposition for DFlash2 tree verify (+ unit test)",
+   "knobs": [
+    "LLAMA_SPEC_EXACT"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "AK-DTREE-1",
+   "tests": [
+    "tests/CMakeLists.txt",
+    "tests/test-spec-dtree-paths.cpp",
+    "tests/test-spec-dtree-verify.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "fb1cd406f2ef9ffe711c29307e1c3529ab2310af"
+   ],
+   "commit_message": "ggml-cuda: H15 conv fusion must not write outputs over its own inputs (AK-DTREE T9 oracle failure)\n\nFold of AK-DTREE: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-spec-dtree-verify.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda: H15 conv fusion must not write outputs over its own inputs (AK-DTREE T9 oracle failure)",
+   "knobs": [
+    "GGML_CUDA_AK_H15",
+    "GGML_CUDA_DISABLE_FUSION",
+    "GGML_HIP_Q8_WVSK"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "AK-DTREE",
+   "tests": [
+    "tests/test-spec-dtree-verify.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "197e56fea61b414485393ddea3e2009d32d6a3a7"
+   ],
+   "commit_message": "tests: chunked-GDN K=8/15/16/17 cases; test-dtree-batch DTREE_NRS knob + line-buffered stdout\n\nFold of COMMIT-197e56fea: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp, tests/test-dtree-batch.cpp",
+   "gate_results": [],
+   "hypothesis": "tests: chunked-GDN K=8/15/16/17 cases; test-dtree-batch DTREE_NRS knob + line-buffered stdout",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-197e56fea",
+   "tests": [
+    "tests/test-backend-ops.cpp",
+    "tests/test-dtree-batch.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "330d3d604febd974cbd246a7a7f9376a2539053d"
+   ],
+   "commit_message": "tests: test-dtree-batch width-matched linear-chain control (DTREE_RATEW / DTREE_CMIS)\n\nFold of COMMIT-330d3d604: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-dtree-batch.cpp",
+   "gate_results": [],
+   "hypothesis": "tests: test-dtree-batch width-matched linear-chain control (DTREE_RATEW / DTREE_CMIS)",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-330d3d604",
+   "tests": [
+    "tests/test-dtree-batch.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "52ceee96ad02e0920dad875adc3b3e4c3d958055"
+   ],
+   "commit_message": "tests: test-dtree-batch buffer 4096, DTREE_PROMPT knob, oracle margin per disagreement\n\nFold of COMMIT-52ceee96a: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-dtree-batch.cpp",
+   "gate_results": [],
+   "hypothesis": "tests: test-dtree-batch buffer 4096, DTREE_PROMPT knob, oracle margin per disagreement",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-52ceee96a",
+   "tests": [
+    "tests/test-dtree-batch.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "98041cdfce1fd03541798d2baa4b3b25b1508341"
+   ],
+   "commit_message": "llama: single tree batch verification (llama_batch.parent + llama_memory_tree_accept)\n\nFold of COMMIT-98041cdfc: 1 source commit(s) squashed (V6R-4b).\nTests: tests/CMakeLists.txt, tests/test-dtree-batch.cpp",
+   "gate_results": [],
+   "hypothesis": "llama: single tree batch verification (llama_batch.parent + llama_memory_tree_accept)",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-98041cdfc",
+   "tests": [
+    "tests/CMakeLists.txt",
+    "tests/test-dtree-batch.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "c6e2e1cab8cb56e09f364971b2e1709510d6eba6"
+   ],
+   "commit_message": "server/spec: --draft-tree-mode batch on llama_batch.parent + llama_memory_tree_accept\n\nFold of COMMIT-c6e2e1cab: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-dtree-batch.cpp",
+   "gate_results": [],
+   "hypothesis": "server/spec: --draft-tree-mode batch on llama_batch.parent + llama_memory_tree_accept",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-c6e2e1cab",
+   "tests": [
+    "tests/test-dtree-batch.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "d44f2406591205abb6c5532739b70a802e9d33c7"
+   ],
+   "commit_message": "tests: test-dtree-batch width control continues from the committed root\n\nFold of COMMIT-d44f24065: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-dtree-batch.cpp",
+   "gate_results": [],
+   "hypothesis": "tests: test-dtree-batch width control continues from the committed root",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-d44f24065",
+   "tests": [
+    "tests/test-dtree-batch.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "d77bf6474847ad44d73672c040a796d80de9c8fd"
+   ],
+   "commit_message": "tests: test-dtree-batch width control in the scratch context (no lin rollback)\n\nFold of COMMIT-d77bf6474: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-dtree-batch.cpp",
+   "gate_results": [],
+   "hypothesis": "tests: test-dtree-batch width control in the scratch context (no lin rollback)",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-d77bf6474",
+   "tests": [
+    "tests/test-dtree-batch.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "e5d7697195723fa3ee6962676270e544448fa881"
+   ],
+   "commit_message": "ggml: tree-verification ops ssm_conv_tree + gated_delta_net_tree (CPU reference)\n\nFold of COMMIT-e5d769719: 1 source commit(s) squashed (V6R-4b).\nTests: tests/CMakeLists.txt, tests/test-backend-ops.cpp, tests/test-dtree-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml: tree-verification ops ssm_conv_tree + gated_delta_net_tree (CPU reference)",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-e5d769719",
+   "tests": [
+    "tests/CMakeLists.txt",
+    "tests/test-backend-ops.cpp",
+    "tests/test-dtree-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "fc1fab6d7efb806f63e130a9b487bb4065913fa3"
+   ],
+   "commit_message": "ggml-hip: DTREE-0-GDN-ROWS few-row gated-delta-net verify kernel\n\nFold of DTREE-0-GDN-ROWS: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-hip: DTREE-0-GDN-ROWS few-row gated-delta-net verify kernel",
+   "knobs": [
+    "GGML_HIP_GDN_ROWS"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "DTREE-0-GDN-ROWS",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "7aa97c263857237f76fb43c0fee368d0fce54776"
+   ],
+   "commit_message": "ggml-cuda: DTREE-0-Q8MF gfx90a MFMA i8 small-M Q8_0 MUL_MAT (GGML_HIP_Q8_MF, opt-in)\n\nFold of DTREE-0-Q8MF: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda: DTREE-0-Q8MF gfx90a MFMA i8 small-M Q8_0 MUL_MAT (GGML_HIP_Q8_MF, opt-in)",
+   "knobs": [
+    "GGML_HIP_Q8_MF",
+    "GGML_HIP_Q8_MF"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "DTREE-0-Q8MF",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "87cf9c016448c0d708f4376a0a60001cbabcacb6"
+   ],
+   "commit_message": "ggml-cuda: DTREE-0-Q8MF-REPACK-INPLACE in-place load-time stage-contiguous Q8_0 repack for V3 (GGML_HIP_Q8_MF_INPLACE)\n\nFold of DTREE-0-Q8MF-REPACK-INPLACE: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda: DTREE-0-Q8MF-REPACK-INPLACE in-place load-time stage-contiguous Q8_0 repack for V3 (GGML_HIP_Q8_MF_INPLACE)",
+   "knobs": [
+    "GGML_HIP_Q8_MF_INPLACE",
+    "GGML_HIP_Q8_MF_INPLACE",
+    "GGML_HIP_Q8_MF",
+    "GGML_HIP_Q8_MF_INPLACE"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "DTREE-0-Q8MF-REPACK-INPLACE",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "b39e11f1b0b20ced29813d5d6731ec7e7f454937"
+   ],
+   "commit_message": "ggml-cuda: DTREE-0-Q8MF-V2 stream-K small-M Q8_0 MUL_MAT, int8 (MF=1) + f16 (MF=2) MFMA variants\n\nFold of DTREE-0-Q8MF-V2: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda: DTREE-0-Q8MF-V2 stream-K small-M Q8_0 MUL_MAT, int8 (MF=1) + f16 (MF=2) MFMA variants",
+   "knobs": [
+    "GGML_HIP_Q8_MF",
+    "GGML_HIP_Q8_MF",
+    "GGML_HIP_Q8_MF"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "DTREE-0-Q8MF-V2",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "339c40373890116293a103f3fca7106aa3dc9278"
+   ],
+   "commit_message": "tests: GDN-ROWS tree cases start at W=2 (a 1-column tree trips the K>1 tree-op assert)\n\nFold of GDN-ROWS: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "tests: GDN-ROWS tree cases start at W=2 (a 1-column tree trips the K>1 tree-op assert)",
+   "knobs": [
+    "GGML_ASSERT",
+    "GGML_HIP_GDN_ROWS"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "GDN-ROWS",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "1d9df0812b038ba66dd50b3fd12d9b6617831318"
+   ],
+   "commit_message": "ggml-cuda: H15 conv fusion must not write outputs over its own inputs (+ multi-seq ubatch test)\n\nFold of COMMIT-1d9df0812: 1 source commit(s) squashed (V6R-4b).\nTests: tests/CMakeLists.txt, tests/test-multiseq-ubatch.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda: H15 conv fusion must not write outputs over its own inputs (+ multi-seq ubatch test)",
+   "knobs": [
+    "GGML_CUDA_AK_H15"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-1d9df0812",
+   "tests": [
+    "tests/CMakeLists.txt",
+    "tests/test-multiseq-ubatch.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "a8cb3a83941cc9199a67ab3f883e94a0613ef025"
+   ],
+   "commit_message": "ggml-cuda: DTREE-0-Q8MF-V5 4-WG/CU half-tile packed small-M Q8_0 kernel (GGML_HIP_Q8_MF=6)\n\nFold of DTREE-0-Q8MF-V5: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda: DTREE-0-Q8MF-V5 4-WG/CU half-tile packed small-M Q8_0 kernel (GGML_HIP_Q8_MF=6)",
+   "knobs": [
+    "GGML_HIP_Q8_MF",
+    "GGML_HIP_Q8_MF_INPLACE",
+    "GGML_HIP_Q8_MF_SLC",
+    "GGML_HIP_Q8_MF"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "DTREE-0-Q8MF-V5",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "d3afcd6e58cf312822ee31c0f5ad59fc283ef036",
+    "d7fabe9493eab337405ec9c7c742f6fb7e5537a3",
+    "519c40774a0dc32b8cb2d39777c66438bb423868"
+   ],
+   "commit_message": "ggml-cuda: DTREE-0-Q8MF-PACKED-CONSUMERS v2: packed q8_0->f16 prefill convert + prefetching packed MMVQ\n\nFold of DTREE-0-Q8MF-PACKED-CONSUMERS: 3 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda: DTREE-0-Q8MF-PACKED-CONSUMERS v2: packed q8_0->f16 prefill convert + prefetching packed MMVQ",
+   "knobs": [
+    "GGML_HIP_Q8_MF_INPLACE",
+    "GGML_HIP_Q8IP_MMVQ_MAX",
+    "GGML_HIP_Q8IP_MMQ",
+    "GGML_HIP_Q8IP_BLAS"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "DTREE-0-Q8MF-PACKED-CONSUMERS",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "86936f47392986b6dbdee743e4e8f210dfc3898f"
+   ],
+   "commit_message": "tests: visit the cpy branch first in test_gdn_tree_cache so the HIP fusion matches\n\nFold of COMMIT-86936f473: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "tests: visit the cpy branch first in test_gdn_tree_cache so the HIP fusion matches",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-86936f473",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "bf14c0d35d529677250ff977c9e046fd2c169e2a"
+   ],
+   "commit_message": "tests: read the strided cache view back through ggml_cont in test_gdn_tree_cache\n\nFold of COMMIT-bf14c0d35: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "tests: read the strided cache view back through ggml_cont in test_gdn_tree_cache",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-bf14c0d35",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "c602b49572c95955ac8c386bc4e66bae876922a2",
+    "a177c970b45611b1ac85c7e54cd887e17dccb984"
+   ],
+   "commit_message": "dtree: scatter the tree conv states with one strided cpy (DTREE-ROUND-OVERHEAD)\n\nFold of DTREE-ROUND-OVERHEAD: 2 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "dtree: scatter the tree conv states with one strided cpy (DTREE-ROUND-OVERHEAD)",
+   "knobs": [
+    "GGML_HIP_GDN_TREE_FUSE"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "DTREE-ROUND-OVERHEAD",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "a54bda270004380e95d695a9c91484e47282c13c"
+   ],
+   "commit_message": "dtree: fused tree conv + GDN tree register save slots (DTREE-ROUND-OVERHEAD-2)\n\nFold of DTREE-ROUND-OVERHEAD-2: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp, tests/test-dtree-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "dtree: fused tree conv + GDN tree register save slots (DTREE-ROUND-OVERHEAD-2)",
+   "knobs": [
+    "LLAMA_DTREE_CONV_FUSED"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "DTREE-ROUND-OVERHEAD-2",
+   "tests": [
+    "tests/test-backend-ops.cpp",
+    "tests/test-dtree-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "9401697b4e0da73e29270b4c7a46a73aa12030d3",
+    "2108dccffe60fb03dafca1640cb9e2643a5de236",
+    "f023026177e50a531ddcef5a220d5db68cc95d1d",
+    "1c5eeb077af61c93ee23d6c0cb335c1c7b46f3ba",
+    "59f4275e7196c4296ccad8def69090f2a6cb3631",
+    "cb9765586ecf7c3e5ac02f23d9ca565c6b2e83e6",
+    "31b0ee03fcac4c0946d16010feb264bb5fcdb2b9",
+    "8fa3f90c7c3f318ca14114d7e606bfa39f4c0bff",
+    "ed5d949695a3daaa9f1b3c857014ab5e4e3e6924"
+   ],
+   "commit_message": "llama: LLAMA_DEVICE_ACCEPT=1 defers the logits download behind device argmax (AK-GAP-1-SAMPLE)\n\nFold of AK-GAP-1-SAMPLE: 9 source commit(s) squashed (V6R-4b).\nTests: tests/CMakeLists.txt, tests/test-device-accept.cpp",
+   "gate_results": [
+    {
+     "row": "ak-gap-1-sample-gpu-20261121-r4",
+     "verdict": "cited"
+    }
+   ],
+   "hypothesis": "llama: LLAMA_DEVICE_ACCEPT=1 defers the logits download behind device argmax (AK-GAP-1-SAMPLE)",
+   "knobs": [
+    "LLAMA_DEVICE_ACCEPT",
+    "LLAMA_DEVICE_ACCEPT",
+    "LLAMA_DEVICE_ARGMAX"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "AK-GAP-1-SAMPLE",
+   "tests": [
+    "tests/CMakeLists.txt",
+    "tests/test-device-accept.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "9d5ff35ff2ba0b4f31462f39616dd40962441458",
+    "2e263b23dc14b8a76b699a5d6abe425508795ab6"
+   ],
+   "commit_message": "llama: device argmax per output row for greedy verify (DTREE-A, LLAMA_DEVICE_ARGMAX=1)\n\nFold of DTREE-A: 2 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "llama: device argmax per output row for greedy verify (DTREE-A, LLAMA_DEVICE_ARGMAX=1)",
+   "knobs": [
+    "LLAMA_DEVICE_ARGMAX",
+    "LLAMA_DEVICE_ARGMAX",
+    "LLAMA_TOKEN_NULL"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "DTREE-A",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "cb6f90e2d770f09d16ac8dbc9b5d9e934d463372",
+    "7201a7bde9b594ce0c0778a8df7ffa99fe9ae442"
+   ],
+   "commit_message": "server: PFXC-TOOLPARSE retryable tool_call_parse_error contract\n\nFold of PFXC-TOOLPARSE: 2 source commit(s) squashed (V6R-4b).\nTests: tests/CMakeLists.txt, tests/test-chat-toolparse-strict.cpp",
+   "gate_results": [],
+   "hypothesis": "server: PFXC-TOOLPARSE retryable tool_call_parse_error contract",
+   "knobs": [
+    "LLAMA_TEST_TOOLPARSE_GGUF"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "PFXC-TOOLPARSE",
+   "tests": [
+    "tests/CMakeLists.txt",
+    "tests/test-chat-toolparse-strict.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "856ff303d17de8ed89f0ff7fab4058616539f2eb",
+    "9e67602127086a9c586542fefdc0262fb028b4a2",
+    "692398a2b4576327b85be716664a2f0b2b6945f5",
+    "942bf56f2aebacb252cdc49c141b46e8167d7cd1",
+    "991425a07a2f2ebe50e630ddc1b43dca0ccd5b33",
+    "6ca173c827830e1128f35743a88cc7f12cb7de96"
+   ],
+   "commit_message": "cuda/hip: topk-moe picks k distinct experts under ties, -inf and NaN (AK-ASM-H11-UNIQ-FIX)\n\nFold of AK-ASM-H11-UNIQ-FIX: 6 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [
+    {
+     "row": "ak-h11-uniqfix-gpu-20261121-r2",
+     "verdict": "cited"
+    },
+    {
+     "row": "ak-h11-uniqfix-gpu-20261121-r3",
+     "verdict": "cited"
+    }
+   ],
+   "hypothesis": "cuda/hip: topk-moe picks k distinct experts under ties, -inf and NaN (AK-ASM-H11-UNIQ-FIX)",
+   "knobs": [
+    "GGML_HIP_TOPK_ASM",
+    "GGML_HIP_TOPK_ASM"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "AK-ASM-H11-UNIQ-FIX",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "771ba5b915245bcc7a17cca3288c7e0c112f6209",
+    "2944feaff50257f2ecd0fc42b9981fd8b1868666"
+   ],
+   "commit_message": "ggml-cuda: GGML_HIP_TOPK_FAST defaults ON (=0 disables) (AK-GAP-1-IDSORT; ak-gap-1-idsort-step2-gpu-20261121-r3 KEEP, A3B e2e +13.8%)\n\nFold of AK-GAP-1-IDSORT: 2 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [
+    {
+     "row": "ak-gap-1-idsort-step2-gpu-20261121-r3",
+     "verdict": "cited"
+    }
+   ],
+   "hypothesis": "ggml-cuda: GGML_HIP_TOPK_FAST defaults ON (=0 disables) (AK-GAP-1-IDSORT; ak-gap-1-idsort-step2-gpu-20261121-r3 KEEP, A3B e2e +13.8%)",
+   "knobs": [
+    "GGML_HIP_TOPK_FAST",
+    "GGML_HIP_TOPK_FAST"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "AK-GAP-1-IDSORT",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "4bc50bd6518703341b32388ce87aaf97fd4aeeaa"
+   ],
+   "commit_message": "mtp: two-stage truncated-SVD draft head for qwen4exp (LLAMA_MTP_DRAFT_HEAD_SVD, default off)\n\nFold of COMMIT-4bc50bd65: 1 source commit(s) squashed (V6R-4b).\nTests: tests/CMakeLists.txt, tests/test-mtp-svd-head.cpp",
+   "gate_results": [],
+   "hypothesis": "mtp: two-stage truncated-SVD draft head for qwen4exp (LLAMA_MTP_DRAFT_HEAD_SVD, default off)",
+   "knobs": [
+    "LLAMA_MTP_DRAFT_HEAD_SVD",
+    "LLAMA_MTP_DRAFT_HEAD_SVD",
+    "LLAMA_MTP_DRAFT_HEAD_SVD_C"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-4bc50bd65",
+   "tests": [
+    "tests/CMakeLists.txt",
+    "tests/test-mtp-svd-head.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": true,
+   "cherry_pick": [
+    "1b83c69671a3fc0193fdf5baf929e27240478e40"
+   ],
+   "commit_message": "llama: fix lazy logits OOB on multi-ubatch decodes (C17-FIX-LAZY)\n\nFold of C17-FIX-LAZY: 1 source commit(s) squashed (V6R-4b).\nTests: tests/CMakeLists.txt, tests/test-device-accept-multiseq.cpp",
+   "gate_results": [],
+   "hypothesis": "llama: fix lazy logits OOB on multi-ubatch decodes (C17-FIX-LAZY)",
+   "knobs": [
+    "GGML_ASSERT"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "C17-FIX-LAZY",
+   "tests": [
+    "tests/CMakeLists.txt",
+    "tests/test-device-accept-multiseq.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": false,
+   "cherry_pick": [
+    "7b0314f3b7a7dad5c5bbb2b9eded6933ecd6865b",
+    "e0b5d2637858411bfb8b27609a2e7e199dc6f38c"
+   ],
+   "commit_message": "ggml-cuda: C15-EPI-Q8 one-time \"GGML_HIP_EPILOGUE_Q8 engaged\" log line\n\nFold of C15-EPI-Q8: 2 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda: C15-EPI-Q8 one-time \"GGML_HIP_EPILOGUE_Q8 engaged\" log line",
+   "knobs": [
+    "GGML_HIP_EPILOGUE_Q8"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "C15-EPI-Q8",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": false,
+   "cherry_pick": [
+    "dfcaa42ffd11edc145f868d9f78cbb7a81ad4cb4"
+   ],
+   "commit_message": "ggml-cuda: C15-GV-BW gv_fattn q8_0 bandwidth knobs (default off)\n\nFold of C15-GV-BW: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda: C15-GV-BW gv_fattn q8_0 bandwidth knobs (default off)",
+   "knobs": [
+    "GGML_HIP_GV_PREFETCH_DEPTH",
+    "GGML_HIP_GV_LDS_ALIAS"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "C15-GV-BW",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": false,
+   "cherry_pick": [
+    "bb3294c71b9d02fb8040a4d71dfec75f5522b4dc"
+   ],
+   "commit_message": "ggml-cuda: default-off GGML_HIP_ROUTER_WIDE keeps small F32/BF16 matmuls on MMVF up to ne11=64 on CDNA\n\nFold of COMMIT-bb3294c71: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda: default-off GGML_HIP_ROUTER_WIDE keeps small F32/BF16 matmuls on MMVF up to ne11=64 on CDNA",
+   "knobs": [
+    "GGML_HIP_ROUTER_WIDE"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-bb3294c71",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": false,
+   "cherry_pick": [
+    "2e1e5191a65e72b2a0553653198cad854c3582d2"
+   ],
+   "commit_message": "ggml-cuda: C15-GV-COALESCE coalesced q8_0 K/V load + swizzled sK/sVt (default off)\n\nFold of C15-GV-COALESCE: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cuda: C15-GV-COALESCE coalesced q8_0 K/V load + swizzled sK/sVt (default off)",
+   "knobs": [
+    "GGML_HIP_GV_COALESCE",
+    "GGML_HIP_GV_PREFETCH_DEPTH",
+    "GGML_HIP_GV_LDS_ALIAS"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "C15-GV-COALESCE",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": false,
+   "cherry_pick": [
+    "bb25700426937666b28e578d85ee5fb43c51d2b2"
+   ],
+   "commit_message": "tests: GGML_TBO_OUTPUT_DIGEST=1 prints a per-case device-output digest\n\nFold of COMMIT-bb2570042: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "tests: GGML_TBO_OUTPUT_DIGEST=1 prints a per-case device-output digest",
+   "knobs": [
+    "GGML_TBO_OUTPUT_DIGEST",
+    "GGML_TBO_OUTPUT_DIGEST"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-bb2570042",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": false,
+   "cherry_pick": [
+    "efff7cf6cf63de098a26c30267fd4f9b1914889b"
+   ],
+   "commit_message": "ggml-cpu: GGML_GDN_COLSPLIT=1 splits CPU GATED_DELTA_NET over 64-column value blocks (default off)\n\nFold of COMMIT-efff7cf6c: 1 source commit(s) squashed (V6R-4b).\nTests: tests/CMakeLists.txt, tests/test-backend-ops.cpp, tests/test-gdn-colsplit.cpp",
+   "gate_results": [],
+   "hypothesis": "ggml-cpu: GGML_GDN_COLSPLIT=1 splits CPU GATED_DELTA_NET over 64-column value blocks (default off)",
+   "knobs": [
+    "GGML_GDN_COLSPLIT"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-efff7cf6c",
+   "tests": [
+    "tests/CMakeLists.txt",
+    "tests/test-backend-ops.cpp",
+    "tests/test-gdn-colsplit.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": false,
+   "cherry_pick": [
+    "32b7983263ed94cf8e5e3edf6d69dc7576e16669"
+   ],
+   "commit_message": "tests: gdn_colsplit opt-in set belongs in the perf corpus, not eval; avoid duplicating default nt=1/9 cases\n\nFold of COMMIT-32b798326: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "tests: gdn_colsplit opt-in set belongs in the perf corpus, not eval; avoid duplicating default nt=1/9 cases",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-32b798326",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  },
+  {
+   "carried_from_current_fold": false,
+   "cherry_pick": [
+    "1686eb029bc5f35f690f59573b51cd89eb650d5e"
+   ],
+   "commit_message": "cuda/hip: GGML_CUDA_MMQ_FORCE runtime env knob (runtime twin of GGML_CUDA_FORCE_MMQ)\n\nFold of COMMIT-1686eb029: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-mmq-tile-env.sh",
+   "gate_results": [],
+   "hypothesis": "cuda/hip: GGML_CUDA_MMQ_FORCE runtime env knob (runtime twin of GGML_CUDA_FORCE_MMQ)",
+   "knobs": [
+    "GGML_CUDA_MMQ_FORCE",
+    "GGML_CUDA_FORCE_MMQ"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-1686eb029",
+   "tests": [
+    "tests/test-mmq-tile-env.sh"
+   ]
+  },
+  {
+   "carried_from_current_fold": false,
+   "cherry_pick": [
+    "66b0b7362f2d10c18def7c07452f1959807657f9"
+   ],
+   "commit_message": "cuda/hip: GGML_CUDA_MMQ_J env knob forces the MMQ tile width (mmq_x)\n\nFold of COMMIT-66b0b7362: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-mmq-tile-env.sh",
+   "gate_results": [],
+   "hypothesis": "cuda/hip: GGML_CUDA_MMQ_J env knob forces the MMQ tile width (mmq_x)",
+   "knobs": [
+    "GGML_CUDA_MMQ_J",
+    "GGML_CUDA_MMQ_J",
+    "GGML_CUDA_MMQ_J",
+    "GGML_CUDA_MMQ_FORCE"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-66b0b7362",
+   "tests": [
+    "tests/test-mmq-tile-env.sh"
+   ]
+  },
+  {
+   "carried_from_current_fold": false,
+   "cherry_pick": [
+    "b3bcc3dd3db7bb7a98e3dee635aadc9cdb9ec943"
+   ],
+   "commit_message": "cuda/hip: GGML_CUDA_MMQ_STREAM_K=0 env knob runs MMQ as plain tiling\n\nFold of COMMIT-b3bcc3dd3: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-mmq-tile-env.sh",
+   "gate_results": [],
+   "hypothesis": "cuda/hip: GGML_CUDA_MMQ_STREAM_K=0 env knob runs MMQ as plain tiling",
+   "knobs": [
+    "GGML_CUDA_MMQ_STREAM_K",
+    "GGML_CUDA_MMQ_STREAM_K"
+   ],
+   "squash_into_one_commit": true,
+   "tag": "COMMIT-b3bcc3dd3",
+   "tests": [
+    "tests/test-mmq-tile-env.sh"
+   ]
+  },
+  {
+   "carried_from_current_fold": false,
+   "cherry_pick": [
+    "9d679fabc5afb81d0274f4ae321732780b45f730"
+   ],
+   "commit_message": "CUDA: use the fast mm_ids_helper path for any n_expert_used (#27978) + n_used=10 MUL_MAT_ID tests (MMID-HELPER-N10)\n\nFold of MMID-HELPER-N10: 1 source commit(s) squashed (V6R-4b).\nTests: tests/test-backend-ops.cpp",
+   "gate_results": [],
+   "hypothesis": "CUDA: use the fast mm_ids_helper path for any n_expert_used (#27978) + n_used=10 MUL_MAT_ID tests (MMID-HELPER-N10)",
+   "knobs": [],
+   "squash_into_one_commit": true,
+   "tag": "MMID-HELPER-N10",
+   "tests": [
+    "tests/test-backend-ops.cpp"
+   ]
+  }
+ ],
+ "refused": [
+  {
+   "branches": [
+    "llama.cpp-experimental-c15-folds-20261118",
+    "llama.cpp-experimental-c16-composite-20261118",
+    "llama.cpp-experimental-c16-gpu-next-20261118",
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "UPSTREAM-30408: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "UPSTREAM-30408"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c15-a3b-n4-fix-20261118",
+    "llama.cpp-experimental-c15-a3b-router-wide-20261118",
+    "llama.cpp-experimental-c16-composite-20261118",
+    "llama.cpp-experimental-c16-gpu-next-20261118",
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "COMMIT-79650eeab: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "COMMIT-79650eeab"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "COMMIT-610831c9e: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "COMMIT-610831c9e"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "COMMIT-8e9fecf29: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "COMMIT-8e9fecf29"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "COMMIT-a5d351508: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "COMMIT-a5d351508"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "COMMIT-b3406d849: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "COMMIT-b3406d849"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "COMMIT-b759c7d88: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "COMMIT-b759c7d88"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "DTREE-0-Q8MF-HBM-CEILING: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "DTREE-0-Q8MF-HBM-CEILING"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "DTREE-0-Q8MF-V3: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "DTREE-0-Q8MF-V3"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "DTREE-0-Q8MF-V4: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "DTREE-0-Q8MF-V4"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "COMMIT-e0bc8e3dc: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "COMMIT-e0bc8e3dc"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "MMID-Q8-N1-ODDM: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "MMID-Q8-N1-ODDM"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "PFXC-A1: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "PFXC-A1"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c17-20261121",
+    "llama.cpp-experimental-c17-lightning-idx-fix-20261121",
+    "llama.cpp-experimental-c17-mmid-helper-n10-20261121",
+    "llama.cpp-experimental-c17-router-wide-20261121"
+   ],
+   "carried": true,
+   "reason": "UPSTREAM-29722: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "UPSTREAM-29722"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c16-gpu-next-20261118"
+   ],
+   "carried": false,
+   "reason": "C16-TOPK-STAGE: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "C16-TOPK-STAGE"
+  },
+  {
+   "branches": [
+    "llama.cpp-experimental-c14-quant-recip-20261119"
+   ],
+   "carried": false,
+   "reason": "COMMIT-f73a4bdef: no test travels with this feature (DS41-C116 gate, kernel_coverage.py; V6R-4b: a feature's test travels with it)",
+   "tag": "COMMIT-f73a4bdef"
+  }
+ ],
+ "rule": "one feature per commit with its test (V6R-4b); untested refused (DS41-C116)",
+ "schema": "epyc.autokernel.fold_list.v1"
+}
