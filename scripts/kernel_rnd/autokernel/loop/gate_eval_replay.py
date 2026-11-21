@@ -90,6 +90,19 @@ def result_for(rec: dict[str, Any]) -> tuple[Path | None, Any]:
 
 def lifecycle(rec: dict[str, Any], ended: dict[str, str], succ: dict[str, str], has_result: bool,
               ids: set[str] | None = None) -> dict[str, Any]:
+    """Rowflow facts for gate_eval's no-result rule (operator ruling 2026-11-21): the successor row id,
+    if any. gate_eval decides SUPERSEDED (successor) / WITHDRAWN (none) for a row with no finished RESULT."""
+    reason = ended.get("rc") and ended.get("reason", "") or ""
+    if has_result and ended.get("rc", "0") == "0":     # rc 0 with a RESULT = finished (any end reason)
+        return {}
+    nxt = succ.get(rec["id"]) or successor_by_name(rec["id"], ids or set())
+    if nxt or re.match(r"superseded", reason, re.I):
+        return {"successor": nxt or reason}
+    return {}
+
+
+def lifecycle_legacy(rec: dict[str, Any], ended: dict[str, str], succ: dict[str, str], has_result: bool,
+                     ids: set[str] | None = None) -> dict[str, Any]:
     """Only a row that produced no verdict-bearing run (no RESULT, or it did not end rc 0 complete)
     is SUPERSEDED / WITHDRAWN; a completed row keeps its own measured verdict even if re-run."""
     reason = ended.get("reason", "")
@@ -116,7 +129,44 @@ def load_records(flags: Path, since: str, owner: str) -> list[dict[str, Any]]:
     return out
 
 
-def replay(flags: Path = FLAGS, since: str = "2026-11-06", owner: str = "autokernel") -> dict[str, Any]:
+_LIFE = ("SUPERSEDED", "WITHDRAWN")
+
+
+def ruled_label(human: str, v: dict[str, Any]) -> str:
+    """The human label re-read under the 2026-11-21 filing rule: a no-result row's correct label is the
+    rule's (SUPERSEDED with a successor, else WITHDRAWN); a lifecycle label on a row that RAN to a finished
+    RESULT means "ran but could not decide" = inconclusive; a pass on a declared DROP is inconclusive under
+    FILER-DROP-AS-PASS-GUARD (epyc-root bba1c010a, file_result.coerce_declared_nonpass). Everything else
+    keeps the owner's label."""
+    if v.get("gate_id") == gate_eval.NO_CLAIM_GATE:
+        return v["filed_verdict"]
+    if human == "pass" and re.match(r"^\s*DROP\s*\(\s*diagnostic", str(v.get("native_verdict") or ""), re.I):
+        return "inconclusive"
+    if human in _LIFE and v.get("verdict") not in _LIFE:
+        return "inconclusive"
+    return human
+
+
+def load_categories(md: Path | None) -> dict[str, str]:
+    """row -> disagreement category from the P1 replay report's 'Every disagreement' table."""
+    out: dict[str, str] = {}
+    if md and md.is_file():
+        for line in md.read_text(encoding="utf-8").splitlines():
+            m = re.match(r"^\| `([^`]+)` \|.*\| (A|B2|B|C|D|E|F|G|H) \|$", line)
+            if m:
+                out[m.group(1)] = m.group(2)
+    return out
+
+
+def _agree_by(rows: list[dict[str, Any]], key: str, field: str) -> dict[str, str]:
+    groups: dict[str, list[bool]] = collections.defaultdict(list)
+    for r in rows:
+        groups[r[key]].append(r[field])
+    return {g: f"{sum(v)}/{len(v)}" for g, v in sorted(groups.items())}
+
+
+def replay(flags: Path = FLAGS, since: str = "2026-11-06", owner: str = "autokernel",
+           categories: dict[str, str] | None = None, legacy: bool = False) -> dict[str, Any]:
     succ = successors(flags)
     ids = known_ids(flags)
     policy = gate_eval.load_policy()
@@ -125,11 +175,14 @@ def replay(flags: Path = FLAGS, since: str = "2026-11-06", owner: str = "autoker
     for rec in load_records(flags, since, owner):
         ended = gate_eval.parse_ended(rec.get("end_line") or "")
         path, result = result_for(rec)
-        life = lifecycle(rec, ended, succ, isinstance(result, dict), ids)
+        life = (lifecycle_legacy if legacy else lifecycle)(rec, ended, succ, isinstance(result, dict), ids)
         v = gate_eval.evaluate(result if isinstance(result, dict) else None, ended=ended, row=rec["id"],
                                policy=policy, lifecycle=life, consts=consts)
         human = norm(rec.get("row_verdict"))
-        rows.append({"row": rec["id"], "human": human, "machine": v["filed_verdict"],
+        ruled = ruled_label(human, v)
+        rows.append({"row": rec["id"], "human": human, "machine": v["filed_verdict"], "ruled": ruled,
+                     "agree_ruled": ruled == v["filed_verdict"], "policy_decided": v.get("policy_decided"),
+                     "group": (categories or {}).get(rec["id"], "agreed-in-P1"),
                      "verdict": v["verdict"], "gate_id": v["gate_id"], "layer": v["layer"],
                      "native": (v.get("native_verdict") or "")[:100], "result": str(path) if path else None,
                      "agree": human == v["filed_verdict"], "filed_at": rec.get("filed_at"),
@@ -137,8 +190,16 @@ def replay(flags: Path = FLAGS, since: str = "2026-11-06", owner: str = "autoker
     n = len(rows)
     agree = sum(r["agree"] for r in rows)
     confusion = collections.Counter((r["human"], r["machine"]) for r in rows)
+    agree_r = sum(r["agree_ruled"] for r in rows)
+    pd = [r for r in rows if r["policy_decided"]]
     return {"schema": gate_eval.SCHEMA + ".replay", "since": since, "owner": owner, "n": n,
             "agree": agree, "agreement": round(agree / n, 4) if n else None,
+            "agree_ruled": agree_r, "agreement_ruled": round(agree_r / n, 4) if n else None,
+            "by_group_strict": _agree_by(rows, "group", "agree"),
+            "by_group_ruled": _agree_by(rows, "group", "agree_ruled"),
+            "by_human_ruled": _agree_by(rows, "ruled", "agree_ruled"),
+            "policy_decided": f"{sum(r['agree_ruled'] for r in pd)}/{len(pd)}",
+            "disagreements_ruled": [r for r in rows if not r["agree_ruled"]],
             "by_layer": dict(collections.Counter(r["layer"] for r in rows)),
             "policy_gate_rows": sum(1 for r in rows if r["checks"]),
             "confusion": {f"{h}->{m}": c for (h, m), c in sorted(confusion.items())},
@@ -151,12 +212,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--since", default="2026-11-06")
     ap.add_argument("--owner", default="autokernel")
     ap.add_argument("--json", type=Path)
+    ap.add_argument("--categories", type=Path, help="P1 replay report (.md) whose disagreement table names groups")
+    ap.add_argument("--legacy", action="store_true", help="pre-ruling lifecycle inference (the P1 baseline)")
     a = ap.parse_args(argv)
-    r = replay(a.flags, a.since, a.owner)
+    r = replay(a.flags, a.since, a.owner, load_categories(a.categories), a.legacy)
     if a.json:
         a.json.write_text(json.dumps(r, indent=1, sort_keys=True), encoding="utf-8")
     print(f"replayed {r['n']} filed verdicts (owner {a.owner}, since {a.since}): agree {r['agree']} "
           f"= {100 * (r['agreement'] or 0):.1f}%; policy-gated rows {r['policy_gate_rows']}; layers {r['by_layer']}")
+    print(f"ruled agreement (2026-11-21 filing rule): {r['agree_ruled']}/{r['n']} = "
+          f"{100 * (r['agreement_ruled'] or 0):.1f}%; policy-decided rows agreeing {r['policy_decided']}")
+    print(f"  by group strict {r['by_group_strict']}")
+    print(f"  by group ruled  {r['by_group_ruled']}")
     for k, c in r["confusion"].items():
         print(f"  {k:32s} {c}")
     for d in r["disagreements"]:

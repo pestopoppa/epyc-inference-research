@@ -74,11 +74,17 @@ def test_bench_floor_noise_matches_run_noise_floor_rule():
 
 
 def test_run_end_and_lifecycle_layers():
-    assert ev(None)["verdict"] == "FUTILITY"
-    assert ev({"verdict": "PASS"}, ended={"rc": "75", "reason": "stopped"})["filed_verdict"] == "inconclusive"
+    # No result -> no claim (operator ruling 2026-11-21): never inconclusive.
+    assert ev(None)["verdict"] == "WITHDRAWN" and ev(None)["gate_id"] == ge.NO_CLAIM_GATE
+    assert ev(None, lifecycle={"successor": "x-r2"})["verdict"] == "SUPERSEDED"
+    assert ev({"verdict": "PASS"}, ended={"rc": "75", "reason": "stopped"})["filed_verdict"] == "WITHDRAWN"
+    assert ev({"verdict": "FUTILITY_INPUT"}, ended={"rc": "143", "reason": "killed"},
+              lifecycle={"successor": "y-r3"})["filed_verdict"] == "SUPERSEDED"
     assert ev({"verdict": "FAIL(crash)"}, ended={"rc": "75", "reason": "stopped"})["verdict"] == "FAIL"
     assert ev({"verdict": "PASS"}, ended={"rc": "0", "reason": "direct-run"})["verdict"] == "PASS"
-    assert ev({"verdict": "PASS", "complete": False})["verdict"] == "FUTILITY"
+    assert ev({"verdict": "PASS", "complete": False})["verdict"] == "WITHDRAWN"
+    # A row that RAN to a finished RESULT but could not decide stays inconclusive.
+    assert ev({"verdict": "FUTILITY_INPUT", "complete": True})["filed_verdict"] == "inconclusive"
     assert ev({}, lifecycle={"superseded_by": "x-r2"})["filed_verdict"] == "SUPERSEDED"
     assert ev({}, lifecycle={"withdrawn": "owner"})["filed_verdict"] == "WITHDRAWN"
 
@@ -120,7 +126,29 @@ def test_replay_lifecycle_rules():
     assert rp.successor_by_name("b-20261120-r2q0", ids) == "b-20261120-r3q0"
     assert rp.lifecycle({"id": "a-20261120"}, OK, {}, True, ids) == {}   # completed: keeps its verdict
     assert rp.lifecycle({"id": "a-20261120"}, {"rc": "75", "reason": "stopped"}, {}, False, ids) == \
-        {"superseded_by": "a-20261120-r2"}
-    assert rp.lifecycle({"id": "c"}, {"rc": "75", "reason": "operator_said_drop"}, {}, False, set()) == \
+        {"successor": "a-20261120-r2"}
+    assert rp.lifecycle({"id": "c"}, {"rc": "75", "reason": "operator_said_drop"}, {}, False, set()) == {}
+    assert rp.lifecycle_legacy({"id": "c"}, {"rc": "75", "reason": "operator_said_drop"}, {}, False, set()) == \
         {"withdrawn": "operator_said_drop"}
+    # ruled label: no-result rows take the rule's label; a lifecycle label on a finished row -> inconclusive
+    nc = ge.evaluate(None, lifecycle={"successor": "x"}, policy={}, consts=ge._constants())
+    assert rp.ruled_label("inconclusive", nc) == "SUPERSEDED"
+    assert rp.ruled_label("SUPERSEDED", {"verdict": "FUTILITY", "gate_id": "declared.futility"}) == "inconclusive"
+    assert rp.ruled_label("pass", {"verdict": "FUTILITY", "native_verdict": "DROP(diagnostic: X)"}) == "inconclusive"
+    assert rp.ruled_label("fail", {"verdict": "FAIL", "gate_id": "declared.negative"}) == "fail"
     assert rp.norm("BIT_EXACT_PASS") == "pass" and rp.norm("superseded") == "SUPERSEDED"
+
+
+def test_polar_tokens_and_split_futility():
+    c = ge.classify_token
+    assert c("FUTILITY_HARNESS")[0] == "FUTILITY" and c("FUTILITY_HARNESS_STORE_IDENTITY")[0] == "FUTILITY"
+    assert c("FUTILITY_CANDIDATE")[0] == "FAIL" and c("FUTILITY_CANDIDATE_OUTPUT_IDENTITY")[0] == "FAIL"
+    # old tokens still accepted
+    assert c("FUTILITY_IDENTITY")[0] == "FUTILITY" and c("FUTILITY_BELOW_BASELINE")[0] == "FAIL"
+    # polar beside an unpolar named answer decides it (category E fix)
+    v = ev({"verdict": "ANSWERED", "polar": "FAIL", "complete": True})
+    assert v["verdict"] == "FAIL" and v["gate_id"] == "declared.polar" and v["policy_decided"]
+    assert ev({"verdict": "MEASURED", "polar": "PASS"})["verdict"] == "PASS"
+    # a legacy L3 token is not policy-decided (owner reviews it)
+    assert not ev({"verdict": "NO_GAIN"})["policy_decided"]
+    assert ev(None)["policy_decided"]

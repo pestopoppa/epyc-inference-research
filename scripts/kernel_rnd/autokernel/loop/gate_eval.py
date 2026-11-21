@@ -15,19 +15,29 @@ Inputs, all plain data:
 
 Layers, first decisive one wins except that a policy-gate FAIL always overrides a declared PASS:
   L0 lifecycle   superseded -> SUPERSEDED, withdrawn -> WITHDRAWN
-  L1 run end     no RESULT, rc 75/143, reason != complete, RESULT complete:false -> FUTILITY
+  L1 run end     no finished RESULT (no RESULT, rc 75/143, reason != complete, RESULT complete:false)
+                 -> NO RESULT, NO CLAIM (operator ruling 2026-11-21): SUPERSEDED when a successor row
+                 exists (lifecycle["successor"]), otherwise WITHDRAWN; never FUTILITY/inconclusive.
+                 A declared FAIL on such a run is still a measured negative (FAIL).
   L2 policy      graph-KLD gate on model-keyed blocks (27B / Q38FN) for the row's backend, the PPL
                  contract, the bench speed floor -> PASS / FAIL / NOISE
   L3 declared    the row's own pre-registered verdict token (job.py evaluated its RULE) classified by
                  a fixed vocabulary: candidate-attributable negatives FAIL, harness/instrument
                  failures FUTILITY, a named answer on a complete run PASS
 
+Inconclusive (FUTILITY) is reserved for rows that RAN to a finished RESULT but could not decide.
+
+Polar tokens (row templates since 2026-11-21, row_scaffold.py): one PASS/FAIL token per row in RESULT["polar"]
+beside the named answer in RESULT["verdict"] (polar wins over the legacy reading of the answer), and split futility tokens
+FUTILITY_HARNESS (instrument/harness, -> FUTILITY) vs FUTILITY_CANDIDATE (candidate negative, -> FAIL).
+The legacy vocabulary below is still accepted.
+
 Verdict alphabet PASS / FAIL / NOISE / FUTILITY (+ SUPERSEDED / WITHDRAWN); `filed_verdict` maps it to
 the filer's pass / fail / inconclusive (NOISE is a measured null: fail, the DROP convention of
 runend.map_verdict). Every verdict names the deciding gate id, thresholds and observed values.
 
 CLI:  python3 -m autokernel.loop.gate_eval RESULT.json [--ended grants/<row>.ended] [--row ID]
-                                           [--backend gpu|cpu] [--out verdict.json]
+                                           [--backend gpu|cpu] [--out verdict.json] [--successor ID]
 """
 from __future__ import annotations
 
@@ -45,6 +55,12 @@ POLICY_PATH = Path(__file__).with_name("graph_kld_policy.json")
 POLICY_IN_FORCE_FROM = "2026-11-18"
 #: Ended reasons that mean the job ran to its own end (direct runs bypass the keeper's `complete`).
 COMPLETE_REASONS = frozenset({"complete", "direct-run"})
+#: The no-result filing rule id (operator ruling 2026-11-21: "No result -> no claim").
+NO_CLAIM_GATE = "filing.no_result_no_claim"
+#: Verdicts the filer can apply with zero LLM turns: decided by a policy gate, a lifecycle fact, the
+#: no-result rule, or a polar row token. A legacy-vocabulary L3 token still gets owner review.
+POLICY_DECIDED_RULES = frozenset({NO_CLAIM_GATE, "lifecycle.superseded", "lifecycle.withdrawn",
+                                  "declared.polar", "declared.futility_harness", "declared.futility_candidate"})
 FILED = {"PASS": "pass", "FAIL": "fail", "NOISE": "fail", "FUTILITY": "inconclusive",
          "SUPERSEDED": "SUPERSEDED", "WITHDRAWN": "WITHDRAWN"}
 
@@ -100,6 +116,11 @@ def classify_token(native: str) -> tuple[str | None, str]:
     if not text:
         return None, "declared.none"
     tok = re.split(r"[\s:;,(]", text, maxsplit=1)[0].upper()
+    # Polar row-template tokens (2026-11-21) win over the legacy vocabulary.
+    if tok.startswith("FUTILITY_HARNESS"):
+        return "FUTILITY", "declared.futility_harness"
+    if tok.startswith("FUTILITY_CANDIDATE"):
+        return "FAIL", "declared.futility_candidate"
     if tok.startswith("DROP") and re.match(r"DROP\s*\(\s*diagnostic", text, re.I):
         # A diagnostic row localises a defect; it makes no claim about the candidate.
         return "FUTILITY", "declared.diagnostic"
@@ -243,8 +264,13 @@ def _row_date(row: str | None, result: Mapping[str, Any] | None) -> str | None:
 
 
 def _verdict(v: str, gate: str, layer: str, why: str, checks=(), native=None, **extra) -> dict[str, Any]:
-    return {"schema": SCHEMA, "verdict": v, "filed_verdict": FILED[v], "gate_id": gate, "layer": layer,
-            "rationale": why, "checks": list(checks), "native_verdict": native, **extra}
+    return _finalize({"schema": SCHEMA, "verdict": v, "filed_verdict": FILED[v], "gate_id": gate, "layer": layer,
+            "rationale": why, "checks": list(checks), "native_verdict": native, **extra})
+
+
+def _finalize(v: dict[str, Any]) -> dict[str, Any]:
+    v["policy_decided"] = policy_decided(v)
+    return v
 
 
 def evaluate(result: Mapping[str, Any] | None, *, ended: Mapping[str, str] | None = None,
@@ -265,21 +291,30 @@ def evaluate(result: Mapping[str, Any] | None, *, ended: Mapping[str, str] | Non
     rc, reason = str(ended.get("rc", "0")), ended.get("reason", "complete")
     if reason in COMPLETE_REASONS:
         reason = "complete"
+
+    def no_claim(why: str, native_s: str | None = None) -> dict[str, Any]:
+        succ = lifecycle.get("successor")
+        if succ:
+            return _verdict("SUPERSEDED", NO_CLAIM_GATE, "L1", f"{why}; no result -> no claim; successor {succ}",
+                            native=native_s, successor=succ)
+        return _verdict("WITHDRAWN", NO_CLAIM_GATE, "L1", f"{why}; no result -> no claim; 0 successor rows",
+                        native=native_s)
+
     if not isinstance(result, Mapping):
-        return _verdict("FUTILITY", "run_end.no_result", "L1",
-                        f"no RESULT.json; ended rc={rc} reason={reason}")
+        return no_claim(f"no RESULT.json; ended rc={rc} reason={reason}")
     native = result.get("verdict")
     native_s = "" if native is None else (native if isinstance(native, str) else json.dumps(native))
     declared, rule_id = classify_token(native_s)
-    if rc in ("75", "143") or (reason and reason != "complete"):
+    polar = str(result.get("polar") or "").strip().upper()
+    if polar in ("PASS", "FAIL") and rule_id not in ("declared.futility_harness", "declared.futility_candidate"):
+        declared, rule_id = polar, "declared.polar"
+    if rc != "0" or (reason and reason != "complete" and not ended.get("rc")):
         if declared == "FAIL":
             return _verdict("FAIL", rule_id, "L1+L3", f"ended rc={rc} reason={reason}; declared {native_s[:80]}",
                             native=native_s)
-        return _verdict("FUTILITY", "run_end.incomplete", "L1", f"ended rc={rc} reason={reason}",
-                        native=native_s)
+        return no_claim(f"run did not finish: ended rc={rc} reason={reason}", native_s)
     if result.get("complete") is False and declared != "FAIL":
-        return _verdict("FUTILITY", "run_end.result_incomplete", "L1",
-                        f"RESULT complete=false; declared {native_s[:80] or '(none)'}; rc={rc}", native=native_s)
+        return no_claim(f"RESULT complete=false; declared {native_s[:80] or '(none)'}; rc={rc}", native_s)
     date = _row_date(row, result)
     in_force = date is None or date >= POLICY_IN_FORCE_FROM
     be = backend or backend_of(row, result)
@@ -314,6 +349,12 @@ def evaluate(result: Mapping[str, Any] | None, *, ended: Mapping[str, str] | Non
                     f"no declared verdict and no policy-gated metric; rc={rc} (0 gates applicable)")
 
 
+def policy_decided(verdict: Mapping[str, Any]) -> bool:
+    """True when the verdict may be filed with zero LLM turns (runend --gate-eval --file)."""
+    return verdict.get("gate_id") in POLICY_DECIDED_RULES or str(verdict.get("layer", "")).startswith("L2") \
+        and verdict.get("verdict") in ("PASS", "FAIL", "NOISE") and bool(verdict.get("checks"))
+
+
 def parse_ended(text: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for tok in re.split(r"\s+", text or ""):
@@ -331,13 +372,15 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--backend", choices=["gpu", "cpu"])
     ap.add_argument("--policy", type=Path, default=POLICY_PATH)
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--successor", help="successor row id (no-result rule: SUPERSEDED instead of WITHDRAWN)")
     a = ap.parse_args(list(argv) if argv is not None else None)
     try:
         result = json.loads(a.result.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         result = None
     ended = parse_ended(a.ended.read_text(encoding="utf-8")) if a.ended and a.ended.exists() else {}
-    v = evaluate(result, ended=ended, row=a.row, backend=a.backend, policy=load_policy(a.policy))
+    v = evaluate(result, ended=ended, row=a.row, backend=a.backend, policy=load_policy(a.policy),
+                 lifecycle={"successor": a.successor} if a.successor else None)
     text = json.dumps(v, indent=1, sort_keys=True)
     if a.out:
         a.out.write_text(text + "\n", encoding="utf-8")
