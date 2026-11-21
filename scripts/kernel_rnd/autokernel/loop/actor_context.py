@@ -422,6 +422,18 @@ def _headings(text: str) -> list[tuple[int, str]]:
 
 
 _MUST_READ = re.compile(r"settled|not this loop|do not|standing rules|dead", re.I)
+#: program.md's distilled-learnings sections ("## Learnings <date> (...)") are the loop's
+#: durable journal. In variable mode `program_strategy` is a file, and no Learnings heading
+#: matches `_MUST_READ`, so they would sit in the jump table but never in "Read these before
+#: you propose". Scoped to that one section: other sections' headings are unchanged.
+_LEARNINGS_HEADING = re.compile(r"^#+\s+Learnings\b")
+
+
+def _must_read(section_key: str, heading: str) -> bool:
+    if section_key == "inbox":
+        return False
+    return bool(_MUST_READ.search(heading)
+                or (section_key == "program_strategy" and _LEARNINGS_HEADING.match(heading)))
 
 
 @dataclass
@@ -519,7 +531,7 @@ def _index_text(directory: Path, rows: list[tuple[Section, str]],
         if section.key in REQUIRED_SECTIONS:
             must.append(f"- `{rel}` — {REQUIRED_SECTIONS[section.key]}")
         for line, heading in _headings(section.text):
-            if section.key != "inbox" and _MUST_READ.search(heading):
+            if _must_read(section.key, heading):
                 must.append(f"- `{rel}` L{line}: {heading}")
     if must:
         out.append("Read these before you propose. The critic reviews your proposal "
@@ -681,7 +693,7 @@ def _orch_index_text(sections: list[Section], payloads: dict[str, Any], *,
         if section.key in REQUIRED_SECTIONS:
             must.append(f"- `{section.key}` -- {REQUIRED_SECTIONS[section.key]}")
         for line, heading in _headings(section.text):
-            if section.key != "inbox" and _MUST_READ.search(heading):
+            if _must_read(section.key, heading):
                 must.append(f"- `{section.key}` line {line}: {heading}")
     if must:
         out.append("Read these before you propose (line numbers are within "

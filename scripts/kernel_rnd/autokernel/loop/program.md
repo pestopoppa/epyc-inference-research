@@ -834,6 +834,50 @@ and `progress/2026-11/2026-11-2{0,1}-autokernel.md` (wrap-ups 5-10).
   T16 (0.959) do not. Round cost 1.144 vs break-even 1.175 after the two round-overhead fixes; static trees
   lose, and depth beats width.
 
+## Learnings 2026-11-21 (evening: C17 gates, GDN replay, gap levers, top-k, gate hygiene) — distilled, not a log
+
+- **A single-stream KEEP is not multi-slot safety.** Device-accept (lazy logits download, default ON) passed
+  r4 at np2 but fired its lazy download on the FIRST ubatch of a multi-ubatch decode; `logits_lazy_flush` then
+  read a stale or rebuilt `t_logits`, hit an OOB assert and aborted. It killed the CPU CH33 gate and the np4 A3B
+  server smoke. Fix: lazy only on the last ubatch, flush before a graph rebuild, plus a multi-seq regression
+  test that fails on the old code. Any lever that defers or caches a device-to-host copy must be tested at
+  multi-ubatch AND multi-slot before it defaults on.
+- **np4 wall-clock tok/s on the MI210 is dominated by request and slot-path noise**: A/A ratios span +-12 to
+  25% (0.88-1.25 on the replay burst). Gate multi-slot speed on SERVER-SIDE ms per target round from
+  print_timing (eval_ms / (tokens - draft accepted), warm-up tasks excluded): the A/A there is +-0.5%
+  (1.0025 [0.9988, 1.0062]). Wall-clock and kernel-level numbers stay as supporting evidence only.
+- **A/A floors are mandatory for any identity or speed gate**, and identity gates are unusable for A3B, for
+  seeded temp>0 sampling (not launch-deterministic on the MI210), and for multi-slot CPU decode (CPU np4 is
+  nondeterministic). Without an A/A, a 6/12 identity failure looked like a replay bug and was batching
+  nondeterminism (A/A diverged MORE than ON). Perplexity A/A on A3B is about 0.45%, so an absolute dPPL gate
+  below that is noise: gate A3B quality on A/A-relative dPPL plus KLD at or below the A/A KLD.
+- **GDN snapshot-vs-replay wins at multi-slot and loses at np1.** Replay adds about 1008 graph nodes (about 21
+  per GDN layer): +1.2 ms/round at np1 (about 2.4% slower), but at np4 snapshot bytes are 4x and replay saves
+  9.5-10.9 ms/round (-7.7% ms/round, about +8.6% decode, RS buffer -85%). Condition such levers on n_seq_max
+  (`LLAMA_RS_REPLAY=1` auto replays only when n_seq_max > 1, 2 forces). A single noisy pair (1.262x) misled;
+  do not report a speed from one pair.
+- **Fused in-workgroup quantize loses; reuse wins.** Quantizing the activation inside each workgroup
+  (`q8wv-fuseq`) re-quantizes the full activation per workgroup: op 0.33x, DROP. Quantize-once reuse across
+  sibling MMVQs (`q81-reuse`) won +3.0% on A3B-mtp. Producer-epilogue quantize (EPI-Q8) measured -0.4% on 27B.
+  Before building a quantize-fusion, count sibling re-quantizes: on 27B q8wv only 0.46% was recoverable.
+- **A multi-row MoE router fused into ONE block serializes the rows and loses** (`topk-moe-multirow` 0.89x op,
+  although correct). Fusing rows needs a block per row or a cooperative design, not a single-block loop.
+- **A pinned helper's sha must be updated when the helper is edited**, in job.py (e.g. GPU_COMMON_SHA256), and a
+  cloned or edited row needs SOURCE.sha256 regenerated and re-smoked. A stale pin cost a full gate smoke.
+- **Fast top-k only covers k <= 16; k=32 silently falls back to the radix kernel.** The stoch-accept r2 ran about
+  3-6% SLOWER because K=32 hit the radix path. Always check from logs which kernel actually ran (witness line),
+  never infer it from the knob being ON. Fix was the TOPK_FAST=32 wide path and a K=20 default; the lever then
+  captured only about 7% of its 11.8% census bound (about +0.8%), so keep it as an enabler (device-resident
+  spec round, temp>0 tree verify), not as a speed claim.
+- **An acceptance jump between builds can be a correctness FIX, not a lever.** C17's P3 acceptance rose 0.69 to
+  0.87 from non-knob code (likely the H15 alias fix) because C16's spec path was diverging early. Test
+  spec-vs-nospec greedy agreement (C17 229 chars vs C16 44) before crediting or blaming a knob for it.
+- **Census before lever, and census the recipe that is served.** The temp-1 census found 11.8% recoverable host
+  time (host sampling 10.4%) that the greedy census could not show; the WSTREAM census showed the fp16 scales
+  carry about 45% of the lossless-coding headroom, so scales-only coding (about 3% net, 15x GPU op budget) is the
+  GPU route while per-code schemes fail the decode rate by 4-23x. A CPU ubench of a model that is not CPU-served
+  (27B) answers nothing.
+
 ## gfx90a low-level tier — ISA-schedule operator catalogue
 
 Sub-tier (a), source-only: a text diff to HIP source (builtins / pragmas / attributes). Its

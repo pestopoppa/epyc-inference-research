@@ -1,0 +1,66 @@
+"""Planning-context canary for program.md's Learnings (the loop's durable journal).
+
+CPU-only, no inference: it stops at context assembly. It proves that what is appended to
+`loop/program.md` reaches the planner in BOTH delivery modes and that no size cap cuts it:
+
+* inline: `actors.render_context` puts the whole file in the prompt, and a prompt over
+  `ARGV_PROMPT_LIMIT_BYTES` is sent on stdin, never truncated;
+* variable: `actor_context` writes it as the `program_strategy` file, lists its headings in
+  the jump table, and names the Learnings sections under "Read these before you propose".
+"""
+import re
+import tempfile
+import unittest
+from pathlib import Path
+
+from autokernel.loop import actor_context, actors, loop
+
+PROGRAM = loop.PROGRAM.read_text(encoding="utf-8")
+LEARNINGS = [m.group(0) for m in re.finditer(r"(?m)^## Learnings .*$", PROGRAM)]
+
+
+class ProgramJournalReachesPlanner(unittest.TestCase):
+    def test_journal_has_learnings_sections(self):
+        self.assertTrue(any("2026-11-21 (evening" in h for h in LEARNINGS), LEARNINGS)
+
+    def test_inline_prompt_carries_program_md_whole(self):
+        text = actors.render_context({"program": PROGRAM})
+        self.assertIn(PROGRAM.strip(), text)
+        for heading in LEARNINGS:
+            self.assertIn(heading, text)
+
+    def test_oversize_prompt_goes_to_stdin_not_truncated(self):
+        backend = actors.Backend("claude", "m", "high", "/bin/x")
+        prompt = actors.render_context({"program": PROGRAM}) + "x" * actors.ARGV_PROMPT_LIMIT_BYTES
+        argv = backend.argv(prompt, Path("/ws"))
+        self.assertNotIn(prompt, argv)  # on stdin, not in argv
+        self.assertTrue(backend._prompt_on_stdin(prompt))
+
+    def test_variable_mode_strategy_file_and_required_reading(self):
+        text = actors.render_context({"program": "CPU directive.\n\n" + PROGRAM})
+        sections = actor_context.split_sections(text)
+        strategy = [s for s in sections if s.key == "program_strategy"]
+        self.assertEqual(len(strategy), 1)
+        self.assertEqual(strategy[0].text.count("## Learnings "), len(LEARNINGS))
+        with tempfile.TemporaryDirectory() as tmp:
+            index = actor_context._index_text(
+                Path(tmp), [(s, f"sections/{s.key}.md") for s in sections], {})
+        for heading in LEARNINGS:
+            self.assertIn(heading, index, "Learnings heading missing from the required-reading list")
+        must = index.split("Read these before you propose", 1)[1].split("| # |", 1)[0]
+        for heading in LEARNINGS:
+            self.assertIn(heading, must)
+
+    def test_learnings_headings_fit_the_jump_table(self):
+        heads = actor_context._headings(PROGRAM)
+        self.assertLessEqual(len(heads), actor_context.TOC_MAX_HEADINGS,
+                             "program.md has more headings than the variable-mode jump table lists")
+
+    def test_other_sections_unchanged(self):
+        self.assertFalse(actor_context._must_read("shared_history", "## Learnings 2026-11-21 (x)"))
+        self.assertFalse(actor_context._must_read("inbox", "## settled"))
+        self.assertTrue(actor_context._must_read("program_strategy", "## Learnings 2026-11-21 (x)"))
+
+
+if __name__ == "__main__":
+    unittest.main()
