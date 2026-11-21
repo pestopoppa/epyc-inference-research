@@ -1,0 +1,42 @@
+
+## q27b  stream/token=27.629 GB  ideal=6.99%  net(2.1%ovh)=5.04%  net(1.2%ovh)=5.88%  split=2.86%
+class | share of stream | code H bits | scale H bits | ideal % | net % (2.1% ovh) | contrib to total net (pp)
+ffn_down | 22.28% | 7.674 | 7.39 | 6.99 | 5.04 | 1.12
+ffn_gate | 22.28% | 7.680 | 7.38 | 6.94 | 4.98 | 1.11
+ffn_up | 22.28% | 7.678 | 7.31 | 6.99 | 5.03 | 1.12
+attn_qkv | 9.68% | 7.668 | 7.33 | 7.09 | 5.14 | 0.50
+attn_gate | 5.81% | 7.676 | 7.35 | 6.99 | 5.03 | 0.29
+ssm_out | 5.81% | 7.671 | 7.38 | 7.04 | 5.09 | 0.30
+output | 4.89% | 7.672 | 7.61 | 6.94 | 4.99 | 0.24
+attn_q | 4.11% | 7.669 | 7.57 | 6.99 | 5.04 | 0.21
+attn_output | 2.06% | 7.659 | 7.53 | 7.12 | 5.17 | 0.11
+attn_k | 0.34% | 7.617 | 7.87 | 7.49 | 5.55 | 0.02
+per-tensor code entropy range 7.450-7.689 bits
+
+## a3b  stream/token=3.256 GB  ideal=7.30%  net(2.1%ovh)=5.41%  net(1.2%ovh)=6.22%  split=3.21%
+class | share of stream | code H bits | scale H bits | ideal % | net % (2.1% ovh) | contrib to total net (pp)
+output | 16.60% | 7.650 | 7.56 | 7.22 | 5.27 | 0.88
+attn_qkv | 16.42% | 7.610 | 7.78 | 7.61 | 5.67 | 0.93
+ffn_down_exps | 11.22% | 7.626 | 7.49 | 7.53 | 5.58 | 0.63
+ffn_gate_exps | 11.22% | 7.619 | 7.33 | 7.67 | 5.73 | 0.64
+ffn_up_exps | 11.22% | 7.619 | 7.24 | 7.70 | 5.76 | 0.65
+attn_gate | 8.21% | 7.625 | 7.96 | 7.36 | 5.42 | 0.44
+ssm_out | 8.21% | 7.625 | 8.01 | 7.34 | 5.40 | 0.44
+attn_q | 6.02% | 7.632 | 7.93 | 7.30 | 5.35 | 0.32
+attn_output | 3.01% | 7.623 | 7.95 | 7.40 | 5.45 | 0.16
+ffn_gate_inp | 2.61% | non-Q8 | | 0 | 0 | 0
+per-tensor code entropy range 5.397-7.687 bits
+
+## drafter  stream/token=2.045 GB  ideal=6.92%  net(2.1%ovh)=4.97%  net(1.2%ovh)=5.81%  split=2.76%
+class | share of stream | code H bits | scale H bits | ideal % | net % (2.1% ovh) | contrib to total net (pp)
+ffn_down | 23.15% | 7.680 | 7.14 | 7.02 | 5.07 | 1.17
+ffn_gate | 23.15% | 7.691 | 7.21 | 6.87 | 4.92 | 1.14
+ffn_up | 23.15% | 7.689 | 7.18 | 6.90 | 4.94 | 1.14
+fc | 6.81% | 7.676 | 7.88 | 6.80 | 4.84 | 0.33
+attn_output | 5.45% | 7.691 | 7.35 | 6.82 | 4.87 | 0.26
+attn_q | 5.45% | 7.687 | 7.53 | 6.80 | 4.84 | 0.26
+selector_predecessor | 3.30% | 7.674 | 7.20 | 7.07 | 5.12 | 0.17
+selector_successor | 3.30% | 7.647 | 7.57 | 7.25 | 5.31 | 0.18
+attn_conv_proj | 1.70% | 7.646 | 7.69 | 7.22 | 5.27 | 0.09
+ffn_conv_proj | 1.70% | 7.677 | 7.31 | 7.00 | 5.04 | 0.09
+per-tensor code entropy range 7.495-7.692 bits
