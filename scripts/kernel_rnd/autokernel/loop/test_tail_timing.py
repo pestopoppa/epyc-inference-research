@@ -129,3 +129,57 @@ def test_report_on_fixture_store(tmp_path):
     assert r["device_held_split"] == {"correctness_s": 5.0, "timing_s": 15.0}
     assert r["stages"]["tail_held"]["p90_s"] == 20.0
     assert tt.main([str(tmp_path)]) == 0
+
+
+# ---- AK parallel loop P0: RESULT export --------------------------------------------
+
+def _store_with(tmp_path, rows):
+    db = tmp_path / "experiments.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE experiments (recorded_at TEXT, payload TEXT)")
+    conn.executemany("INSERT INTO experiments VALUES (?, ?)",
+                     [(at, json.dumps(p)) for at, p in rows])
+    conn.commit()
+    conn.close()
+    return tmp_path
+
+
+def _timed(wait, held, build):
+    return {tt.FIELD: {"tail_sessions": [{"wait_s": wait, "held_s": held, "stages": [
+        {"stage": "gate", "duration_s": build + 1, "build_s": build, "correctness_s": 1.0},
+        {"stage": "measure", "duration_s": 5.0}]}],
+        "actor": [{"stage": "propose", "duration_s": 2.0}], "died_at": None, "outcome": "kept"}}
+
+
+def test_result_block_reports_lock_wait_and_stage_durations():
+    block = tt.result_block([_timed(3.0, 10.0, 4.0), _timed(5.0, 12.0, 6.0), {"x": 1}])
+    assert block["iterations_timed"] == 2 and block["iterations_untimed"] == 1
+    assert block["lock_wait"]["total_s"] == 8.0 and block["lock_held"]["n"] == 2
+    assert block["stage_durations"]["tail:gate.build"]["total_s"] == 10.0
+    assert block["stage_durations"]["actor:propose"]["n"] == 2
+    assert "tail_wait" not in block["stage_durations"]
+    assert block["tail_split_go_no_go_ready"] is False
+    assert tt.result_block([_timed(1, 1, 1)] * 30)["tail_split_go_no_go_ready"] is True
+
+
+def test_export_result_merges_into_existing_result_and_honours_since(tmp_path):
+    store = _store_with(tmp_path, [("2026-11-20T00:00:00Z", _timed(100.0, 1.0, 1.0)),
+                                   ("2026-11-21T01:00:00Z", _timed(2.0, 3.0, 1.0))])
+    result = tmp_path / "out" / "RESULT.json"
+    result.parent.mkdir()
+    result.write_text(json.dumps({"verdict": "PASS", "n": 3}))
+    block = tt.export_result(store, result, since="2026-11-21T00:00:00+00:00")
+    doc = json.loads(result.read_text())
+    assert doc["verdict"] == "PASS" and doc["n"] == 3
+    assert doc[tt.RESULT_KEY]["lock_wait"]["total_s"] == 2.0 == block["lock_wait"]["total_s"]
+    assert doc[tt.RESULT_KEY]["since"] == "2026-11-21T00:00:00+00:00"
+
+
+def test_export_from_env_is_a_noop_without_env_and_never_raises(tmp_path, monkeypatch):
+    monkeypatch.delenv(tt.RESULT_ENV, raising=False)
+    assert tt.export_from_env([str(tmp_path)], None) is None
+    monkeypatch.setenv(tt.RESULT_ENV, str(tmp_path / "R.json"))
+    assert tt.export_from_env([str(tmp_path / "missing-store")], None) is None  # no db: swallowed
+    store = _store_with(tmp_path, [("2026-11-21T01:00:00Z", _timed(2.0, 3.0, 1.0))])
+    assert tt.export_from_env([str(store)], None)["iterations_timed"] == 1
+    assert json.loads((tmp_path / "R.json").read_text())[tt.RESULT_KEY]["iterations_timed"] == 1

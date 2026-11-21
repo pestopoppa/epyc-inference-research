@@ -311,13 +311,18 @@ def summarize(payloads: Iterable[Mapping[str, Any] | None]) -> dict[str, Any]:
             "died_at": died, "stages": stages}
 
 
-def read_store(store_root: Path) -> list[Mapping[str, Any] | None]:
-    """Read-only: every experiment row's decoded payload from `experiments.db`."""
+def read_store(store_root: Path, since: str | None = None) -> list[Mapping[str, Any] | None]:
+    """Read-only: every experiment row's decoded payload from `experiments.db`
+    (only rows with `recorded_at >= since` when given, e.g. this run's start)."""
     db = Path(store_root) / "experiments.db"
     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:
-        rows = conn.execute("SELECT payload FROM experiments ORDER BY recorded_at, rowid"
-                            ).fetchall()
+        if since:
+            rows = conn.execute("SELECT payload FROM experiments WHERE recorded_at >= ? "
+                                "ORDER BY recorded_at, rowid", (since,)).fetchall()
+        else:
+            rows = conn.execute("SELECT payload FROM experiments ORDER BY recorded_at, rowid"
+                                ).fetchall()
     finally:
         conn.close()
     out: list[Mapping[str, Any] | None] = []
@@ -329,12 +334,81 @@ def read_store(store_root: Path) -> list[Mapping[str, Any] | None]:
     return out
 
 
+# ---- RESULT export (AK parallel loop P0) ------------------------------------------
+
+#: Key the compact per-stage summary is merged under in a row's RESULT.json.
+RESULT_KEY = "tail_path_timing_summary"
+#: Env var naming the RESULT.json a campaign run should export into (run.py reads it).
+RESULT_ENV = "AK_RESULT_JSON"
+
+
+def result_block(payloads: Iterable[Mapping[str, Any] | None]) -> dict[str, Any]:
+    """Compact, RESULT-sized form of `summarize`: per-stage duration distributions,
+    lock wait (ready -> tail lock acquired) and lock hold, keyed for estimate-from-history
+    and the AK-TAIL-SPLIT GO/NO-GO (which needs >= 30 timed iterations)."""
+    r = summarize(payloads)
+    stages = r.get("stages") or {}
+    empty = _dist([])
+    return {"schema": SCHEMA + ".result", "iterations_timed": r["iterations_timed"],
+            "iterations_untimed": r["iterations_untimed"],
+            "lock_wait": stages.get("tail_wait", empty),
+            "lock_held": stages.get("tail_held", empty),
+            "stage_durations": {k: v for k, v in stages.items()
+                                if k not in ("tail_wait", "tail_held")},
+            "tail_held_on_failed_candidates": r["tail_held_on_failed_candidates"],
+            "device_held_split": r["device_held_split"], "died_at": r["died_at"],
+            "tail_split_go_no_go_ready": r["iterations_timed"] >= 30}
+
+
+def export_result(store_root: Path, result_path: Path, *, since: str | None = None) -> dict[str, Any]:
+    """Merge `result_block` of the store (rows since `since`) into `result_path` under
+    RESULT_KEY, atomically; an existing RESULT.json keeps every other key. Returns the block."""
+    block = result_block(read_store(Path(store_root), since=since))
+    block["since"] = since
+    path = Path(result_path)
+    doc: dict[str, Any] = {}
+    if path.exists():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                doc = loaded
+        except (OSError, ValueError):
+            doc = {}
+    doc[RESULT_KEY] = block
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp-tail-timing")
+    tmp.write_text(json.dumps(doc, indent=1, sort_keys=True), encoding="utf-8")
+    tmp.replace(path)
+    return block
+
+
+def export_from_env(stores: Iterable[str] | None, since: str | None) -> dict[str, Any] | None:
+    """run.py's end-of-run hook: export into $AK_RESULT_JSON when set. Never raises."""
+    import os
+    target = os.environ.get(RESULT_ENV)
+    stores = [s for s in (stores or ()) if s]
+    if not target or len(stores) != 1:
+        return None
+    try:
+        return export_result(Path(stores[0]), Path(target), since=since)
+    except Exception as exc:      # noqa: BLE001
+        print(f"tail_timing: RESULT export skipped: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Summarize iteration/tail stage timing (read-only).")
     parser.add_argument("store", type=Path, help="AutoKernel store root (holds experiments.db)")
     parser.add_argument("--json", action="store_true", help="print the JSON report")
+    parser.add_argument("--export-result", type=Path, metavar="RESULT_JSON",
+                        help=f"merge the compact block into this RESULT.json under {RESULT_KEY}")
+    parser.add_argument("--since", help="only experiment rows recorded at/after this ISO time")
     args = parser.parse_args(argv)
-    r = summarize(read_store(args.store))
+    if args.export_result:
+        block = export_result(args.store, args.export_result, since=args.since)
+        print(json.dumps(block, indent=2, sort_keys=True))
+        return 0
+    r = summarize(read_store(args.store, since=args.since))
     if args.json:
         print(json.dumps(r, indent=2, sort_keys=True))
         return 0
@@ -353,8 +427,9 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["ATTR", "FIELD", "SCHEMA", "IterationTimer", "classify_label", "main",
-           "read_store", "summarize", "timed_session", "verdict_split"]
+__all__ = ["ATTR", "FIELD", "RESULT_ENV", "RESULT_KEY", "SCHEMA", "IterationTimer",
+           "classify_label", "export_from_env", "export_result", "main", "read_store",
+           "result_block", "summarize", "timed_session", "verdict_split"]
 
 if __name__ == "__main__":  # pragma: no cover
     sys.exit(main())

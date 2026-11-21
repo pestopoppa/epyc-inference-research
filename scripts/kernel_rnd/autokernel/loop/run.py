@@ -9140,6 +9140,18 @@ def _amdahl_tail_demote(args, hypothesis) -> bool:
                                         mechanism_id=getattr(hypothesis, "mechanism_id", None))
     return bool(row and row.get("demoted"))
 
+def _main_exporting_tail_timing(actual: list[str], stores) -> int:
+    """`_main`, then (AK parallel loop P0) merge this run's per-stage durations and tail
+    lock wait into $AK_RESULT_JSON when set. Observe-only: the export never changes rc."""
+    from datetime import datetime, timezone
+    started = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        return _main(actual)
+    finally:
+        if "--planner-only" not in actual:
+            tail_timing.export_from_env(stores, started)
+
+
 def main(argv: list[str] | None = None) -> int:
     from . import lane_watchdog, serial_run
     actual = list(sys.argv[1:] if argv is None else argv)
@@ -9157,11 +9169,11 @@ def main(argv: list[str] | None = None) -> int:
             raise
         return (rc or 1) if _report_dry_run_refusals() else rc
     if lane_watchdog._SUPERVISED or not stores or "--planner-only" in actual:
-        return _main(actual)
+        return _main_exporting_tail_timing(actual, stores)
     if len(stores) != 1:
         raise lane_watchdog.WatchdogRefused("exactly one canonical store is required")
     if lane_watchdog.accept_serial_capability(stores[0]):
-        return _main(actual)
+        return _main_exporting_tail_timing(actual, stores)
     return lane_watchdog.supervise(
         "scripts.kernel_rnd.autokernel.loop.run", actual, key=stores[0],
         file_options=(*serial_run._DOCUMENT_FLAGS, "--resume-run"),
