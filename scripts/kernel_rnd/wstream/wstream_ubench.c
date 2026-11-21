@@ -176,6 +176,23 @@ static void dec_tans(const Tans *t, const uint8_t *in, uint8_t *out, int n) {
   }
 }
 
+
+// ---------------- scales_only: raw int8 codes + 32-lane Huffman-coded 8-bit scale index (per-tensor fp16 table) ----
+// chunk layout: [lane-coded scale indices for CH/32 blocks][CH raw code bytes]. Decoded output per chunk = CH codes
+// (+ CH/32 fp16 scales into a side array). Throughput counts CH*34/32 decoded bytes per chunk (codes + 2-byte scales).
+#define NSB (CH / 32)
+static uint16_t SCTAB[256];
+static size_t enc_scales(const Huff *h, const uint8_t *s, const uint8_t *sidx, uint8_t *o) {
+  size_t n = enc_lanes(h, sidx, NSB, o, 0); n = (n + 63) & ~(size_t)63;
+  memcpy(o + n, s, CH); return n + CH;
+}
+static uint16_t SCOUT[NSB];
+static void dec_scales(const Huff *h, const uint8_t *chunk, uint8_t *out, size_t codes_at) {
+  uint8_t idx[NSB]; dec_lanes_core(h->lut, chunk, idx, NSB, 0);
+  for (int b = 0; b < NSB; b++) SCOUT[b] = SCTAB[idx[b]];
+  memcpy(out, chunk + codes_at, CH);
+}
+
 // ---------------- Q8_0 dot baseline (34-byte blocks, L2-resident) ----------------
 static float dot_q8(const uint8_t *w, const int8_t *a, int nblk) {
   __m512 acc = _mm512_setzero_ps();
@@ -227,46 +244,52 @@ int main(int argc, char **argv) {
   for (size_t i = 0; i < raw; i++) { xs ^= xs << 13; xs ^= xs >> 7; xs ^= xs << 17; src[i] = (uint8_t)lutc[xs >> 48]; }
 
   static Huff h8, h4; static Tans tt; huff_build(&h8, p, 256); huff_build(&h4, phi, 16); tans_build(&tt, p);
-  const char *names[4] = {"static", "split", "tans", "lanes32"};
-  uint8_t *enc[4]; size_t *off[4], etot[4];
+  const char *names[5] = {"static", "split", "tans", "lanes32", "scales_only"};
+  for (int i = 0; i < 256; i++) SCTAB[i] = (uint16_t)(0x2000 + 37 * i);
+  size_t *cat = malloc((nch + 1) * sizeof(size_t));
+  uint8_t *enc[5]; size_t *off[5], etot[5];
   uint32_t *pb = malloc(CH * 4); uint8_t *pk = malloc(CH);
-  for (int k = 0; k < 4; k++) {
+  for (int k = 0; k < 5; k++) {
     enc[k] = aligned_alloc(64, raw + raw / 4 + nch * 512 + 4096); off[k] = malloc((nch + 1) * sizeof(size_t)); size_t at = 0;
     for (size_t c = 0; c < nch; c++) {
       off[k][c] = at; const uint8_t *s = src + c * CH; uint8_t *o = enc[k] + at; size_t n;
       if (k == 0) n = enc_static(&h8, s, CH, o); else if (k == 1) n = enc_split(&h4, s, CH, o);
-      else if (k == 2) n = enc_tans(&tt, s, CH, o, pb, pk); else n = enc_lanes(&h8, s, CH, o, 0);
+      else if (k == 2) n = enc_tans(&tt, s, CH, o, pb, pk); else if (k == 3) n = enc_lanes(&h8, s, CH, o, 0);
+      else { uint8_t si[NSB]; for (int b = 0; b < NSB; b++) si[b] = src[(c * CH + b * 32 + 17) % raw]; n = enc_scales(&h8, s, si, o); cat[c] = n - CH; }
       at += (n + PAD + 63) & ~(size_t)63;
     }
     off[k][nch] = at; etot[k] = 0;
     for (size_t c = 0; c < nch; c++) etot[k] += off[k][c + 1] - off[k][c] - PAD;  // approx payload (pad/alignment excluded)
   }
+  { etot[4] = raw; for (size_t c = 0; c < nch; c++) etot[4] += cat[c]; }  // coded scales (incl. lane hdr) + raw codes
   uint8_t *outb = aligned_alloc(64, CH + 64);
   // lossless check on every chunk (untimed), then timed pass
-  int ok[4];
-  for (int k = 0; k < 4; k++) {
+  int ok[5];
+  for (int k = 0; k < 5; k++) {
     ok[k] = 1;
     for (size_t c = 0; c < nch && ok[k]; c++) {
       const uint8_t *in = enc[k] + off[k][c];
       if (k == 0) dec_static(&h8, in, outb, CH); else if (k == 1) dec_split(&h4, in, outb, CH);
-      else if (k == 2) dec_tans(&tt, in, outb, CH); else dec_lanes(&h8, in, outb, CH);
+      else if (k == 2) dec_tans(&tt, in, outb, CH); else if (k == 3) dec_lanes(&h8, in, outb, CH);
+      else { dec_scales(&h8, in, outb, cat[c]); for (int b = 0; b < NSB; b++) if (SCOUT[b] != SCTAB[src[(c * CH + b * 32 + 17) % raw]]) ok[k] = 0; }
       if (memcmp(outb, src + c * CH, CH)) ok[k] = 0;
     }
   }
   // flush caches between schemes by touching src (raw bytes > L3 share)
-  double gbps[4], cyc[4]; uint64_t sink = 0;
-  int order[4]; for (int k = 0; k < 4; k++) order[k] = (k + round) & 3;   // rotate scheme order per round
-  for (int oi = 0; oi < 4; oi++) {
+  double gbps[5], cyc[5]; uint64_t sink = 0;
+  int order[5]; for (int k = 0; k < 5; k++) order[k] = (k + round) % 5;   // rotate scheme order per round
+  for (int oi = 0; oi < 5; oi++) {
     int k = order[oi]; for (size_t i = 0; i < raw; i += 64) sink += src[i];
     double t0 = now(); uint64_t c0 = __rdtsc();
     for (size_t c = 0; c < nch; c++) {
       const uint8_t *in = enc[k] + off[k][c];
       if (k == 0) dec_static(&h8, in, outb, CH); else if (k == 1) dec_split(&h4, in, outb, CH);
-      else if (k == 2) dec_tans(&tt, in, outb, CH); else dec_lanes(&h8, in, outb, CH);
+      else if (k == 2) dec_tans(&tt, in, outb, CH); else if (k == 3) dec_lanes(&h8, in, outb, CH);
+      else { dec_scales(&h8, in, outb, cat[c]); sink += SCOUT[c & (NSB - 1)]; }
       sink += outb[c & (CH - 1)];
     }
     uint64_t c1 = __rdtsc(); double t1 = now();
-    gbps[k] = raw / (t1 - t0) / 1e9; cyc[k] = (double)(c1 - c0) / raw;
+    double rb = k == 4 ? raw * 34.0 / 32 : raw; gbps[k] = rb / (t1 - t0) / 1e9; cyc[k] = (double)(c1 - c0) / rb;
   }
   // Q8_0 dot baseline over an L2-resident 34-byte-block buffer (1088 blocks = 36 KiB)
   int nb = 1088; uint8_t *wq = aligned_alloc(64, nb * 34 + 64); int8_t *av = aligned_alloc(64, nb * 32 + 64);
@@ -289,9 +312,9 @@ int main(int argc, char **argv) {
   printf("{\"round\":%d,\"raw_bytes\":%zu,\"entropy_bits\":%.4f,\"tsc_ghz\":%.3f,\"cpu0\":%d,\"bw_threads\":%d,\"dram_read_gbs\":%.2f,"
          "\"per_core_share_gbs\":%.3f,\"dot_q8_gbps\":%.3f,\"dot_q8_tsc_cyc_per_byte\":%.4f,\"schemes\":{",
          round, raw, H, tsc_ghz, cpus[0], bwn, bw_gbs, bw_gbs / bwn, dot_gbps, dot_cyc);
-  for (int k = 0; k < 4; k++)
+  for (int k = 0; k < 5; k++)
     printf("%s\"%s\":{\"ok\":%s,\"decoded_gbps\":%.3f,\"tsc_cyc_per_byte\":%.4f,\"enc_bytes\":%zu,\"ratio\":%.5f,\"saving\":%.5f}",
-           k ? "," : "", names[k], ok[k] ? "true" : "false", gbps[k], cyc[k], etot[k], (double)etot[k] / raw, 1 - (double)etot[k] / raw);
+           k ? "," : "", names[k], ok[k] ? "true" : "false", gbps[k], cyc[k], etot[k], (double)etot[k] / (k == 4 ? raw * 34.0 / 32 : raw), 1 - (double)etot[k] / (k == 4 ? raw * 34.0 / 32 : raw));
   printf("},\"sink\":%llu,\"fs\":%.1f}\n", (unsigned long long)(sink & 1), fs * 0);
   return 0;
 }

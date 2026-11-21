@@ -6,7 +6,8 @@ MODEL     none. Synthetic i.i.d. code streams drawn from measured 256-bin histog
           (inputs/hist_q27b.txt = Qwen3.8-27B Q8_0 ffn_*, inputs/hist_a3b.txt = Qwen3.6-35B-A3B Q8_0 ffn_*_exps).
 HARNESS   inputs/wstream_ubench (AVX-512 C, source inputs/wstream_ubench.c; hashes pinned in SOURCE.sha256).
           Per invocation: 1 GiB raw codes, 4 schemes (static scalar Huffman | split raw-low-nibble + 32-lane Huffman hi
-          nibble | tANS 4-state | 32-lane interleaved Huffman), every chunk round-trip checked (lossless), decode timed on
+          nibble | tANS 4-state | 32-lane interleaved Huffman | scales_only = raw int8 codes + 32-lane-Huffman 8-bit scale index into
+          a per-tensor fp16 table; its decoded bytes count codes + 2-byte scales, its saving is taken from the census), every chunk round-trip checked (lossless), decode timed on
           ONE core (physical cpu 0) into an L2-resident chunk; Q8_0 VNNI dot cycles/byte; 24-thread DRAM read GB/s on
           physical 0-23 (per-core share = that / 24, the decode threads of a q0 instance). Scheme order rotates per round.
 ROUNDS    6 interleaved rounds x {q27b, a3b}.
@@ -29,7 +30,7 @@ BIN = D / "inputs/wstream_ubench"
 HISTS = {"q27b": D / "inputs/hist_q27b.txt", "a3b": D / "inputs/hist_a3b.txt"}
 PIN = list(range(0, 24))
 ROUNDS, INTERIM, RAW_MIB, MARGIN = 6, 3, 1024, 1.25
-SCHEMES = ["static", "split", "tans", "lanes32"]
+SCHEMES = ["static", "split", "tans", "lanes32", "scales_only"]
 SMOKE = os.environ.get("FILLER_SMOKE") == "1" or os.environ.get("FILLER_DRYRUN") == "1"
 
 
