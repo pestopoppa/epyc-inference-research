@@ -361,7 +361,8 @@ class FakeExecutors:
                     "reference_output_f32le_hex": output.hex(),
                     "reference_output_f64le_hex": output_f64.hex(),
                 }, sort_keys=True))
-                invocation.stdout_path.write_text("native C6 oracle complete\n")
+                invocation.stdout_path.write_text(
+                    getattr(self, "c6_oracle_stdout", "native C6 oracle complete\n"))
             else:
                 self.c6_leg_calls += 1
                 leg = self.c6_leg_calls
@@ -768,6 +769,26 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             reopened = E.load_gpu_source_evidence_bundle(
                 Path(directory) / "evidence" / "proof-bundle.json")
             self.assertEqual(reopened, bundle)
+
+    def test_split_c6_oracle_with_empty_stdout_seals_and_reopens(self):
+        # r13 (INF48-C6-CONTROLLER-PROOF): the real oracle writes its result to
+        # the sidecar and nothing to stdout; reopening the sealed receipt must
+        # not refuse an empty-but-hash-bound stdout.
+        with tempfile.TemporaryDirectory() as directory:
+            executors = FakeExecutors()
+            executors.c6_oracle_stdout = ""
+            bundle, _, _ = self.produce(directory, executors=executors)
+            correctness = Path(directory) / "evidence" / "correctness"
+            body = json.loads((correctness / "c6-receipt.json").read_text())
+            stdout = Path(body["oracle_output"]["stdout_path"])
+            self.assertEqual(stdout.stat().st_size, 0)
+            reopened = E.load_gpu_source_evidence_bundle(
+                Path(directory) / "evidence" / "proof-bundle.json")
+            self.assertEqual(reopened, bundle)
+            stdout.write_text("x")
+            with self.assertRaisesRegex(E.EvidenceProducerError, "oracle stdout changed"):
+                E.load_gpu_source_evidence_bundle(
+                    Path(directory) / "evidence" / "proof-bundle.json")
 
     def test_combined_c6_mode_still_seals_without_oracle_split(self):
         with tempfile.TemporaryDirectory() as directory:

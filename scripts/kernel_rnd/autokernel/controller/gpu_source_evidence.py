@@ -5167,7 +5167,9 @@ def _validate_c6_split_receipt_body(
     oracle_output = body.get("oracle_output")
     if not isinstance(oracle_output, Mapping):
         raise EvidenceProducerError("sealed C6 oracle output reference is malformed")
-    for kind, allow_empty in (("stdout", False), ("stderr", True)):
+    # The oracle result lives in the sidecar; empty stdout is legitimate and
+    # stays bound by its sealed sha256 (r13: untyped refusal killed the controller).
+    for kind, allow_empty in (("stdout", True), ("stderr", True)):
         path = Path(str(oracle_output.get(f"{kind}_path", "")))
         if _hash_file(path, f"C6 oracle {kind}", allow_empty=allow_empty) \
                 != oracle_output.get(f"{kind}_sha256"):
