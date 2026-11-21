@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Mapping
 
 _HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE.parents[1]))
+sys.path.insert(0, str(_HERE.parents[2]))
 from scripts.kernel_rnd import c6_reward_integrity as ri  # noqa: E402
 
 RUBRIC_PATH = _HERE / "tritonrl_appendix_h_rubric.json"
