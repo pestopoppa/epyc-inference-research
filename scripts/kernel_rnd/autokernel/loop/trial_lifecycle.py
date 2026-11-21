@@ -139,6 +139,8 @@ class OutcomeStatus(str, Enum):
     HYPOTHESIS_RETIRED = "hypothesis_retired"
     # control / harness
     SUPERSEDED = "superseded"
+    #: AKPL-P3: formed and handed to the rowflow row chain (measured there, not in-process).
+    HANDED_OFF = "handed_off"
     STOPPED_MID_FORMATION = "stopped_mid_formation"
     STOPPED_BEFORE_RESCHEDULE = "stopped_before_reschedule"
     PLANNER_TRANSIENT = "planner_transient"

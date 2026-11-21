@@ -210,6 +210,21 @@ class TailRefused(RuntimeError):
     """
 
 
+#: AKPL-P3 status: the lane formed a candidate and handed it to its rowflow row chain.
+HANDED_OFF = "handed_off"
+
+
+class HandedOff(TailRefused):
+    """AKPL-P3 (AK-TAIL-SPLIT via rowflow): the candidate was handed to its row chain.
+
+    Raised by `tailsplit.EmittingTail` where the legacy serialized tail would have been
+    entered. Not a supersession and not an error: the candidate is measured by its chain
+    rows (build -> oracle-kld -> ab-timing -> fold-check), never in-process. `record` is
+    the candidate record as handed off."""
+
+    record: dict | None = None
+
+
 class NoOpBuild(RuntimeError):
     """AKX-ALL-29.3: the candidate's gfx90a kernel bodies equal the incumbent's.
 
@@ -598,6 +613,8 @@ class Outcome:
     # its final outcome, each already recorded as its own row.
     retained_patch: dict | None = None
     abandoned_candidates: list[dict] = field(default_factory=list)
+    # AKPL-P3: the candidate record a `handed_off` outcome passed to its row chain.
+    handoff_record: dict | None = None
     # Resume lineage and checkpoints (`resume.py`). `resumed_from` names the
     # checkpoint (`<attempt_id>#<index>`) this candidate was resumed from;
     # `resume_checkpoints` is what a later launch needs to resume THIS one.
@@ -668,6 +685,8 @@ class Outcome:
             row["abort_evidence"] = self.abort_evidence
         if self.no_op_build is not None:
             row["no_op_build"] = self.no_op_build
+        if self.handoff_record is not None:
+            row["handoff_record"] = self.handoff_record
         for key in ("attempt_identity", "exact_repeat_dispatch_count", "duplicate_of",
                     "prior_effect", "prior_epoch", "refusal_gate", "candidate_diff_sha256"):
             if getattr(self, key) is not None:
@@ -1275,6 +1294,10 @@ def iterate(*, planner: Planner, critic: Critic,
                         author_lane=author_lane, author_panel=author_panel,
                         begin_author_custody=begin_author_custody,
                         finish_author_custody=finish_author_custody))
+    except HandedOff as exc:
+        # AKPL-P3: formed and handed to the row chain; measured there, not here.
+        return observed(Outcome(HANDED_OFF, getattr(exc, "hypothesis", None), [str(exc)],
+                                handoff_record=getattr(exc, "record", None)))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -2091,7 +2114,11 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             # happens under the lock), so it must be caught around the `with`, not
             # around the call that builds it.
             try:
-                with (tail_session(hypothesis=hypothesis)
+                # AKPL-P3: an emitting tail (tailsplit.EmittingTail) also takes the
+                # validated paths, so it can snapshot the candidate and hand it off.
+                with (tail_session(hypothesis=hypothesis,
+                                   **({"paths": paths}
+                                      if getattr(tail_session, "accepts_paths", False) else {}))
                       if getattr(tail_session, "accepts_hypothesis", False)
                       else tail_session()):
                     if reserve_candidate is not None and hypothesis.runtime_pair is None:
@@ -2307,6 +2334,6 @@ __all__ = ["NoOpBuild", "AUTHORING_FAILED", "AUTHORING_HARNESS_FAILURE", "AUTHOR
            "HYPOTHESIS_AUTHOR_ATTEMPTS", "HYPOTHESIS_RETIRED", "PATCH_ROUNDS_EXHAUSTED",
            "PENDING_HYPOTHESIS_STATUSES", "SCOPE_BLOCKED", "classify_patch_rejection",
            "scope_rules_fingerprint",
-           "RESUME_REJECTED", "STOPPED_AFTER_DISPOSALS", "gate_rules_fingerprint", "Abstain", "ActorStopped", "ActorTransient", "AuthorReportMissing", "REPORT_SOURCE_LANE_DIFF", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
+           "RESUME_REJECTED", "STOPPED_AFTER_DISPOSALS", "gate_rules_fingerprint", "Abstain", "ActorStopped", "ActorTransient", "AuthorReportMissing", "REPORT_SOURCE_LANE_DIFF", "ConfirmVetoed", "InteractionRegression", "TailRefused", "HandedOff", "HANDED_OFF", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]

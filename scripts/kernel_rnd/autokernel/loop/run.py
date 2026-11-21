@@ -3151,6 +3151,13 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workers", type=int, default=pipeline.DEFAULT_WORKERS,
                         help="concurrent lanes (default: the measured tail-saturation "
                              "point; see pipeline.DEFAULT_WORKERS)")
+    parser.add_argument("--legacy-tail", action="store_true",
+                        help="AKPL-P3 rollback: measure in-process through the serialized tail "
+                             "(build, oracle, A/B, commit under one lock). Default with --workers > 1: "
+                             "lanes emit candidate records and hand them to the rowflow row chain "
+                             "(tailsplit.py); --workers 1 always uses the legacy tail")
+    parser.add_argument("--chain-spool", type=Path, default=None,
+                        help="AKPL-P3 candidate-record spool (default tailsplit.SPOOL)")
     parser.add_argument("--worker-root", type=Path, default=pool.WORKER_ROOT,
                         help="parent of the per-lane detached worktrees")
     parser.add_argument("--worker-build-root", type=Path,
@@ -8002,7 +8009,11 @@ def _main(argv: list[str] | None = None) -> int:
             **({"make_exact_judge": _exact_judge_factory(args)}
                if getattr(args, "exact_lane_config", None) else {}),
             **({"make_isa_check": _isa_check_factory(args)}
-               if getattr(args, "isa_claims_gate", "off") != "off" else {}))
+               if getattr(args, "isa_claims_gate", "off") != "off" else {}),
+            # AKPL-P3 (AK-TAIL-SPLIT via rowflow): lanes emit candidate records unless
+            # --legacy-tail or --workers 1 keeps the in-process serialized tail.
+            **({"make_emitting_tail": _emitting_tail_factory(args)}
+               if _tail_split_enabled(args) else {}))
 
     claim_started = None
     original_claims = []
@@ -9075,6 +9086,18 @@ def _exact_judge_factory(args):
         cpu_campaign=getattr(args, "cpu_serving_launch", None) is not None,
         gpu_campaign=getattr(args, "gpu_serving_launch", None) is not None)
     return exact_lane.make_exact_judge(exact_lane.load_config(args.exact_lane_config))
+
+
+def _tail_split_enabled(args) -> bool:
+    """AKPL-P3: the row-chain hand-off is the default for a pooled run; `--legacy-tail`
+    or `--workers 1` keeps the in-process serialized tail (rollback)."""
+    return (not getattr(args, "legacy_tail", False)) and int(getattr(args, "workers", 1) or 1) > 1
+
+
+def _emitting_tail_factory(args):
+    from . import tailsplit
+    handoff = tailsplit.ChainHandoff(spool=getattr(args, "chain_spool", None) or tailsplit.SPOOL)
+    return lambda worker, base: tailsplit.EmittingTail(worker=worker, base=base, handoff=handoff)
 
 def _isa_check_factory(args):
     """C5-ISA-1: per-worker ISA archive + claims check for a GPU campaign; refused for CPU."""

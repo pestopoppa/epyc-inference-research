@@ -987,6 +987,22 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "pool.py:prune_anchor_generations:mkdir": (1, "private quarantine dir of the anchor pruner's own delete protocol"),
     "source_loo.py:execute_surface:mkdir": (1, "evidence: LOO result dir; omission trees retained with deletion_authorized=False"),
     "source_loo.py:execute_surface:worktree-add": (1, "evidence: LOO omission worktree retained with its result (deletion_authorized=False)"),
+    "gate_eval.py:main:write_text": (1, "evidence: CLI --out verdict.json the caller names (AKPL-P1)"),
+    "gate_eval_replay.py:main:write_text": (1, "evidence: replay report the caller names (AKPL-P1)"),
+    "tail_timing.py:export_result:mkdir": (1, "evidence: $AK_RESULT_JSON parent dir of the tail timing export (AKPL-P0)"),
+    "tail_timing.py:export_result:write_text": (1, "evidence: tail timing summary written into the row's RESULT (AKPL-P0)"),
+    "stage_bodies.py:_live_source_tree:mkdir": (1, "evidence: per-candidate worktree parent under akchain-work, kept with its build (AKPL-P3)"),
+    "stage_bodies.py:_live_oracle:mkdir": (1, "state: champion base-logits dir keyed by base sha, reused by later candidates (AKPL-P3)"),
+    "stage_bodies.py:main:mkdir": (1, "evidence: the chain row's out/ dir for RESULT.json (AKPL-P3)"),
+    "stage_bodies.py:main:write_text": (1, "evidence: the chain row's RESULT.json (temp + rename) (AKPL-P3)"),
+    "stage_bodies.py:trigger_lineage:mkdir": (1, "evidence: lineage generate output dir per KEEP/composite event (AKPL-P3)"),
+    "stage_bodies.py:trigger_lineage:write_text": (1, "evidence: lineage event.json beside the generated ledger (AKPL-P3)"),
+    "stage_bodies.py:_live_source_tree:worktree-add": (1, "evidence: detached candidate worktree at the patch sha, kept with its build (AKPL-P3)"),
+    "stage_bodies.py:test_primitives.lineage:open-write": (1, "evidence: test-mode lineage log the offline simulation names (AKPL-P3)"),
+    "tailsplit.py:ChainHandoff.__call__:mkdir": (1, "evidence: candidate-record spool dir (the hand-off to the row chain, AKPL-P3)"),
+    "tailsplit.py:ChainHandoff.__call__:write_text": (1, "evidence: candidate record (temp + rename) in the spool (AKPL-P3)"),
+    "tailsplit.py:snapshot_commit:TemporaryDirectory": (1, "private GIT_INDEX_FILE for the candidate snapshot; removed on exit (AKPL-P3)"),
+    "tailsplit.py:git_rebase_fns.rebase:TemporaryDirectory": (1, "private GIT_INDEX_FILE for a rebase-and-recheck commit; removed on exit (AKPL-P3)"),
 }
 
 

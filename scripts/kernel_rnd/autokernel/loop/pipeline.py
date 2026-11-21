@@ -58,6 +58,9 @@ from . import tail_timing
 #: FAILED for `--scratch-keep failed` (its scratch is retained, still marked).
 MEASURED_STATUSES = frozenset({"kept", "measured_null", "regression", "keep_candidate",
                                "runtime_observed"})
+#: AKPL-P3: a handed-off candidate's patch lives in its snapshot commit and candidate
+#: record, so its scratch is not retained as a failure either.
+HANDOFF_STATUSES = frozenset({loop_mod.HANDED_OFF})
 
 #: Beyond this, lanes queue on the serialized tail rather than adding throughput.
 #: Derived from measurement, not chosen. Run 13 recorded per-phase wall time:
@@ -324,7 +327,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              next_resume: Callable[[Worker, str], Any] | None = None,
              begin_author_custody=None, finish_author_custody=None,
              make_exact_judge: Callable[[Worker], Any] | None = None,
-             make_isa_check: Callable[[Worker], Any] | None = None
+             make_isa_check: Callable[[Worker], Any] | None = None,
+             make_emitting_tail: Callable[[Worker, str], Any] | None = None
              ) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
@@ -348,6 +352,12 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
     (`bestof.AuthorPanel`) once, like its planner; None from it, or no factory, is the
     single-author path (N=1), unchanged. The panel authors in scratch worktrees and
     lands the selected diff on this lane at the base `reset_to_champion` returned.
+
+    `make_emitting_tail(worker, base)` (AKPL-P3, AK-TAIL-SPLIT via rowflow) replaces the
+    in-process SerializedTail: a formed candidate is snapshotted, written as a candidate
+    record and handed to the row-chain scaffolder (`tailsplit.EmittingTail`), and the
+    iteration ends `handed_off`. None (or `--legacy-tail` / `--workers 1` upstream) is
+    the legacy serialized tail, byte for byte.
     """
     budget = Budget(iterations, should_stop=should_stop)
     tail = tail or SerializedTail(champion_head)
@@ -401,7 +411,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             nonlocal iteration_scope
             if iteration_scope is None:
                 return
-            if outcome is None or outcome.status not in MEASURED_STATUSES:
+            if outcome is None or outcome.status not in (MEASURED_STATUSES | HANDOFF_STATUSES):
                 iteration_scope.mark_failed()
             iteration_scope.__exit__(None, None, None)
             iteration_scope = None
@@ -519,7 +529,9 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 outcome = loop_mod.iterate(
                     planner=planner, critic=critic, context=build_context(),
                     measure=measure, gate=gate, commit=commit_one, on_step=step,
-                    tail_session=_TailSession(tail, base, timer),
+                    tail_session=(make_emitting_tail(worker, base)
+                                  if make_emitting_tail is not None
+                                  else _TailSession(tail, base, timer)),
                     should_abandon=should_stop, record_reschedule=record_reschedule,
                     accumulate_valid_positive=accumulate_valid_positive,
                     # Per-hypothesis authoring budget across iterations (loop.py).

@@ -19,6 +19,8 @@ INVALID_OUTCOMES = frozenset({
     "integrity_refused", "patch_rounds_exhausted", "scope_blocked", "hypothesis_retired",
     "authoring_failed",
     "stopped_before_reschedule", "stopped_mid_formation", "superseded",
+    # AKPL-P3: formed and handed to the row chain; no in-process measurement.
+    "handed_off",
     "source_validation_failed", "source_validation_pending",
     # A refusal before measurement: the exact-attempt identity, and (DS41-C97) a runtime
     # treatment already measured in the same frame under another mechanism id.
