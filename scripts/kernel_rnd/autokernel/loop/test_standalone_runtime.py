@@ -1048,3 +1048,181 @@ def test_legacy_restart_without_held_record_keeps_existing_fence(tmp_path, monke
     finally:
         second[0].close()
         second[1].close()
+
+
+# AKU-07h bounded recovery retry, stop-responsive backoff and single run owner.
+# Every authority loss below is a labelled fixture fault, not a real provider event.
+
+
+def _issued_restart(tmp_path, monkeypatch, *, config=None, children=None):
+    runtime, controller, _lifecycle, engine = _runtime(tmp_path, monkeypatch)
+    runtime.recover()
+    transition_id = runtime.driver.tick(now=1.0).transition_id
+    reopened = _reopen_runtime(runtime, controller, engine, monkeypatch, child_counter=children)
+    if config is not None:
+        reopened[0].config = config
+    return transition_id, reopened
+
+
+def _flaky_recover_issued(runtime, monkeypatch, failures, error=None):
+    real = runtime.executor.recover_issued
+    seen = []
+
+    def flaky(outcome):
+        seen.append(outcome.transition_id)
+        if len(seen) <= failures:
+            raise error or worker_lifecycle.WaitingAuthority("fixture provider not ready")
+        return real(outcome)
+
+    monkeypatch.setattr(runtime.executor, "recover_issued", flaky)
+    return seen
+
+
+def test_run_retries_transient_restart_recovery_with_the_same_transition(tmp_path, monkeypatch):
+    children = {"count": 0}
+    transition_id, (runtime, controller, _lc, engine) = _issued_restart(
+        tmp_path, monkeypatch, children=children)
+    seen = _flaky_recover_issued(runtime, monkeypatch, 2)
+    stop = threading.Event()
+    real = runtime.executor.recover_issued
+    monkeypatch.setattr(runtime.executor, "recover_issued",
+                        lambda outcome: (real(outcome), stop.set())[0])
+    try:
+        result = runtime.run(stop)
+        assert result.status == "settled", result.reason
+        assert result.driver_outcome["transition_id"] == transition_id
+        assert seen == [transition_id] * 3
+        assert children["count"] == 1
+        assert len(engine.export_state().receipts) == 1
+        assert len(engine.export_state().issued_selection_digests) == 0
+    finally:
+        runtime.close()
+        controller.close()
+
+
+def test_recovery_retry_exhaustion_is_typed_terminal_and_never_issues(tmp_path, monkeypatch):
+    config = sr.StandaloneRuntimeConfig(0.001, 0.001, 0.002, 0.05, max_exact_retries=2)
+    children = {"count": 0}
+    transition_id, (runtime, controller, _lc, engine) = _issued_restart(
+        tmp_path, monkeypatch, config=config, children=children)
+    seen = _flaky_recover_issued(runtime, monkeypatch, 99)
+    try:
+        result = runtime.recover_with_backoff(lambda _seconds: False)
+        assert result.status == "recovery_required"
+        assert result.terminal == "recovery_retry_exhausted"
+        assert result.to_dict()["terminal"] == "recovery_retry_exhausted"
+        assert "recovery retry budget exhausted after 3 attempts" in result.reason
+        assert seen == [transition_id] * 3
+        blocked = runtime.tick()  # admission stays fenced behind unresolved recovery
+        assert blocked.status == "recovery_required"
+        assert blocked.terminal == "recovery_retry_exhausted"
+        assert controller.unified_driver_pending_intent()["transition_id"] == transition_id
+        assert children["count"] == 0 and not engine.export_state().receipts
+    finally:
+        runtime.close()
+        controller.close()
+
+
+def test_non_transient_recovery_refusal_is_terminal_without_retry(tmp_path, monkeypatch):
+    _tid, (runtime, controller, _lc, _engine) = _issued_restart(tmp_path, monkeypatch)
+    seen = _flaky_recover_issued(
+        runtime, monkeypatch, 99, driver_execution.DriverExecutionRefused("fixture refusal"))
+    try:
+        result = runtime.recover_with_backoff(lambda _seconds: pytest.fail("no backoff"))
+        assert (result.status, result.terminal) == ("recovery_required", "recovery_refused")
+        assert len(seen) == 1
+    finally:
+        runtime.close()
+        controller.close()
+
+
+def test_runtime_stop_interrupts_recovery_backoff(tmp_path, monkeypatch):
+    _tid, (runtime, controller, _lc, _engine) = _issued_restart(
+        tmp_path, monkeypatch, config=sr.StandaloneRuntimeConfig(0.001, 1.0, 2.0, 0.05))
+    attempted = threading.Event()
+    seen = _flaky_recover_issued(runtime, monkeypatch, 99)
+    real = runtime.executor.recover_issued
+    monkeypatch.setattr(runtime.executor, "recover_issued",
+                        lambda outcome: (attempted.set(), real(outcome)))
+    observed = {}
+    thread = threading.Thread(
+        target=lambda: observed.setdefault("value", runtime.run(threading.Event())))
+    thread.start()
+    try:
+        assert attempted.wait(2)
+        started = time.monotonic()
+        runtime.request_stop()  # not the run's stop_event: the backoff still wakes
+        thread.join(0.5)
+        assert not thread.is_alive()
+        assert time.monotonic() - started < 0.5
+        assert observed["value"].status == "stopped"
+        assert len(seen) == 1
+    finally:
+        runtime.request_stop()
+        thread.join(2)
+        runtime.close()
+        controller.close()
+
+
+def test_drain_command_wakes_exact_retry_backoff_and_second_run_refuses(
+        tmp_path, monkeypatch):
+    runtime, controller, _lifecycle, engine = _runtime(
+        tmp_path, monkeypatch, config=sr.StandaloneRuntimeConfig(0.001, 1.0, 2.0, 0.05))
+    stop = threading.Event()
+    first, second = threading.Event(), threading.Event()
+    attempts = []
+
+    def unavailable(outcome):
+        attempts.append(outcome.transition_id)
+        (first if len(attempts) == 1 else second).set()
+        if len(attempts) > 1:
+            stop.set()
+        raise worker_lifecycle.WaitingAuthority("fixture authority lost")
+
+    monkeypatch.setattr(runtime.executor, "execute", unavailable)
+    drives = []
+    real_drive = runtime._drive
+
+    def tracked_drive(**kwargs):
+        drives.append(real_drive(**kwargs))
+        return drives[-1]
+
+    monkeypatch.setattr(runtime, "_drive", tracked_drive)
+    thread = threading.Thread(target=lambda: runtime.run(stop))
+    thread.start()
+    try:
+        assert first.wait(2)
+        with pytest.raises(sr.StandaloneRuntimeRefused, match="active run owner"):
+            runtime.run(threading.Event())
+        deadline = time.monotonic() + 2
+        while not drives and time.monotonic() < deadline:
+            time.sleep(0.005)
+        time.sleep(0.05)  # the run owner is now inside its 1s exact-retry backoff
+        assert [item.status for item in drives] == ["waiting"]
+        started = time.monotonic()
+        controller.request_shutdown_drain()
+        assert second.wait(0.6)
+        assert time.monotonic() - started < 0.6  # woke well before the 1s backoff
+        thread.join(2)
+        assert not thread.is_alive()
+        assert len(set(attempts)) == 1
+        assert len(engine.export_state().issued_selection_digests) == 1
+    finally:
+        stop.set()
+        thread.join(2)
+        runtime.close()
+        controller.close()
+
+
+def test_runtime_result_terminal_is_closed_and_legacy_rows_unchanged(tmp_path, monkeypatch):
+    runtime, controller, _lifecycle, _engine = _runtime(tmp_path, monkeypatch)
+    try:
+        snapshot = controller.snapshot()
+        assert "terminal" not in sr.RuntimeTickResult("waiting", "x", 0, snapshot).to_dict()
+        for status, terminal in (("recovery_required", "made_up"),
+                                 ("waiting", "recovery_refused")):
+            with pytest.raises(sr.StandaloneRuntimeRefused, match="terminal"):
+                sr.RuntimeTickResult(status, "x", 0, snapshot, terminal=terminal)
+    finally:
+        runtime.close()
+        controller.close()

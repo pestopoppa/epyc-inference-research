@@ -869,3 +869,120 @@ finally:
         if process.poll() is None:
             process.terminate()
             process.wait(timeout=3)
+
+
+# AKU-07h: typed process-restart reconstruction through the service path. Faults are
+# labelled fixtures; held receipts come from the HeldProvider fixture, not real hardware.
+
+
+def _service_restart_args(controller, tmp_path, monkeypatch):
+    source = tmp_path / "restart-07h-resolved.json"
+    source.write_text(json.dumps(controller.resolved.to_dict()), encoding="utf-8")
+    monkeypatch.setenv("AUTOKERNEL_CONTROL_TOKEN", "runtime-fixture-token")
+    return ["--resolved-campaign", str(source), "--store", str(controller.store),
+            "--snapshot-version", "3", "--listen", "127.0.0.1:0", "--shutdown-deadline", "1"]
+
+
+def _track_recovery(runtime, monkeypatch):
+    recover = runtime.recover
+    results, runs = [], []
+
+    def tracked():
+        results.append(recover())
+        return results[-1]
+
+    monkeypatch.setattr(runtime, "recover", tracked)
+    monkeypatch.setattr(runtime, "run", lambda _event: runs.append(True) or
+                        runtime_module.RuntimeTickResult(
+                            "stopped", "fixture run owner", 0, runtime.controller.snapshot()))
+    return results, runs
+
+
+def test_service_restart_settles_held_receipt_index_before_listener(tmp_path, monkeypatch):
+    from .test_standalone_runtime import _crash_at, _no_reacquire, _reopen_runtime, _runtime
+
+    first, first_controller, lifecycle, engine = _runtime(tmp_path, monkeypatch)
+    first.recover()
+    _crash_at(first, lifecycle, "OWNED_HELD_RECEIPT_RETAINED")
+    transition_id = first_controller.unified_driver_pending_intent()["transition_id"]
+    children = {"count": 0}
+    runtime, controller, _lc, replay_engine = _reopen_runtime(
+        first, first_controller, engine, monkeypatch, child_counter=children, crashed=True)
+    calls = _no_reacquire(controller)
+    results, runs = _track_recovery(runtime, monkeypatch)
+    assert service._main(_service_restart_args(controller, tmp_path, monkeypatch),
+                         runtime_factory=lambda _r, _a: (controller, runtime)) == 0
+    assert [item.status for item in results] == ["settled"]
+    assert results[0].driver_outcome["transition_id"] == transition_id
+    assert not results[0].execution_receipt["native_measurement_ids"]
+    assert runs == [True]
+    assert len(replay_engine.export_state().receipts) == 1
+    assert children["count"] == 0 and calls["authorize"] == 0
+    assert controller._entered is False
+
+
+def test_service_restart_retries_transient_authority_loss_with_exact_intent(
+        tmp_path, monkeypatch):
+    from .test_standalone_runtime import _flaky_recover_issued, _issued_restart
+
+    children = {"count": 0}
+    transition_id, (runtime, controller, _lc, engine) = _issued_restart(
+        tmp_path, monkeypatch, children=children)
+    seen = _flaky_recover_issued(runtime, monkeypatch, 1)
+    results, runs = _track_recovery(runtime, monkeypatch)
+    assert service._main(_service_restart_args(controller, tmp_path, monkeypatch),
+                         runtime_factory=lambda _r, _a: (controller, runtime)) == 0
+    assert [item.status for item in results] == ["recovery_required", "settled"]
+    assert seen == [transition_id] * 2
+    assert children["count"] == 1 and runs == [True]
+    assert len(engine.export_state().receipts) == 1
+
+
+def test_service_restart_recovery_exhaustion_refuses_before_listener(tmp_path, monkeypatch):
+    from .test_standalone_runtime import _flaky_recover_issued, _issued_restart
+
+    transition_id, (runtime, controller, _lc, engine) = _issued_restart(
+        tmp_path, monkeypatch, config=runtime_module.StandaloneRuntimeConfig(
+            0.001, 0.001, 0.002, 0.05, max_exact_retries=2))
+    seen = _flaky_recover_issued(runtime, monkeypatch, 99)
+    started = []
+    monkeypatch.setattr(service, "CampaignHTTPService",
+                        lambda *a, **k: started.append(True) or pytest.fail("listener"))
+    with pytest.raises(control.ControlRefused, match="recovery retry budget exhausted"):
+        service._main(_service_restart_args(controller, tmp_path, monkeypatch),
+                      runtime_factory=lambda _r, _a: (controller, runtime))
+    assert seen == [transition_id] * 3 and started == []
+    assert not engine.export_state().receipts
+    assert runtime._closed is True and controller._entered is False
+
+
+def test_sigterm_interrupts_restart_recovery_backoff(tmp_path, monkeypatch):
+    from .test_standalone_runtime import _flaky_recover_issued, _issued_restart
+
+    _tid, (runtime, controller, _lc, engine) = _issued_restart(
+        tmp_path, monkeypatch,
+        config=runtime_module.StandaloneRuntimeConfig(0.001, 1.0, 2.0, 0.05))
+    handlers = {}
+
+    def fake_signal(signum, handler):
+        previous = handlers.get(signum, signal.SIG_DFL)
+        handlers[signum] = handler
+        return previous
+
+    seen = _flaky_recover_issued(runtime, monkeypatch, 99)
+    real = runtime.executor.recover_issued
+
+    def signalled(outcome):
+        handlers[signal.SIGTERM](signal.SIGTERM, None)
+        return real(outcome)
+
+    monkeypatch.setattr(service.signal, "signal", fake_signal)
+    monkeypatch.setattr(runtime.executor, "recover_issued", signalled)
+    _results, runs = _track_recovery(runtime, monkeypatch)
+    started = time.monotonic()
+    assert service._main(_service_restart_args(controller, tmp_path, monkeypatch),
+                         runtime_factory=lambda _r, _a: (controller, runtime)) == 0
+    assert time.monotonic() - started < 0.9  # first backoff alone was 1s
+    assert len(seen) == 1 and runs == []
+    assert not engine.export_state().receipts
+    assert controller._entered is False

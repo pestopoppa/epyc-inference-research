@@ -26,6 +26,15 @@ MAX_EXACT_RETRIES = 32
 _RETRYABLE_STATES = frozenset(
     {"driver_transaction_retry_required", "execution_exact_retry_required"}
 )
+# Closed typed terminals of bounded retry (AKU-07h); legacy results carry none.
+TERMINAL_OUTCOMES = frozenset(
+    {"execution_retry_exhausted", "recovery_retry_exhausted", "recovery_refused"})
+_BACKOFF_SLICE_SECONDS = 0.02
+# Transient authority/provider-readiness loss or lost replies: only these retry the
+# retained exact restored intent. Refusals, containment and corruption never retry.
+_TRANSIENT_RECOVERY = (worker_lifecycle.WaitingAuthority,
+                       driver_execution.DriverExecutionUncertain,
+                       unified_driver.DriverTransactionUncertain)
 
 
 class StandaloneRuntimeRefused(RuntimeError):
@@ -127,6 +136,7 @@ class RuntimeTickResult:
     controller_snapshot: Mapping[str, Any]
     driver_outcome: Mapping[str, Any] | None = None
     execution_receipt: Mapping[str, Any] | None = None
+    terminal: str | None = None
     schema: str = RESULT_SCHEMA
 
     def __post_init__(self) -> None:
@@ -138,6 +148,9 @@ class RuntimeTickResult:
             "recovery_required",
         }:
             raise StandaloneRuntimeRefused("runtime result schema/status is invalid")
+        if self.terminal is not None and (self.terminal not in TERMINAL_OUTCOMES
+                                          or self.status != "recovery_required"):
+            raise StandaloneRuntimeRefused("runtime terminal outcome is invalid")
         if not isinstance(self.reason, str) or not self.reason:
             raise StandaloneRuntimeRefused("runtime result requires a reason")
         delay = float(self.retry_after_seconds)
@@ -152,7 +165,7 @@ class RuntimeTickResult:
             object.__setattr__(self, "execution_receipt", _freeze(self.execution_receipt))
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        row = {
             "schema": self.schema,
             "status": self.status,
             "reason": self.reason,
@@ -161,6 +174,9 @@ class RuntimeTickResult:
             "driver_outcome": _thaw(self.driver_outcome),
             "execution_receipt": _thaw(self.execution_receipt),
         }
+        if self.terminal is not None:  # additive; legacy rows stay byte-identical
+            row["terminal"] = self.terminal
+        return row
 
 
 @dataclass(frozen=True)
@@ -220,6 +236,9 @@ class StandaloneRuntime:
         self._uncertain: str | None = None
         self._retry_failures = 0
         self._uncertainty_reason: str | None = None
+        self._running = False
+        self._terminal: str | None = None
+        self._recovery_transient = False
         self.controller.register_runtime_projection(self)
 
     def _observed_result(self, *args, **kwargs) -> RuntimeTickResult:
@@ -227,6 +246,9 @@ class StandaloneRuntime:
             self._observe_aggregates()
         except Exception:
             pass  # diagnostic dispatch faults cannot change the operational result
+        if args[0] == "recovery_required":
+            with self._condition:
+                kwargs.setdefault("terminal", self._terminal)
         result = RuntimeTickResult(*args, **kwargs)
         try:
             # Capture immutable selected identity on the execution thread, before
@@ -236,7 +258,7 @@ class StandaloneRuntime:
             self.controller.record_runtime_observation(self, result, catalog_id=catalog_id)
             return RuntimeTickResult(
                 result.status, result.reason, result.retry_after_seconds, self._snapshot(),
-                result.driver_outcome, result.execution_receipt)
+                result.driver_outcome, result.execution_receipt, result.terminal)
         except Exception as exc:
             # Diagnostics cannot turn an already settled operation into an exact
             # retry or change the original command/execution outcome.
@@ -413,7 +435,9 @@ class StandaloneRuntime:
                 self._uncertainty_reason = (
                     f"exact retry budget exhausted after {self._retry_failures} failures: {reason}"
                 )
+                self._terminal = "execution_retry_exhausted"
                 return False
+            self._terminal = None
             self._uncertain = state
             self._uncertainty_reason = reason
             return True
@@ -421,6 +445,7 @@ class StandaloneRuntime:
     def recover(self) -> RuntimeTickResult:
         if not self._enter():
             return self._observed_result("stopped", "stop requested", 0, self._snapshot())
+        self._recovery_transient = False
         try:
             pending_record = self.controller.unified_driver_pending_intent()
             with self._condition:
@@ -449,6 +474,7 @@ class StandaloneRuntime:
                 self._uncertain = None
                 self._retry_failures = 0
                 self._uncertainty_reason = None
+                self._terminal = None
             if receipt is not None:
                 return self._observed_result(
                     "settled",
@@ -467,11 +493,64 @@ class StandaloneRuntime:
                     self._pending_outcome = pending
                 self._uncertain = "execution_recovery_required"
                 self._uncertainty_reason = str(exc)
+                self._recovery_transient = isinstance(exc, _TRANSIENT_RECOVERY)
             return self._observed_result(
                 "recovery_required", str(exc), self._delay(unavailable=True), self._snapshot()
             )
         finally:
             self._leave()
+
+    def recover_with_backoff(self, wait) -> RuntimeTickResult:
+        """Retry the retained exact restored intent after transient authority/reply loss.
+
+        ``wait(seconds)`` blocks at most ``seconds`` and returns True once stop is
+        requested.  Each attempt re-enters ``recover`` with the same pending transition,
+        so no duplicate child is launched and unresolved ownership is re-checked, never
+        stepped past; nothing new is selected until recovery succeeds.  A non-transient
+        refusal or an exhausted budget ends in a typed terminal outcome.
+        """
+        if not callable(wait):
+            raise StandaloneRuntimeRefused("recovery backoff wait must be callable")
+        attempts = 0
+        while True:
+            result = self.recover()
+            if result.status != "recovery_required":
+                return result
+            attempts += 1
+            with self._condition:
+                transient = self._recovery_transient
+            if not transient or attempts > self.config.max_exact_retries:
+                reason = (f"recovery retry budget exhausted after {attempts} attempts: "
+                          f"{result.reason}" if transient else result.reason)
+                with self._condition:
+                    self._terminal = ("recovery_retry_exhausted" if transient
+                                      else "recovery_refused")
+                return self._observed_result(
+                    "recovery_required", reason, result.retry_after_seconds, self._snapshot())
+            if self._stop_requested or wait(result.retry_after_seconds):
+                return self._observed_result(
+                    "stopped", "stop requested during recovery backoff", 0, self._snapshot())
+
+    def _control_marker(self) -> tuple:
+        return tuple(getattr(self.controller, name, None) for name in (
+            "control_revision", "desired_state", "_shutdown_requested"))
+
+    def _backoff_wait(self, stop_event: threading.Event, seconds: float) -> bool:
+        """Wait on the stop event, never a bare sleep; return True when stopping.
+
+        A runtime stop wins at once.  A new control command (pause/drain/resume or the
+        shutdown drain latch) ends the backoff early so the retained exact operation or
+        the admission check observes it promptly.
+        """
+        deadline = time.monotonic() + seconds
+        marker = self._control_marker()
+        while True:
+            if stop_event.is_set() or self._stop_requested:
+                return True
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or self._control_marker() != marker:
+                return False
+            stop_event.wait(min(remaining, _BACKOFF_SLICE_SECONDS))
 
     def _drive(self, *, retry: bool, external_stop=lambda: False) -> RuntimeTickResult:
         if not self._enter():
@@ -542,6 +621,7 @@ class StandaloneRuntime:
                 self._uncertain = None
                 self._retry_failures = 0
                 self._uncertainty_reason = None
+                self._terminal = None
             return self._observed_result(
                 "settled",
                 "runtime attempt durably settled",
@@ -611,9 +691,19 @@ class StandaloneRuntime:
         return self._drive(retry=True)
 
     def run(self, stop_event: threading.Event) -> RuntimeTickResult:
+        if not isinstance(stop_event, threading.Event):
+            raise StandaloneRuntimeRefused("run requires a threading.Event")
+        with self._condition:
+            # One run owner: a second thread would interleave ticks between backoffs
+            # and its cleanup would close the first owner's feed.
+            if self._running:
+                raise StandaloneRuntimeRefused("runtime already has an active run owner")
+            self._running = True
         try:
             return self._run_owned(stop_event)
         finally:
+            with self._condition:
+                self._running = False
             owner = self.driver.feed_owner
             if owner is not None:
                 owner.close()
@@ -623,10 +713,8 @@ class StandaloneRuntime:
                 pass
 
     def _run_owned(self, stop_event: threading.Event) -> RuntimeTickResult:
-        if not isinstance(stop_event, threading.Event):
-            raise StandaloneRuntimeRefused("run requires a threading.Event")
         last = (
-            self.recover()
+            self.recover_with_backoff(lambda seconds: self._backoff_wait(stop_event, seconds))
             if not self._recovered
             else self._observed_result(
                 "waiting",
@@ -635,7 +723,7 @@ class StandaloneRuntime:
                 self._snapshot(),
             )
         )
-        if last.status == "recovery_required" and not self._recovered:
+        if not self._recovered:
             return last
         while not stop_event.is_set() and not self._stop_requested:
             with self._condition:
@@ -661,7 +749,7 @@ class StandaloneRuntime:
                 )
             if last.status in {"stopped", "recovery_required"}:
                 break
-            stop_event.wait(last.retry_after_seconds)
+            self._backoff_wait(stop_event, last.retry_after_seconds)
         return last
 
     def request_stop(self) -> None:
@@ -734,4 +822,5 @@ __all__ = [
     "StandaloneRuntimeInputs",
     "StandaloneRuntimeRefused",
     "StandaloneRuntimeUncertain",
+    "TERMINAL_OUTCOMES",
 ]

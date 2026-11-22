@@ -496,6 +496,8 @@ class _RuntimeExecution:
                 self.error = exc
 
     def start(self) -> None:
+        if self.thread.ident is not None:
+            raise ControlRefused("runtime run thread was already started")
         self.thread.start()
 
     def request_stop(self) -> None:
@@ -639,15 +641,20 @@ def _main(argv: list[str] | None = None, *, runtime_factory: RuntimeFactory | No
         handler_attempted = True
         signal.signal(signal.SIGTERM, notify_shutdown)
         if runtime is not None:
-            recovered = runtime.recover()
+            # Restart reconstruction settles the retained issued intent (including the
+            # durable held-receipt index) before any listener or new issue; transient
+            # authority/reply loss retries with bounded backoff that SIGTERM interrupts.
+            recovered = runtime.recover_with_backoff(
+                lambda seconds: bool(select.select([read_fd], [], [], seconds)[0]))
             from . import standalone_runtime as runtime_module
             if not isinstance(recovered, runtime_module.RuntimeTickResult):
                 raise ControlRefused("runtime recovery returned an untyped result")
-            if recovered.status not in {"recovered", "settled"}:
+            if recovered.status not in {"recovered", "settled", "stopped"}:
                 raise ControlRefused(f"runtime recovery unavailable: {recovered.reason}")
             pending_signal, _, _ = select.select([read_fd], [], [], 0)
-            if pending_signal:
-                os.read(read_fd, 4096)
+            if pending_signal or recovered.status == "stopped":
+                if pending_signal:
+                    os.read(read_fd, 4096)
                 deadline = time.monotonic() + args.shutdown_deadline
                 controller.request_shutdown_drain()
                 runtime.request_stop()

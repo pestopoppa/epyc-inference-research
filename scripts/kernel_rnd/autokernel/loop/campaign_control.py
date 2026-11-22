@@ -223,8 +223,8 @@ def validate_snapshot_v2(value: Mapping[str, Any]) -> dict[str, Any]:
             raise ControlRefused("v2 active_worker plan_digest is invalid")
         if active["state"] not in {
                 "intent", "container_created", "child_captured", "exec_release_intent",
-                "executing", "result_retained", "tearing_down", "teardown_failed",
-                "unresolved"}:
+                "executing", "result_retained", "terminal_pending_result",
+                "tearing_down", "teardown_failed", "unresolved"}:
             raise ControlRefused("v2 active_worker state is invalid")
         for name in ("worker_generation", "grant_generation"):
             if not isinstance(active[name], int) or isinstance(active[name], bool) \
