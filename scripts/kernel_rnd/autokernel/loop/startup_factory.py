@@ -23,6 +23,8 @@ FEED_REQUEST_SCHEMA = "epyc.autokernel.startup_factory_request.v2"
 NATIVE_REQUEST_SCHEMA = "epyc.autokernel.startup_factory_request.v3"
 PREPARATION_REQUEST_SCHEMA = "epyc.autokernel.startup_factory_request.v4"
 RECEIPT_SCHEMA = "epyc.autokernel.startup_factory_receipt.v1"
+RECORD_SCHEMA = "epyc.autokernel.startup_factory_record.v1"
+PROVIDER_DEBT_SCHEMA = "epyc.autokernel.startup_provider_debt.v1"
 MAX_INPUT_BYTES = 4 * 1024 * 1024
 TARGET_FIELDS = {"profile", "profile_request", "execution", "runtime_dimensions"}
 
@@ -448,14 +450,111 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
     return receipt
 
 
+def provider_debt(manifest: Any, preflight: Mapping[str, Any],
+                  factory_id: str | None = None) -> list[dict[str, Any]]:
+    """Typed debt for every provider/verifier the manifest names; nothing is constructed."""
+    from . import provider_factories
+    status = "absent"
+    if factory_id is not None and factory_id in provider_factories.REGISTERED_FACTORIES:
+        try:
+            provider_factories.source(factory_id)  # identity check only; never imported here
+            status = "registered_unactivated"
+        except ValueError:
+            status = "registered_source_differs"
+    feed = manifest.evidence_feed
+    rows = [("lifecycle_provider", manifest.lifecycle_provider_id, None),
+            ("readiness_provider", manifest.readiness_provider_id, None),
+            ("evidence_feed", feed.binding_id, None) if feed is not None
+            else ("evidence_verifier", manifest.evidence_verifier_id, None)]
+    requests = unified_driver._thaw(manifest.driver_config.profile_requests)
+    rows += [("profile_execution", requests[target]["profile_contract"]["adapter_id"], target)
+             for target in preflight["pending_profile_targets"]]
+    return [{"schema": PROVIDER_DEBT_SCHEMA, "kind": kind, "identifier": identifier,
+             "target_revision_digest": target, "status": status,
+             "provider_factory_id": factory_id,
+             "preflight_key": (f"{kind}:{identifier}:unavailable" if target is None
+                               else f"target:{target}:{kind}:{identifier}:unavailable")}
+            for kind, identifier, target in rows]
+
+
+def build_from_export(*, production_export: Path, resolved_export: Path, startup_config: Path,
+                      output_dir: Path, expect_export_sha256: str | None = None,
+                      provider_factory_id: str | None = None) -> dict[str, Any]:
+    """AKU-07n: sealed export + campaign_cli output + explicit configuration -> bundle + record."""
+    from . import standalone_inputs
+    paths = {"production_export": Path(production_export),
+             "resolved_export": Path(resolved_export), "startup_config": Path(startup_config)}
+    raw = {role: _read(path, role) for role, path in paths.items()}
+    digests = {role: hashlib.sha256(data).hexdigest() for role, data in raw.items()}
+    # The exporter's own seal (export_sha256 over the body) and recipe sidecars.
+    export = production_enrollment.load_export(json.loads(raw["production_export"]))
+    if expect_export_sha256 is not None and export["export_sha256"] != expect_export_sha256:
+        raise StartupFactoryRefused("sealed export digest differs from the expected pin")
+    config = json.loads(raw["startup_config"])
+    if not isinstance(config, Mapping) or {"resolved_export", "production_export"} & set(config):
+        raise StartupFactoryRefused("startup configuration must be an object without export pins")
+    request = dict(config) | {role: {"path": str(paths[role]), "sha256": digests[role]}
+                              for role in ("resolved_export", "production_export")}
+    request.setdefault("dry_run_runner", {"python": sys.executable,
+                                          "pythonpath": str(Path(__file__).resolve().parents[2])})
+    receipt = build_startup(request, output_dir=Path(output_dir))
+    output_dir = Path(output_dir)
+    if hashlib.sha256(_read(paths["startup_config"], "startup_config")).hexdigest() \
+            != digests["startup_config"]:
+        raise StartupFactoryRefused("startup configuration changed during the build")
+    # Round trip through the installed standalone parser, exactly as --dry-run loads it.
+    manifest = standalone_inputs.StartupManifest.from_dict(
+        json.loads(_read(output_dir / "startup.json", "startup manifest")))
+    preflight = standalone_inputs.materialize(manifest).preflight()
+    if preflight != receipt["preflight"]:
+        raise StartupFactoryRefused("installed startup parser round trip differs")
+    debt = provider_debt(manifest, preflight, provider_factory_id)
+    other = sorted(set(preflight["missing_prerequisites"]) - {row["preflight_key"] for row in debt})
+    outputs = dict(receipt["output_files"])
+    outputs["factory-receipt.json"] = hashlib.sha256(
+        _read(output_dir / "factory-receipt.json", "factory receipt")).hexdigest()
+    record = {"schema": RECORD_SCHEMA, "manifest_digest": manifest.manifest_digest,
+              "export_seal": {"export_sha256": export["export_sha256"],
+                              "expected_pin": expect_export_sha256,
+                              "verified_by": "production_enrollment.load_export"},
+              "inputs": {role: {"path": str(path), "sha256": digests[role]}
+                         for role, path in paths.items()},
+              "input_closure": receipt["input_pins"],
+              "outputs": {name: {"path": str(output_dir / name), "sha256": digest}
+                          for name, digest in sorted(outputs.items())},
+              "installed_parser_roundtrip": "verified", "dry_run_command": receipt["command"],
+              "provider_debt": debt, "prerequisite_debt": other,
+              "launchable": not other and all(
+                  row["status"] == "registered_unactivated" for row in debt),
+              "execution_authorized": False}
+    _write_new(output_dir, "startup-record.json", record)
+    return record
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--request", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--request", type=Path)
+    source.add_argument("--production-export", type=Path)
+    parser.add_argument("--resolved-export", type=Path)
+    parser.add_argument("--startup-config", type=Path)
+    parser.add_argument("--expect-export-sha256")
+    parser.add_argument("--provider-factory")
     parser.add_argument("--out-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        request = json.loads(_read(args.request, "factory request"))
-        result = build_startup(request, output_dir=args.out_dir)
+        if args.request is None:
+            if args.resolved_export is None or args.startup_config is None:
+                raise StartupFactoryRefused(
+                    "--production-export requires --resolved-export and --startup-config")
+            result = build_from_export(
+                production_export=args.production_export, resolved_export=args.resolved_export,
+                startup_config=args.startup_config, output_dir=args.out_dir,
+                expect_export_sha256=args.expect_export_sha256,
+                provider_factory_id=args.provider_factory)
+        else:
+            request = json.loads(_read(args.request, "factory request"))
+            result = build_startup(request, output_dir=args.out_dir)
     except (OSError, ValueError, TypeError, KeyError, ImportError, RuntimeError) as exc:
         print(f"startup factory refused: {exc}", file=sys.stderr)
         return 2

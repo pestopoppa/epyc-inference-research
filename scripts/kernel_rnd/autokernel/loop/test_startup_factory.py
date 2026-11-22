@@ -325,3 +325,116 @@ def test_cli_refusal_is_clean_and_does_not_create_output(tmp_path, capsys):
     assert factory.main(["--request", str(path), "--out-dir", str(tmp_path / "bundle")]) == 2
     assert "startup factory refused:" in capsys.readouterr().err
     assert not (tmp_path / "bundle").exists()
+
+
+# --- AKU-07n: export-path CLI, typed provider debt, retained record ------------------
+# FIXTURE: the export below is the labelled research fixture (`_export` +
+# `_seal_recipe_artifacts`, the same seal the accepted factory tests use). The real
+# producer (epyc-orchestrator scripts/server/autokernel_enrollment.py) needs the live
+# stack registry, so it cannot run hermetically here; no real export is claimed.
+def export_inputs(tmp_path: Path) -> dict:
+    request = request_for(tmp_path)
+    config = {key: value for key, value in request.items()
+              if key not in {"resolved_export", "production_export"}}
+    config_path = tmp_path / "startup-config.json"
+    pin(config_path, config)
+    return {"production_export": Path(request["production_export"]["path"]),
+            "resolved_export": Path(request["resolved_export"]["path"]),
+            "startup_config": config_path, "store": Path(request["store_path"])}
+
+
+def test_sealed_export_cli_emits_manifest_record_and_installed_dry_run(tmp_path, monkeypatch):
+    inputs = export_inputs(tmp_path)
+    output = tmp_path / "bundle"
+    def forbidden(*args, **kwargs):
+        raise AssertionError("factory must not launch or activate a provider")
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    from . import provider_factories
+    monkeypatch.setattr(provider_factories, "construct", forbidden)
+    seal = json.loads(inputs["production_export"].read_text())["export_sha256"]
+    record = factory.build_from_export(
+        production_export=inputs["production_export"], resolved_export=inputs["resolved_export"],
+        startup_config=inputs["startup_config"], output_dir=output, expect_export_sha256=seal)
+    monkeypatch.undo()
+    manifest = standalone_inputs.StartupManifest.from_dict(
+        json.loads((output / "startup.json").read_text()))
+    assert record["manifest_digest"] == manifest.manifest_digest
+    assert record["export_seal"]["export_sha256"] == seal
+    assert record["installed_parser_roundtrip"] == "verified"
+    for role in ("production_export", "resolved_export", "startup_config"):
+        row = record["inputs"][role]
+        assert row["path"] == str(inputs[role])
+        assert hashlib.sha256(Path(row["path"]).read_bytes()).hexdigest() == row["sha256"]
+    assert set(record["outputs"]) == {"resolved-campaign.json", "startup.json", "factory-receipt.json"}
+    for row in record["outputs"].values():
+        assert Path(row["path"]).parent == output
+        assert hashlib.sha256(Path(row["path"]).read_bytes()).hexdigest() == row["sha256"]
+    assert json.loads((output / "startup-record.json").read_text()) == record
+    command = record["dry_run_command"]
+    assert command["argv"][-3:] == ["--config", str(output / "startup.json"), "--dry-run"]
+    completed = subprocess.run(command["argv"], cwd=tmp_path, env={
+        **os.environ, "PYTHONPATH": command["PYTHONPATH"], "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True, capture_output=True, timeout=60, check=False)
+    assert completed.returncode == 0, completed.stderr
+    report = json.loads(completed.stdout)
+    assert report == json.loads((output / "factory-receipt.json").read_text())["preflight"]
+    assert report["execution_authorized"] is False and record["execution_authorized"] is False
+    assert not inputs["store"].exists()
+
+
+def test_missing_provider_is_typed_debt_and_not_launchable(tmp_path, monkeypatch):
+    inputs = export_inputs(tmp_path)
+    record = factory.build_from_export(
+        production_export=inputs["production_export"], resolved_export=inputs["resolved_export"],
+        startup_config=inputs["startup_config"], output_dir=tmp_path / "bundle")
+    debt = record["provider_debt"]
+    assert {(row["kind"], row["identifier"]) for row in debt} >= {
+        ("lifecycle_provider", "unavailable-explicit-lifecycle"),
+        ("readiness_provider", "unavailable-explicit-readiness"),
+        ("evidence_verifier", "unavailable-explicit-verifier"),
+        ("profile_execution", "explicit-profiler-v1")}
+    assert all(row["schema"] == factory.PROVIDER_DEBT_SCHEMA and row["status"] == "absent"
+               for row in debt)
+    preflight = json.loads((tmp_path / "bundle/factory-receipt.json").read_text())["preflight"]
+    assert {row["preflight_key"] for row in debt} <= set(preflight["missing_prerequisites"])
+    assert "evidence_index:projection_unavailable" in record["prerequisite_debt"]
+    assert record["launchable"] is False
+    # A registered factory is identity-checked only, never constructed; the source
+    # mismatch below stays debt rather than becoming launchable.
+    from . import provider_factories
+    monkeypatch.setattr(provider_factories, "REGISTERED_FACTORIES",
+                        {"fixture": ("startup_factory.py", "main", "0" * 64)})
+    monkeypatch.setattr(provider_factories, "construct", lambda *_: pytest.fail("constructed"))
+    again = factory.build_from_export(
+        production_export=inputs["production_export"], resolved_export=inputs["resolved_export"],
+        startup_config=inputs["startup_config"], output_dir=tmp_path / "bundle2",
+        provider_factory_id="fixture")
+    assert {row["status"] for row in again["provider_debt"]} == {"registered_source_differs"}
+    assert again["launchable"] is False
+
+
+@pytest.mark.parametrize("change", ["unsealed_edit", "seal_field", "expected_pin", "config_pins"])
+def test_tampered_export_or_config_refuses_without_output(tmp_path, change, capsys):
+    inputs = export_inputs(tmp_path)
+    path = inputs["production_export"]
+    export = json.loads(path.read_text())
+    expect = None
+    if change == "unsealed_edit":
+        export["targets"][0]["port"] = 9999
+        path.write_text(json.dumps(export))
+    elif change == "seal_field":
+        export["export_sha256"] = "0" * 64
+        path.write_text(json.dumps(export))
+    elif change == "expected_pin":
+        expect = "f" * 64
+    else:
+        config = json.loads(inputs["startup_config"].read_text())
+        config["production_export"] = {"path": str(path), "sha256": "0" * 64}
+        inputs["startup_config"].write_text(json.dumps(config))
+    argv = ["--production-export", str(path), "--resolved-export", str(inputs["resolved_export"]),
+            "--startup-config", str(inputs["startup_config"]), "--out-dir", str(tmp_path / "bundle")]
+    if expect:
+        argv += ["--expect-export-sha256", expect]
+    assert factory.main(argv) == 2
+    assert "startup factory refused:" in capsys.readouterr().err
+    assert not (tmp_path / "bundle").exists()
