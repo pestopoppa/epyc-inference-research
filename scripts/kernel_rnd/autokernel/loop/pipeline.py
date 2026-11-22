@@ -43,7 +43,7 @@ a failure of the science and must never be recorded as one.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import traceback
 from pathlib import Path
 import threading
@@ -53,6 +53,10 @@ from typing import Any, Callable, Sequence
 from . import loop as loop_mod
 from . import scratch
 from . import tail_timing
+# re-exported: moved verbatim to pipeline_budget.py
+from .pipeline_budget import (  # noqa: F401
+    Budget,
+)
 
 #: Outcomes that reached a measurement: an iteration ending any other way counts as
 #: FAILED for `--scratch-keep failed` (its scratch is retained, still marked).
@@ -132,35 +136,6 @@ class Worker:
     name: str
     worktree: Path
     build_dir: Path
-
-
-@dataclass
-class Budget:
-    """A shared iteration count, or none at all.
-
-    `remaining=None` means run until told to stop. That is the difference between a
-    tool someone runs and a loop that works: the previous shape exited after N
-    iterations, so every continuation needed a human to start it again.
-
-    `should_stop` is checked on every draw, so a stop is honoured at the next
-    iteration boundary rather than mid-measurement -- a lane holding the device
-    finishes what it started, publishes, and only then declines to take more.
-    """
-    remaining: int | None
-    should_stop: Callable[[], bool] | None = None
-    drawn: int = 0
-    _lock: threading.Lock = field(default_factory=threading.Lock)
-
-    def take(self) -> bool:
-        with self._lock:
-            if self.should_stop is not None and self.should_stop():
-                return False
-            if self.remaining is not None:
-                if self.remaining <= 0:
-                    return False
-                self.remaining -= 1
-            self.drawn += 1
-            return True
 
 
 class SerializedTail:
