@@ -35,7 +35,7 @@ def execute_surface(*, directory, store_root, repo, assembled_commit, assembled_
                     keep_references, target, full_launch, baseline=None, frozen_requests,
                     instrument, pairs, cmake_defines, jobs, build_cpu_list, held_cpu,
                     held_gpu=None, epoch, campaign_id, should_stop,
-                    on_serving_export=None):
+                    on_serving_export=None, loo_plan=None, surface_id=None):
     """Return ``{loo: [references], rebaseline: reference | None}``.
 
     ``baseline`` is either None (no rebaseline owed) or the original
@@ -111,6 +111,14 @@ def execute_surface(*, directory, store_root, repo, assembled_commit, assembled_
         keeps.append((reference, keep))
     if len({keep.keep_id for _, keep in keeps}) != len(keeps):
         raise surface_fold.FoldRefused("duplicate omission keep")
+    # AKX-P3b: with a TOUCHED-scoped plan (loo_touched.loo_plan) the caller does not pick
+    # surfaces; keeps whose screen classes this surface INERT owe no arm here.
+    skipped_inert = []
+    if loo_plan is not None:
+        from . import loo_touched
+        owed, skipped_inert = loo_touched.owed_keeps(
+            [keep.keep_id for _, keep in keeps], loo_plan, surface_id)
+        keeps = [(reference, keep) for reference, keep in keeps if keep.keep_id in owed]
     directory.mkdir(parents=True, exist_ok=False)
 
     def retain(kind, identity, *, comparison=None, verdicts=(), reason=None,
@@ -186,6 +194,8 @@ def execute_surface(*, directory, store_root, repo, assembled_commit, assembled_
         # Confine this thread and future child processes; not pre-existing threads.
         os.sched_setaffinity(0, owned)
         results = {"loo": [], "rebaseline": None}
+        if loo_plan is not None:
+            results["loo_scope"] = {"surface_id": surface_id, "skipped_inert": skipped_inert}
         for reference, keep in keeps:
             boundary()
             source = directory / f"omit-{keep.keep_id}"

@@ -43,6 +43,30 @@ def loo_plan(screens: Mapping[str, Mapping]) -> dict:
     return plan
 
 
+def owed_keeps(keep_ids: Sequence[str], plan: Mapping[str, Mapping], surface_id: str) -> tuple:
+    """Split `keep_ids` into (owed, skipped_inert) for one LOO surface.
+
+    A keep owes an arm on `surface_id` when the surface is in its plan's `required`
+    (TOUCHED or UNKNOWN); it is skipped only when the plan names the surface INERT. A keep
+    absent from the plan, or a surface the plan classes neither way, REFUSES: the caller may
+    not pick surfaces itself.
+    """
+    if not isinstance(surface_id, str) or not surface_id:
+        raise LOOTouchedRefusal("LOO surface id is required to apply the TOUCHED scope")
+    owed, skipped = [], []
+    for kid in keep_ids:
+        entry = plan.get(kid)
+        if entry is None:
+            raise LOOTouchedRefusal(f"keep {kid}: absent from the TOUCHED-scoped LOO plan")
+        if surface_id in entry.get("required", ()):
+            owed.append(kid)
+        elif surface_id in entry.get("skipped_inert", ()):
+            skipped.append(kid)
+        else:
+            raise LOOTouchedRefusal(f"keep {kid}: surface {surface_id} is not classed by its screen")
+    return owed, skipped
+
+
 def count_touched(arms: Sequence[Mapping], *, full_bundle: Mapping[str, float],
                   plan: Mapping[str, Mapping]) -> dict:
     """AK-GH-1 count over TOUCHED-workload LOO arms only.

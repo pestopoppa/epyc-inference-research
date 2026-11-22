@@ -27,7 +27,8 @@ class PromotionEvidenceRefusal(ValueError):
 
 def compound_from_heldout(*, launches: Sequence[Mapping], deciding_pair_ids: Sequence[str],
                           production_commit: str, recipe_hash: str, min_launches: int = 1,
-                          goodhart: Mapping | None = None) -> dict:
+                          goodhart: Mapping | None = None,
+                          loo_record: Mapping | None = None) -> dict:
     """Compounded gain over held-out launches.
 
     Each launch: {"pair_id": str, "effect": float (candidate/production - 1),
@@ -41,6 +42,16 @@ def compound_from_heldout(*, launches: Sequence[Mapping], deciding_pair_ids: Seq
     additive `goodharted_count`/`goodhart` fields; it never changes the gain. When
     omitted the record carries `goodharted_count: None` (not measured), never 0.
     """
+    if loo_record is not None:
+        # AKX-P3b: a TOUCHED-scoped LOO block on the promotion record must pass the
+        # required-field rule (count + LOO receipts + plan) or the record refuses.
+        from . import loo_touched
+        try:
+            loo_touched.require_fields(loo_record)
+        except loo_touched.LOOTouchedRefusal as exc:
+            raise PromotionEvidenceRefusal(f"LOO block refused: {exc}") from exc
+        if goodhart is not None and goodhart.get("goodharted_count") != loo_record["goodharted_count"]:
+            raise PromotionEvidenceRefusal("LOO block count differs from the goodhart count")
     if goodhart is not None:
         if (not isinstance(goodhart, Mapping) or goodhart.get("schema") != goodhart_count.SCHEMA
                 or type(goodhart.get("goodharted_count")) is not int
@@ -75,4 +86,5 @@ def compound_from_heldout(*, launches: Sequence[Mapping], deciding_pair_ids: Seq
             "heldout_pair_ids": ids, "deciding_pair_ids": sorted(deciding),
             "launches": len(ids), "compounded_gain": gain - 1.0,
             "goodharted_count": None if goodhart is None else goodhart["goodharted_count"],
-            "goodhart": None if goodhart is None else dict(goodhart)}
+            "goodhart": None if goodhart is None else dict(goodhart),
+            "loo": None if loo_record is None else dict(loo_record)}

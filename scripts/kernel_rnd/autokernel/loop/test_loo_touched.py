@@ -55,3 +55,12 @@ def test_promotion_record_refuses_without_count_or_receipts():
         lt.promotion_loo_record(plan=plan, count=c, loo_receipts=["a"])
     with pytest.raises(lt.LOOTouchedRefusal):
         lt.promotion_loo_record(plan=plan, count={}, loo_receipts=["a", "b"])
+
+
+def test_owed_keeps_splits_by_surface_and_refuses_unclassed():
+    p = lt.loo_plan(SCREENS)
+    assert lt.owed_keeps(["k1", "k2"], p, "w2") == (["k2"], ["k1"])
+    assert lt.owed_keeps(["k1", "k2"], p, "w1") == (["k1", "k2"], [])
+    for args in ((["k3"], p, "w1"), (["k1"], p, "w9"), (["k1"], p, "")):
+        with pytest.raises(lt.LOOTouchedRefusal):
+            lt.owed_keeps(*args)

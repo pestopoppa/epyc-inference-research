@@ -81,3 +81,18 @@ def test_promotion_record_refuses_malformed_goodhart(bad):
     with pytest.raises(pe.PromotionEvidenceRefusal, match="goodhart"):
         pe.compound_from_heldout(launches=[L("h1")], deciding_pair_ids=["d"], production_commit=C,
                                  recipe_hash=H, goodhart=bad)
+
+
+def test_promotion_record_requires_valid_touched_loo_block():
+    from . import loo_touched as lt
+    plan = {"k1": {"required": ["w1"], "skipped_inert": []}}
+    good = {"schema": lt.SCHEMA, "loo_plan": plan, "goodharted_count": 0,
+            "goodharted_keep_ids": [], "loo_receipts": ["r1"]}
+    r = pe.compound_from_heldout(launches=[L("h1")], deciding_pair_ids=["d"],
+                                 production_commit=C, recipe_hash=H, loo_record=good)
+    assert r["loo"]["goodharted_count"] == 0
+    for bad in ({**good, "loo_receipts": []}, {**good, "goodharted_count": None},
+                {**good, "loo_plan": {}}):
+        with pytest.raises(pe.PromotionEvidenceRefusal, match="LOO block refused"):
+            pe.compound_from_heldout(launches=[L("h1")], deciding_pair_ids=["d"],
+                                     production_commit=C, recipe_hash=H, loo_record=bad)

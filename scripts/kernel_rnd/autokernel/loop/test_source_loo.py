@@ -232,3 +232,24 @@ def test_foreign_or_expired_claim_is_not_reacquired(tmp_path, monkeypatch):
     with pytest.raises(claim.ClaimRefused):
         source_loo.execute_surface(**inputs, held_cpu=owner)
     assert not calls and not inputs["directory"].exists()
+
+
+def test_touched_scope_skips_inert_keep_and_refuses_unplanned(tmp_path, monkeypatch):
+    """AKX-P3b: with a TOUCHED-scoped plan the caller no longer picks surfaces."""
+    cpu, inputs = _inputs(tmp_path)
+    inputs["baseline"] = None
+    calls = _hardware_edges(monkeypatch, inputs)
+    keep_id = surface_fold.validate_original(
+        surface_fold.reopen_reference(inputs["keep_references"][0])).keep_id
+    plan = {keep_id: {"required": ["other"], "skipped_inert": ["decode"]}}
+    with _held(tmp_path / "cpu.lock", cpu) as owner:
+        result = source_loo.execute_surface(**inputs, held_cpu=owner,
+                                            loo_plan=plan, surface_id="decode")
+    assert result["loo"] == []
+    assert result["loo_scope"] == {"surface_id": "decode", "skipped_inert": [keep_id]}
+    assert not any(call[0] == "build" for call in calls)
+    inputs["directory"] = tmp_path / "second"
+    with _held(tmp_path / "cpu2.lock", cpu) as owner:
+        with pytest.raises(Exception, match="absent from the TOUCHED-scoped LOO plan"):
+            source_loo.execute_surface(**inputs, held_cpu=owner, loo_plan={},
+                                       surface_id="decode")
