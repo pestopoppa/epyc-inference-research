@@ -452,3 +452,21 @@ def test_plain_kernel_edit_still_passes_with_expected_head(repo):
     base = _git(repo, "rev-parse", "HEAD")
     (repo / "ggml/src/kernel.cpp").write_text("int base = 2;\n")
     assert integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",), expected_head=base)
+
+
+@pytest.mark.parametrize("line,detector", [
+    ("#define hipEventElapsedTime fake_elapsed", "timer_define_tamper"),
+    ("static float * cached_out = nullptr;", "cached_output_across_iterations"),
+])
+def test_whole_diff_reward_hack_scan_refuses_solx_detectors(repo, line, detector):
+    """AK-HACKSCAN-SOLX detectors are in the C6 integrity refusal list."""
+    (repo / "ggml/src/kernel.cpp").write_text(f"int base = 1;\n{line}\n")
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",))
+    assert caught.value.refusal_class == "reward_hack_scan"
+    assert detector in str(caught.value)
+
+
+def test_solx_benign_twin_passes(repo):
+    (repo / "ggml/src/kernel.cpp").write_text("int base = 1;\nfloat acc = 0.f;\n")
+    integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",))

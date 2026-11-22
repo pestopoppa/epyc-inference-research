@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 from typing import Iterable, Sequence
 
-from ..execution import reward_hack_scan
+from ..execution import reward_hack_scan, reward_hack_scan_solx
 from . import prebuild_rules
 
 
@@ -492,6 +492,8 @@ def validate_candidate(worktree: Path, declared_paths: Sequence[str], *,
               if ":phase_detection:" in row),
         scan.capture_replay_findings,
         scan.content_specialization_findings,
+        # AK-HACKSCAN-SOLX: the 11 SOL-ExecBench / wave64 detectors (0a739b23e).
+        *reward_hack_scan_solx.scan_unified_diff(diff).findings.values(),
     ) for finding in value)
     if findings:
         raise IntegrityRefused("reward_hack_scan", "; ".join(findings))
