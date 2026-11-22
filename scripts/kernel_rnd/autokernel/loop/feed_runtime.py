@@ -571,17 +571,17 @@ class FeedRuntimeOwner:
 
     def _open(self) -> evidence_feed.EvidenceFeed:
         projection = self.binding.load(self.config)
-        return evidence_feed.EvidenceFeed(
+        feed = evidence_feed.EvidenceFeed(
                 source_root=Path(self.config.source_root), corpus_root=Path(self.config.corpus_root),
                 ledger_path=Path(self.config.ledger_path), store_root=Path(self.config.store_root),
                 root_repo=self.binding.root_repo, current_epoch=self.binding.current_epoch,
-                loaded_projection=projection,
-                reader_id=self.config.reader_id,
+                loaded_projection=projection, reader_id=self.config.reader_id,
                 finding_projector=self.binding.finding_projector,
                 scope_verifier=self.binding.scope_verifier, use_verifier=self.binding.use_verifier,
-                result_verifier=self.binding.result_verifier,
-                support_rule_identity=self.binding.support_rule_identity,
+                result_verifier=self.binding.result_verifier, support_rule_identity=self.binding.support_rule_identity,
                 max_projection_entries=self.config.max_projection_entries)
+        getattr(self.binding.finding_projector, "attach_feed", lambda _feed: None)(feed)  # AKU-08c4 generation owner
+        return feed
     def close(self) -> None:
         from . import runtime_aggregates as aggregate
         self._check_thread()
