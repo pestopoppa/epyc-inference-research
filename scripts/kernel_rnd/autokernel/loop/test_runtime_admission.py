@@ -229,6 +229,9 @@ def test_nonprefix_campaign_uses_original_owned_runtime_frame(tmp_path, monkeypa
                 join = event["campaign_join"]
                 assert join["parent_campaign_id"] == "glm-5.3-flash-runtime"
                 assert join["evaluator_campaign_id"] == row["evaluation"]["campaign_id"]
+                if event["evaluation"].get("control_bootstrap"):
+                    assert event["event"] is None  # AKU-07x: bootstrap is never published.
+                    continue
                 assert event["event"]["campaign_id"] == join["evaluator_campaign_id"]
                 original = admission._read(store, "direct-runtime-window-result",
                                            event["original_window"])
@@ -296,7 +299,7 @@ def test_measured_negative_panel_blocks_retention_despite_internal_bootstrap(tmp
             row = owner.compare(pair)
             assert row["decisive"] is None
             assert row["control_panel"]["may_rank"] is False
-            with pytest.raises(rc.RuntimeCalibrationRefused, match="lacks original admission"):
+            with pytest.raises(admission.ControlPanelRefused, match="lacks original admission"):
                 owner.retain(row, pair.anchor)
             assert owner.selected() == pair.anchor
             assert counter
@@ -383,5 +386,86 @@ def test_missing_during_work_host_facts_invalidates_at_first_completed_launch(tm
             retained = admission._read(store, "direct-calibration-launch", frame.failures[0]["artifact"])
             assert "COULD_NOT_CHECK" in retained["failure"]
             assert retained["during_work"]["samples"] == []
+    finally:
+        store.close()
+
+
+_BOOTSTRAP_MARKER = "internal control-evaluation bootstrap only"
+
+
+def test_aku07x_bootstrap_computes_outcomes_only_admission_reads_measured_panel(tmp_path, monkeypatch):
+    """(a) bootstrap outcomes are real but its panel is never published/admits nothing;
+    (b) candidate windows consume only the measured ControlPanelResult; reopen joins
+    every original control result and never launches a missing one."""
+    pair, store, counter, make_owner = installed_fixture(tmp_path, monkeypatch)
+    seen, evaluate = [], admission.RuntimeAdmission._evaluate_pair
+    def spy(self, pair, candidate_id, *, panel, **kwargs):
+        seen.append((candidate_id.startswith("akc-control-"), type(panel)))
+        return evaluate(self, pair, candidate_id, panel=panel, **kwargs)
+    monkeypatch.setattr(admission.RuntimeAdmission, "_evaluate_pair", spy)
+    try:
+        with original_claim(tmp_path / "private.lock") as holder:
+            owner = make_owner(holder)
+            row = owner.compare(pair)
+            assert row["decisive"] is True and row["control_panel"]["may_rank"] is True
+            assert {kind for control, kind in seen if control} == {admission._ControlBootstrap}
+            assert {kind for control, kind in seen if not control} == {controls.ControlPanelResult}
+            observed = {o["control_id"]: o for o in row["control_panel"]["observations"]}
+            for control_id in controls.MANDATORY_CONTROL_IDS:
+                assert observed[control_id]["ran"] is True and observed[control_id]["evidence_ref"]
+                assert observed[control_id]["verdict_status"] is not None
+            for path in store.root.rglob("*"):
+                if path.is_file():
+                    assert _BOOTSTRAP_MARKER not in path.read_text(errors="ignore"), path
+            count = len(counter)
+            carrier = admission._ControlBootstrap({"controls": None})
+            for candidate_id, panel in (("akc-runtime-forged", carrier), ("akc-runtime-forged", dict(carrier)),
+                                        ("akc-runtime-forged", None), ("akc-control-forged", dict(carrier))):
+                with pytest.raises(admission.ControlPanelRefused, match="measured ControlHarness panel"):
+                    owner._evaluate_pair(pair, candidate_id, panel=panel)
+            refs = owner.state["attempts"][0]["controls"]
+            for missing in (controls.CONTROL_NEUTRAL, controls.CONTROL_HISTORICAL_WIN_REPLAY):
+                with pytest.raises(admission.ControlPanelRefused, match="not joined"):
+                    owner._controls(pair.anchor, 0, reopening={k: v for k, v in refs.items() if k != missing})
+            assert len(counter) == count  # refusals launched nothing
+    finally:
+        store.close()
+
+
+def _historical_only(monkeypatch, resolution, observation):
+    def historical(**kwargs):
+        ref = kwargs["store"].write("fixture-historical", {"fixture": "historical control result",
+            "campaign": kwargs["campaign_id"], "index": kwargs["window_index"]})
+        return resolution, observation, ref
+    fixture = SimpleNamespace(run_or_reopen=historical)
+    monkeypatch.setitem(sys.modules, "autokernel.loop.direct_historical_control", fixture)
+    monkeypatch.setattr(sys.modules["autokernel.loop"], "direct_historical_control", fixture, raising=False)
+
+
+@pytest.mark.parametrize("kind", ["could_not_run", "unavailable"])
+def test_aku07x_failed_or_missing_control_cannot_bank_runtime_recipe(tmp_path, monkeypatch, kind):
+    """(c) a failed/missing measured control leaves the original recipe; typed refusal."""
+    from ..evaluator.test_controls import _unavailable
+    pair, store, counter, make_owner = installed_fixture(tmp_path, monkeypatch)
+    not_run = controls.ControlObservation(controls.CONTROL_HISTORICAL_WIN_REPLAY, False,
+        could_not_run_reason="fixture: historical replay did not run", evidence_ref="fixture")
+    _historical_only(monkeypatch, _available() if kind == "could_not_run" else _unavailable(), not_run)
+    try:
+        with original_claim(tmp_path / "private.lock") as holder:
+            owner = make_owner(holder)
+            if kind == "unavailable":
+                with pytest.raises(admission.ControlPanelRefused):
+                    owner.compare(pair)
+                attempt = owner.state["attempts"][0]
+                assert attempt["result"] is None and attempt.get("selection") is None
+            else:
+                row = owner.compare(pair)
+                assert row["decisive"] is None and row["qualified"] is False
+                assert row["control_panel"]["may_rank"] is False
+                assert admission._read(store, "direct-runtime-admission", row["runtime_admission"])["admitted"] is False
+                with pytest.raises(admission.ControlPanelRefused, match="recipe not banked"):
+                    owner.retain(row, pair.anchor)
+            assert owner.state["selected"] is None
+            assert owner.selected() == pair.anchor
     finally:
         store.close()

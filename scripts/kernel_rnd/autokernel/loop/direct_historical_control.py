@@ -29,8 +29,21 @@ LOCATOR = ("data/kernel-v8-candidate/cpu-prefill-regression/"
     "run-20260725T155655Z-v4-waive-q8-kfd-procrace-swapoff/summary.json")
 
 
+ORIGINAL_MODEL = "Qwen2.5-Coder-0.5B-Q4_K_M.gguf"  # The band's own frame; never another model.
+
+
 class HistoricalControlRefused(ValueError):
     pass
+
+
+class HistoricalBandTransferRefused(HistoricalControlRefused):
+    """The Qwen pp512 0.03--0.60 band is not a GLM (or any other model) band."""
+
+
+def reference_band(model):
+    if Path(str(model)).name != ORIGINAL_MODEL:
+        raise HistoricalBandTransferRefused(f"historical band belongs to {ORIGINAL_MODEL}, not {Path(str(model)).name}")
+    return controls.ReferenceBand(.03, .60)
 
 
 def _digest(value):
@@ -75,7 +88,7 @@ def _frame():
         "control_arms": list(lc.CONTROL_ARM_IQK["historical_win_replay"]),
         "production_commit": lc.PRODUCTION_COMMIT, "instrument_commit": lc.INSTRUMENT_COMMIT,
         "instrument_root": str(lc.INSTRUMENT_ROOT), "instrument_binary": str(lc.INSTRUMENT_BINARY),
-        "reference_band": {"low": .03, "high": .60}, "phase": "prefill",
+        "reference_band": reference_band(lc.MODEL).to_dict(), "phase": "prefill",
         "cell_class": recipes.CELL_CLASS_TINY_GRAPH}
 
 
@@ -93,7 +106,7 @@ def _resolve(store):
     root = Path(__file__).resolve().parents[4]
     declaration = controls.HistoricalWinReplayDeclaration(
         win_id="iqk-prefill-port", backend="llama_cpu", phase="prefill",
-        reference_direction="higher_better", reference_band=controls.ReferenceBand(.03, .60),
+        reference_direction="higher_better", reference_band=reference_band(lc.MODEL),
         evidence_locator=str(root / LOCATOR), durability_class="carried_in_git")
     resolution = controls.resolve_historical_win_replay(declarations=(declaration,),
         backend="llama_cpu", tracked_index=storage.GitTrackedIndex(root))

@@ -354,3 +354,24 @@ def test_original_raw_and_build_joins_refuse_changed_material(tmp_path, monkeypa
             material["raw"]["historical_win_replay"] = store.write("direct-historical-microbench", raw).to_dict()
         with pytest.raises(owner.HistoricalControlRefused, match="raw"):
             owner._compose(store, declaration, material, "synthetic-mutated-material")
+
+
+def test_aku07x_historical_band_never_transfers_to_another_model(tmp_path, monkeypatch):
+    """(d) the Qwen pp512 frame keeps its own band; GLM (any other model) is refused."""
+    assert owner.reference_band(owner.lc.MODEL) == owner.controls.ReferenceBand(.03, .60)
+    glm = Path("/fixture/models/GLM-5.3-Flash-GGUF/GLM-5.3-Flash-Q4_K_M.gguf")  # never opened
+    with pytest.raises(owner.HistoricalBandTransferRefused, match="not GLM"):
+        owner.reference_band(glm)
+    store = ArtifactStore(tmp_path / "artifacts")
+    monkeypatch.setattr(owner.lc, "INSTRUMENT_BINARY", tmp_path / "absent" / "llama-bench")
+    try:
+        with held(tmp_path) as claim:
+            _resolution, _observation, ref = invoke(store, claim)  # own original Qwen frame
+            monkeypatch.setattr(owner.lc, "MODEL", glm)
+            with pytest.raises(owner.HistoricalBandTransferRefused):
+                invoke(store, claim, campaign_id="glm-5.3-flash-runtime")
+            with pytest.raises(owner.HistoricalBandTransferRefused):
+                invoke(store, claim, reference=ref.to_dict())  # no receipt relabeling
+        assert len(list(store.root.glob("historical-control-*"))) == 1
+    finally:
+        store.close()

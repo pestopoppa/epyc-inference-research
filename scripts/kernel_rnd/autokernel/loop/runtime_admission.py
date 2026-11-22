@@ -43,6 +43,21 @@ def _evaluation_campaign_join(parent_campaign_id, epoch, window_frame):
             "original_window_frame_sha256": rc._digest(window_frame)}
 
 
+class ControlPanelRefused(rc.RuntimeCalibrationRefused):
+    """Measured ControlHarness panel absent, failed or unjoined: nothing admits or banks."""
+
+
+class _ControlBootstrap(dict):
+    """Cycle-breaking carrier, as in execution.live_controls: control outcomes only."""
+
+
+def _joined(completed, control_id, reopening):
+    value = completed.get(control_id)
+    if reopening is not None and value is None:
+        raise ControlPanelRefused(f"original {control_id} result is not joined to this admission; reopen never launches")
+    return value
+
+
 def _check(condition, reason, *, unavailable=False):
     return schemas.Check(schemas.PASS if condition else
         schemas.COULD_NOT_CHECK if unavailable else schemas.FAIL, (reason,))
@@ -425,6 +440,10 @@ class RuntimeAdmission:
                 pair=pair, candidate_id=candidate_id, stratum=stratum,
                 replacement=declaration["frame"].get("replacement"))
             operations, source = reopening["operations"], StoredArtifact(**reopening["source_snapshot"])
+        bootstrap = type(panel) is _ControlBootstrap
+        if bootstrap != candidate_id.startswith("akc-control-") or not (
+                bootstrap or isinstance(panel, controls.ControlPanelResult)):
+            raise ControlPanelRefused("candidates consume only the measured ControlHarness panel; the bootstrap computes control outcomes")
         sequence = st.SequentialEvaluation(rule=self.statistical.stopping_rule,
             commitment=self.statistical.commitment, construction=window.statistics.construction,
             b_min=window.outputs.b_min_blocks, threshold=window.outputs.threshold_for(stratum),
@@ -484,13 +503,16 @@ class RuntimeAdmission:
             rows[-1][3]["ended_at"], self.statistical.controls, window.outputs,
             device_state=_device_state(rows, _ref(original)) if pair.anchor.backend == "gpu" else None)
         reduction = st.PairedBlockReducer(window.statistics).reduce(request, blocks, raw_samples_ref=_ref(original))
-        attestations = _window_checks(window, rows, reduction, panel, anchor, _ref(original))
+        attestations = _window_checks(window, rows, reduction, panel if bootstrap else
+                                      controls.window_control_attestations(panel), anchor, _ref(original))
         runner = DirectGates(rows=rows, operations=operations, raw_ref=_ref(original), original_prompts=self.prompts)
         outcome = api.TierDispatcher(gate_runners={"T1": runner}).dispatch(request, attestations, effect=reduction.estimate)
         # Preserve the emitted per-case vector, not just the summary verdict.
         event = {"original_window": original.to_dict(), "campaign_join": campaign_join,
                  "event": outcome.event,
                  "evaluation": outcome.durable_payload}
+        if bootstrap:  # Never publish the provisional panel: only the control's own verdict.
+            event.update(event=None, evaluation={"control_bootstrap": True, "verdict": outcome.verdict.to_dict()})
         if reopening is None:
             self.store.write("direct-runtime-evaluation", event)
         else:
@@ -512,7 +534,7 @@ class RuntimeAdmission:
                      self.state["attempts"][index].setdefault("controls", {}))
         gpu_observations = None
         if anchor.backend == "gpu":
-            retained = completed.get(controls.CONTROL_HISTORICAL_WIN_REPLAY)
+            retained = _joined(completed, controls.CONTROL_HISTORICAL_WIN_REPLAY, reopening)
             if reopening is None and retained is not None:
                 previous = _read(self.store, direct_gpu_control.NAMESPACE, retained)
                 if previous["error"] is not None:
@@ -535,7 +557,7 @@ class RuntimeAdmission:
         else:
             frame, reference = self.calibration(anchor, reopen_only=reopening is not None)
             solved = frame.reopen(reference)
-            historical_reference = completed.get(controls.CONTROL_HISTORICAL_WIN_REPLAY)
+            historical_reference = _joined(completed, controls.CONTROL_HISTORICAL_WIN_REPLAY, reopening)
             self._progress(operation="historical_control")
             historical_replacement = None
             if reopening is None:
@@ -582,9 +604,9 @@ class RuntimeAdmission:
         # Cycle-breaking carrier only, as in execution.live_controls. Never put
         # this panel in a result, selected recipe, or candidate evaluation.
         provisional = schemas.Check(schemas.PASS, ("internal control-evaluation bootstrap only",))
-        bootstrap = {"controls": api.ControlPanel(provisional, provisional, provisional, provisional, provisional),
+        bootstrap = _ControlBootstrap({"controls": api.ControlPanel(provisional, provisional, provisional, provisional, provisional),
             "aa_cadence": provisional, "control_definitions_immutable": bundle.reverify(
-                pinned_definitions_digest=bundle.definitions_digest)}
+                pinned_definitions_digest=bundle.definitions_digest)})
         class Runner:
             def run_control(self, definition, context):
                 if definition.control_id == controls.CONTROL_HISTORICAL_WIN_REPLAY:
@@ -597,7 +619,7 @@ class RuntimeAdmission:
                     controls.CONTROL_AA: lambda: PreparationArmPair("aa", anchor, anchor, None),
                     controls.CONTROL_DEGRADED_NEGATIVE: lambda: rc.degraded_work_control(anchor, owner.prompts)}
                 pair = pairs[definition.control_id]()
-                retained = completed.get(definition.control_id)
+                retained = _joined(completed, definition.control_id, reopening)
                 original = None if retained is None else _read(owner.store, "direct-runtime-window-result", retained)
                 ref, outcome, reduction = owner._evaluate_pair(pair, "akc-control-" + context.seed,
                     panel=bootstrap, reopening=original, attempt_index=index)
@@ -657,13 +679,13 @@ class RuntimeAdmission:
         if panel.panel is None:
             # Missing historical disposition is visible. Candidate observation
             # remains useful through serving.compare; no bootstrap escapes here.
-            raise rc.RuntimeCalibrationRefused(panel.blocked_reason or "original measured control panel unavailable")
+            raise ControlPanelRefused(panel.blocked_reason or "original measured control panel unavailable")
         attempt = self.state["attempts"][index]
         original_selection = (None if attempt.get("selection") is None else
             _read(self.store, "direct-runtime-window-result", attempt["selection"]))
         self._progress(operation="candidate_selection")
         selected, outcome, reduction = self._evaluate_pair(pair, candidate_id,
-            panel=controls.window_control_attestations(panel), reopening=original_selection,
+            panel=panel, reopening=original_selection,
             attempt_index=index)
         attempt["selection"] = selected.to_dict()
         self._checkpoint()
@@ -681,7 +703,7 @@ class RuntimeAdmission:
                 self._checkpoint()
                 self._progress(operation="candidate_confirmation")
                 confirmation, confirmed, _reduction = self._evaluate_pair(pair, candidate_id,
-                    panel=controls.window_control_attestations(panel), stratum="confirmation", attempt_index=index,
+                    panel=panel, stratum="confirmation", attempt_index=index,
                     reopening=None if attempt.get("confirmation_result") is None else
                         _read(self.store, "direct-runtime-window-result", attempt["confirmation_result"]))
                 attempt["confirmation_result"] = confirmation.to_dict()
@@ -774,7 +796,7 @@ class RuntimeAdmission:
             original = _read(self.store, "direct-runtime-window-result", body[key])
             ref, outcome, _reduction = self._evaluate_pair(pair,
                 self.state["attempts"][body["index"]]["candidate_id"],
-                panel=controls.window_control_attestations(panel), stratum=stratum, reopening=original)
+                panel=panel, stratum=stratum, reopening=original)
             admitted = (admitted and ref.to_dict() == body[key] and outcome.event is not None
                 and not outcome.event_violations and outcome.verdict.speed_rank_admissible
                 and outcome.verdict.effect_resolution == api.EFFECT_IMPROVEMENT)
@@ -785,6 +807,9 @@ class RuntimeAdmission:
     def retain(self, comparison, current):
         reference = comparison["runtime_admission"]
         pair, admitted = self.reopen_admission(reference)
+        panel = _read(self.store, "direct-runtime-admission", reference)["panel"]
+        if not admitted and (not panel["may_rank"] or panel["halts_campaign"]):
+            raise ControlPanelRefused("recipe not banked: measured control panel lacks original admission")
         if not admitted or pair.anchor.to_dict() != current.to_dict():
             raise rc.RuntimeCalibrationRefused("recipe keep lacks original admission or names another current anchor")
         self.state["selected"] = reference
