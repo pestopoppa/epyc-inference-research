@@ -1662,6 +1662,7 @@ def _main(argv=None) -> int:
             if decision["verdict"] != "noop_above_trigger":
                 print(f"retention {decision['message']}", file=sys.stderr, flush=True)
             result = _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix,
+                            stage_server=stage_footprint.parent_server(args),
                             scheduler_manifest=scheduler_manifest,
                             source_validation_priority_dir=args.source_validation_priority_dir,
                             control_listen=args.control_listen, control_origin=args.control_origin,
@@ -2461,7 +2462,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
            scheduler_manifest=None, source_validation_priority_dir=None,
            control_listen=None, control_origin=None, initial_continuation=None,
            gpu_window="off", gpu_window_path=None, gpu_window_request=None,
-           gpu_window_session=None):
+           gpu_window_session=None, stage_server=None):
     # Preserve the existing scheduler contract unless the operator/campaign
     # explicitly enrolls the AKX priority producer.  Making an absent optional
     # producer a new default launch dependency would stop every existing
@@ -2811,11 +2812,16 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                     if window_kwargs:
                         child_env = window_kwargs["env"]
                         capability_fds = (*capability_fds, *window_kwargs["pass_fds"])
+                from . import stage_coordination as coord
+                child_env, capability_fds, stage_parent, stage_child = coord.popen_kwargs(
+                    stage_server, child_env, capability_fds)
                 process = subprocess.Popen(
                     [*child_prefix, *_child_command(child_argv)],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                     cwd=Path(__file__).resolve().parents[4], env=child_env,
                     pass_fds=capability_fds)
+                coord.attach_child(stage_server, stage_parent, stage_child, process,
+                                   coord.target_of_argv(child_argv) if stage_server else "")
                 output_capture = _BoundedChildOutput(process, directory)
                 active["pid"] = process.pid
                 try:

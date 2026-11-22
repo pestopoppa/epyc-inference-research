@@ -209,13 +209,18 @@ def conflicts(a: StageFootprint, b: StageFootprint) -> tuple:
 
 def add_max_active_targets(parser) -> None:
     parser.add_argument("--max-active-targets", type=int, default=DEFAULT_MAX_ACTIVE_TARGETS,
-                        help="concurrent target children (default 1; >1 needs CTC stage admission)")
+                        help="concurrent target children (default 1; >1 runs children under stage admission)")
 
 
 def check_max_active_targets(parser, args) -> None:
     value = getattr(args, "max_active_targets", DEFAULT_MAX_ACTIVE_TARGETS)
     if value < 1:
         parser.error("--max-active-targets must be >= 1")
-    if value > 1:
-        parser.error("--max-active-targets > 1 needs stage admission (CTC-2/CTC-3), "
-                     "which is not installed yet")
+
+
+def parent_server(args):
+    """Coordinated mode (CTC-2): a stage-admission server only when > 1 target is allowed."""
+    if getattr(args, "max_active_targets", DEFAULT_MAX_ACTIVE_TARGETS) <= 1:
+        return None
+    from .stage_coordination import ParentServer
+    return ParentServer()

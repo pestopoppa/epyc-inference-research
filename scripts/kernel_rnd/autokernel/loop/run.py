@@ -3142,6 +3142,8 @@ def _main(argv: list[str] | None = None) -> int:
                              "events as `status` broadcasts; 'off' (or empty) disables the bus "
                              "(the window file and its events.jsonl remain) (default: %(default)s)")
     args = parser.parse_args(argv)
+    from . import stage_coordination
+    stage_client = stage_coordination.client_from_env()
     if args.planner_only:
         return planner_only.run(args, seat_common=_actor_seat_common(args))
     try:
@@ -8013,7 +8015,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     def publish_held_claims():
         nonlocal held_claim_evidence, held_claim_error, held_claim_attempted
-        if scheduler_selection is None or held_claim_attempted:
+        if scheduler_selection is None or held_claim_attempted or stage_client is not None:
             return
         held_claim_attempted = True
         if (args.cpu_held_intervals_v2 == "on" and preclaim_failure_published
@@ -8076,7 +8078,7 @@ def _main(argv: list[str] | None = None) -> int:
         publish_lineage_taxonomy(args.store, source_revision)
 
     cpu_win = None
-    if args.cpu_window_yield == "on" and not gpu_skip_cpu_claim \
+    if args.cpu_window_yield == "on" and not gpu_skip_cpu_claim and stage_client is None \
             and (owned_cpu_list is not None or cpu_launch):
         cpu_win = cpu_window.CpuWindow(
             campaign=(resolved_campaign.campaign_id if selected_target is not None
@@ -8192,6 +8194,20 @@ def _main(argv: list[str] | None = None) -> int:
                 return cpu_win.acquire_initial(
                     lambda: ownership.enter_context(claim.hold_cpu(cpu_list, **gpu_quiet_kw)))
 
+            stage_scope = None
+            if stage_client is not None:
+                stage_scope = stage_coordination.install(
+                    stage_client, args=args, target=selected_target, launch=direct_launch,
+                    resources=(resolved_campaign.resources if selected_target is not None
+                               else None),
+                    hold_cpu=lambda cpus: claim.hold_cpu(cpus, **gpu_quiet_kw),
+                    hold_device=None if cpu_launch else claim.hold,
+                    runtime_enabled=runtime_enabled)
+                gate_for = stage_scope.wrap_factory("build", gate_for)
+                measure_for = stage_scope.wrap_factory("measure", measure_for)
+                confirm_measure = stage_scope.wrap_factory("measure", confirm_measure)
+                reprofile = stage_scope.wrap("profile", reprofile)
+                build_champion = stage_scope.wrap("build", build_champion)
             try:
                 if owned_cpu_list is not None:
                     # This thread and future actor/oracle children inherit the declared
@@ -8200,19 +8216,19 @@ def _main(argv: list[str] | None = None) -> int:
                     from ..execution.cpu_region_claim import parse_cpu_list
                     os.sched_setaffinity(0, set(parse_cpu_list(owned_cpu_list)))
                     ownership.callback(os.sched_setaffinity, 0, previous_affinity)
-                    if not gpu_skip_cpu_claim:
+                    if not gpu_skip_cpu_claim and stage_scope is None:
                         receipt = hold_cpu_claim(owned_cpu_list)
                         original_claims.append(receipt)
-                    else:
+                    elif stage_scope is None:
                         print(f"cpu claim none (--gpu-cpu-region-claim off; affinity "
                               f"{owned_cpu_list} only)")
-                elif cpu_launch:
+                elif cpu_launch and stage_scope is None:
                     receipt = hold_cpu_claim(cpu_launch.template.cpu_list)
                     original_claims.append(receipt)
                 if cpu_win is not None and original_claims:
                     cpu_win.set_reserved(cpu_window.ak_check_cpus())
                     cpu_win.bind(original_claims[0])
-                if not cpu_launch:
+                if not cpu_launch and stage_scope is None:
                     # G1 F4: under --gpu-window required the window is confirmed AFTER
                     # the device flock is held (never check-then-acquire); under a
                     # serial_run window hold this re-enters the parent's flock.
@@ -8245,8 +8261,9 @@ def _main(argv: list[str] | None = None) -> int:
                 except Exception as marker_error:
                     print(f"pre-claim failure marker unavailable: {marker_error}", file=sys.stderr)
                 raise
-            _publish_claim_acquired(
-                args.out, scheduler_selection, selected_identity, original_claims)
+            if stage_scope is None:
+                _publish_claim_acquired(
+                    args.out, scheduler_selection, selected_identity, original_claims)
             if gpu_local is not None:
                 from .gpu_phases import CHILD_PHASE_DIR
                 phase_root = args.out or args.store / "gpu-local-phases" / scratch_run_id

@@ -141,14 +141,17 @@ def test_execution_adapter_is_read_not_rechosen():
         sf.execution_adapter(["--cpu-serving-launch", "a", "--gpu-serving-launch", "b"])
 
 
-def test_max_active_targets_defaults_to_one_and_refuses_more_without_admission():
+def test_max_active_targets_defaults_to_one_without_a_stage_server():
     parser = argparse.ArgumentParser()
     sf.add_max_active_targets(parser)
     args = parser.parse_args([])
     sf.check_max_active_targets(parser, args)
-    assert args.max_active_targets == 1
+    assert args.max_active_targets == 1 and sf.parent_server(args) is None
+    two = parser.parse_args(["--max-active-targets", "2"])
+    sf.check_max_active_targets(parser, two)
+    assert sf.parent_server(two) is not None
     with pytest.raises(SystemExit):
-        sf.check_max_active_targets(parser, parser.parse_args(["--max-active-targets", "2"]))
+        sf.check_max_active_targets(parser, parser.parse_args(["--max-active-targets", "0"]))
 
 
 def test_scheduling_code_names_no_model():
