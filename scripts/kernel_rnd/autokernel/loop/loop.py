@@ -512,6 +512,10 @@ class Hypothesis:
     #: the quality gate. Declared by the author, verified by the exact judge. Omitted from
     #: `to_dict` unless set, so every existing row keeps its shape.
     lane: str = ""
+    #: AK-PM-17: the planner's OPTIONAL declared expectation ({"direction", "min_effect_fraction"}),
+    #: carried to the attempt row's `reflexion.expected_outcome` and linted there. Omitted from
+    #: `to_dict` unless declared, so every existing row and identity digest keeps its shape.
+    expected_outcome: Any = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "relies_on_claims", tuple(self.relies_on_claims or ()))
@@ -541,6 +545,8 @@ class Hypothesis:
             row["preseed_id"] = self.preseed_id
         if self.lane:
             row["lane"] = self.lane
+        if self.expected_outcome is not None:
+            row["expected_outcome"] = self.expected_outcome
         return row
 
 
@@ -744,9 +750,12 @@ class Outcome:
         if self.belief_mode is not None:
             row["belief_mode"] = self.belief_mode
             row["belief_refusal"] = dict(self.belief_refusal or {})
-        if self.comparison is not None or self.reflexion_declared is not None:
-            row["reflexion"] = reflexion.build(self.comparison, self.status,
-                                               self.reflexion_declared)
+        declared = self.reflexion_declared
+        planned = getattr(self.hypothesis, "expected_outcome", None)
+        if planned is not None and not (isinstance(declared, dict) and "expected_outcome" in declared):
+            declared = {**(declared if isinstance(declared, dict) else {}), "expected_outcome": planned}
+        if self.comparison is not None or declared is not None:
+            row["reflexion"] = reflexion.build(self.comparison, self.status, declared)
         if self.history_fields is not None:
             # Additive and nullable: a value that is unknown is null, never invented.
             row.update(self.history_fields)

@@ -55,6 +55,27 @@ class OutcomeAttempt(unittest.TestCase):
         self.assertIn("comparison", row)
         self.assertIsNone(row["comparison"])
 
+    def test_planner_declared_expected_outcome_reaches_reflexion(self):
+        # AK-PM-17: an optional Hypothesis.expected_outcome becomes the row's declared
+        # expectation; invalid ones are linted not repaired; absent stays absent.
+        base = _hypothesis()
+        hyp = loop.Hypothesis(**{**base.to_dict(),
+                                 "expected_outcome": {"direction": "improve",
+                                                      "min_effect_fraction": 0.01}})
+        row = loop.Outcome("kept", hyp, comparison=_comparison(0.05)).to_attempt()
+        self.assertTrue(row["reflexion"]["was_diagnosis_correct"])
+        wrong = loop.Hypothesis(**{**base.to_dict(),
+                                   "expected_outcome": {"direction": "regress"}})
+        row = loop.Outcome("kept", wrong, comparison=_comparison(0.05)).to_attempt()
+        self.assertFalse(row["reflexion"]["was_diagnosis_correct"])
+        bad = loop.Hypothesis(**{**base.to_dict(), "expected_outcome": "improve"})
+        row = loop.Outcome("kept", bad, comparison=_comparison(0.05)).to_attempt()
+        self.assertIsNone(row["reflexion"]["was_diagnosis_correct"])
+        self.assertTrue(row["reflexion"]["lint_violations"])
+        self.assertNotIn("expected_outcome", base.to_dict())
+        # hypothesis survives a to_dict round trip (resume path)
+        self.assertEqual(loop.Hypothesis(**hyp.to_dict()).expected_outcome, hyp.expected_outcome)
+
     def test_reflexion_is_observe_only_and_never_costs_the_attempt_its_record(self):
         # AK-PM-17 custody: `reflexion.build` runs inside `to_attempt`, so a hostile
         # declaration must degrade to recorded lint violations, never raise (a raise here

@@ -4341,7 +4341,10 @@ class AgentPlanner:
             runtime_pair=(_runtime_pair(body["runtime_treatment"], context,
                                         str(body["mechanism_id"]))
                           if "runtime_treatment" in body else None),
-            **({"planner_report_source": report_source} if report_source else {})), declared
+            **({"planner_report_source": report_source} if report_source else {}),
+            # AK-PM-17: optional and unprompted today; carried verbatim, linted downstream.
+            **({"expected_outcome": body["expected_outcome"]}
+               if body.get("expected_outcome") is not None else {})), declared
 
     @_in_call_scope("author")
     def author(self, hypothesis: Hypothesis,
