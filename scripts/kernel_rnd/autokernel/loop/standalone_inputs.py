@@ -92,10 +92,14 @@ class StartupManifest:
     evidence_feed: feed_runtime.FeedConfig | None = None
     native_evidence: Mapping[str, Any] | None = None
     serving_preparation: Any = None
+    operation_settlement: bool | None = None  # AKU-06l3: absent = runtime default (v2 on)
 
     @classmethod
     def from_dict(cls, value: Any) -> "StartupManifest":
         row = dict(_mapping(value, "startup manifest"))
+        settlement = row.get("operation_settlement")
+        if "operation_settlement" in row and type(settlement) is not bool:
+            raise StandaloneInputsRefused("operation_settlement must be a bool")
         fields = {"schema", "driver_config", "evidence_index", "actor_identities",
                   "lifecycle_provider_id", "readiness_provider_id",
                   "evidence_verifier_id", "manifest_digest"}
@@ -108,7 +112,7 @@ class StartupManifest:
             fields |= {"native_evidence"}
         if row.get("schema") == PREPARATION_MANIFEST_SCHEMA:
             fields |= {"serving_preparation"}
-        if set(row) != fields or row["schema"] not in {
+        if set(row) - {"operation_settlement"} != fields or row["schema"] not in {
                 MANIFEST_SCHEMA, FEED_MANIFEST_SCHEMA, NATIVE_MANIFEST_SCHEMA,
                 PREPARATION_MANIFEST_SCHEMA}:
             raise StandaloneInputsRefused("startup manifest fields/schema differ")
@@ -144,7 +148,7 @@ class StartupManifest:
             _text(row["lifecycle_provider_id"], "lifecycle_provider_id"),
             _text(row["readiness_provider_id"], "readiness_provider_id"),
             "" if feed_mode else _text(row["evidence_verifier_id"], "evidence_verifier_id"),
-            supplied_digest, row["schema"], feed, native, preparation,
+            supplied_digest, row["schema"], feed, native, preparation, settlement,
         )
 
     def body(self) -> dict[str, Any]:
@@ -189,6 +193,8 @@ class StartupManifest:
             if type(self.serving_preparation) is not PreparationStartupConfiguration:
                 raise StandaloneInputsRefused("v4 requires concrete preparation configuration")
             result["serving_preparation"] = self.serving_preparation.to_dict()
+        if self.operation_settlement is not None:
+            result["operation_settlement"] = self.operation_settlement
         return result
 
     def to_dict(self) -> dict[str, Any]:
@@ -828,8 +834,11 @@ def runtime_factory(materialized: MaterializedInputs, registry: ProviderRegistry
                 if written.to_dict() != reference.artifact.to_dict():
                     raise StandaloneInputsRefused(
                         "runtime loaded instrument publication differs from startup")
+            settlement = materialized.manifest.operation_settlement
             runtime = standalone_runtime.StandaloneRuntime.compose(
-                controller=controller, inputs=current_inputs)
+                controller=controller, inputs=current_inputs,
+                **({} if settlement is None else {"config": standalone_runtime.StandaloneRuntimeConfig(
+                    operation_settlement=settlement)}))
         except BaseException:
             controller.close()
             raise

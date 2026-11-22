@@ -78,7 +78,7 @@ class StandaloneRuntimeConfig:
     shutdown_timeout_seconds: float = 10.0
     max_exact_retries: int = 3
     schema: str = CONFIG_SCHEMA
-    operation_settlement: bool = False  # AKU-06l: single-stage SETTLED.v2 (opt-in)
+    operation_settlement: bool = False  # AKU-06l: single-stage SETTLED.v2 (opt-in; manifest-configurable, AKU-06l3)
 
     def __post_init__(self) -> None:
         if self.schema != CONFIG_SCHEMA:

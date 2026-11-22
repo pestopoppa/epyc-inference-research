@@ -174,6 +174,7 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
         fields |= {"serving_preparation"}
     if "kfd_gpu_ids" in request:  # AKU-07o2: optional manifest fallback map
         fields |= {"kfd_gpu_ids"}
+    fields |= {"operation_settlement"} & set(request)  # AKU-06l3: optional runtime choice
     request = _closed(request, fields, "factory request")
     if request["schema"] not in {REQUEST_SCHEMA, FEED_REQUEST_SCHEMA,
                                  NATIVE_REQUEST_SCHEMA, PREPARATION_REQUEST_SCHEMA}:
@@ -422,6 +423,8 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
         assert evidence is not None
         body.update(evidence_index=evidence.to_dict(),
                     evidence_verifier_id=providers["evidence_verifier"])
+    if "operation_settlement" in request:
+        body["operation_settlement"] = request["operation_settlement"]
     manifest = standalone_inputs.StartupManifest.from_dict(
         body | {"manifest_digest": standalone_inputs._digest(body)})
     runner = _closed(request["dry_run_runner"], {"python", "pythonpath"}, "dry-run runner")
