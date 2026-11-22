@@ -15,6 +15,10 @@
   {
    "row": "ak-c18-a3b-mtp-trace-gpu-20261122",
    "sha256": "2b952c22f671224d894a85d52a43c8146a3e28a85b3332aa3663c6f94e7b6e3b"
+  },
+  {
+   "row": "a3b-cpu-gap-census-20261122-r2",
+   "sha256": "e57d7da945c36e655a5253c79a0d7ca52f5fca674af222f691ecc99d53eac78b"
   }
  ],
  "ceiling_gbps": 1500.0,
@@ -914,7 +918,7 @@
    "measured_at": "",
    "model": "a3b-q8_0-cpu",
    "n": 1,
-   "rank": 21,
+   "rank": 20,
    "recoverable_ms_per_round": 0.215,
    "result_sha256": "e06640638cfdda230ffb5310a76a2c9d57cfdfec955a1b1934caa09ebc225010",
    "seed": "CPU-A3B-SHEXP",
@@ -937,7 +941,7 @@
    "measured_at": "",
    "model": "a3b-q8_0-cpu",
    "n": 1,
-   "rank": 22,
+   "rank": 21,
    "recoverable_ms_per_round": 0.182,
    "result_sha256": "e06640638cfdda230ffb5310a76a2c9d57cfdfec955a1b1934caa09ebc225010",
    "shape": "quarter-24t",
@@ -953,21 +957,32 @@
    "ceiling_gbps": 129.9,
    "config": "quarter-24t",
    "device": "cpu",
-   "frac_of_ceiling": 0.724,
-   "gbps": 94.0,
+   "frac_of_ceiling": 0.781,
+   "gbps": 101.4,
+   "history": [
+    [
+     "a3b-cpu-gap-census-20261121",
+     94.0
+    ],
+    [
+     "a3b-cpu-gap-census-20261122-r2",
+     101.4
+    ]
+   ],
    "kernel_class": "MUL_MAT_ID:exps_gate_up",
    "measured_at": "",
    "model": "a3b-q8_0-cpu",
    "n": 1,
-   "rank": 17,
-   "recoverable_ms_per_round": 0.726,
-   "result_sha256": "e06640638cfdda230ffb5310a76a2c9d57cfdfec955a1b1934caa09ebc225010",
+   "rank": 22,
+   "recoverable_ms_per_round": 0.172,
+   "result_sha256": "e57d7da945c36e655a5253c79a0d7ca52f5fca674af222f691ecc99d53eac78b",
    "seed": "CPU-A3B-MMID",
    "shape": "quarter-24t",
-   "share_of_round": 0.1868,
-   "source_row": "a3b-cpu-gap-census-20261121",
-   "status": "open_surface",
-   "us_per_call": 7587.2
+   "share_of_round": 0.177,
+   "source_row": "a3b-cpu-gap-census-20261122-r2",
+   "status": "ok",
+   "unit": "GB/s",
+   "us_per_call": 7032.9
   },
   "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:fullattn_proj|quarter-24t-d1k|n1": {
    "arm": "plain-greedy-d1k",
@@ -1104,7 +1119,7 @@
    "measured_at": "2026-11-22T22:12:12Z",
    "model": "q38fn-ud-iq4xs-cpu",
    "n": 1,
-   "rank": 20,
+   "rank": 19,
    "recoverable_ms_per_round": 0.22,
    "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
    "shape": "quarter-24t-d1k",
@@ -1162,7 +1177,7 @@
    "measured_at": "2026-11-22T22:12:12Z",
    "model": "q38fn-ud-iq4xs-cpu",
    "n": 1,
-   "rank": 18,
+   "rank": 17,
    "recoverable_ms_per_round": 0.545,
    "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
    "shape": "quarter-24t-d1k",
@@ -1220,7 +1235,7 @@
    "measured_at": "2026-11-22T22:12:12Z",
    "model": "q38fn-ud-iq4xs-cpu",
    "n": 1,
-   "rank": 19,
+   "rank": 18,
    "recoverable_ms_per_round": 0.472,
    "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
    "shape": "quarter-24t-d1k",
