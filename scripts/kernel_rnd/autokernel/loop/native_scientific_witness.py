@@ -26,6 +26,10 @@ from . import lifecycle_observation as lo
 from . import measurement_capture as mc
 from . import observation_binding as ob
 from . import worker_lifecycle as wl
+# re-exported: moved verbatim to native_witness_source_pins.py
+from .native_witness_source_pins import (  # noqa: F401
+    ScientificWitnessRefused, _file_stats, _model_source_pins,
+)
 
 ADAPTERS_SCHEMA = "epyc.autokernel.parent_scientific_witness_adapters.v1"
 ADAPTERS_SCHEMA_V2 = "epyc.autokernel.parent_scientific_witness_adapters.v2"
@@ -42,10 +46,6 @@ MODEL_SCHEMA = "epyc.autokernel.parent_verified_model_inventory.v1"
 MAX_CAPTURES = 4096
 MAX_UNITS = 1024
 REPLAY_COVERAGE = "original_collection_identity_and_owning_reducer_replay"
-
-
-class ScientificWitnessRefused(ValueError):
-    pass
 
 
 def _same(actual: Any, expected: Any, label: str) -> None:
@@ -145,27 +145,6 @@ def _native_artifact_facts(context: Any) -> tuple[Mapping[str, Any], ...]:
             facts.append({"expected": artifact.to_dict(), "observed": None,
                           "error": type(exc).__name__})
     return tuple(ob._freeze(row) for row in facts)
-
-
-def _file_stats(paths: tuple[str, ...]) -> tuple[Mapping[str, Any], ...]:
-    """Continuity with an original hash receipt; these fields are NOT content hashes."""
-    rows = []
-    for name in paths:
-        path = Path(name)
-        info = path.lstat()
-        if path.is_symlink() or not path.is_file():
-            raise ScientificWitnessRefused("verified inventory member is no longer a regular file")
-        rows.append({"path": name, "dev": info.st_dev, "ino": info.st_ino,
-            "size": info.st_size, "mtime_ns": info.st_mtime_ns, "ctime_ns": info.st_ctime_ns,
-            "mode": info.st_mode, "nlink": info.st_nlink})
-    return tuple(ob._freeze(row) for row in rows)
-
-
-def _model_source_pins() -> Mapping[str, Any]:
-    return ob._freeze({"module": lo.prepare_artifact_identity(Path(tensor_capture.__file__)),
-        "callables": [lo.callable_identity(function) for function in (
-            tensor_capture.CaptureModelIdentity.validate, tensor_capture._checked_regular_file,
-            tensor_capture._sha256_file, _file_stats)]})
 
 
 def _frame(context: Any) -> Mapping[str, Any]:
