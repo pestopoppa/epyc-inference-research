@@ -1494,7 +1494,10 @@ def _main(argv=None) -> int:
                              "(default: %(default)s)")
     parser.add_argument("--gpu-window-bus-root", type=Path, default=None,
                         help="session-bus root (default: the live bus; tests only)")
+    from . import stage_footprint
+    stage_footprint.add_max_active_targets(parser)
     args = parser.parse_args(argv)
+    stage_footprint.check_max_active_targets(parser, args)
     request_flags = (args.gpu_window_request_schedule_ref, args.gpu_window_request_campaign,
                      args.gpu_window_request_duration_s)
     if any(value is not None for value in request_flags):
