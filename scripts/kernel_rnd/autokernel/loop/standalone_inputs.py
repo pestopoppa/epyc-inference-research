@@ -7,7 +7,6 @@ whatever the reconstructed EvidenceIndex can verify with its installed callbacks
 from __future__ import annotations
 
 import hashlib
-import json
 import copy
 import time
 from dataclasses import dataclass, replace
@@ -18,13 +17,17 @@ from typing import Any, Callable, Mapping
 from . import (campaign, campaign_control, campaign_service, experiment_plan,
                scheduling, scoped_evidence, standalone_runtime, unified_driver,
                unified_planner, feed_runtime)
+# re-exported: moved verbatim to standalone_installed_adapters.py
+from .standalone_installed_adapters import (  # noqa: F401
+    SCIENTIFIC_SELECTION_SCHEMA, StandaloneInputsRefused, _canonical,
+    _installed_scientific_adapters, _mapping,
+)
 
 MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v1"
 FEED_MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v2"
 NATIVE_MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v3"
 PREPARATION_MANIFEST_SCHEMA = "epyc.autokernel.standalone_inputs.v4"
 NATIVE_EVIDENCE_SCHEMA = "epyc.autokernel.standalone_native_evidence.v1"
-SCIENTIFIC_SELECTION_SCHEMA = "epyc.autokernel.scientific_adapter_selection.v1"
 PREFLIGHT_SCHEMA = "epyc.autokernel.standalone_inputs_preflight.v1"
 NATIVE_PREFLIGHT_SCHEMA = "epyc.autokernel.standalone_inputs_preflight.v2"
 _PROVIDER_METHODS = (
@@ -33,27 +36,8 @@ _PROVIDER_METHODS = (
 )
 
 
-class StandaloneInputsRefused(RuntimeError):
-    """Startup input is malformed, stale, foreign, or unavailable."""
-
-
-def _canonical(value: Any) -> bytes:
-    try:
-        return json.dumps(value, sort_keys=True, separators=(",", ":"),
-                          allow_nan=False).encode()
-    except (TypeError, ValueError) as exc:
-        raise StandaloneInputsRefused("startup manifest is not canonical JSON") from exc
-
-
 def _digest(value: Any) -> str:
     return hashlib.sha256(_canonical(value)).hexdigest()
-
-
-def _mapping(value: Any, label: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping) or any(not isinstance(key, str) for key in value):
-        raise StandaloneInputsRefused(f"{label} must be an object with string keys")
-    _canonical(value)
-    return value
 
 
 def _text(value: Any, label: str) -> str:
@@ -283,31 +267,6 @@ class ProviderRegistry:
 
     def profile_binding(self, identifier: str):
         return self._profile_bindings.get(identifier)
-
-
-def _installed_scientific_adapters(value: Any):
-    """Construct one closed installed adapter registry without restoring issuance."""
-    from . import native_scientific_witness as nsw
-    selection = dict(_mapping(value, "scientific adapter selection"))
-    from . import scientific_adapter_selection as v2  # AKU-07h5: native-v2 registry
-    if selection.get("schema") == v2.SCHEMA_V2:
-        try:
-            return v2.installed(selection)
-        except Exception as exc:
-            raise StandaloneInputsRefused(f"scientific adapter selection is invalid: {exc}") from exc
-    if set(selection) != {"schema", "correctness", "purpose", "contention", "residency"} \
-            or selection["schema"] != SCIENTIFIC_SELECTION_SCHEMA \
-            or any(selection[name] is not None for name in ("purpose", "contention", "residency")):
-        raise StandaloneInputsRefused("scientific adapter selection is unsupported")
-    correctness = dict(_mapping(selection["correctness"], "correctness adapter selection"))
-    if set(correctness) != {"adapter_id", "max_units"} \
-            or correctness["adapter_id"] != nsw.ADAPTER_ID:
-        raise StandaloneInputsRefused("configured correctness adapter is not installed")
-    try:
-        return nsw.ParentScientificWitnessAdapters(
-            correctness=nsw.NativeT0WitnessAdapter(max_units=correctness["max_units"]))
-    except Exception as exc:
-        raise StandaloneInputsRefused(f"scientific adapter selection is invalid: {exc}") from exc
 
 
 def native_evidence_document(*, scientific_adapters: Any,
