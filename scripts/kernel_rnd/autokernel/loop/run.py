@@ -2055,6 +2055,27 @@ def _write_new_source_floor(floor_store: Path, recipe, anchor, row, *, frozen_re
     return written
 
 
+KEEP_LESSON_JOURNAL = "lesson-journal"
+
+
+def submit_keep_lesson(store: Path, attempt: dict, *, producer=None) -> dict:
+    """AK-PM-12: record one kept attempt's LESSON_ADMISSION_EVALUATED receipt.
+
+    Journal at ``<store>/lesson-journal``; `keep_lesson.submit_keep` is idempotent on
+    (task_id, candidate_id, commit). Never raises: an unopenable journal is returned as a
+    reason, exactly like a producer refusal.
+    """
+    from . import keep_lesson
+    try:
+        from ..journal import Journal
+        journal = Journal(str(Path(store) / KEEP_LESSON_JOURNAL))
+        journal.initialize()
+    except Exception as exc:  # noqa: BLE001 - observe-only write side
+        return {"recorded": False, "reason": f"journal_unavailable: {type(exc).__name__}: {exc}"[:300],
+                "decision": None}
+    return keep_lesson.submit_keep(journal, attempt, producer=producer)
+
+
 def attempt_with_codegen(outcome: loop.Outcome, summaries: dict[str, dict]) -> dict:
     """Attach a keep's diagnostic to the same durable experiment row."""
     attempt = outcome.to_attempt()
@@ -7118,6 +7139,10 @@ def _main(argv: list[str] | None = None) -> int:
             shadow = same_state_stop.retry_budget_shadow(args.store, attempt)
             if shadow is not None:
                 attempt["retry_budget_shadow"] = shadow
+            if outcome.status == "kept":
+                # AK-PM-12: the keep path's write-side lesson-admission receipt.
+                # Idempotent and never raises; a refusal never costs the keep.
+                attempt["keep_lesson"] = submit_keep_lesson(args.store, attempt)
             journal_receipts = []
             try:
                 archive.record(args.store, attempt, epoch=epoch,
