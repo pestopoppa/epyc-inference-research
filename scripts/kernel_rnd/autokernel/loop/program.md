@@ -917,6 +917,34 @@ and `progress/2026-11/2026-11-2{0,1}-autokernel.md` (wrap-ups 5-10).
   3. test-backend-ops on C18 for MUL_MAT q8_0 m=248320/1024, k=5120, n=1..16, V5I ON.
   4. `ak-mmid-mf-gpu-20261122` verdict.
 
+## Learnings 2026-11-22 (day: DTREE park, ROUND-2, C18, atomics, gate protocol) — distilled, not a log
+
+- **Tree verify on the MI210 is PARKED, and the cost is inside the target forward.** tree-on-V5I r4: T12/L
+  0.924, T16/L 0.963. The phase timer (r2) puts all the overhead in the target decode (T12 +6.0 ms, T16 +9.7 ms;
+  draft, pre and post ~0). V5I matmul is only 0.17 ms per extra row, so ~1.3 ms/row is GDN, FA and mask work.
+  Reopen only with a lever that cuts the non-matmul per-row cost, and against the measured 45.7 ms linear round.
+- **Check the served recipe before calling a path missing.** The MFMA small-M Q8_0 path (V5I, `GGML_HIP_Q8_MF=6`)
+  already existed. The q8wv rows never set the MF env. Read the served recipe before building a kernel.
+- **GPU-RESIDENT-ROUND-2 slices (2a/2c/2d/2e/2f) gave no speed or CPU gain.** ROCm 6.2 through 7.2 headers have
+  no conditional graph nodes. The per-round host time that is left is not sync wait.
+- **Pooled binomial acceptance CIs are about 3x too narrow**, because drafts cluster by trajectory. Gate
+  acceptance with paired per-triple CIs and temp>0 distributions with a trajectory-permutation chi-square. The
+  "ON acceptance higher" seen in 2a/2d/stoch-accept was this artifact.
+- **GPU run nondeterminism comes from float atomics** (V5 MF split half-tiles and mmq-q8-skinny unsafeAtomicAdd).
+  With GGML_DETERMINISTIC, fresh-server A/A divergence falls from 7/16 to 0/16, at 2.4x cost, so the knob is
+  for test gates only. Single-sample OFF2==OFF identity gates are unsound. Use fresh servers, N>=8 x R>=3 A/A
+  and the top-2 margin at the divergence point.
+- **Default-on fusions need a long-generation quality check.** C12 Q38FN GPU greedy loops past position ~256
+  (accuracy 0.05 with fusions on, 0.70 with them off; prime suspect AK-H15). C17 and C18 ship those fusions on,
+  so the C10 bisect must clear C18 before it promotes.
+- **Fix a mis-specified rule instead of widening it after the fact.** split16 r3 passed only on a band widened
+  post hoc. The clean r4 (band preregistered, fresh units) confirmed it at 0.8318 [0.827,0.837]. Report a
+  post-hoc pass as inconclusive, then rerun.
+- **Choose the profiling unit by arithmetic intensity.** Compute-bound prefill GEMMs are judged in TFLOP/s and
+  decode/GEMV in GB/s. The I8GEMM row's "effective_GBps" field was actually TFLOP/s.
+- **A STOP on a job that drives a server must never be judged.** ea-pool r2 wrote a false FUTILITY_INPUT
+  after its server was killed mid-unit.
+
 ## gfx90a low-level tier — ISA-schedule operator catalogue
 
 Sub-tier (a), source-only: a text diff to HIP source (builtins / pragmas / attributes). Its
