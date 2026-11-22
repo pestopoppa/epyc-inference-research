@@ -319,6 +319,9 @@ def test_missing_native_callback_closes_provider_and_preserves_child_refusal(tmp
     assert list(tmp_path.glob("*.pending")) and not list(tmp_path.glob("*.json"))
 
 
+AUTHOR_FIXTURE_TIMEOUT_S = 10.
+
+
 @pytest.mark.parametrize("route", ["ordinary", "author"])
 @pytest.mark.parametrize("outcome", ["success", "error", "timeout", "cleanup_uncertain",
                                      "survivor_retry", "census_retry", "live_diagnostic_failure", "dead_census_retry"])
@@ -467,9 +470,11 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
         return original_terminate(targets, still_selected)
 
     def temporary_census_failure(path):
-        if Path(path) == Path("/proc") and census_failures[0] < 2:
+        # Inject only once the captured child is known: an injection that fires before
+        # the fixture compiler wrote its PID would fail forever, and the strict
+        # cleanup wait (by design) never releases an owner on an unverified census.
+        if Path(path) == Path("/proc") and census_failures[0] < 2 and child_pid[0] is not None:
             assert_held()
-            assert child_pid[0] is not None
             child = procguard.read_proc(Path("/proc"), child_pid[0])
             assert child is not None and child.state != "Z"
             census_failures[0] += 1
@@ -537,8 +542,12 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
                 monkeypatch.setenv(gp.CHILD_PHASE_DIR, str(phase_dir))
                 def invoke():
                     with gp.child_build("0", paths=(build,)):
+                        # run_bounded wraps the fixture in `nice -n 19 taskset -c <cpu>`; on a
+                        # loaded shared host a nice-19 python start on one CPU takes >1 s, so
+                        # a sub-second budget timed the fixture out before it spawned its
+                        # descendant. Only the "timeout" fixture (sleeps 60 s) may time out.
                         return ak_check.run_bounded([str(script)], cpus=tuple(sorted(gp.os.sched_getaffinity(0)))[:1],
-                            timeout_s=.5, cwd=tmp_path)
+                            timeout_s=AUTHOR_FIXTURE_TIMEOUT_S, cwd=tmp_path)
             else:
                 tree = ast.parse((Path(__file__).parent / "run.py").read_text())
                 main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_main")
