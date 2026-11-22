@@ -108,7 +108,14 @@ def link_argv(object_o: Path, hsaco: Path, *, llvm: Path = ROCM_LLVM) -> list[st
     return [str(llvm / "ld.lld"), "-shared", str(object_o), "-o", str(hsaco)]
 
 
-def static_gate_argv(incumbent_json: Path, candidate_json: Path, *, families: str,
+# Pre-timing ISA gate family set: the audit DEFAULT_FAMILIES, which include the served
+# decode/verify attention kernels (fattn_vec, fattn_tile, gqa_verify, qsa_sparse) so a VGPR
+# increase, spill or occupancy drop there fails before any timing (AK-ISA-FAMILIES).
+ISA_GATE_FAMILIES = "mmq,mmf,fattn_mma,fattn_wmma,fattn_vec,fattn_tile,gqa_verify,qsa_sparse"
+
+
+def static_gate_argv(incumbent_json: Path, candidate_json: Path, *,
+                     families: str = ISA_GATE_FAMILIES,
                      audit: Path | None = None) -> list[str]:
     audit = audit or Path(__file__).resolve().parents[2] / "gfx90a_isa_audit.py"
     return ["python3", str(audit), "diff", str(incumbent_json), str(candidate_json),

@@ -330,6 +330,40 @@ def test_diff_exit_codes_and_fail_on_warn(tmp_path):
     assert ga.main(["diff", str(paths["b"]), str(paths["w"]), "--fail-on", "warn"]) == 1
 
 
+@pytest.mark.parametrize("name,family", [
+    ("_ZL15gv_fattn_kernelILi128ELi8EEvPKfS1_", "gqa_verify"),
+    ("_ZL15gv_merge_kernelPKfPK15HIP_vector_typeIfLj2EEPfiii", "gqa_verify"),
+    ("_ZL17k_qsa_sparse_attnILi128EEvPKfS1_", "qsa_sparse"),
+    ("_ZL20k_qsa_sparse_combinePKfS0_Pfiii", "qsa_sparse"),
+    ("_ZL15flash_attn_tileILi128ELi128ELi8ELi1ELb0EEvPKc", "fattn_tile"),
+])
+def test_classify_served_attention_families(name, family):
+    assert ga.classify_family(name)[0] == family
+    assert family in ga.DEFAULT_FAMILIES
+
+
+@pytest.mark.parametrize("family", ga.SERVED_ATTN_FAMILIES)
+def test_diff_synthetic_vgpr_increase_fails_on_served_attention(tmp_path, family):
+    """AK-ISA-FAMILIES done-when: diff exits 1 on a synthetic +VGPR served-FA variant."""
+    base = _doc([_row("k", family=family, params={})])
+    cand = _doc([_row("k", family=family, params={}, vgpr_total=208)])
+    b, c = tmp_path / "b.json", tmp_path / "c.json"
+    b.write_text(json.dumps(base))
+    c.write_text(json.dumps(cand))
+    assert ga.main(["diff", str(b), str(c)]) == 1
+    res = ga.run_diff(base, cand, ga.DEFAULT_FAMILIES, None)
+    assert {(f["check"], f["severity"]) for f in res["findings"]} == {("vgpr_total", "FAIL")}
+
+
+def test_gcn_gym_static_gate_defaults_include_served_attention():
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "autokernel" / "loop"))
+    import gcn_gym  # noqa: PLC0415
+    argv = gcn_gym.static_gate_argv(Path("b.json"), Path("c.json"))
+    fams = argv[argv.index("--families") + 1].split(",")
+    assert set(ga.SERVED_ATTN_FAMILIES) <= set(fams)
+    assert set(fams) == set(ga.DEFAULT_FAMILIES)
+
+
 def test_diff_ignores_stubs_and_reports_added_removed():
     base = _doc([_row(SYM), _row("gone"), _row("stubbed", stub=True)])
     cand = _doc([_row(SYM), _row("new", vgpr_spill=2), _row("stubbed", stub=True, vgpr_spill=9)])

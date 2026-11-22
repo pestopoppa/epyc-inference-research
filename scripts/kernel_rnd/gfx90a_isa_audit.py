@@ -26,7 +26,8 @@ register-affecting change: no timing before it passes.
 
 Usage::
 
-    gfx90a_isa_audit.py audit LIB_OR_CO [--families mmq,mmf,fattn_mma,fattn_wmma]
+    gfx90a_isa_audit.py audit LIB_OR_CO [--families mmq,mmf,fattn_mma,fattn_wmma,
+                             fattn_vec,fattn_tile,gqa_verify,qsa_sparse]
                              [--match REGEX] [--json OUT.json] [--table OUT.txt]
     gfx90a_isa_audit.py table AUDIT.json [--families ...] [--sort spill]
     gfx90a_isa_audit.py diff BASELINE.json CANDIDATE.json [--fail-on fail|warn]
@@ -69,9 +70,14 @@ import yaml
 SCHEMA = "epyc.gfx90a.isa_audit.v1"
 TOOL_ID = "epyc.gfx90a_isa_audit/v1"
 LLVM_BIN = Path(os.environ.get("ROCM_LLVM_BIN", "/opt/rocm/llvm/bin"))
-DEFAULT_FAMILIES = ("mmq", "mmf", "fattn_mma", "fattn_wmma")
+# Served decode/verify attention kernels (AK-ISA-FAMILIES, intake-2797#record): the vec/tile
+# FA kernels, the gqa-verify kernels (gv_*) and the qsa-sparse kernels (k_qsa_sparse_*).
+# For these a VGPR-count increase is a FAIL in ``diff`` (not a WARN): upstream #32740
+# measured 181->202 registers and ~25% loss from one runtime branch in an FA hot loop.
+SERVED_ATTN_FAMILIES = ("fattn_vec", "fattn_tile", "gqa_verify", "qsa_sparse")
+DEFAULT_FAMILIES = ("mmq", "mmf", "fattn_mma", "fattn_wmma") + SERVED_ATTN_FAMILIES
 ALL_FAMILIES = ("mmq", "mmq_fixup", "mmvq", "mmf", "fattn_mma", "fattn_wmma",
-                "fattn_vec", "fattn_tile", "fattn_other", "other")
+                "fattn_vec", "fattn_tile", "gqa_verify", "qsa_sparse", "fattn_other", "other")
 
 # gfx90a (CDNA2, MI210) per-SIMD / per-CU resources.
 GFX90A = {
@@ -494,6 +500,12 @@ def classify_family(name: str) -> tuple[str, dict]:
     if m:
         ints = [int(x) for x in re.findall(r"Li(\d+)E", m.group(3))]
         return "mmf", {"ids": bool(m.group(1)), "T": m.group(2), "ints": ints}
+    m = re.match(r"_ZL\d+(gv_\w+?_kernel)", name)
+    if m:
+        return "gqa_verify", {"kernel_fn": m.group(1)}
+    m = re.match(r"_ZL\d+(k_qsa_sparse_[a-z]+)", name)
+    if m:
+        return "qsa_sparse", {"kernel_fn": m.group(1)}
     if "flash_attn_ext_vec" in name:
         return "fattn_vec", {}
     if "flash_attn_tile" in name:
@@ -866,7 +878,8 @@ def compare_rows(b: dict, c: dict) -> list[tuple[str, str, str]]:
         c["occupancy_waves_per_simd"], lambda bv, cv: cv < bv)
     chk(FAIL, "agpr_appears", b["agpr"], c["agpr"], lambda bv, cv: bv == 0 and cv > 0)
     chk(WARN, "agpr", b["agpr"], c["agpr"], lambda bv, cv: bv > 0 and cv > bv)
-    chk(WARN, "vgpr_total", b["vgpr_total"], c["vgpr_total"], gt)
+    served = c.get("family") in SERVED_ATTN_FAMILIES
+    chk(FAIL if served else WARN, "vgpr_total", b["vgpr_total"], c["vgpr_total"], gt)
     chk(WARN, "private_bytes", b["private_bytes"], c["private_bytes"], gt)
     chk(WARN, "lds_bytes", b["lds_bytes"], c["lds_bytes"], gt)
     chk(WARN, "kern_accvgpr_copies", b["kern_accvgpr_copies"], c["kern_accvgpr_copies"], gt)
