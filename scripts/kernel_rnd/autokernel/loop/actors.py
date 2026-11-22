@@ -54,6 +54,10 @@ from ..custody import append_rows, sync_path as _sync_path
 from . import actor_metrics, belief_context, call_budget, gpu_counter_signals, history_fields, hotspots, integrity, procguard, scratch
 from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
                    Review, RunAborted)
+# re-exported: moved verbatim to actor_budgets.py
+from .actor_budgets import (  # noqa: F401
+    SEAT_ENV_BUDGETS, _budgets_of,
+)
 
 #: `--actor-belief-context`: the ONLY mode is `required` (operator 2026-10-21: there is no
 #: "off" for planning). Every proposal first obtains a validated `ready` answer from ROOT's
@@ -1441,44 +1445,6 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
     return failure_class
 
 
-def _budgets_of(env: Mapping[str, str] | None, budget_s: float | None,
-                budget_exhausted: bool, opencode_stats: Mapping[str, Any] | None
-                ) -> dict[str, Any] | None:
-    """OAB-22/23 on the metrics row: the limits the per-call config applied (from
-    `SEAT_ENV_BUDGETS`), the wall budget, whether it ran out, and -- when the export was
-    readable -- whether compaction ran and how many steps hit the output cap. None for a
-    call that applied none of them (historical rows unchanged)."""
-    applied: dict[str, Any] = {}
-    raw = (env or {}).get(SEAT_ENV_BUDGETS)
-    if raw:
-        try:
-            applied = dict(json.loads(raw))
-        except (ValueError, TypeError) as exc:
-            applied = {"error": f"{type(exc).__name__}: {exc}"[:200]}
-    if not applied and not budget_s:
-        return None
-    totals = (opencode_stats or {}).get("totals") or None
-    return {
-        "context_limit": applied.get("context_limit", 0),
-        "output_limit": applied.get("output_limit", 0),
-        "concise": bool(applied.get("concise", False)),
-        # OAB-24: the reasoning switch the call's config applied ("default" = none).
-        "thinking": applied.get("thinking", "default"),
-        "action_rule": bool(applied.get("action_rule", False)),
-        # Planner reasoning-history drop: only on rows whose call applied it.
-        **({"reasoning_history": applied["reasoning_history"]}
-           if "reasoning_history" in applied else {}),
-        **({"error": applied["error"]} if "error" in applied else {}),
-        "budget_s": budget_s or 0,
-        "budget_exhausted": budget_exhausted,
-        # None when the export was unreadable: unknown, never "did not happen".
-        "compacted": (totals.get("compactions", 0) > 0) if totals else None,
-        "compactions": totals.get("compactions") if totals else None,
-        "output_capped_steps": totals.get("output_capped_steps") if totals else None,
-        "context_max_tokens": (opencode_stats or {}).get("context_max_tokens"),
-    }
-
-
 def _seat_provenance(env: Mapping[str, str] | None) -> dict[str, Any]:
     """The per-call seat config and opencode switches behind a metrics row (OAB-10/11):
     the plain seat's permission-only config is not allowed in the VB-AK-SEAT record, so
@@ -1521,8 +1487,6 @@ SEAT_ENV_ARM, SEAT_ENV_FAN_OUT, SEAT_ENV_STEPS = (
 #: Marks an OPENCODE_CONFIG that belongs to the PLAIN seat (OAB-10/11 permission block
 #: only), so the VB-AK-SEAT record does not mistake it for a bounded seat's config.
 SEAT_ENV_PLAIN_CONFIG = "AK_ACTOR_SEAT_PLAIN_CONFIG"
-#: OAB-22/23: the limits a call's per-call config applied, as JSON, for the metrics row.
-SEAT_ENV_BUDGETS = "AK_ACTOR_SEAT_BUDGETS"
 #: UFH14-B1: what `actor_serving` derived for the call (F1 params, thinking budget), as
 #: JSON, for the metrics row (`serving`). Harmless to the child.
 SEAT_ENV_SERVING = "AK_ACTOR_SEAT_SERVING"
