@@ -514,6 +514,9 @@ def test_runtime_factory_recovers_before_non_http_worker_and_closes_in_order(
     calls = []
     recover = runtime.recover
     close = runtime.close
+    # Producers without the standalone service keep projection v3 (AKU-09g3).
+    assert controller.snapshot()["unified"]["schema"] == control.UNIFIED_PROJECTION_SCHEMA_V3
+    published = []
 
     def tracked_recover():
         calls.append("recover")
@@ -522,8 +525,9 @@ def test_runtime_factory_recovers_before_non_http_worker_and_closes_in_order(
     def stopped_run(stop_event):
         calls.append("run")
         assert isinstance(stop_event, threading.Event)
+        published.append(controller.snapshot())
         return runtime_module.RuntimeTickResult(
-            "stopped", "fixture owner stopped", 0, controller.snapshot())
+            "stopped", "fixture owner stopped", 0, published[-1])
 
     def tracked_close(*, deadline=None):
         calls.append("runtime-close")
@@ -546,6 +550,23 @@ def test_runtime_factory_recovers_before_non_http_worker_and_closes_in_order(
     ], runtime_factory=factory) == 0
     assert calls == ["recover", "run", "runtime-close"]
     assert controller._entered is False
+    # The standalone service producer opts into projection v4 and it validates.
+    unified = control.validate_snapshot_v3(published[-1])["unified"]
+    assert unified["schema"] == control.UNIFIED_PROJECTION_SCHEMA_V4
+    assert unified["resources"]["schema"] == "epyc.autokernel.unified_resource_status.v2"
+    assert unified["candidate"]["schema"] == "epyc.autokernel.unified_candidate_status.v2"
+    assert unified["candidate"]["status"] == "not_connected"  # typed absence, not readiness
+    assert published[-1]["execution_authorized"] is False
+
+
+def test_identity_rejected_factory_never_opts_into_projection_v4(tmp_path, monkeypatch):
+    runtime, controller, source = _runtime_service_owner(tmp_path, monkeypatch)
+    with pytest.raises(control.ControlRefused, match="identity differs"):
+        service._main([
+            "--resolved-campaign", str(source), "--store", str(tmp_path / "wrong-store"),
+            "--snapshot-version", "3", "--listen", "127.0.0.1:0",
+        ], runtime_factory=lambda _resolved, _args: (controller, runtime))
+    assert getattr(controller, "_aggregate_projection_token", None) is None
 
 
 def test_runtime_factory_pending_restart_accepts_settled_recovery_without_reselection(
@@ -840,6 +861,8 @@ finally:
             base, "/snapshot", token="runtime-subprocess-token")
         assert code == 200
         assert snapshot["schema"] == control.SNAPSHOT_SCHEMA_V3
+        wire = control.validate_snapshot_v3(snapshot)["unified"]  # published bytes, AKU-09g3
+        assert wire["schema"] == control.UNIFIED_PROJECTION_SCHEMA_V4
         os.kill(process.pid, signal.SIGTERM)
         assert process.wait(timeout=5) == 0
     finally:

@@ -99,7 +99,9 @@ means explicitly `not_connected`; an installed owner not yet observed is `unknow
 
 `unified_campaign_projection.v4` is v3 plus `unified_resource_status.v2` and
 `unified_candidate_status.v2`. It is opt-in: `connect_aggregate_projection(runtime)`
-after the runtime registers. The default producer still emits v3. The v3 validator
+after the runtime registers. The standalone campaign service opts in once it has
+accepted the factory's typed `(controller, runtime)` pair (AKU-09g3), so its published
+snapshots are v4; controllers without that service keep emitting v3. The v3 validator
 path is unchanged. A v4 snapshot is checked strictly first, then validated as v3 with
 v1 `not_connected` carriers in place of the two sections.
 
@@ -125,8 +127,8 @@ exact total. Runtime observation alone never makes either section ready.
 
 ## Remaining connections
 
-ROOT's `/loop` parser and page still accept only projection v1 to v3. They must consume v4
-before any producer opts in. Service configuration, health/freshness/control acceptance
+ROOT's `/loop` parser and page must accept v4 (AKU-09g2) before the standalone service
+change (AKU-09g3) is deployed; a reader that knows only v1 to v3 refuses v4. Service configuration, health/freshness/control acceptance
 and monitored reliability remain AKU-12 work.
 
 Hermetic tests cross actual runtime/controller/Journal paths and ROOT/browser readers.

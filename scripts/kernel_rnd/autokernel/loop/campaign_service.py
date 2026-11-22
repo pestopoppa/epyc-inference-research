@@ -535,8 +535,7 @@ def _runtime_owner(runtime_factory: RuntimeFactory, resolved: ResolvedCampaign,
         raise ControlRefused(
             "runtime_factory returned an untyped owner; factory retains cleanup authority")
     if runtime.controller is not controller:
-        raise ControlRefused(
-            "runtime and service controllers differ; typed owners remain retained")
+        raise ControlRefused("runtime and service controllers differ; typed owners remain retained")
     try:
         if controller.snapshot_version != 3:
             raise ControlRefused("runtime service requires snapshot v3")
@@ -544,6 +543,9 @@ def _runtime_owner(runtime_factory: RuntimeFactory, resolved: ResolvedCampaign,
                 or controller.config_generation != args.config_generation
                 or controller.store != Path(args.store).absolute()):
             raise ControlRefused("runtime owner identity differs from service configuration")
+        # AKU-09g3: the standalone producer emits projection v4 (report-only
+        # resource/candidate sections); producers without this owner keep v3.
+        controller.connect_aggregate_projection(runtime)
         controller.snapshot()  # public active-owner check after factory-controlled replay
         return controller, runtime
     except BaseException as exc:
