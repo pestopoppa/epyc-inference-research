@@ -941,7 +941,11 @@ and `progress/2026-11/2026-11-2{0,1}-autokernel.md` (wrap-ups 5-10).
   post hoc. The clean r4 (band preregistered, fresh units) confirmed it at 0.8318 [0.827,0.837]. Report a
   post-hoc pass as inconclusive, then rerun.
 - **Choose the profiling unit by arithmetic intensity.** Compute-bound prefill GEMMs are judged in TFLOP/s and
-  decode/GEMV in GB/s. The I8GEMM row's "effective_GBps" field was actually TFLOP/s.
+  decode/GEMV in GB/s. The I8GEMM row's "effective_GBps" field was actually TFLOP/s (root 8341cdad7).
+  **Rule:** AI = FLOP/byte; ridge = peak compute / peak BW (MI210 ~121 FLOP/B = 181 TFLOP/s / 1500 GB/s; CPU
+  half-48t ~32). AI >= ridge is compute-bound: report TFLOP/s; below it memory-bound: GB/s. Never put one unit
+  in a field named for the other. Census records carry an explicit `unit` (`GB/s`|`TFLOP/s`, null on old rows) and
+  `census_update.validate_unit` rejects a compute-bound record whose unit is GB/s (enforced in `apply`).
 - **A STOP on a job that drives a server must never be judged.** ea-pool r2 wrote a false FUTILITY_INPUT
   after its server was killed mid-unit.
 

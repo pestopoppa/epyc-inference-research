@@ -171,3 +171,26 @@ class Cpu(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnitRule(unittest.TestCase):
+    def test_compute_bound_in_gbps_rejected(self):
+        rec = {"bytes_per_call": 1_000_000, "flops_per_call": 5e9, "unit": "GB/s"}  # AI 5000 >> ridge
+        self.assertTrue(cu.validate_unit(rec))
+        self.assertEqual(cu.unit_for(5e9, 1e6), "TFLOP/s")
+
+    def test_ok_cases(self):
+        self.assertEqual(cu.validate_unit({"bytes_per_call": 1e6, "flops_per_call": 5e9, "unit": "TFLOP/s"}), [])
+        self.assertEqual(cu.validate_unit({"bytes_per_call": 1e9, "flops_per_call": 2e9, "unit": "GB/s"}), [])
+        self.assertEqual(cu.validate_unit({"bytes_per_call": 1e9}), [])  # old row, unit null
+        self.assertTrue(cu.validate_unit({"unit": "GBps"}))
+
+    def test_apply_rejects_and_stamps_unit(self):
+        c = cu.empty_census()
+        bad = {"model": "m", "kernel_class": "k", "shape": "s", "n": 8, "arm": "V", "bytes_per_call": 10**6,
+               "us_per_call": 5.0, "calls_per_round": 1, "flops_per_call": 5e9, "unit": "GB/s"}
+        with self.assertRaises(ValueError):
+            cu.apply(c, [bad], "r", "x" * 64, "t")
+        good = {k: v for k, v in bad.items() if k not in ("flops_per_call", "unit")}
+        cu.apply(c, [good], "r", "y" * 64, "t")
+        self.assertEqual(next(iter(c["records"].values()))["unit"], "GB/s")
