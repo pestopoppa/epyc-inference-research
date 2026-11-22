@@ -966,6 +966,8 @@ class CampaignController:
                 })
                 self._entered = True
                 self._poisoned = False
+                from .candidate_startup_replay import rebuild_cache
+                rebuild_cache(self)  # AKU-09g4: replay_verified survives restart
                 if self.snapshot_version in {2, 3}:
                     self._initialize_worker_lifecycle_locked()
                 return self
