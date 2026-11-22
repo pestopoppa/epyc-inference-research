@@ -16,6 +16,7 @@ from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from . import campaign, campaign_control, driver_execution, experiment_plan, feed_runtime
+from . import standalone_dispatch
 from . import scheduling, scoped_evidence, unified_driver, unified_planner, worker_lifecycle
 from .profile_preparation import ProfilePreparationRefused
 
@@ -130,6 +131,7 @@ class StandaloneRuntimeInputs:
     calibration_requests: tuple = ()
     profile_binding: Any = None
     kfd_gpu_ids: Mapping[str, str] | None = None  # AKU-07o2
+    actor_dispatch: Any = None  # AKU-07h4 standalone_dispatch.InstalledActorDispatch
 
 
 @dataclass(frozen=True)
@@ -222,11 +224,13 @@ class StandaloneRuntime:
         config: StandaloneRuntimeConfig,
         monotonic_clock,
         profile_executor=None,
+        actor_executor=None,
     ) -> None:
         self.controller = controller
         self.driver = driver
         self.executor = executor
         self.profile_executor = profile_executor
+        self.actor_executor = actor_executor
         self.config = config
         self._clock = monotonic_clock
         self._condition = threading.Condition(threading.RLock())
@@ -365,6 +369,9 @@ class StandaloneRuntime:
                 controller=controller, resolved=inputs.resolved_campaign,
                 runtime_anchors=inputs.runtime_anchors, requests=inputs.profile_requests,
                 configured_profiles=inputs.profiles)
+        from .standalone_dispatch import InstalledActorDispatch
+        if inputs.actor_dispatch is not None and type(inputs.actor_dispatch) is not InstalledActorDispatch:
+            raise StandaloneRuntimeRefused("actor dispatch must be the installed concrete owner")
         driver = unified_driver.UnifiedCampaignDriver(
             resolved_campaign=inputs.resolved_campaign,
             controller=controller,
@@ -381,7 +388,8 @@ class StandaloneRuntime:
             monotonic_clock=monotonic_clock,
             executable_work_kinds=({"runtime_comparison"}
                 | ({"calibration_preparation"} if inputs.calibration_requests else set())
-                | ({"profile_preparation"} if profile_executor is not None else set())),
+                | ({"profile_preparation"} if profile_executor is not None else set())
+                | ({"actor_preparation"} if inputs.actor_dispatch is not None else set())),
             calibration_requests=inputs.calibration_requests,
             feed_owner=inputs.feed_owner,
         )
@@ -399,6 +407,7 @@ class StandaloneRuntime:
             config=config or StandaloneRuntimeConfig(),
             monotonic_clock=monotonic_clock,
             profile_executor=profile_executor,
+            actor_executor=inputs.actor_dispatch,
         )
 
     def _snapshot(self) -> Mapping[str, Any]:
@@ -468,12 +477,9 @@ class StandaloneRuntime:
             receipt = None
             if pending is None:
                 self.controller.reconcile_workers()
-            elif self.driver.issued_work_kind(pending) == "profile_preparation":
-                if self.profile_executor is None:
-                    raise StandaloneRuntimeRefused("profile recovery owner is not installed")
-                receipt = self.profile_executor.recover_issued(self.driver, pending)
             else:
-                receipt = self.executor.recover_issued(pending)
+                receipt = standalone_dispatch.dispatch(
+                    self, self.driver.issued_work_kind(pending), pending, recover=True)
             with self._condition:
                 self._recovered = True
                 self._pending_outcome = None
@@ -606,13 +612,8 @@ class StandaloneRuntime:
                 return self._observed_result(
                     "stopped", "; ".join(outcome.reasons), 0, self._snapshot(), outcome.to_dict()
                 )
-            available_kinds = ({"runtime_comparison", "calibration_preparation"}
-                               if self.driver.preparation_owner is not None
-                               else {"runtime_comparison"})
-            if self.profile_executor is not None:
-                available_kinds.add("profile_preparation")
             kind = self.driver.issued_work_kind(outcome)
-            if kind not in available_kinds:
+            if kind not in standalone_dispatch.installed_kinds(self):
                 raise StandaloneRuntimeRefused("standalone runtime received unavailable work")
             with self._condition:
                 self._pending_outcome = outcome
@@ -620,8 +621,7 @@ class StandaloneRuntime:
                 self._observe_aggregates()  # completed drain/reductions before long owned work
             except Exception:
                 pass
-            receipt = (self.profile_executor.execute(self.driver, outcome)
-                       if kind == "profile_preparation" else self.executor.execute(outcome))
+            receipt = standalone_dispatch.dispatch(self, kind, outcome)
             with self._condition:
                 self._pending_outcome = None
                 self._uncertain = None
