@@ -19,6 +19,10 @@ import time
 import uuid
 
 from . import belief_context, campaign_cli, champion, legacy_targets, provider_breaker, status, worker_lifecycle
+# re-exported: moved verbatim to serial_run_resume_option.py
+from .serial_run_resume_option import (  # noqa: F401
+    FLOOR_REGISTRY_SWITCHES, SerialRefused, _BOOLEAN_FLAGS, _without, with_resume,
+)
 
 CONTINUATION_SCHEMA = "epyc.autokernel.loop_continuation.v1"
 CONTINUATION_SCHEMA_V2 = "epyc.autokernel.loop_continuation.v2"
@@ -44,8 +48,6 @@ _DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving
 ANCHOR_EPOCH_FLAGS = frozenset({"--new-anchor-epoch"})
 FLOOR_REGISTRY_FLAGS = frozenset({"--floor-registry", "--floor-registry-role", "--floor-numerics-epoch",
                                   "--floor-require-grade", "--floor-co-tenancy"})
-#: Bare switch of the same family (no value): `_BOOLEAN_FLAGS` so `_without` never eats the next token.
-FLOOR_REGISTRY_SWITCHES = frozenset({"--floor-allow-stale-upstream"})
 _CHANGING_FLAGS = frozenset({*ANCHOR_EPOCH_FLAGS, *FLOOR_REGISTRY_FLAGS, *FLOOR_REGISTRY_SWITCHES, "--out", "--iterations", "--resume-run", "--anchor-build",
                             "--cor-build", "--cpu-calibrate-serving", "--gpu-calibrate-serving",
                             "--scheduler-selection", "--dry-run", "--cpu-screen-scope",
@@ -53,16 +55,10 @@ _CHANGING_FLAGS = frozenset({*ANCHOR_EPOCH_FLAGS, *FLOOR_REGISTRY_FLAGS, *FLOOR_
                             "--source-anchor-sha256", "--runtime-recipe-reference",
                             "--runtime-recovery-reference", "--validate-source-continuation",
                             "--validate-source-loo", "--exact-lane-config"})
-_BOOLEAN_FLAGS = frozenset({*FLOOR_REGISTRY_SWITCHES, "--dry-run", "--validate-source-continuation",
-                            "--validate-source-loo"})
 _CONTINUATION_FIELDS = {"schema", "terminal", "input_argv", "input_argv_sha256", "binding",
                         "worktree", "branch", "model", "selected_target", "current_anchor", "cor_anchor",
                         "iterations_requested", "iterations_completed", "outcome_counts", "result_file"}
 _CONTINUATION_FIELDS_V2 = _CONTINUATION_FIELDS | {"held_claim_evidence"}
-
-
-class SerialRefused(ValueError):
-    pass
 
 
 class _BoundedChildOutput:
@@ -253,26 +249,6 @@ def option(argv, name, default=None):
     # Match the existing argparse last-value behavior, including old launchers
     # which append a finite iteration override to common arguments.
     return values[-1] if values else default
-
-
-def with_resume(argv, value):
-    """`argv` with exactly one `--resume <value>` (run.py's checkpoint resume)."""
-    if value not in ("on", "off"):
-        raise SerialRefused(f"--resume must be on or off, not {value!r}")
-    return [*_without(list(argv), {"--resume"}), "--resume", value]
-
-
-def _without(argv, names):
-    out = []
-    iterator = iter(argv)
-    for arg in iterator:
-        flag, equals, _value = arg.partition("=")
-        if flag in names:
-            if not equals and flag not in _BOOLEAN_FLAGS:
-                next(iterator, None)
-        else:
-            out.append(arg)
-    return out
 
 
 def input_binding(argv) -> dict:
