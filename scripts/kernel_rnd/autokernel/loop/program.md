@@ -626,6 +626,28 @@ they are ranked:
   arrive asynchronously — from the operator, or harvested from the backlog by
   `python3 -m autokernel.loop.seed`. Dropping a file in never blocks the loop.
 
+## GPU bandwidth reporting standard (operator rule, 2026-11-22)
+
+Every MI210 GPU kernel candidate and every GPU result record reports these numbers:
+- **bytes per call**: weights + KV + activations, from the GGUF tensor shapes and the quant block size (Q8_0 = 34 B
+  per 32 weights);
+- **measured µs per call** and **calls per round**;
+- **effective GB/s** = bytes / time;
+- the **gap to the 1 TB/s floor** and the **gap to the ~1.5 TB/s stream ceiling** (HBM peak ~1.6 TB/s);
+- **share of round wall time** on the served path: 27B DFlash2 with the V5I env, or A3B MTP;
+- **recoverable ms per round** if the kernel were lifted to 1.2 TB/s.
+
+A served kernel below **1 TB/s** effective is an **open surface**. Flag it in the candidate record, even when the candidate is about
+something else.
+
+Launch-bound kernels (KB-scale bytes, a few µs each) report `launch_bound: true` in place of a GB/s gap. Their lever
+is fusion, not bandwidth.
+
+A number taken from a row without the V5I env must say so, because V5I changes the dense time on the 27B.
+
+Baseline census and seeds: epyc-root `docs/design/mi210-served-kernel-bandwidth-census-20261122.md`; seed file
+`seeds/hypotheses/21-bw-census-mi210-20261122.md`.
+
 ## Measured gfx90a facts — check a mechanism against these before proposing it
 
 These are receipts, not priors. A hypothesis that contradicts one is dead on arrival.
@@ -877,6 +899,23 @@ and `progress/2026-11/2026-11-2{0,1}-autokernel.md` (wrap-ups 5-10).
   carry about 45% of the lossless-coding headroom, so scales-only coding (about 3% net, 15x GPU op budget) is the
   GPU route while per-code schemes fail the decode rate by 4-23x. A CPU ubench of a model that is not CPU-served
   (27B) answers nothing.
+
+## Learnings 2026-11-22 (journal: MI210 served-path bandwidth census, no compute) — distilled, not a log
+
+- **Rule:** operator 2026-11-22. Below 1 TB/s effective is an open surface. See *GPU bandwidth reporting standard* above.
+- **Census:** epyc-root `docs/design/mi210-served-kernel-bandwidth-census-20261122.md` (62a1b9538, 1cd2e55dc).
+  - 27B DF2 with V5I: dense Q8_0 runs at 1.04 TB/s at M=8 and 1.0 at M=16. The 6144-class shapes are at 0.91-0.98.
+    Dense time is 24.7 ms of a 45.7 ms round.
+  - GDN runs at about 200 GB/s (approximate bytes).
+  - A3B: MMID 0.57-0.85 TB/s; dense MMVQ shows 224 GB/s apparent, attribution unresolved. The router figure is from
+    C14 and predates the MMVF knob.
+- **Seeds filed:** `21-bw-census-mi210-20261122.md`, containing BW-DENSE-M16, BW-A3B-DENSE and BW-GDN-RESIDENT, plus
+  annotations BW-MMID (→ 4297a2caa) and BW-ROUTER-RESIDUAL.
+- **Pending measurements:**
+  1. C18 27B DF2 rocprofv3 trace with V5I ON: lm_head, attn_k/v, drafter, GDN, FA at served depth.
+  2. C18 A3B MTP n=3 rocprofv3 trace with V5I ON and OFF, split into draft and verify.
+  3. test-backend-ops on C18 for MUL_MAT q8_0 m=248320/1024, k=5120, n=1..16, V5I ON.
+  4. `ak-mmid-mf-gpu-20261122` verdict.
 
 ## gfx90a low-level tier — ISA-schedule operator catalogue
 
