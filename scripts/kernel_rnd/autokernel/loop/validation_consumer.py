@@ -24,6 +24,7 @@ from . import native_capture_control as nc
 
 HISTORICAL_V3 = "epyc.autokernel.validation_native_pair.v3"
 HISTORICAL_V4 = "epyc.autokernel.validation_native_pair.v4"  # + typed receipt eligibility
+QUALIFIED_V5 = "epyc.autokernel.validation_native_pair.v5"  # + owning qualified serving decision
 
 
 class ValidationConsumerError(RuntimeError):
@@ -128,6 +129,28 @@ class HistoricalReceiptRowEvidence:
                            ClaimGradeReceiptPairReference.from_dict(self.claim_grade_pair.to_dict()))
 
 
+@dataclass(frozen=True)
+class QualifiedReceiptRowEvidence(HistoricalReceiptRowEvidence):
+    """AKU-08m: canonical receipts plus the original calibration and control evidence.
+
+    Only the registered evaluator's qualified serving decision can pass the row.
+    """
+
+    calibration: ep.CalibrationReceipt | None = None
+    control_reference: Mapping[str, Any] | None = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        if (self.calibration is not None and type(self.calibration) is not ep.CalibrationReceipt
+                or self.control_reference is not None and (not isinstance(self.control_reference, Mapping)
+                    or set(self.control_reference) != {"locator", "sha256"})):
+            raise ValidationConsumerError("qualified row evidence requires typed calibration/control references")
+
+    def serving_evidence(self) -> dict[str, Any]:
+        return {"calibration": self.calibration, "control_reference":
+                None if self.control_reference is None else dict(self.control_reference)}
+
+
 class ValidationConsumer:
     """Bridge real native captures to the existing durable candidate transactions."""
 
@@ -225,9 +248,12 @@ class ValidationConsumer:
         row = rows.get(evidence.row_id)
         if row is None:
             raise ValidationConsumerError("evidence row is outside the frozen row set")
-        if type(evidence) is HistoricalReceiptRowEvidence:
+        if type(evidence) in (HistoricalReceiptRowEvidence, QualifiedReceiptRowEvidence):
+            qualified = type(evidence) is QualifiedReceiptRowEvidence
             body = self._historical_body(assembly.batch, row, assembly.row_set,
-                candidate, comparator, evidence.claim_grade_pair, authority_id)
+                candidate, comparator, evidence.claim_grade_pair, authority_id,
+                *((QUALIFIED_V5, evidence.serving_evidence()) if qualified else ()))
+            passed = _qualified_pass(body)
             stored = self.evidence_store.write("candidate-validation-row", body)
             receipt = cm.RowReceipt.from_dict({"schema": cm.RECEIPT_SCHEMA,
                 "batch_id": assembly.batch.batch_id,
@@ -235,10 +261,11 @@ class ValidationConsumer:
                 "comparator_manifest_digest": comparator.manifest_digest,
                 "row_set_digest": assembly.row_set.row_set_digest, "row_id": row.row_id,
                 "native_evidence_ref": stored.locator, "native_evidence_digest": stored.sha256,
-                "intended_use": "validate", "use_disposition": "policy_undefined"})
+                "intended_use": "validate", "use_disposition": "permitted" if passed else "policy_undefined"})
             decision = body["semantic_decision"]
-            status = "prerequisite_missing" if decision["source_grade"] == "Unavailable" else "inconclusive"
-            state = cm.ValidationRowState(row.row_id, status, "; ".join(body["prerequisites"]), receipt)
+            status = ("passed" if passed else "prerequisite_missing"
+                      if qualified or decision["source_grade"] == "Unavailable" else "inconclusive")
+            state = cm.ValidationRowState(row.row_id, status, "; ".join(body["prerequisites"]) or None, receipt)
             self.transactions.record_row(request_id=request_id, batch_id=assembly.batch.batch_id,
                                          row_set=assembly.row_set, row_state=state)
             return state
@@ -381,7 +408,7 @@ class ValidationConsumer:
 
     def _validate_reopened_bundle(self, bundle: Mapping[str, Any],
                                   receipt: cm.RowReceipt) -> Mapping[str, Any]:
-        if isinstance(bundle, Mapping) and bundle.get("schema") in {HISTORICAL_V3, HISTORICAL_V4}:
+        if isinstance(bundle, Mapping) and bundle.get("schema") in {HISTORICAL_V3, HISTORICAL_V4, QUALIFIED_V5}:
             return self._reopen_historical_row(bundle, receipt)
         fields = {"schema", "batch", "row", "candidate", "comparator", "row_set",
                   "plan_digest", "native", "calibration", "semantic_authority_id",
@@ -517,21 +544,23 @@ class ValidationConsumer:
         return authority
 
     def _historical_body(self, batch, row, row_set, candidate, comparator, pair, authority_id,
-                         schema=HISTORICAL_V4):
-        """Consume historical facts; this path cannot pass or advance a row.
+                         schema=HISTORICAL_V4, serving=None):
+        """Consume historical facts; receipt replay alone cannot pass or advance a row.
 
         v4 additively records the typed receipt eligibility disposition; v3 replays unchanged.
+        v5 adds the original calibration/control evidence decided by the registered evaluator.
         """
         from . import observation_binding as ob
-        from .validation_semantic_adapter import RegisteredClaimGradeEligibility
+        from .validation_semantic_adapter import RegisteredClaimGradeEligibility, qualified_serving_facts
         authority = self._historical_registration(authority_id)
         actual = authority.claim_grade_verifier.reopen_pair(pair)
         debt = self._binding_debt(row, actual.plan, candidate, comparator)
         if debt:
             raise ValidationConsumerError("historical receipt/validation row identity differs: " + "; ".join(debt))
-        decision = authority.evaluate(actual.plan, {"claim_grade_pair": pair})
-        if (type(decision) is not SemanticDecision or decision.permitted
-                or decision.intended_use != "validate_production" or not decision.reasons):
+        decision = authority.evaluate(actual.plan, {"claim_grade_pair": pair}
+                                      | ({"serving_evidence": serving} if schema == QUALIFIED_V5 else {}))
+        if type(decision) is not SemanticDecision or (decision.permitted or decision.intended_use
+                != "validate_production" or not decision.reasons) and schema != QUALIFIED_V5:
             raise ValidationConsumerError("historical receipt cannot authorize validation")
         prerequisites = set(decision.reasons)
         body = {"schema": schema,
@@ -542,7 +571,7 @@ class ValidationConsumer:
             "semantic_decision": ob._plain(decision.__dict__),
             "source_identity": ob._plain(actual.anchor["source_identity"]),
             "final_view_digest": actual.view.view_digest}
-        if schema == HISTORICAL_V4:
+        if schema in {HISTORICAL_V4, QUALIFIED_V5}:
             # The receipts are reprojected now (independently of the plan's use); a typed
             # code is recorded and never passes a historical row.
             typed = RegisteredClaimGradeEligibility(authority.claim_grade_verifier, pair)
@@ -550,6 +579,17 @@ class ValidationConsumer:
             use = _structural_use(actual.plan, view=actual.view, registered_claim_grade=typed)
             body["eligibility"] = {"disposition": use.to_dict(), "receipt_codes": codes}
             prerequisites.update(f"eligibility:{code}" for code in codes)
+        if schema == QUALIFIED_V5:
+            facts = qualified_serving_facts(authority.evaluate.serving_decision, authority.claim_grade_verifier,
+                                            actual, pair, serving)
+            calibration = serving["calibration"]
+            body["serving_evidence"] = {"calibration": None if calibration is None else calibration.to_dict(),
+                                        "control_reference": serving["control_reference"]}
+            body["serving_decision"] = ob._plain(facts)
+            prerequisites.update(facts["reasons"])
+            if decision.permitted and (prerequisites or (decision.source_grade, decision.trace_grade)
+                                       != ("Witnessed", "Attested")):
+                raise ValidationConsumerError("qualified serving decision disagrees with its evidence")
         body["prerequisites"] = sorted(prerequisites)
         return body
 
@@ -557,7 +597,8 @@ class ValidationConsumer:
         from .validation_claim_receipt import ClaimGradeReceiptPairReference
         fields = {"schema", "batch", "row", "candidate", "comparator", "row_set", "plan_digest",
             "claim_grade_pair", "semantic_authority_id", "semantic_decision", "source_identity",
-            "final_view_digest", "prerequisites"} | ({"eligibility"} if bundle["schema"] == HISTORICAL_V4 else set())
+            "final_view_digest", "prerequisites"} | ({"eligibility"} if bundle["schema"] != HISTORICAL_V3 else set()) \
+            | ({"serving_evidence", "serving_decision"} if bundle["schema"] == QUALIFIED_V5 else set())
         if set(bundle) != fields:
             raise ValidationConsumerError("historical row bundle has missing/unknown fields")
         try:
@@ -568,16 +609,18 @@ class ValidationConsumer:
             row_set = cm.RequiredRowSet.from_dict(bundle["row_set"])
             pair = ClaimGradeReceiptPairReference.from_dict(bundle["claim_grade_pair"])
             cm._validate_batch_obligations(batch, row_set, candidate, comparator)
+            serving = None if bundle["schema"] != QUALIFIED_V5 else _serving_evidence(bundle["serving_evidence"])
         except (ValueError, KeyError, TypeError) as exc:
             raise ValidationConsumerError("historical row original frozen closure is malformed") from exc
         if (not batch.matches_receipt(receipt) or receipt.row_id != row.row_id
-                or receipt.intended_use != "validate" or receipt.use_disposition != "policy_undefined"
+                or receipt.intended_use != "validate"
+                or receipt.use_disposition != ("permitted" if _qualified_pass(bundle) else "policy_undefined")
                 or row not in row_set.rows or batch.row_set_digest != row_set.row_set_digest
                 or receipt.candidate_manifest_digest != candidate.manifest_digest
                 or receipt.comparator_manifest_digest != comparator.manifest_digest):
             raise ValidationConsumerError("historical row receipt differs from original binding")
         expected = self._historical_body(batch, row, row_set, candidate, comparator,
-                                         pair, bundle["semantic_authority_id"], bundle["schema"])
+                                         pair, bundle["semantic_authority_id"], bundle["schema"], serving)
         if mc._plain(bundle) != expected:
             raise ValidationConsumerError("historical row differs from complete receipt replay")
         return bundle
@@ -648,6 +691,19 @@ class ValidationConsumer:
         return batch
 
 
+def _qualified_pass(body: Mapping[str, Any]) -> bool:
+    decision = body.get("semantic_decision")
+    return (body.get("schema") == QUALIFIED_V5 and isinstance(decision, Mapping)
+            and decision.get("permitted") is True and not body.get("prerequisites"))
+
+
+def _serving_evidence(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Original inputs only; the complete body replay re-decides everything else."""
+    calibration = value["calibration"]
+    return {"calibration": None if calibration is None else ep.CalibrationReceipt.from_dict(mc._plain(calibration)),
+            "control_reference": mc._plain(value["control_reference"])}
+
+
 def plan_view(carrier: Mapping[str, Any]) -> Mapping[str, Any]:
     value = carrier.get("admissible_view")
     if not isinstance(value, Mapping):
@@ -668,5 +724,6 @@ def _structural_use(plan: ep.ExperimentPlan, carrier: Mapping[str, Any] | None =
                           registered_claim_grade=registered_claim_grade)
 
 
-__all__ = ["BatchAssembly", "NativeRowEvidence", "HistoricalReceiptRowEvidence", "RegisteredSemanticAuthority",
+__all__ = ["BatchAssembly", "NativeRowEvidence", "HistoricalReceiptRowEvidence", "QualifiedReceiptRowEvidence",
+           "RegisteredSemanticAuthority",
            "RowDebt", "SemanticDecision", "ValidationConsumer", "ValidationConsumerError"]

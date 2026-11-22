@@ -505,7 +505,7 @@ print(json.dumps({"bodies": [schemas.content_hash(mc._plain(b)) for b in (actual
 
 # AKU-08c second child: the historical consumer records typed receipt eligibility in v4.
 @contextmanager
-def _historical_consumer(real, tmp_path, projection=None, receipts_root=None):
+def _historical_consumer(real, tmp_path, projection=None, receipts_root=None, serving_decision=None):
     """Real transaction WAL and actual receipts; candidate metadata is hermetic (as above)."""
     plan = ep.ExperimentPlan.from_dict(real["events"]["anchor"]["payload"]["carrier"]["plan"])
     library = real["controller"].parent / "candidate/build/bin/libggml-base.so"
@@ -528,7 +528,8 @@ def _historical_consumer(real, tmp_path, projection=None, receipts_root=None):
         manager = ct.CandidateTransactions(controller, git_backend=FakeGitBackend())
         projection = projection or sa.PinnedRootProjection(real["root"], source_closure=real["closure"])
         authority = sa.ValidationSemanticAdapter(projection).registered_authority(
-            transaction_verifier_id="current-semantic/v2", source_store=source, receipt_store=receipts)
+            transaction_verifier_id="current-semantic/v2", source_store=source, receipt_store=receipts,
+            serving_decision=serving_decision)
         validator = nc.NativeCaptureValidator(binding=nc.NativeCaptureBinding(
             controller.resolved.campaign_id, controller.config_digest,
             controller.config_generation, "unused-historical-consumer", 1), store=source)
@@ -539,10 +540,10 @@ def _historical_consumer(real, tmp_path, projection=None, receipts_root=None):
         assembly = consumer.assemble_due_batch(request_id="assemble", candidate=candidate,
             comparator=comparator, row_set=rows)
 
-        def record(pair):
+        def record(pair, evidence=None):
             return consumer.record_native_row(request_id="diagnostic", assembly=assembly,
                 candidate=candidate, comparator=comparator, authority_id=authority.authority_id,
-                evidence=vc.HistoricalReceiptRowEvidence(diagnostic.row_id, pair))
+                evidence=evidence or vc.HistoricalReceiptRowEvidence(diagnostic.row_id, pair))
         yield SimpleNamespace(consumer=consumer, assembly=assembly, candidate=candidate,
             comparator=comparator, diagnostic=diagnostic, authority=authority, store=store, record=record)
     finally:
@@ -645,3 +646,218 @@ def test_registered_eligibility_gates_receipt_backed_findings(real, monkeypatch)
     finding = projector(None, ("Witnessed", "Attested"), row, 7)
     assert (finding.frontier, finding.authority_reference) == (7, "fixture:fixture-comparison")
     assert finding.intended_use_disposition["disposition"] == "exploration_only"
+
+
+# AKU-08m: original qualified calibration/control + measurement evidence through the same
+# registered evaluator passes a v4-eligible required row; receipt replay alone never does.
+# FIXTURES: the measurement pair is a hermetic relabel of the actual receipts onto a planned
+# serving plan, and the control owner is a labelled fixture (production: runtime_admission_control).
+FIXTURE_CONTROL_REF = {"locator": "fixture-direct-runtime-admission.json",
+                       "sha256": hashlib.sha256(b"fixture-direct-runtime-admission").hexdigest()}
+
+
+def _fixture_serving_decision(plan, *, admitted=True, bound=True, rule=None, control=None):
+    ca, an = dict(plan.candidate_identity), dict(plan.anchor_identity)
+
+    def reopen(reference):
+        assert reference == FIXTURE_CONTROL_REF
+        return sa.ControlAdmission(admitted, an["resolved_execution_digest"],
+            ca["resolved_execution_digest"] if bound else "e" * 64,
+            () if admitted else ("FIXTURE degraded-work negative did not resolve",))
+    return sa.RegisteredServingDecision("fixture-serving-decision/v1", {"median.v1": lambda r: r.value},
+        "fixture-calibration/v1", rule or (lambda _receipt, _plan: True), control or reopen, fixture_only=True)
+
+
+@contextmanager
+def _qualified_service(real, tmp_path, monkeypatch, *, use="validate"):
+    """Planned-serving plan/view/calibration (hermetic) + actual receipt pair relabelled onto it."""
+    from .test_validation_consumer import _calibration, _produce
+    producer = control.CampaignController(_resolved(), tmp_path / "producer-service")
+    producer.__enter__()
+    calibration = _calibration()
+    try:
+        plan, captures, _validator, capture_store, dsos = _produce(
+            producer, tmp_path, calibration, plan_updates={"intended_use": use})
+        capture_store.close()
+    finally:
+        producer.close()
+    value = vc.plan_view(captures["candidate"][1]["carrier"])
+    view = ep.AdmissibleUnitView(**{k: v for k, v in value.items() if k != "selected_rows"},
+        selected_rows=tuple(ep.RawUnit.from_dict(item) for item in value["selected_rows"]))
+    shaped = _shaped(real, plan, view, current.ProducerProvenance(True, ()))
+    monkeypatch.setattr(sa.RegisteredClaimGradeVerifier, "reopen_pair", lambda _self, _pair: shaped)
+    comparator, chain = _candidate_chain(plan, 1, dsos=dsos)
+    production, rows = _row(plan, chain[-1], comparator)
+    yield SimpleNamespace(plan=plan, calibration=calibration, comparator=comparator,
+                          candidate=chain[-1], production=production, rows=rows, git=FakeGitBackend())
+
+
+@contextmanager
+def _qualified_consumer(real, tmp_path, s, serving_decision, *, fresh=True):
+    controller = control.CampaignController(_resolved(), tmp_path / "qualified-service")
+    controller.__enter__()
+    source, receipts = mc.ArtifactStore(real["source"].root), mc.ArtifactStore(real["receipts"].root)
+    store = mc.ArtifactStore(tmp_path / "qualified-evidence")
+    try:
+        manager = ct.CandidateTransactions(controller, git_backend=s.git)
+        projection = sa.PinnedRootProjection(real["root"], source_closure=real["closure"])
+        authority = sa.ValidationSemanticAdapter(projection).registered_authority(
+            transaction_verifier_id="current-semantic/v2", source_store=source, receipt_store=receipts,
+            serving_decision=serving_decision)
+        validator = nc.NativeCaptureValidator(binding=nc.NativeCaptureBinding(
+            controller.resolved.campaign_id, controller.config_digest,
+            controller.config_generation, "unused-qualified-consumer", 1), store=source)
+        consumer = vc.ValidationConsumer(transactions=manager, native_validator=validator,
+            evidence_store=store, semantic_authorities={authority.authority_id: authority})
+        assembly = None
+        if fresh:
+            manager.initialize(request_id="initialize", state=_state(s.comparator), manifest=s.comparator)
+            manager.integrate(request_id="integrate", previous=s.comparator, candidate=s.candidate,
+                              threshold_signal=True)
+            assembly = consumer.assemble_due_batch(request_id="assemble", candidate=s.candidate,
+                                                   comparator=s.comparator, row_set=s.rows)
+
+        def record(**evidence):
+            values = {"calibration": s.calibration, "control_reference": FIXTURE_CONTROL_REF} | evidence
+            return consumer.record_native_row(request_id="qualified", assembly=assembly,
+                candidate=s.candidate, comparator=s.comparator, authority_id=authority.authority_id,
+                evidence=vc.QualifiedReceiptRowEvidence(s.production.row_id, real["pair"], **values))
+        yield SimpleNamespace(consumer=consumer, manager=manager, assembly=assembly, store=store,
+                              record=record, journal=controller._journal, authority=authority)
+    finally:
+        store.close()
+        receipts.close()
+        source.close()
+        controller.close()
+
+
+def _completion_digest(snapshot):
+    return sa.schemas.content_hash([batch["rows"] for batch in snapshot["state"]["completed_batches"]])
+
+
+def test_qualified_evidence_passes_and_completes_required_row_and_replays_after_restart(
+        real, tmp_path, monkeypatch):
+    with _qualified_service(real, tmp_path, monkeypatch) as s:
+        decision = _fixture_serving_decision(s.plan)
+        with _qualified_consumer(real, tmp_path, s, decision) as h:
+            state = h.record()
+            assert (state.status, state.reason, state.receipt.use_disposition) == ("passed", None, "permitted")
+            bundle = ob._plain(h.consumer.reopen_row(state.receipt))
+            assert bundle["schema"] == vc.QUALIFIED_V5 and bundle["prerequisites"] == []
+            assert bundle["semantic_decision"] == {"source_grade": "Witnessed", "trace_grade": "Attested",
+                "intended_use": "validate", "permitted": True, "reasons": []}
+            facts = bundle["serving_decision"]
+            assert facts["disposition"]["status"] == "permitted" and facts["fixture_only"] is True
+            assert facts["calibration"] == {"digest": s.calibration.digest, "status": "applicable", "reasons": []}
+            assert facts["control"]["admitted"] is True
+            assert list(bundle["eligibility"]["receipt_codes"]) == []
+            h.consumer.complete(request_id="complete", assembly=h.assembly)
+            snapshot = h.manager.inspect()
+            completed = snapshot["state"]["completed_batches"][0]["rows"]
+            assert [(row["row_id"], row["status"]) for row in completed] == [(s.production.row_id, "passed")]
+            digest = _completion_digest(snapshot)
+            receipt = state.receipt
+        with _qualified_consumer(real, tmp_path, s, _fixture_serving_decision(s.plan), fresh=False) as h:
+            count = len(h.journal.read_all())
+            assert h.manager.inspect() == snapshot and _completion_digest(h.manager.inspect()) == digest
+            for _ in range(2):
+                assert ob._plain(h.consumer.verify_row_receipt(
+                    receipt, s.production, s.candidate, s.comparator)) == bundle
+            assert len(h.journal.read_all()) == count
+            for damage in ("permitted", "control", "calibration"):
+                changed = ob._plain(bundle)
+                if damage == "permitted":
+                    changed["semantic_decision"]["permitted"] = False
+                elif damage == "control":
+                    changed["serving_decision"]["control"]["admitted"] = False
+                else:
+                    changed["serving_evidence"]["calibration"]["value"] += 1.0
+                forged, _ = _rewrite(h.store, receipt, changed)
+                with pytest.raises(vc.ValidationConsumerError):
+                    h.consumer.reopen_row(forged)
+            # Old (v4) readers refuse the v5 field set.
+            forged, _ = _rewrite(h.store, receipt, ob._plain(bundle) | {"schema": vc.HISTORICAL_V4})
+            with pytest.raises(vc.ValidationConsumerError, match="missing/unknown fields"):
+                h.consumer.reopen_row(forged)
+        # A control owner whose original admission no longer rederives refuses the replay.
+        with _qualified_consumer(real, tmp_path, s, _fixture_serving_decision(s.plan, admitted=False),
+                                 fresh=False) as h:
+            with pytest.raises(vc.ValidationConsumerError):
+                h.consumer.reopen_row(receipt)
+
+
+def _raises(_reference):
+    raise sa.SemanticAdapterError("FIXTURE original control admission moved")
+
+
+@pytest.mark.parametrize("case,evidence,options,code", [
+    ("missing_calibration", {"calibration": None}, {}, "calibration_evidence_missing"),
+    ("unqualified_calibration", {}, {"rule": lambda *_: "FIXTURE transfer refused"},
+     "calibration:FIXTURE transfer refused"),
+    ("foreign_calibration", {"calibration": "other"}, {},
+     "calibration:plan does not reference this calibration receipt"),
+    ("missing_control", {"control_reference": None}, {}, "control_evidence_missing"),
+    ("failed_control", {}, {"admitted": False}, "control_failed"),
+    ("unbound_control", {}, {"bound": False}, "control_admission_unbound"),
+    ("unverified_control", {}, {"control": _raises}, "control_evidence_unverified"),
+    ("no_owner", {}, None, "registered_serving_decision_owner_missing")])
+def test_missing_or_unqualified_calibration_or_failed_control_refuses_typed(
+        real, tmp_path, monkeypatch, case, evidence, options, code):
+    with _qualified_service(real, tmp_path, monkeypatch) as s:
+        if evidence.get("calibration") == "other":
+            evidence = {"calibration": ep.CalibrationReceipt.from_dict(s.calibration.to_dict() | {"value": 2.5})}
+        decision = None if options is None else _fixture_serving_decision(s.plan, **options)
+        with _qualified_consumer(real, tmp_path, s, decision) as h:
+            state = h.record(**evidence)
+            assert (state.status, state.receipt.use_disposition) == ("prerequisite_missing", "policy_undefined")
+            assert code in state.reason.split("; ")
+            bundle = h.consumer.reopen_row(state.receipt)
+            assert bundle["semantic_decision"]["permitted"] is False and code in bundle["prerequisites"]
+            with pytest.raises(cm.TransitionError, match="terminal"):
+                h.manager.record_row(request_id="late-pass", batch_id=h.assembly.batch.batch_id,
+                    row_set=s.rows, row_state=replace(state, status="passed", reason=None))
+
+
+def test_deployment_use_stays_policy_undefined_with_fully_qualified_evidence(real, tmp_path, monkeypatch):
+    with _qualified_service(real, tmp_path, monkeypatch, use="validate_production") as s:
+        with _qualified_consumer(real, tmp_path, s, _fixture_serving_decision(s.plan)) as h:
+            state = h.record()
+            assert state.status == "prerequisite_missing" and state.receipt.use_disposition == "policy_undefined"
+            assert ("structural_use:deployment use requires the owning qualified serving decision"
+                    in state.reason.split("; "))
+
+
+def test_receipt_replay_alone_never_authorizes_validation_ranking_or_promotion(real, tmp_path, monkeypatch):
+    # Actual diagnostic receipts with qualified calibration/control: no authority at all.
+    plan = ep.ExperimentPlan.from_dict(real["events"]["anchor"]["payload"]["carrier"]["plan"])
+    with _historical_consumer(real, tmp_path / "diagnostic", serving_decision=_fixture_serving_decision(plan)) as h:
+        from .test_validation_consumer import _calibration
+        state = h.record(None, vc.QualifiedReceiptRowEvidence(h.diagnostic.row_id, real["pair"],
+            _calibration(), FIXTURE_CONTROL_REF))
+        assert state.status == "prerequisite_missing" and state.receipt.use_disposition == "policy_undefined"
+        bundle = h.consumer.reopen_row(state.receipt)
+        assert bundle["semantic_decision"]["source_grade"] == "Unavailable"
+        assert "eligibility:claim_grade_receipt_unqualified" in bundle["serving_decision"]["reasons"]
+    verifier = sa.RegisteredClaimGradeVerifier(real["projection"], real["source"], real["receipts"])
+    view = verifier.reopen_pair(real["pair"]).view
+    for use in ("rank", "validate", "validate_production"):
+        assert _eligibility(plan, view, verifier, real["pair"], use).status == "refused"
+    # A qualified measurement pair replayed WITHOUT calibration/control (historical v4) never passes.
+    with _qualified_service(real, tmp_path, monkeypatch) as s:
+        with _qualified_consumer(real, tmp_path, s, _fixture_serving_decision(s.plan)) as h:
+            state = h.consumer.record_native_row(request_id="replay-only", assembly=h.assembly,
+                candidate=s.candidate, comparator=s.comparator, authority_id=h.authority.authority_id,
+                evidence=vc.HistoricalReceiptRowEvidence(s.production.row_id, real["pair"]))
+            assert state.status == "inconclusive" and state.receipt.use_disposition == "policy_undefined"
+            assert "owning qualified measurement/serving decision is required" in state.reason
+
+
+def test_runtime_admission_control_adapts_the_original_reopen_admission():
+    reference = dict(FIXTURE_CONTROL_REF)
+    recipe = lambda digest: SimpleNamespace(execution_digest=digest)  # noqa: E731 - FIXTURE recipes
+    owner = SimpleNamespace(reopen_admission=lambda ref: (
+        SimpleNamespace(anchor=recipe("a" * 64), candidate=recipe("b" * 64)), ref == reference))
+    assert sa.runtime_admission_control(owner)(reference) == sa.ControlAdmission(True, "a" * 64, "b" * 64)
+    assert sa.runtime_admission_control(owner)({"locator": "x", "sha256": "0" * 64}).admitted is False
+    with pytest.raises(sa.SemanticAdapterError, match="installed calibration/control owners"):
+        sa.RegisteredServingDecision("owner", {}, "rule", None, lambda _r: None, fixture_only=False)

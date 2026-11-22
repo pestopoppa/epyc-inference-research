@@ -565,7 +565,8 @@ class ValidationSemanticAdapter:
 
     def evaluate(self, plan: ep.ExperimentPlan,
                  evidence: Mapping[str, Any], *,
-                 claim_grade_verifier: RegisteredClaimGradeVerifier | None = None) -> vc.SemanticDecision:
+                 claim_grade_verifier: RegisteredClaimGradeVerifier | None = None,
+                 serving_decision: Any = None) -> vc.SemanticDecision:
         plan = ep.ExperimentPlan.from_dict(plan.to_dict())
         if not isinstance(evidence, Mapping):
             raise SemanticAdapterError("semantic evidence must be a mapping")
@@ -584,6 +585,11 @@ class ValidationSemanticAdapter:
                 return vc.SemanticDecision("Unavailable", "Unavailable", "validate_production", False,
                     ("native producer source identity is compatibility-only",)
                     + actual.producer_provenance.reasons)
+            if "serving_evidence" in evidence:  # AKU-08m: the owning qualified serving decision.
+                facts = qualified_serving_facts(serving_decision, claim_grade_verifier, actual,
+                                                evidence["claim_grade_pair"], evidence["serving_evidence"])
+                return vc.SemanticDecision(facts["source_grade"], facts["trace_grade"], plan.intended_use,
+                                           not facts["reasons"], tuple(facts["reasons"]))
             # The same strict registration serves the future owning qualified
             # serving-decision route; source/grade proof alone is not that rule.
             claim_grade_verifier.verify(plan, actual.view, evidence["claim_grade_pair"])
@@ -597,13 +603,13 @@ class ValidationSemanticAdapter:
     def registered_authority(self, transaction_verifier_id: str, *,
                              source_store: mc.ArtifactStore | None = None,
                              receipt_store: mc.ArtifactStore | None = None,
-                             native_validator: Any = None) \
+                             native_validator: Any = None, serving_decision: Any = None) \
             -> vc.RegisteredSemanticAuthority:
         """Expose a real capability whose current result is an explicit refusal."""
         if source_store is not None or receipt_store is not None or native_validator is not None:
             verifier = RegisteredClaimGradeVerifier(self.projection, source_store, receipt_store, native_validator)
             return vc.RegisteredSemanticAuthority(AUTHORITY_ID, transaction_verifier_id,
-                RegisteredServingSemanticEvaluator(self, verifier), fixture_only=False,
+                RegisteredServingSemanticEvaluator(self, verifier, serving_decision), fixture_only=False,
                 claim_grade_verifier=verifier)
         return vc.RegisteredSemanticAuthority(
             AUTHORITY_ID, transaction_verifier_id, self.evaluate, fixture_only=False)
@@ -613,19 +619,122 @@ class ValidationSemanticAdapter:
 class RegisteredServingSemanticEvaluator:
     adapter: ValidationSemanticAdapter
     claim_grade_verifier: RegisteredClaimGradeVerifier
+    serving_decision: Any = None  # RegisteredServingDecision (AKU-08m) or None
 
     def __post_init__(self):
         if (type(self.adapter) is not ValidationSemanticAdapter
                 or type(self.claim_grade_verifier) is not RegisteredClaimGradeVerifier
-                or self.adapter.projection is not self.claim_grade_verifier.projection):
+                or self.adapter.projection is not self.claim_grade_verifier.projection
+                or self.serving_decision is not None
+                and type(self.serving_decision) is not RegisteredServingDecision):
             raise SemanticAdapterError("semantic evaluator requires concrete installed dependencies")
 
     def __call__(self, plan, evidence):
-        return self.adapter.evaluate(plan, evidence, claim_grade_verifier=self.claim_grade_verifier)
+        return self.adapter.evaluate(plan, evidence, claim_grade_verifier=self.claim_grade_verifier,
+                                     serving_decision=self.serving_decision)
+
+
+@dataclass(frozen=True)
+class ControlAdmission:
+    """An original control-panel admission rederived by its owner for one measured arm pair."""
+
+    admitted: bool
+    anchor_execution_digest: str
+    candidate_execution_digest: str
+    reasons: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RegisteredServingDecision:
+    """Installed calibration/control owners of the qualified serving decision (AKU-08m).
+
+    Calibration is the registered estimator replay plus applicability rule
+    (``ep.calibration_applicability``) against the plan's frozen reference. Control
+    reopens an original control admission; production is ``runtime_admission_control``.
+    ``fixture_only`` is recorded in every sealed row it decides.
+    """
+
+    owner_id: str
+    estimators: Mapping[str, Any]
+    calibration_rule_id: str
+    calibration_rule: Any
+    reopen_control: Any
+    fixture_only: bool
+
+    def __post_init__(self):
+        if (not isinstance(self.owner_id, str) or not self.owner_id or not isinstance(self.estimators, Mapping)
+                or not isinstance(self.calibration_rule_id, str) or not self.calibration_rule_id
+                or not callable(self.calibration_rule) or not callable(self.reopen_control)
+                or type(self.fixture_only) is not bool):
+            raise SemanticAdapterError("serving decision requires installed calibration/control owners")
+
+
+def runtime_admission_control(admission: Any):
+    """Production control owner: ``RuntimeAdmission.reopen_admission`` rederives the original
+    controls/panel and both admitted strata from its original store (its held claim/frame)."""
+    def reopen(reference: Mapping[str, Any]) -> ControlAdmission:
+        pair, admitted = admission.reopen_admission(dict(reference))
+        return ControlAdmission(admitted is True, pair.anchor.execution_digest, pair.candidate.execution_digest)
+    return reopen
+
+
+def qualified_serving_facts(owner: Any, verifier: RegisteredClaimGradeVerifier,
+                            actual: ReopenedClaimReceiptPair, pair: Any,
+                            supplied: Mapping[str, Any]) -> dict[str, Any]:
+    """Decide one receipt pair with its original calibration/control evidence; typed reasons.
+
+    Reprojection (typed eligibility) gates first; deployment uses stay policy_undefined.
+    """
+    plan, reasons, use = actual.plan, [], None
+    typed = RegisteredClaimGradeEligibility(verifier, pair)
+    codes = typed.discharge(plan, actual.view)
+    reasons += [f"eligibility:{code}" for code in codes]
+    if type(owner) is not RegisteredServingDecision:
+        reasons.append("registered_serving_decision_owner_missing")
+    elif not codes:
+        use = ep.eligibility(plan, actual.view, plan.intended_use, current_epoch=plan.epoch,
+                             registered_claim_grade=typed)
+        if use.status != "permitted":
+            reasons += [f"structural_use:{reason}" for reason in use.reasons]
+    if not isinstance(supplied, Mapping) or set(supplied) != {"calibration", "control_reference"}:
+        raise SemanticAdapterError("serving evidence has missing/unknown fields")
+    calibration, reference = supplied["calibration"], supplied["control_reference"]
+    calibration_fact = control_fact = None
+    if calibration is None:
+        reasons.append("calibration_evidence_missing")
+    elif type(owner) is RegisteredServingDecision:
+        found = ep.calibration_applicability(calibration, plan, registered_estimators=owner.estimators,
+            registered_rule_id=owner.calibration_rule_id, applicability_rule=owner.calibration_rule)
+        reasons += [f"calibration:{reason}" for reason in found.reasons or (found.status,)
+                    if found.status != "applicable"]
+        calibration_fact = {"digest": calibration.digest, "status": found.status, "reasons": list(found.reasons)}
+    if reference is None:
+        reasons.append("control_evidence_missing")
+    elif type(owner) is RegisteredServingDecision:
+        try:
+            admission = owner.reopen_control(reference)
+            if type(admission) is not ControlAdmission:
+                raise SemanticAdapterError("control owner returned an untyped admission")
+        except Exception:  # Missing, moved or non-rederiving original controls fail closed.
+            reasons.append("control_evidence_unverified")
+        else:
+            control_fact = asdict(admission)
+            if (admission.anchor_execution_digest, admission.candidate_execution_digest) != (
+                    dict(plan.anchor_identity).get("resolved_execution_digest"),
+                    dict(plan.candidate_identity).get("resolved_execution_digest")):
+                reasons.append("control_admission_unbound")
+            if not admission.admitted:
+                reasons += ["control_failed"] + [f"control:{reason}" for reason in admission.reasons]
+    grade = ("Unavailable",) * 2 if codes else ("Witnessed", "Attested")
+    return {"owner_id": getattr(owner, "owner_id", None), "fixture_only": getattr(owner, "fixture_only", None),
+            "source_grade": grade[0], "trace_grade": grade[1],
+            "disposition": None if use is None else use.to_dict(), "calibration": calibration_fact,
+            "control": control_fact, "reasons": list(dict.fromkeys(reasons))}
 
 
 __all__ = ["ARM_ADAPTER_ID", "ARM_PROJECTOR_SHA256", "AUTHORITY_ID",
-           "CLAIM_TUPLE_SHA256", "CanonicalGrade", "ClaimGradeEvidenceUnqualified", "PinnedRootProjection",
-           "ProjectionSourceClosure", "RegisteredClaimGradeEligibility", "RegisteredClaimGradeVerifier",
-           "RegisteredServingSemanticEvaluator",
-           "ProducerProvenanceRefused", "SemanticAdapterError", "ValidationSemanticAdapter"]
+           "CLAIM_TUPLE_SHA256", "CanonicalGrade", "ClaimGradeEvidenceUnqualified", "ControlAdmission",
+           "PinnedRootProjection", "ProjectionSourceClosure", "RegisteredClaimGradeEligibility",
+           "RegisteredClaimGradeVerifier", "RegisteredServingDecision", "RegisteredServingSemanticEvaluator",
+           "ProducerProvenanceRefused", "SemanticAdapterError", "ValidationSemanticAdapter",
+           "qualified_serving_facts", "runtime_admission_control"]
