@@ -6,7 +6,7 @@ measure files, decide expiry, hold resources, or delete anything.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import copy
 import hashlib
 import json
@@ -19,6 +19,7 @@ from typing import Any
 from . import campaign, candidate_manifest as cm, retention
 from . import resolved_recipe as rr, unified_planner
 from . import native_model_preparation as model_preparation
+from . import elf_retention
 from .. import storage
 
 
@@ -725,6 +726,17 @@ def build_native_view(capture: Mapping[str, Any]) -> PreparedCatalogView:
         owned.extend(registered.artifacts)
     for item in _merge_artifacts((*seed.artifacts, *owned)).values():
         insert(item)
+    extras, elf_deps, elf_uncertain = elf_retention.extend_view(  # AKU-10f2, outside the mutex
+        manifests.values(), build_id_of=lambda item: _build_artifact_id(seed, item),
+        directory_id=_directory_id, dso_id=lambda p, d: _artifact_id("candidate-build", p, d),
+        make_artifact=lambda i, k, p, d: CatalogArtifact(i, k, p, d, "file_sha256" if d else
+            "directory_pending_measurement", (), "permanent_large", (), {"owners": [{"role": "elf"}]}))
+    uncertain.extend(elf_uncertain)
+    for item in (item for item in extras if item.artifact_id not in nodes):
+        insert(item)
+    for key, extra in elf_deps.items():
+        if key in nodes:
+            nodes[key] = replace(nodes[key], dependencies=tuple(sorted({*nodes[key].dependencies, *extra})))
     # Expand the complete bounded model manifest into every declared shard.  This
     # reads only the small inventory, never model bytes.
     for spec in seed.model_inventories:
