@@ -130,6 +130,7 @@ class OutcomeStatus(str, Enum):
     HYPOTHESIS_REJECTED = "hypothesis_rejected"
     PATCH_REJECTED = "patch_rejected"
     GATE_REFUSED = "gate_refused"
+    HOST_BLOCKED = "host_blocked"  # AK-BLOCKED-VS-FAILED: host fault at a gate, not a candidate failure
     RESUME_REJECTED = "resume_rejected"
     # authoring
     PATCH_ROUNDS_EXHAUSTED = "patch_rounds_exhausted"

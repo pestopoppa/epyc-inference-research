@@ -20,6 +20,9 @@ measurement would block it, or it would block them. So:
   unit test reads or ingests the canonical ledger or raises a real operator alarm. It is a
   fake ANSWER, still validated by `belief_context.validate_ready` -- never a bypass. Tests of
   the reader itself inject their own runner (`belief_ready_answer` builds the canned body).
+* the bandwidth-census journal that `loop.program_text()` appends is an absent temporary
+  path, so the planner program a test sees is program.md alone;
+* `kernel_coverage`'s process-global launch-stderr capture starts off in every test.
 """
 from contextlib import contextmanager
 import json
@@ -28,7 +31,7 @@ import subprocess
 
 import pytest
 
-from .loop import belief_context, claim, gpu_window
+from .loop import belief_context, claim, gpu_window, kernel_coverage, loop as loop_module
 
 # Current hub view first (the /workspace shared clone can lag origin/main), then /workspace.
 _REAL_ROOT_CANDIDATES = (Path("/mnt/raid0/llm/views/epyc-root-main"), Path("/workspace"))
@@ -69,6 +72,15 @@ def _isolate_host_claims(tmp_path_factory):
         patch.setattr(gpu_window, "SCHEDULE_FILE", root / "gpu-window" / "schedule.json")
         patch.setattr(gpu_window, "BUS_ROOT", root / "session-bus")
         patch.delenv(claim.INHERITED_DEVICE_LOCK_ENV, raising=False)
+        # The live bandwidth-census journal (ak_runend hook, outside git) is appended to the
+        # planner's program by program_text(); a test must see program.md alone, in-process and
+        # in subprocesses. Tests of the journal pass their own path.
+        absent_journal = root / "ak-bw-census" / "journal.md"
+        patch.setenv("AK_BW_CENSUS_JOURNAL", str(absent_journal))
+        patch.setattr(loop_module, "BW_CENSUS_JOURNAL", absent_journal)
+        # run.main turns the process-global launch-stderr capture on for its store; a test
+        # that ran main must not leave it on for the next one (it would swallow stderr).
+        patch.setattr(kernel_coverage, "_CAPTURE", dict(kernel_coverage._CAPTURE, root=None))
         yield holds
 
 

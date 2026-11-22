@@ -91,6 +91,8 @@ def test_constants_in_loop_agree_with_inventory():
     assert {s.value for s in T.RESUMABLE_OUTCOME_STATUSES} == set(L.RESUMABLE_STATUSES)
     from . import same_state_stop
     assert same_state_stop.PLANNER_SAME_STATE_SKIP in T.OUTCOME_STATUS_VALUES
+    from . import host_blocked
+    assert host_blocked.BLOCKED in T.OUTCOME_STATUS_VALUES
 
 
 # ---- source scan: every status literal constructed in the sources is typed ----------
@@ -148,7 +150,7 @@ def test_every_status_literal_in_sources_is_covered():
     # Non-literal first arguments are accounted for explicitly (each resolves to the
     # typed inventory elsewhere in this file or in the dynamic-source test below).
     allowed_dynamic = {"state['class']", "status", "validation_status",
-                       "same_state_stop.PLANNER_SAME_STATE_SKIP"}
+                       "same_state_stop.PLANNER_SAME_STATE_SKIP", "_host_blocked.BLOCKED"}
     assert {d[2] for d in dynamic} <= allowed_dynamic, dynamic
 
 
