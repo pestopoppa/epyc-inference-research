@@ -43,6 +43,21 @@ Q8_SHAPE_CLASS = {  # 27B Qwen3.8 Q8_0 tensor shapes -> (class name, calls per v
     "17408x5120": ("ffn_gate_up", 128), "5120x17408": ("ffn_down", 64), "10240x5120": ("gdn_attn_qkv", 48),
     "6144x5120": ("gdn_attn_gate", 48), "5120x6144": ("ssm_out+attn_output", 64), "12288x5120": ("attn_q", 16),
 }
+# CPU (EPYC 9655 Zen 5, NPS4). Ceiling = measured read-sum, NOT a guess. half-48t: 259.8 GB/s same-window read-sum
+# (q38p1-c13-20261117-r4, 2026-11-18). quarter-24t: half/2 (DERIVED; no fresh per-quarter read-sum row exists).
+CPU_DEFAULTS = {"flag_frac": 0.75, "target_frac": 0.80,
+                "ceiling_gbps": {"half-48t": 259.8, "quarter-24t": 129.9},
+                "ceiling_source": {"half-48t": "measured: q38p1-c13-20261117-r4 same-window bench_readbw read-sum",
+                                   "quarter-24t": "derived: half-48t / 2 (pending a per-quarter read-sum row)"}}
+# Static bytes per decode step (n=1 row) per family, Qwen3.6-35B-A3B-MTP-Q8_0.gguf tensor table (Q8_0 = 34 B/32 w).
+A3B_CPU_FAMILY_BYTES = {
+    "MUL_MAT:gdn_proj": 1_069_000_000,          # 30 x (attn_qkv + attn_gate + ssm_out)
+    "MUL_MAT:lm_head": 540_000_000,             # output [2048, 248320]
+    "MUL_MAT_ID:exps_gate_up": 713_000_000,     # 40 x 8 experts x 2 x 2048x512
+    "MUL_MAT_ID:exps_down": 357_000_000,        # 40 x 8 experts x 512x2048
+    "MUL_MAT:fullattn_proj": 300_000_000,       # 10 x (q + o + k/v), approx
+    "MUL_MAT:shared_expert": 138_000_000,       # 41 x 3 x 2048x512
+}
 MMID_CLASS = {"gate_up": ("mmid_gate_up", 40), "down": ("mmid_down", 40)}  # A3B, 40 MoE layers
 
 
@@ -52,7 +67,7 @@ def sha256(path: str) -> str:
 
 
 def empty_census() -> dict:
-    return {"schema": "epyc.autokernel.bw_census.v1", "floor_gbps": FLOOR, "target_gbps": TARGET,
+    return {"cpu": json.loads(json.dumps(CPU_DEFAULTS)), "schema": "epyc.autokernel.bw_census.v1", "floor_gbps": FLOOR, "target_gbps": TARGET,
             "ceiling_gbps": CEILING, "noise_frac": NOISE, "records": {}, "seeds": {}, "seed_stubs": [],
             "applied": []}
 
@@ -92,7 +107,46 @@ def extract(res: dict) -> list[dict]:
     return out
 
 
+def cpu_config(result_path: str | None, cfg: str) -> str:
+    """Thread/quarter config from the row's server argv (out/servers/<cfg>-L1.argv.json); 'unknown' if absent."""
+    if not result_path:
+        return "unknown"
+    p = os.path.join(os.path.dirname(os.path.abspath(result_path)), "servers", f"{cfg}-L1.argv.json")
+    try:
+        a = json.load(open(p))
+    except (OSError, ValueError):
+        return "unknown"
+    a = [str(x) for x in (a.get("argv", []) if isinstance(a, dict) else a)]
+    t = int(a[a.index("-t") + 1]) if "-t" in a else 0
+    return {24: "quarter-24t", 48: "half-48t"}.get(t, f"{t}t")
+
+
+def extract_cpu(res: dict, result_path: str | None = None) -> list[dict]:
+    """CPU gap-census rows: configs[<cfg>].ranked_families at one row per step (plain decode only; MTP steps carry
+    a row-dependent byte count and are skipped, deterministically)."""
+    out = []
+    rid_ = str(res.get("id") or res.get("row") or "")
+    if "a3b" not in rid_:
+        return out
+    for cfg, c in sorted((res.get("configs") or {}).items()):
+        if not isinstance(c, dict) or c.get("mean_verify_rows") != 1.0:
+            continue
+        conf = cpu_config(result_path, cfg)
+        for f in c.get("ranked_families") or []:
+            b = A3B_CPU_FAMILY_BYTES.get(f.get("family"))
+            ms = f.get("ms_per_timing_step")
+            if b is None or not isinstance(ms, (int, float)) or ms <= 0:
+                continue
+            out.append({"device": "cpu", "model": "a3b-q8_0-cpu", "kernel_class": f["family"], "shape": conf,
+                        "n": 1, "arm": cfg, "bytes_per_call": b, "us_per_call": round(ms * 1e3, 1),
+                        "calls_per_round": 1, "share_of_round": round(float(f.get("share_pct", 0)) / 100, 4),
+                        "config": conf})
+    return out
+
+
 def rid(o: dict) -> str:
+    if o.get("device") == "cpu":
+        return f"cpu|{o['model']}|{o['kernel_class']}|{o['shape']}|n{o['n']}"
     return f"{o['model']}|{o['kernel_class']}|{o['shape']}|n{o['n']}"
 
 
@@ -107,13 +161,23 @@ def recoverable_ms(r: dict, target: float) -> float:
 
 def rerank(c: dict) -> None:
     recs = c["records"]
+    cpu = c.setdefault("cpu", json.loads(json.dumps(CPU_DEFAULTS)))
     for r in recs.values():
         r["gbps"] = gbps(r["bytes_per_call"], r["us_per_call"])
-        r["status"] = "stale" if r.get("stale") else ("open_surface" if r["gbps"] < c["floor_gbps"] else "ok")
-        r["recoverable_ms_per_round"] = recoverable_ms(r, c["target_gbps"])
-    order = sorted(recs, key=lambda k: (-recs[k]["recoverable_ms_per_round"], k))
-    for i, k in enumerate(order, 1):
-        recs[k]["rank"] = i
+        floor, target = c["floor_gbps"], c["target_gbps"]
+        if r.get("device") == "cpu":
+            ceil = cpu["ceiling_gbps"].get(r.get("config", ""), 0.0)
+            floor, target = cpu["flag_frac"] * ceil, cpu["target_frac"] * ceil
+            r["ceiling_gbps"] = ceil
+            r["frac_of_ceiling"] = round(r["gbps"] / ceil, 3) if ceil else None
+        r["status"] = ("stale" if r.get("stale") else "no_ceiling" if floor <= 0
+                       else "open_surface" if r["gbps"] < floor else "ok")
+        r["recoverable_ms_per_round"] = recoverable_ms(r, target) if target > 0 else 0.0
+    for dev in ("gpu", "cpu"):  # ranks are per device
+        order = sorted((k for k in recs if recs[k].get("device", "gpu") == dev),
+                       key=lambda k: (-recs[k]["recoverable_ms_per_round"], k))
+        for i, k in enumerate(order, 1):
+            recs[k]["rank"] = i
 
 
 def link_seeds(c: dict) -> list[str]:
@@ -123,7 +187,9 @@ def link_seeds(c: dict) -> list[str]:
     for sid, s in sorted(c["seeds"].items()):
         linked = [r for k, r in recs.items() if all(r.get(f) == v for f, v in s.get("match", {}).items())
                   and r["n"] in s.get("n", sorted(SERVED_N))]
-        bar = max(c["floor_gbps"], float(s.get("target_gbps", c["floor_gbps"])))
+        bar = float(s.get("target_gbps", c["floor_gbps"]))
+        if s.get("device", "gpu") == "gpu":
+            bar = max(c["floor_gbps"], bar)
         if linked and s.get("status") != "done" and all(r["gbps"] >= bar for r in linked):
             s["status"] = "done"
             notes.append(f"seed {sid} DONE (all {len(linked)} linked records >= {bar:.0f} GB/s)")
@@ -165,14 +231,21 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str) -> lis
         frm = f"{before[k][0]:.0f} GB/s rank {before[k][1]}" if k in before else "new"
         lines.append(f"- `{row}` ({sha[:12]}): {k} {frm} -> {r['gbps']:.0f} GB/s rank {r['rank']} "
                      f"[{r['status']}, {r['recoverable_ms_per_round']:.2f} ms/round recoverable at "
-                     f"{c['target_gbps']:.0f} GB/s]")
+                     f"{tgt(c, r):.0f} GB/s]")
     lines += [f"- `{row}` ({sha[:12]}): {n}" for n in link_seeds(c)]
     return lines
 
 
+def tgt(c: dict, r: dict) -> float:
+    if r.get("device") == "cpu":
+        return c["cpu"]["target_frac"] * r.get("ceiling_gbps", 0.0)
+    return c["target_gbps"]
+
+
 def table_md(c: dict, top: int = 40) -> str:
-    recs = sorted(c["records"].items(), key=lambda kv: kv[1]["rank"])[:top]
-    out = [BEGIN, "", "| Rank | Model | Kernel class | Shape | n | MB/call | µs | GB/s | vs 1 TB/s | vs 1.5 TB/s | "
+    allr = sorted(c["records"].items(), key=lambda kv: kv[1]["rank"])
+    recs = [kv for kv in allr if kv[1].get("device", "gpu") == "gpu"][:top]
+    out = [BEGIN, "", "### GPU (MI210)", "", "| Rank | Model | Kernel class | Shape | n | MB/call | µs | GB/s | vs 1 TB/s | vs 1.5 TB/s | "
            "calls/round | recoverable ms/round @1.2 | Status | Seed | Source row |",
            "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for k, r in recs:
@@ -180,6 +253,19 @@ def table_md(c: dict, top: int = 40) -> str:
                    f"{r['bytes_per_call'] / 1e6:.1f} | {r['us_per_call']:.1f} | {r['gbps']:.0f} | "
                    f"{r['gbps'] - c['floor_gbps']:+.0f} | {r['gbps'] - c['ceiling_gbps']:+.0f} | "
                    f"{r['calls_per_round']} | {r['recoverable_ms_per_round']:.2f} | {r['status']} | "
+                   f"{r.get('seed', '-')} | `{r['source_row']}` |")
+    cpu = c.get("cpu", CPU_DEFAULTS)
+    out += ["", f"### CPU (EPYC 9655, NPS4) — open surface below {cpu['flag_frac']:.0%} of the measured ceiling "
+            "(operator-tunable `cpu.flag_frac`)", "",
+            "| Rank | Model | Op class | Config | MB/step | ms/step | GB/s | Ceiling GB/s | % of ceiling | Share of step | "
+            f"recoverable ms @{cpu['target_frac']:.0%} | Status | Seed | Source row |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for k, r in [kv for kv in allr if kv[1].get("device") == "cpu"][:top]:
+        fr = r.get("frac_of_ceiling")
+        out.append(f"| {r['rank']} | {r['model']} | {r['kernel_class']} | {r.get('config', '-')} | "
+                   f"{r['bytes_per_call'] / 1e6:.0f} | {r['us_per_call'] / 1e3:.2f} | {r['gbps']:.1f} | "
+                   f"{r.get('ceiling_gbps', 0):.1f} | {'-' if fr is None else f'{fr:.0%}'} | "
+                   f"{r.get('share_of_round', 0):.1%} | {r['recoverable_ms_per_round']:.2f} | {r['status']} | "
                    f"{r.get('seed', '-')} | `{r['source_row']}` |")
     out += ["", END]
     return "\n".join(out)
@@ -234,7 +320,7 @@ def run(result: str, row: str | None, census: str, program: str | None, doc: str
     row = row or res.get("row") or os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(result))))
     sha = sha256(result)
     c = json.load(open(census)) if os.path.exists(census) else empty_census()
-    obs = extract(res)
+    obs = extract(res) + extract_cpu(res, result)
     lines = apply(c, obs, row, sha, str(res.get("at", "")))
     rep = {"row": row, "sha256": sha[:12], "observations": len(obs), "journal_lines": len(lines), "changed": False}
     if dry_run:

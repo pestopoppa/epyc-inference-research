@@ -27,6 +27,7 @@ a ROCm toolchain.
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 from contextlib import nullcontext
@@ -197,6 +198,27 @@ class MeasurementFailed(RuntimeError):
 #: actor bundle: it sat unread beside the loop for the whole of run 6 while the
 #: planner proposed things its own "Already in v9" list names.
 PROGRAM = Path(__file__).resolve().parent / "program.md"
+#: Deterministic bandwidth-census journal written by census_update.py from the ak_runend hook (outside git, so
+#: the hook never writes the shared research clone). program_text() appends it to program.md for the planner.
+BW_CENSUS_JOURNAL = Path(os.environ.get("AK_BW_CENSUS_JOURNAL", "/mnt/raid0/llm/tmp/ak-bw-census/journal.md"))
+BW_CENSUS_JOURNAL_MAX_LINES = 200
+
+
+def program_text(journal: Path | None = None) -> str:
+    """program.md plus the generated census journal section (last BW_CENSUS_JOURNAL_MAX_LINES lines). Deterministic;
+    a missing or unreadable journal yields program.md unchanged."""
+    from autokernel.loop.census_update import JOURNAL_HEAD
+    text = PROGRAM.read_text(encoding="utf-8")
+    try:
+        j = (journal or BW_CENSUS_JOURNAL).read_text(encoding="utf-8")
+    except OSError:
+        return text
+    if JOURNAL_HEAD not in j or JOURNAL_HEAD in text:
+        return text
+    lines = [ln for ln in j[j.index(JOURNAL_HEAD) + len(JOURNAL_HEAD):].splitlines() if ln.strip()]
+    if not lines:
+        return text
+    return text.rstrip("\n") + "\n\n" + JOURNAL_HEAD + "\n\n" + "\n".join(lines[-BW_CENSUS_JOURNAL_MAX_LINES:]) + "\n"
 
 
 class TailRefused(RuntimeError):

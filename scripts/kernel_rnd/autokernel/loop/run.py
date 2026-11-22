@@ -4422,7 +4422,7 @@ def _main(argv: list[str] | None = None) -> int:
         history_view[0] = (history_comparability(args.store, epoch=epoch,
                                                  measurement_epoch=measurement_epoch)
                            or history_view[0])
-        program = loop.PROGRAM.read_text(encoding="utf-8")
+        program = loop.program_text()
         if cpu_launch:
             program = (
                 "CPU EXPERIMENTAL TARGET — overrides inapplicable GPU instructions below.\n"

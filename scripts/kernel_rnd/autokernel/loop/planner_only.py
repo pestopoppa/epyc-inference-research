@@ -254,7 +254,7 @@ def run(args, *, seat_common: Mapping[str, Any],
     } if cpu else {}
     context = {
         **cpu_context,
-        "program": loop.PROGRAM.read_text(encoding="utf-8"),
+        "program": loop.program_text(),
         "actor_provenance": {"planner": backend.describe()},
         "actor_read_roots": [str(out.resolve()), *([str(store), str(store.parent)] if cpu else [])],
         **profile,

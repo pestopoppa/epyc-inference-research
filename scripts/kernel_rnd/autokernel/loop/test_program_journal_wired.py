@@ -64,3 +64,23 @@ class ProgramJournalReachesPlanner(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CensusJournalReachesPlanner(unittest.TestCase):
+    """The ak_runend census hook writes outside git; program_text() must carry it to the planner in both modes."""
+
+    def test_generated_census_journal_reaches_both_delivery_modes(self):
+        from autokernel.loop import census_update as cu
+        with tempfile.TemporaryDirectory() as d:
+            j = Path(d) / "journal.md"
+            j.write_text("# header\n\n" + cu.JOURNAL_HEAD + "\n- `row-x` (abc): canary-kernel 900 -> 1100 GB/s rank 1\n")
+            text = loop.program_text(j)
+            self.assertIn("canary-kernel 900 -> 1100 GB/s", text)
+            self.assertTrue(text.startswith(PROGRAM.rstrip("\n")[:200]))
+            self.assertIn("canary-kernel", actors.render_context({"program": text}))
+            heads = [m.group(0) for m in re.finditer(r"(?m)^## Learnings .*$", text)]
+            self.assertIn(cu.JOURNAL_HEAD, heads)
+
+    def test_missing_journal_leaves_program_unchanged(self):
+        self.assertEqual(loop.program_text(Path("/nonexistent/journal.md")), PROGRAM)
+

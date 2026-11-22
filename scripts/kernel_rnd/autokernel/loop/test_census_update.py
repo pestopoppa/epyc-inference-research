@@ -107,5 +107,57 @@ class Seeds(Base):
         self.assertEqual(r["journal_lines"], 0)
 
 
+def cpu_result(gate_up_ms=7.5872, rid="a3b-cpu-gap-census-fx"):
+    fam = [{"family": "MUL_MAT:gdn_proj", "share_pct": 25.691, "ms_per_timing_step": 10.4335},
+           {"family": "MUL_MAT_ID:exps_gate_up", "share_pct": 18.682, "ms_per_timing_step": gate_up_ms},
+           {"family": "FLASH_ATTN", "share_pct": 5.2, "ms_per_timing_step": 2.11}]
+    return {"id": rid, "updated_utc": "2026-11-22T00:57:21Z", "configs": {
+        "plain-greedy": {"mean_verify_rows": 1.0, "ranked_families": fam},
+        "mtp-greedy": {"mean_verify_rows": 4.9, "ranked_families": fam}}}
+
+
+class Cpu(Base):
+    def cpu_res(self, name, obj):
+        d = os.path.join(self.d, name)
+        os.makedirs(os.path.join(d, "servers"))
+        json.dump({"argv": ["llama-server", "-t", "24", "-tb", "24"]},
+                  open(os.path.join(d, "servers", "plain-greedy-L1.argv.json"), "w"))
+        p = os.path.join(d, "RESULT.json")
+        json.dump(obj, open(p, "w"))
+        return p
+
+    def test_cpu_records_flag_below_75pct_of_measured_ceiling(self):
+        self.run_(self.cpu_res("a", cpu_result()))
+        c = json.load(open(self.census))
+        gdn = c["records"]["cpu|a3b-q8_0-cpu|MUL_MAT:gdn_proj|quarter-24t|n1"]
+        gu = c["records"]["cpu|a3b-q8_0-cpu|MUL_MAT_ID:exps_gate_up|quarter-24t|n1"]
+        self.assertEqual(gdn["ceiling_gbps"], 129.9)
+        self.assertEqual(gdn["status"], "ok")            # 102.5 GB/s = 79% of ceiling
+        self.assertEqual(gu["status"], "open_surface")   # 94.0 GB/s = 72% of ceiling
+        self.assertNotIn("FLASH_ATTN", "".join(c["records"]))   # no static bytes -> no record
+        self.assertEqual(sum("cpu|" in k for k in c["records"]), 2)  # MTP config skipped
+        self.assertIn("### CPU (EPYC 9655", open(self.doc).read())
+
+    def test_flag_frac_is_a_tunable_parameter(self):
+        c = cu.empty_census()
+        c["cpu"]["flag_frac"] = 0.70
+        json.dump(c, open(self.census, "w"))
+        self.run_(self.cpu_res("a", cpu_result()))
+        c = json.load(open(self.census))
+        self.assertEqual(c["records"]["cpu|a3b-q8_0-cpu|MUL_MAT_ID:exps_gate_up|quarter-24t|n1"]["status"], "ok")
+
+    def test_cpu_seed_done_and_idempotent(self):
+        c = cu.empty_census()
+        c["seeds"]["CPU-A3B-MMID"] = {"device": "cpu", "match": {"model": "a3b-q8_0-cpu",
+                                      "kernel_class": "MUL_MAT_ID:exps_gate_up"}, "target_gbps": 100, "status": "open"}
+        json.dump(c, open(self.census, "w"))
+        p = self.cpu_res("a", cpu_result())
+        self.run_(p)
+        self.assertEqual(json.load(open(self.census))["seed_stubs"], [])
+        self.assertFalse(self.run_(p)["changed"])
+        self.run_(self.cpu_res("b", cpu_result(gate_up_ms=6.5)))   # 109.7 GB/s >= 100
+        self.assertEqual(json.load(open(self.census))["seeds"]["CPU-A3B-MMID"]["status"], "done")
+
+
 if __name__ == "__main__":
     unittest.main()
