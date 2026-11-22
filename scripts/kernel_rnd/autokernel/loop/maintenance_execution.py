@@ -1,11 +1,11 @@
 """Bounded orchestration for retention maintenance ownership.
 
 This module defines the executable state machine around ``retention_consumer``.
-The controller exposes the durable exclusion transitions consumed by a backend,
-but no concrete ``ControllerMaintenanceBackend``, complete fresh catalog, or real
-resource provider is released yet, so default execution remains unavailable.
-Expensive filesystem and provider calls are deliberately outside controller
-admission transactions.
+``CampaignMaintenanceBackend`` binds it to the actual controller transactions and
+``BrokerHoldProvider`` is the hold/refresh/settlement interface the real OP-41
+broker (AKU-11) implements. No broker is registered or constructed by default, so
+default execution remains unavailable. Filesystem and provider calls stay outside
+controller transactions; ``BoundedHoldProvider`` adds per-call deadlines.
 """
 from __future__ import annotations
 
@@ -14,6 +14,8 @@ from datetime import datetime
 import hashlib
 import json
 import math
+import os
+import threading
 from typing import Any, Mapping
 
 from . import retention_consumer as consumer
@@ -21,6 +23,8 @@ from . import retention_consumer as consumer
 
 LEGACY_EVENT_SCHEMA = "epyc.autokernel.maintenance_execution_event.v1"
 EVENT_SCHEMA = "epyc.autokernel.maintenance_execution_event.v2"
+SETTLED_EVENT_SCHEMA = "epyc.autokernel.maintenance_execution_event.v3"
+SETTLEMENT_SCHEMA = "epyc.autokernel.maintenance_hold_settlement.v1"
 TOKEN_SCHEMA = "epyc.autokernel.maintenance_exclusion_token.v1"
 HOLD_SCHEMA = "epyc.autokernel.maintenance_hold_receipt.v1"
 ACCOUNTING_SCHEMA = "epyc.autokernel.maintenance_accounting_receipt.v1"
@@ -39,6 +43,10 @@ _LEGACY_EVENT_FIELDS = _EVENT_FIELDS - {"abort_receipt"}
 
 class MaintenanceExecutionRefused(RuntimeError):
     """The current owner/authority binding cannot safely advance."""
+
+
+class ProviderDeadlineExceeded(MaintenanceExecutionRefused):
+    """A broker call outlived its deadline; its outcome is unknown."""
 
 
 def _iso(value: Any, label: str) -> str:
@@ -317,6 +325,69 @@ class AccountingReceipt:
 
 
 @dataclass(frozen=True, slots=True)
+class HoldSettlement:
+    """Broker-issued exactly-once settlement of one hold, with exact held time."""
+
+    provider_id: str
+    hold_id: str
+    hold_receipt_digest: str
+    token_digest: str
+    cost: MaintenanceCost
+    disposition: str
+    accounting_receipt_digest: str
+    acquired_at_ms: int
+    settled_at_ms: int
+    held_ms: int
+    refresh_count: int
+    receipt_digest: str = ""
+    schema: str = SETTLEMENT_SCHEMA
+
+    def __post_init__(self) -> None:
+        if self.schema != SETTLEMENT_SCHEMA:
+            raise MaintenanceExecutionRefused("unsupported hold settlement schema")
+        _text(self.provider_id, "provider_id")
+        _text(self.hold_id, "hold_id")
+        if self.accounting().receipt_digest != self.accounting_receipt_digest:
+            raise MaintenanceExecutionRefused("hold settlement accounting digest is misbound")
+        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0
+               for value in (self.acquired_at_ms, self.settled_at_ms, self.held_ms,
+                             self.refresh_count)):
+            raise MaintenanceExecutionRefused("hold settlement times must be nonnegative ints")
+        if self.held_ms != self.settled_at_ms - self.acquired_at_ms:
+            raise MaintenanceExecutionRefused("held time differs from the acquire/settle interval")
+        expected = _digest(self.body())
+        if self.receipt_digest and self.receipt_digest != expected:
+            raise MaintenanceExecutionRefused("hold settlement digest mismatch")
+        object.__setattr__(self, "receipt_digest", expected)
+
+    def accounting(self) -> AccountingReceipt:
+        return AccountingReceipt(self.hold_receipt_digest, self.token_digest, self.cost,
+                                 self.disposition)
+
+    def body(self) -> dict[str, Any]:
+        return {name: (self.cost.to_dict() if name == "cost" else getattr(self, name))
+                for name in self.__dataclass_fields__ if name != "receipt_digest"}
+
+    def to_dict(self) -> dict[str, Any]:
+        return {**self.body(), "receipt_digest": self.receipt_digest}
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "HoldSettlement":
+        if not isinstance(value, Mapping) or set(value) != set(cls.__dataclass_fields__):
+            raise MaintenanceExecutionRefused("hold settlement has missing/unknown fields")
+        return cls(**{**value, "cost": MaintenanceCost.from_dict(value["cost"])})
+
+
+def _settlement_from(value: Any) -> "HoldSettlement | NoHoldReceipt":
+    schema = value.get("schema") if isinstance(value, Mapping) else None
+    if schema == SETTLEMENT_SCHEMA:
+        return HoldSettlement.from_dict(value)
+    if schema == NO_HOLD_SCHEMA:
+        return NoHoldReceipt.from_dict(value)
+    raise MaintenanceExecutionRefused("hold settlement schema is invalid")
+
+
+@dataclass(frozen=True, slots=True)
 class MaintenanceState:
     phase: str | None = None
     token: ExclusionToken | None = None
@@ -339,6 +410,7 @@ def validate_event(value: Mapping[str, Any]) -> dict[str, Any]:
     row = dict(value)
     schema = row.get("schema")
     expected_fields = (_EVENT_FIELDS if schema == EVENT_SCHEMA
+                       else _EVENT_FIELDS | {"settlement"} if schema == SETTLED_EVENT_SCHEMA
                        else _LEGACY_EVENT_FIELDS if schema == LEGACY_EVENT_SCHEMA
                        else None)
     if expected_fields is None or set(row) != expected_fields:
@@ -416,6 +488,22 @@ def validate_event(value: Mapping[str, Any]) -> dict[str, Any]:
                 "no-hold ABORTED must carry only its refusal receipt")
         else:
             _validate_no_hold(abort_receipt, token)
+    if row.get("settlement") is not None:
+        settlement = _settlement_from(row["settlement"])
+        row["settlement"] = settlement.to_dict()
+        if event == "INTENT":
+            if token.predecessor_token_digest is None or (
+                    isinstance(settlement, HoldSettlement)
+                    and settlement.token_digest != token.predecessor_token_digest):
+                raise MaintenanceExecutionRefused(
+                    "only a recovery INTENT may carry its predecessor's hold settlement")
+        elif (event not in {"COMPLETED", "ABORTED"}
+              or not isinstance(settlement, HoldSettlement) or hold is None
+              or settlement.hold_receipt_digest != hold.receipt_digest
+              or settlement.token_digest != token.token_digest
+              or settlement.accounting_receipt_digest != accounting
+              or settlement.cost != cost):
+            raise MaintenanceExecutionRefused(f"{event} hold settlement is misbound")
     return row
 
 
@@ -452,6 +540,15 @@ def project_events(values) -> MaintenanceState:
             raise MaintenanceExecutionRefused(
                 f"maintenance transition {state.phase}->{event} is invalid")
         recovering = state.owned and event == "INTENT"
+        prior = (_settlement_from(row["settlement"])
+                 if recovering and row.get("settlement") is not None else None)
+        held = state.hold
+        if (isinstance(prior, NoHoldReceipt) and (
+                held is not None or prior.request_digest != _request_digest(state.token))) \
+                or (isinstance(prior, HoldSettlement) and held is not None
+                    and (prior.provider_id, prior.hold_id) != (held.provider_id, held.hold_id)):
+            raise MaintenanceExecutionRefused(
+                "recovery settlement does not resolve the unresolved provider hold")
         restarting = state.phase in {"COMPLETED", "ABORTED"} and event == "INTENT"
         if recovering and token == state.token:
             raise MaintenanceExecutionRefused(
@@ -496,9 +593,13 @@ def make_event(event: str, token: ExclusionToken, *, occurred_at: str,
                hold: HoldReceipt | None = None, cost: MaintenanceCost | None = None,
                accounting_receipt_digest: str | None = None,
                abort_receipt: AccountingReceipt | NoHoldReceipt | None = None,
-               reason: str | None = None) -> dict[str, Any]:
+               reason: str | None = None,
+               settlement: HoldSettlement | NoHoldReceipt | None = None) -> dict[str, Any]:
+    """Emit v2 bytes unless a broker settlement is carried (additive v3)."""
+    extra = {} if settlement is None else {"settlement": settlement.to_dict()}
     return validate_event({
-        "schema": EVENT_SCHEMA, "event": event, "token": token.to_dict(),
+        **extra, "schema": SETTLED_EVENT_SCHEMA if extra else EVENT_SCHEMA,
+        "event": event, "token": token.to_dict(),
         "hold": ({**hold.body(), "receipt_digest": hold.receipt_digest}
                  if hold is not None else None),
         "cost": cost.to_dict() if cost is not None else None,
@@ -557,6 +658,135 @@ class MaintenanceHoldProvider:
         raise MaintenanceExecutionRefused("maintenance accounting provider is unavailable")
 
 
+class BrokerHoldProvider(MaintenanceHoldProvider):
+    """Interface the real OP-41 broker (AKU-11) implements; unavailable by default.
+
+    ``settle`` is exactly-once per hold: repeating it with the same receipt, cost
+    and disposition returns the identical settlement, anything else refuses.
+    ``resolve`` settles as aborted, or proves absent, an unresolved predecessor's hold.
+    """
+
+    def settle(self, hold: HoldReceipt, token: ExclusionToken, cost: MaintenanceCost,
+               disposition: str) -> HoldSettlement:
+        raise MaintenanceExecutionRefused("maintenance hold broker is unavailable")
+
+    def resolve(self, token: ExclusionToken, hold: HoldReceipt | None) \
+            -> HoldSettlement | NoHoldReceipt:
+        raise MaintenanceExecutionRefused("maintenance hold broker is unavailable")
+
+    def finish(self, hold, token, cost, disposition) -> AccountingReceipt:
+        return self.settle(hold, token, cost, disposition).accounting()
+
+
+class BoundedHoldProvider(BrokerHoldProvider):
+    """Run each broker call off the controller mutex under a wall-clock deadline.
+
+    An overdue call raises ``ProviderDeadlineExceeded`` and is left running on its
+    daemon thread; the broker's exactly-once settlement must win over it.
+    """
+
+    def __init__(self, inner: BrokerHoldProvider, *, mutex, deadline_s: float):
+        if not isinstance(inner, BrokerHoldProvider) or not 0 < deadline_s <= 300:
+            raise MaintenanceExecutionRefused("bounded provider needs a broker and 0..300s")
+        self.inner, self.mutex, self.deadline_s = inner, mutex, deadline_s
+
+    def _call(self, name: str, *args):
+        if self.mutex._is_owned():
+            raise MaintenanceExecutionRefused(f"provider {name} called under controller mutex")
+        box: list = []
+
+        def run():
+            try:
+                box.append((True, getattr(self.inner, name)(*args)))
+            except BaseException as exc:  # relayed to the caller below
+                box.append((False, exc))
+
+        worker = threading.Thread(target=run, name=f"maintenance-{name}", daemon=True)
+        worker.start()
+        worker.join(self.deadline_s)
+        if not box:
+            raise ProviderDeadlineExceeded(f"provider {name} exceeded {self.deadline_s}s")
+        if not box[0][0]:
+            raise box[0][1]
+        return box[0][1]
+
+    def acquire(self, token):
+        return self._call("acquire", token)
+
+    def refresh(self, hold, token):
+        return self._call("refresh", hold, token)
+
+    def settle(self, hold, token, cost, disposition):
+        return self._call("settle", hold, token, cost, disposition)
+
+    def resolve(self, token, hold):
+        return self._call("resolve", token, hold)
+
+
+def native_tombstones(journal, view, selected) -> tuple[consumer.NativeTombstone, ...]:
+    """Bounded replay input: journaled native tombstones of the selected artifacts."""
+    from .. import journal as journal_module
+    wanted = {consumer.storage.tombstone_id(
+        node.expiry.campaign_id, os.path.realpath(node.path), node.expiry.sha256,
+        node.expiry.expirable_kind, node.expiry.rule_id)
+        for node in view.nodes if node.artifact_id in selected and node.expiry and node.path}
+    return tuple(
+        consumer.NativeTombstone(entry.event_id, {
+            key: value for key, value in entry.payload.items()
+            if key not in {"storage_class", "path"}})
+        for entry in journal.read_all()
+        if entry.kind == journal_module.KIND_TOMBSTONE
+        and entry.payload.get("tombstone_id") in wanted)
+
+
+class CampaignMaintenanceBackend(ControllerMaintenanceBackend):
+    """Concrete backend: every method is one short ``CampaignController`` transaction.
+
+    Admitting over an UNRESOLVED exclusion first has the broker resolve the
+    predecessor's hold, outside the mutex, so recovery never holds two holds.
+    """
+
+    def __init__(self, controller, prepared, policy, provider=None):
+        from .native_retention_catalog import PreparedCatalogView
+        if not isinstance(prepared, PreparedCatalogView):
+            raise TypeError("prepared must be a native PreparedCatalogView")
+        self.controller, self.view, self.policy = controller, prepared.view, policy
+        self.provider = provider or BrokerHoldProvider()
+
+    def _lease(self, token: ExclusionToken) -> consumer.MaintenanceLease:
+        if consumer.collect_native_snapshot(self.view).snapshot_digest != token.snapshot_digest:
+            raise MaintenanceExecutionRefused("prepared native view differs from the token")
+        return consumer.MaintenanceLease(
+            self.view, self.policy, None, f"controller:{token.token_digest}",
+            native_tombstones(self.controller._journal, self.view,
+                              token.selected_artifact_ids))
+
+    def admit(self, job):
+        prior = self.controller.maintenance_recovery_owner()
+        resolution = None if prior is None else self.provider.resolve(*prior)
+        token = self.controller.maintenance_admit(job, prior_settlement=resolution)
+        return Admission(token, self._lease(token))
+
+    def revalidate(self, token, hold):
+        self.controller.maintenance_revalidate(token, hold)
+        return self._lease(token)
+
+    def append_tombstone(self, token, kind, payload, campaign_id):
+        return self.controller.maintenance_append_tombstone(token, kind, payload, campaign_id)
+
+    def io_complete(self, token, cost):
+        self.controller.maintenance_io_complete(token, cost)
+
+    def complete(self, token, accounting, settlement=None):
+        self.controller.maintenance_complete(token, accounting, settlement)
+
+    def abort(self, token, reason, receipt, hold=None, settlement=None):
+        self.controller.maintenance_abort(token, reason, receipt, hold, settlement)
+
+    def unresolved(self, token, reason):
+        self.controller.maintenance_unresolved(token, reason)
+
+
 class _JournalProxy:
     def __init__(self, backend: ControllerMaintenanceBackend,
                  provider: MaintenanceHoldProvider, token: ExclusionToken,
@@ -610,6 +840,24 @@ def _validate_no_hold(receipt: NoHoldReceipt, token: ExclusionToken) -> None:
         raise MaintenanceExecutionRefused("provider no-hold receipt is misbound")
 
 
+def _settle(provider, hold: HoldReceipt, token: ExclusionToken, cost: MaintenanceCost,
+            disposition: str) -> tuple[AccountingReceipt, HoldSettlement | None]:
+    settle = getattr(provider, "settle", None)
+    if settle is None:
+        return _validate_accounting(provider.finish(hold, token, cost, disposition),
+                                    hold, token, cost, disposition), None
+    settlement = settle(hold, token, cost, disposition)
+    if not isinstance(settlement, HoldSettlement) or (
+            settlement.provider_id, settlement.hold_id) != (hold.provider_id, hold.hold_id):
+        raise MaintenanceExecutionRefused(f"provider {disposition} settlement is misbound")
+    return _validate_accounting(settlement.accounting(), hold, token, cost,
+                                disposition), settlement
+
+
+def _settled_call(method, settlement, *args) -> None:
+    method(*args) if settlement is None else method(*args, settlement=settlement)
+
+
 def _validate_accounting(accounting: Any, hold: HoldReceipt, token: ExclusionToken,
                          cost: MaintenanceCost, disposition: str) -> AccountingReceipt:
     if (not isinstance(accounting, AccountingReceipt)
@@ -636,7 +884,10 @@ def execute(job: consumer.RetentionJob, *, backend: ControllerMaintenanceBackend
     if not isinstance(job, consumer.RetentionJob):
         raise TypeError("job must be a native RetentionJob")
     backend = backend or ControllerMaintenanceBackend()
-    provider = provider or MaintenanceHoldProvider()
+    provider = provider or getattr(backend, "provider", None) or MaintenanceHoldProvider()
+    if type(backend) is not ControllerMaintenanceBackend \
+            and type(provider) in {MaintenanceHoldProvider, BrokerHoldProvider}:
+        raise MaintenanceExecutionRefused("maintenance hold provider is unavailable")
     admission = backend.admit(job)
     if not isinstance(admission, Admission):
         raise TypeError("controller returned no Admission")
@@ -690,11 +941,9 @@ def execute(job: consumer.RetentionJob, *, backend: ControllerMaintenanceBackend
         result = consumer.execute(job, owner=HeldOwner(), now=now)
         cost = MaintenanceCost.from_result(result)
         backend.io_complete(token, cost)
-        accounting = provider.finish(proxy.hold, token, cost, "complete")
-        accounting = _validate_accounting(
-            accounting, proxy.hold, token, cost, "complete")
+        accounting, settlement = _settle(provider, proxy.hold, token, cost, "complete")
         accounting_done = True
-        backend.complete(token, accounting)
+        _settled_call(backend.complete, settlement, token, accounting)
         return MaintenanceExecutionResult(result, token.token_digest, accounting, cost)
     except BaseException as exc:
         reason = f"{type(exc).__name__}: {exc}"
@@ -712,10 +961,8 @@ def execute(job: consumer.RetentionJob, *, backend: ControllerMaintenanceBackend
                 try:
                     aborted_cost = MaintenanceCost(0, 0, 0, 0)
                     settlement_hold = proxy.hold if proxy is not None else hold
-                    aborted = provider.finish(
-                        settlement_hold, token, aborted_cost, "aborted")
-                    _validate_accounting(
-                        aborted, settlement_hold, token, aborted_cost, "aborted")
+                    aborted, settled = _settle(
+                        provider, settlement_hold, token, aborted_cost, "aborted")
                 except BaseException as settlement_exc:
                     try:
                         backend.unresolved(
@@ -725,14 +972,17 @@ def execute(job: consumer.RetentionJob, *, backend: ControllerMaintenanceBackend
                     except BaseException:
                         pass
                 else:
-                    backend.abort(token, reason, aborted, settlement_hold)
+                    _settled_call(backend.abort, settled, token, reason, aborted,
+                                  settlement_hold)
         raise
 
 
 __all__ = [
-    "ACCOUNTING_SCHEMA", "Admission", "AccountingReceipt", "ControllerMaintenanceBackend",
+    "ACCOUNTING_SCHEMA", "Admission", "AccountingReceipt", "BoundedHoldProvider",
+    "BrokerHoldProvider", "CampaignMaintenanceBackend", "ControllerMaintenanceBackend",
     "EVENT_SCHEMA", "EVENTS", "ExclusionToken", "HOLD_SCHEMA", "HoldReceipt",
-    "LEGACY_EVENT_SCHEMA",
+    "HoldSettlement", "LEGACY_EVENT_SCHEMA", "ProviderDeadlineExceeded",
+    "SETTLED_EVENT_SCHEMA", "SETTLEMENT_SCHEMA", "native_tombstones",
     "MaintenanceCost", "MaintenanceExecutionRefused", "MaintenanceExecutionResult",
     "MaintenanceHoldProvider", "MaintenanceState", "NO_HOLD_SCHEMA", "NoHoldReceipt",
     "TOKEN_SCHEMA", "execute",

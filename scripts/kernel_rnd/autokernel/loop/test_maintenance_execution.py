@@ -1057,7 +1057,15 @@ def test_restart_rebinds_unresolved_without_restoring_stale_provider_authority(
         with pytest.raises(Exception, match="indexed owner|stale owner"):
             reopened.maintenance_revalidate(old_token, old_hold)
 
-        fresh = reopened.maintenance_admit(job)
+        with pytest.raises(Exception, match="needs its hold resolved"):
+            reopened.maintenance_admit(job)
+        zero = me.MaintenanceCost(0, 0, 0, 0)
+        prior = me.HoldSettlement(
+            old_hold.provider_id, old_hold.hold_id, old_hold.receipt_digest,
+            old_token.token_digest, zero, "aborted",
+            me.AccountingReceipt(old_hold.receipt_digest, old_token.token_digest,
+                                 zero, "aborted").receipt_digest, 1000, 1500, 500, 0)
+        fresh = reopened.maintenance_admit(job, prior_settlement=prior)
         assert fresh.predecessor_token_digest == old_token.token_digest
         with pytest.raises(me.MaintenanceExecutionRefused, match="misbound"):
             reopened.maintenance_revalidate(fresh, old_hold)

@@ -3061,8 +3061,15 @@ class CampaignController:
         self._maintenance_state = projected
         return copy.deepcopy(entry)
 
-    def maintenance_admit(self, job):
-        """Reserve only from a complete native catalog; unavailable until connected."""
+    def maintenance_recovery_owner(self):
+        """The UNRESOLVED (token, last journaled hold) the broker must resolve first."""
+        with self._mutex:
+            self._require_active_locked()
+            state = self._maintenance_state
+            return (state.token, state.hold) if state.phase == "UNRESOLVED" else None
+
+    def maintenance_admit(self, job, prior_settlement=None):
+        """Reserve from a complete native catalog; recovery needs broker resolution."""
         if not isinstance(job, maintenance_module.consumer.RetentionJob):
             raise TypeError("job must be a native RetentionJob")
         with self._mutex:
@@ -3076,14 +3083,14 @@ class CampaignController:
                 previous = self._maintenance_state.token
                 if self._maintenance_state.phase != "UNRESOLVED" or previous is None:
                     raise ControlRefused("maintenance exclusion is already owned")
-                if (job.plan.snapshot_id != previous.snapshot_id
-                        or job.plan.snapshot_generation != previous.snapshot_generation
-                        or job.plan.snapshot_digest != previous.snapshot_digest
-                        or job.plan.plan_digest != previous.plan_digest
-                        or job.policy_digest != previous.policy_digest
-                        or job.selected_artifact_ids != previous.selected_artifact_ids):
-                    raise ControlRefused(
-                        "maintenance recovery job differs from unresolved intent")
+                if (job.plan.snapshot_id, job.plan.snapshot_generation, job.plan.snapshot_digest,
+                        job.plan.plan_digest, job.policy_digest, job.selected_artifact_ids) != (
+                        previous.snapshot_id, previous.snapshot_generation,
+                        previous.snapshot_digest, previous.plan_digest,
+                        previous.policy_digest, previous.selected_artifact_ids):
+                    raise ControlRefused("maintenance recovery job differs from unresolved intent")
+                if prior_settlement is None:
+                    raise ControlRefused("unresolved maintenance needs its hold resolved")
                 token = maintenance_module.ExclusionToken(
                     "maintenance-recovery-" + schemas.content_hash({
                         "predecessor": previous.token_digest,
@@ -3096,7 +3103,7 @@ class CampaignController:
                     previous.plan_digest, previous.policy_digest,
                     previous.selected_artifact_ids, self.clock(), previous.token_digest)
                 self._maintenance_append_locked(maintenance_module.make_event(
-                    "INTENT", token, occurred_at=self.clock()))
+                    "INTENT", token, occurred_at=self.clock(), settlement=prior_settlement))
                 self._maintenance_tombstone_intent = True
                 return token
             prepared = self._prepared_retention_jobs.get(job.plan.plan_digest)
@@ -3117,7 +3124,6 @@ class CampaignController:
                 job.selected_artifact_ids, self.clock(), None)
             self._maintenance_append_locked(maintenance_module.make_event(
                 "INTENT", token, occurred_at=self.clock()))
-            self._maintenance_tombstone_intent = True
             return token
 
     def install_native_retention_catalog(
@@ -3264,8 +3270,7 @@ class CampaignController:
         with self._mutex:
             self._require_active_locked()
             self._maintenance_require_token_locked(token)
-            maintenance_module._validate_hold(hold, token,
-                                              previous=self._maintenance_state.hold)
+            maintenance_module._validate_hold(hold, token, previous=self._maintenance_state.hold)
             try:
                 current = datetime.fromisoformat(self.clock().replace("Z", "+00:00"))
             except ValueError as exc:
@@ -3294,8 +3299,7 @@ class CampaignController:
             entry = self._append_durable(kind, payload, campaign_id=campaign_id)
             if payload.get("reclamation_state") == "intent":
                 self._maintenance_tombstone_intent = True
-            self._maintenance_state = replace(
-                self._maintenance_state, phase="PROVIDER_HELD")
+            self._maintenance_state = replace(self._maintenance_state, phase="PROVIDER_HELD")
             return copy.deepcopy(entry)
 
     def maintenance_io_complete(self, token, cost) -> None:
@@ -3303,19 +3307,17 @@ class CampaignController:
             raise TypeError("cost must be MaintenanceCost")
         with self._mutex:
             self._require_active_locked()
-            if (self._maintenance_state.token == token
-                    and self._maintenance_state.phase == "IO_COMPLETE"
-                    and self._maintenance_state.cost == cost):
+            state = self._maintenance_state
+            if (state.token, state.phase, state.cost) == (token, "IO_COMPLETE", cost):
                 return
             self._maintenance_require_token_locked(token)
-            if self._maintenance_state.phase not in {
-                    "PROVIDER_HELD", "MUTATION_REVALIDATED"}:
+            if self._maintenance_state.phase not in {"PROVIDER_HELD", "MUTATION_REVALIDATED"}:
                 raise ControlRefused("maintenance I/O completion is out of order")
             self._maintenance_append_locked(maintenance_module.make_event(
                 "IO_COMPLETE", token, hold=self._maintenance_state.hold, cost=cost,
                 occurred_at=self.clock()))
 
-    def maintenance_complete(self, token, accounting) -> None:
+    def maintenance_complete(self, token, accounting, settlement=None) -> None:
         if not isinstance(accounting, maintenance_module.AccountingReceipt):
             raise TypeError("accounting must be AccountingReceipt")
         with self._mutex:
@@ -3338,11 +3340,11 @@ class CampaignController:
                 "COMPLETED", token, hold=self._maintenance_state.hold,
                 cost=self._maintenance_state.cost,
                 accounting_receipt_digest=accounting.receipt_digest,
-                occurred_at=self.clock()))
+                occurred_at=self.clock(), settlement=settlement))
             self._maintenance_tombstone_intent = False
             self._settle_v2_commands_locked()
 
-    def maintenance_abort(self, token, reason: str, receipt, hold=None) -> None:
+    def maintenance_abort(self, token, reason: str, receipt, hold=None, settlement=None) -> None:
         with self._mutex:
             self._require_active_locked()
             receipt_digest = getattr(receipt, "receipt_digest", None)
@@ -3380,8 +3382,8 @@ class CampaignController:
             self._maintenance_append_locked(maintenance_module.make_event(
                 "ABORTED", token, hold=event_hold, cost=event_cost,
                 accounting_receipt_digest=accounting_digest,
-                abort_receipt=receipt,
-                reason=reason, occurred_at=self.clock()))
+                abort_receipt=receipt, reason=reason, occurred_at=self.clock(),
+                settlement=settlement))
             self._settle_v2_commands_locked()
 
     def maintenance_unresolved(self, token, reason: str) -> None:
