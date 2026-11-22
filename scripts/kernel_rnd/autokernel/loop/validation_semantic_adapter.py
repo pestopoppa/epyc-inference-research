@@ -69,6 +69,10 @@ class ProducerProvenanceRefused(SemanticAdapterError):
         self.reasons = tuple(reasons)
 
 
+class ClaimGradeEvidenceUnqualified(SemanticAdapterError):
+    """Typed refusal: the reopened pair is not complete Witnessed/Attested measurement evidence."""
+
+
 def _digest(path: Path) -> str:
     return hashlib.sha256(_source_bytes(path)).hexdigest()
 
@@ -449,15 +453,44 @@ class RegisteredClaimGradeVerifier:
         plan = ep.ExperimentPlan.from_dict(plan.to_dict())
         supplied = ep._validated_view(plan, view)
         actual = self.reopen_pair(pair)
-        if (actual.plan.to_dict() != plan.to_dict() or actual.view.to_dict() != supplied.to_dict()
-                or not actual.view.complete or any(
-                    body["projection"].get("status") != "measurement"
-                    or (body["projection"].get("source_grade"), body["projection"].get("trace_grade"))
-                    != ("Witnessed", "Attested") for body in (actual.anchor, actual.candidate))):
-            raise SemanticAdapterError("canonical receipt pair lacks complete qualified measurement evidence")
+        if actual.plan.to_dict() != plan.to_dict() or actual.view.to_dict() != supplied.to_dict():
+            raise SemanticAdapterError("canonical receipt pair belongs to another plan/view")
         if not actual.producer_provenance.warranted:
             raise ProducerProvenanceRefused(actual.producer_provenance.reasons)
+        if not actual.view.complete or any(
+                body["projection"].get("status") != "measurement"
+                or (body["projection"].get("source_grade"), body["projection"].get("trace_grade"))
+                != ("Witnessed", "Attested") for body in (actual.anchor, actual.candidate)):
+            raise ClaimGradeEvidenceUnqualified(
+                "canonical receipt pair lacks complete qualified measurement evidence")
         return actual.view
+
+
+@dataclass(frozen=True)
+class RegisteredClaimGradeEligibility:
+    """Typed eligibility input: the concrete registered verifier and one exact receipt pair.
+
+    ``discharge`` reprojects both receipts through the registered projector and
+    sole grader now; ``()`` discharges only ep.eligibility's missing-adapter
+    refusal, otherwise it returns typed refusal codes.  Never deployment authority.
+    """
+
+    verifier: RegisteredClaimGradeVerifier
+    pair: cr.ClaimGradeReceiptPairReference
+
+    def discharge(self, plan: ep.ExperimentPlan, view: ep.AdmissibleUnitView) -> tuple[str, ...]:
+        if (type(self.verifier) is not RegisteredClaimGradeVerifier
+                or type(self.pair) is not cr.ClaimGradeReceiptPairReference):
+            return ("claim_grade_receipt_unregistered",)
+        try:
+            self.verifier.verify(plan, view, self.pair)
+        except ProducerProvenanceRefused as exc:
+            return ("producer_provenance_unwarranted",) + exc.reasons
+        except ClaimGradeEvidenceUnqualified:
+            return ("claim_grade_receipt_unqualified",)
+        except Exception:  # Tampered, rewritten, foreign pin/plan: fail closed.
+            return ("claim_grade_receipt_unverified",)
+        return ()
 
 
 class ValidationSemanticAdapter:
@@ -592,6 +625,7 @@ class RegisteredServingSemanticEvaluator:
 
 
 __all__ = ["ARM_ADAPTER_ID", "ARM_PROJECTOR_SHA256", "AUTHORITY_ID",
-           "CLAIM_TUPLE_SHA256", "CanonicalGrade", "PinnedRootProjection",
-           "ProjectionSourceClosure", "RegisteredClaimGradeVerifier", "RegisteredServingSemanticEvaluator",
+           "CLAIM_TUPLE_SHA256", "CanonicalGrade", "ClaimGradeEvidenceUnqualified", "PinnedRootProjection",
+           "ProjectionSourceClosure", "RegisteredClaimGradeEligibility", "RegisteredClaimGradeVerifier",
+           "RegisteredServingSemanticEvaluator",
            "ProducerProvenanceRefused", "SemanticAdapterError", "ValidationSemanticAdapter"]

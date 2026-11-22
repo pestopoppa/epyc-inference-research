@@ -317,3 +317,179 @@ def test_installed_closure_change_reopens_typed_compatibility_only(real, tmp_pat
         assert code in refused.value.reasons
     finally:
         receipts.close()
+
+
+# AKU-08c: typed receipt eligibility discharges only ep.eligibility's missing-adapter refusal.
+GRADER_MISSING = "shared registered ClaimTuple grader adapter is not integrated"
+
+
+def _refused(code):
+    return f"registered claim-grade receipt refused: {code}"
+
+
+def _eligibility(plan, view, verifier, pair, use=None):
+    typed = sa.RegisteredClaimGradeEligibility(verifier, pair)
+    return ep.eligibility(plan, view, use or plan.intended_use, current_epoch=plan.epoch,
+                          registered_claim_grade=typed)
+
+
+def _complete(**overrides):
+    """Hermetic structural plan/view (fixture): the reopened pair is relabelled onto it."""
+    from .test_experiment_plan import complete_rows, plan_dict
+    plan = ep.ExperimentPlan.from_dict(plan_dict(**({"intended_use": "validate", "n": 1,
+                                                     "calibration_ref": "cal-1"} | overrides)))
+    return plan, ep.admissible_units(plan, complete_rows(plan))
+
+
+def _shaped(real, plan, view, warrant):
+    def measured(body):
+        return ob._freeze(ob._plain(body) | {"projection": {"status": "measurement",
+            "source_grade": "Witnessed", "trace_grade": "Attested"}})
+    return sa.ReopenedClaimReceiptPair(plan, view, measured(real["bodies"]["anchor"]),
+        measured(real["bodies"]["candidate"]), {}, {}, warrant)
+
+
+def test_actual_warranted_pair_reprojects_at_eligibility_and_stops_at_qualification(real):
+    plan = ep.ExperimentPlan.from_dict(real["events"]["anchor"]["payload"]["carrier"]["plan"])
+    view = sa.RegisteredClaimGradeVerifier(real["projection"], real["source"], real["receipts"]
+                                           ).reopen_pair(real["pair"]).view
+    verifier = sa.RegisteredClaimGradeVerifier(real["projection"], real["source"], real["receipts"])
+    typed = sa.RegisteredClaimGradeEligibility(verifier, real["pair"])
+    # Provenance is warranted, so the typed code is the diagnostic (no ClaimTuple) gate.
+    assert typed.discharge(plan, view) == ("claim_grade_receipt_unqualified",)
+    result = ep.eligibility(plan, view, "validate_production", current_epoch=plan.epoch,
+                            registered_claim_grade=typed)
+    assert result.status == "refused"
+
+
+@pytest.mark.parametrize("use,status,reasons", [
+    ("validate", "permitted", ()),
+    ("validate_production", "policy_undefined",
+     ("deployment use requires the owning qualified serving decision",))])
+def test_warranted_measurement_receipt_discharges_only_the_missing_adapter_gate(
+        real, monkeypatch, use, status, reasons):
+    plan, view = _complete(intended_use=use, instrument="serving", category="OPTIMUM")
+    assert ep.eligibility(plan, view, use, current_epoch=plan.epoch).reasons == (GRADER_MISSING,)
+    shaped = _shaped(real, plan, view, current.ProducerProvenance(True, ()))
+    monkeypatch.setattr(sa.RegisteredClaimGradeVerifier, "reopen_pair", lambda _self, _pair: shaped)
+    verifier = sa.RegisteredClaimGradeVerifier(real["projection"], real["source"], real["receipts"])
+    result = _eligibility(plan, view, verifier, real["pair"])
+    assert (result.status, result.reasons) == (status, reasons)
+    # Actor-supplied grades remain inert data, byte-for-byte legacy behaviour.
+    for actor in ("PASS", {"grade": "Witnessed"}, shaped):
+        legacy = ep.eligibility(plan, view, use, current_epoch=plan.epoch, registered_claim_grade=actor)
+        assert legacy.reasons == (GRADER_MISSING,)
+
+
+@pytest.mark.parametrize("case,codes", [
+    ("unwarranted", ("producer_provenance_unwarranted", "producer_source_closure_absent")),
+    ("unqualified", ("claim_grade_receipt_unqualified",)),
+    ("foreign_plan", ("claim_grade_receipt_unverified",)),
+    ("unregistered", ("claim_grade_receipt_unregistered",))])
+def test_unwarranted_or_unbound_receipts_keep_refusing_with_typed_codes(real, monkeypatch, case, codes):
+    plan, view = _complete()
+    warrant = current.ProducerProvenance(case != "unwarranted", () if case != "unwarranted"
+                                         else ("producer_source_closure_absent",))
+    shaped = _shaped(real, plan, view, warrant)
+    if case == "unqualified":
+        shaped = replace(shaped, anchor=real["bodies"]["anchor"])
+    elif case == "foreign_plan":
+        other, other_view = _complete(intended_use="bank")
+        shaped = replace(shaped, plan=other, view=other_view)
+    monkeypatch.setattr(sa.RegisteredClaimGradeVerifier, "reopen_pair", lambda _self, _pair: shaped)
+    verifier = (object() if case == "unregistered" else
+                sa.RegisteredClaimGradeVerifier(real["projection"], real["source"], real["receipts"]))
+    result = _eligibility(plan, view, verifier, real["pair"])
+    assert result.status == "refused"
+    assert result.reasons == tuple(_refused(code) for code in codes) + (GRADER_MISSING,)
+
+
+def test_receipts_from_a_different_projector_pin_refuse_typed(real, tmp_path):
+    expected = ob._plain(real["closure"].expected_native_producer_source)
+    expected["measurement_capture"]["callables"][0]["identity"]["implementation_sha256"] = "e" * 64
+    closure = sa.ProjectionSourceClosure(real["closure"].root_commit,
+                                         dict(real["closure"].root_source_sha256), expected)
+    other = sa.PinnedRootProjection(real["root"], source_closure=closure)
+    receipts = mc.ArtifactStore(tmp_path / "other-pin-receipts")
+    try:
+        refs = {}
+        for arm, ref in (("anchor", real["pair"].anchor), ("candidate", real["pair"].candidate)):
+            event = real["receipts"].read(ref.locator, ref.sha256)["source_event"]
+            refs[arm] = other.produce_receipt(source_store=real["source"],
+                source_locator=event["locator"], source_sha256=event["sha256"], receipt_store=receipts)
+        pair = replace(real["pair"], anchor=refs["anchor"], candidate=refs["candidate"])
+        plan = ep.ExperimentPlan.from_dict(real["events"]["anchor"]["payload"]["carrier"]["plan"])
+        mine = sa.RegisteredClaimGradeVerifier(other, real["source"], receipts)
+        view = mine.reopen_pair(pair).view
+        # Its own installation: compatibility-only, typed provenance refusal.
+        assert sa.RegisteredClaimGradeEligibility(mine, pair).discharge(plan, view) == (
+            "producer_provenance_unwarranted", "producer_implementation_differs")
+        # The installed (published) projector pin refuses the foreign receipt identity.
+        installed = sa.RegisteredClaimGradeVerifier(real["projection"], real["source"], receipts)
+        assert sa.RegisteredClaimGradeEligibility(installed, pair).discharge(plan, view) == (
+            "claim_grade_receipt_unverified",)
+    finally:
+        receipts.close()
+
+
+def test_receipts_are_immutable_and_tampering_refuses_at_eligibility(real, tmp_path):
+    root = tmp_path / "immutable-receipts"
+    receipts = mc.ArtifactStore(root)
+    try:
+        event = real["receipts"].read(real["pair"].anchor.locator, real["pair"].anchor.sha256)["source_event"]
+        kwargs = dict(source_store=real["source"], source_locator=event["locator"],
+                      source_sha256=event["sha256"], receipt_store=receipts)
+        first = real["projection"].produce_receipt(**kwargs)
+        assert real["projection"].produce_receipt(**kwargs) == first == real["pair"].anchor
+        cand = real["receipts"].read(real["pair"].candidate.locator, real["pair"].candidate.sha256)
+        second = real["projection"].produce_receipt(**(kwargs | {
+            "source_locator": cand["source_event"]["locator"], "source_sha256": cand["source_event"]["sha256"]}))
+        plan = ep.ExperimentPlan.from_dict(real["events"]["anchor"]["payload"]["carrier"]["plan"])
+        verifier = sa.RegisteredClaimGradeVerifier(real["projection"], real["source"], receipts)
+        view = verifier.reopen_pair(real["pair"]).view
+        path = root / first.locator
+        raw = path.read_bytes()
+        path.chmod(0o600)
+        path.write_bytes(raw.replace(b'"diagnostic"', b'"measurement"', 1))
+        # The content-addressed store refuses to rewrite the name with different bytes.
+        with pytest.raises(mc.CaptureError, match="different bytes"):
+            real["projection"].produce_receipt(**kwargs)
+        assert sa.RegisteredClaimGradeEligibility(verifier, replace(real["pair"], candidate=second)
+                                                  ).discharge(plan, view) == ("claim_grade_receipt_unverified",)
+    finally:
+        receipts.close()
+
+
+def test_eligibility_reprojection_is_deterministic_across_hash_seeds(real):
+    import json
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+    script = """import json, sys
+from pathlib import Path
+from autokernel.loop import experiment_plan as ep, measurement_capture as mc
+from autokernel.loop import validation_claim_receipt as cr, validation_semantic_adapter as sa
+from autokernel import schemas
+args = json.loads(sys.argv[1])
+closure = sa.ProjectionSourceClosure(args["commit"], args["pins"], args["expected"])
+projection = sa.PinnedRootProjection(Path(args["root"]), source_closure=closure)
+source, receipts = mc.ArtifactStore(Path(args["source"])), mc.ArtifactStore(Path(args["receipts"]))
+pair = cr.ClaimGradeReceiptPairReference.from_dict(args["pair"])
+verifier = sa.RegisteredClaimGradeVerifier(projection, source, receipts)
+actual = verifier.reopen_pair(pair)
+codes = sa.RegisteredClaimGradeEligibility(verifier, pair).discharge(actual.plan, actual.view)
+print(json.dumps({"bodies": [schemas.content_hash(mc._plain(b)) for b in (actual.anchor, actual.candidate)],
+                  "codes": list(codes), "warranted": actual.producer_provenance.warranted}))
+"""
+    args = json.dumps({"commit": real["closure"].root_commit, "root": str(real["root"]),
+        "pins": dict(real["closure"].root_source_sha256),
+        "expected": ob._plain(real["closure"].expected_native_producer_source),
+        "source": str(real["source"].root), "receipts": str(real["receipts"].root),
+        "pair": real["pair"].to_dict()})
+    package_root = str(Path(sa.__file__).resolve().parents[2])
+    rows = [json.loads(subprocess.check_output([sys.executable, "-c", script, args], text=True,
+        timeout=120, env={**os.environ, "PYTHONHASHSEED": str(seed), "PYTHONPATH": package_root}))
+        for seed in (1, 977)]
+    expected = [sa.schemas.content_hash(ob._plain(real["bodies"][arm])) for arm in ("anchor", "candidate")]
+    assert rows == [{"bodies": expected, "codes": ["claim_grade_receipt_unqualified"], "warranted": True}] * 2

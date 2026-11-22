@@ -43,6 +43,9 @@ CLAIM_USES = frozenset({
     "certify_overlap", "headline", "release",
 })
 KNOWN_USES = frozenset({"explore", "nominate", "rank"}) | CLAIM_USES
+# Experimental champion selection never implies deployment authority.
+DEPLOYMENT_USES = frozenset({"validate_production", "headline", "release"})
+_GRADER_MISSING = "shared registered ClaimTuple grader adapter is not integrated"
 
 # Exact protocol identity can be checked structurally; its semantic attestations
 # require a trusted adapter that is deliberately absent from v1.
@@ -773,9 +776,19 @@ def eligibility(plan: ExperimentPlan, view: AdmissibleUnitView,
         if plan.calibration_ref is None:
             refusals.append("strict-search gate requires registered calibration reference")
         # A string/dict supplied by an actor is intentionally never a ClaimTuple.
-        undefined.append("shared registered ClaimTuple grader adapter is not integrated")
+        undefined.append(_GRADER_MISSING)
     if plan.record_class == "registered_claim" and intended_use in CLAIM_USES:
-        undefined.append("shared registered ClaimTuple grader adapter is not integrated")
+        undefined.append(_GRADER_MISSING)
+    if _GRADER_MISSING in undefined and registered_claim_grade is not None:
+        from .validation_semantic_adapter import RegisteredClaimGradeEligibility
+        if type(registered_claim_grade) is RegisteredClaimGradeEligibility:
+            # Receipts are reprojected now; only the exact missing-adapter refusal is discharged.
+            codes = registered_claim_grade.discharge(plan, view)
+            refusals.extend(f"registered claim-grade receipt refused: {code}" for code in codes)
+            if not codes:
+                undefined.remove(_GRADER_MISSING)
+                if intended_use in DEPLOYMENT_USES:
+                    undefined.append("deployment use requires the owning qualified serving decision")
 
     if refusals:
         return _disposition("refused", refusals + undefined)
