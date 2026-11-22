@@ -309,3 +309,138 @@ def test_actual_actor_finish_is_not_scheduler_settlement_and_replays_without_rel
             {k: v for k, v in item.items() if k != "clock_known"} for item in final["data"]["items"]]
         assert all(not item["clock_known"] for item in replay["data"]["items"])  # no registered current clock
         assert replay["data"]["finished_count"] == final["data"]["finished_count"]
+
+
+def _v4(controller):
+    unified = controller.snapshot()["unified"]
+    assert unified["schema"] == cc.UNIFIED_PROJECTION_SCHEMA_V4
+    return unified
+
+
+def test_v4_resource_and_candidate_sections_come_from_replayed_owner_indexes(tmp_path, monkeypatch):
+    from . import candidate_transactions as transactions
+    from .test_candidate_transactions import FakeGitBackend
+    from .test_candidate_manifest import _base, _next, _state
+    runtime, controller, _, engine = _runtime(tmp_path, monkeypatch)
+    try:
+        assert controller.snapshot()["unified"]["schema"] == cc.UNIFIED_PROJECTION_SCHEMA_V3  # opt-in only
+        with pytest.raises(cc.ControlRefused, match="registered runtime owner"):
+            controller.connect_aggregate_projection(object())
+        controller.connect_aggregate_projection(runtime)
+        idle = _v4(controller)
+        assert idle["resources"]["status"] == "available" and idle["resources"]["granted"] is None
+        assert idle["candidate"]["status"] == "not_connected"  # typed absence, not readiness
+        assert idle["candidate"]["accumulated_identity"] is None
+        assert runtime.recover().status == "recovered" and runtime.tick().status == "settled"
+        unified = _v4(controller)
+        resources, receipts = unified["resources"], engine.export_state().receipts
+        assert resources["used"]["receipt_count"] == len(receipts) == 1
+        assert resources["used"]["view_digest"] == engine.accounting_view().view_digest
+        assert resources["held"]["lifecycle_event_count"] == controller._worker_projection.revision > 0
+        assert resources["held"]["active_worker_count"] == 0 and resources["requested"] is None
+        # Runtime observation alone (a settled tick) does not make the candidate ready.
+        assert unified["runtime"]["status"] == "settled" and unified["candidate"]["status"] == "not_connected"
+        base, candidate = _base(), _next(_base(), 0)
+        manager = transactions.CandidateTransactions(controller, git_backend=FakeGitBackend())
+        manager.initialize(request_id="init", state=_state(base), manifest=base)
+        manager.integrate(request_id="integrate-1", previous=base, candidate=candidate)
+        row = _v4(controller)["candidate"]
+        assert row["status"] == "available" and row["projection_lag_events"] == 3
+        assert row["replay_verified"] is False  # committed, not yet re-derived by the replayer
+        assert row["accumulated_identity"] == candidate.manifest_digest
+        assert row["frozen_production_identity"] == base.production_ref_digest
+        assert row["validated_identity"] is None and row["pending_phase"] is None
+        assert row["validation_debt"] == {"count": 0, "items": [], "truncated": False}
+        manager.inspect()  # the trusted replayer, not the publisher, re-derives the cache
+        verified = _v4(controller)["candidate"]
+        assert verified["replay_verified"] is True and verified["projection_lag_events"] == 0
+        assert verified["accumulated_identity"] == candidate.manifest_digest
+        # Fixture-only restart shape: entries replayed, trusted cache not yet rebuilt.
+        monkeypatch.setattr(controller, "_candidate_projection_cache", None)
+        monkeypatch.setattr(controller, "_candidate_projection_position", 0)
+        stale = _v4(controller)["candidate"]
+        assert stale["status"] == "available" and stale["replay_verified"] is False
+        assert stale["projection_lag_events"] == len(controller._candidate_entries) == 6
+        manager.inspect()
+        monkeypatch.setattr(controller, "_lifecycle_provider", None)
+        absent = _v4(controller)["resources"]
+        assert absent["status"] == "not_connected" and absent["held"] is None
+        assert absent["used"]["receipt_count"] == 1  # scheduler accounting still has its owner
+    finally:
+        runtime.close()
+        controller.close()
+
+
+def test_v4_validator_refuses_fabricated_readiness_and_old_shapes_still_validate(tmp_path, monkeypatch):
+    runtime, controller, _, _ = _runtime(tmp_path, monkeypatch)
+    try:
+        legacy = controller.snapshot()
+        assert cc.validate_snapshot_v3(legacy)["unified"]["schema"] == cc.UNIFIED_PROJECTION_SCHEMA_V3
+        controller.connect_aggregate_projection(runtime)
+        good = controller.snapshot()
+        cases = [("resources", "held", {"lifecycle_event_count": 1, "active_worker_count": 0,
+                                         "held_receipt_count": 0}, "not_connected"),
+                 ("candidate", "projection_lag_events", 2, "available"),
+                 ("candidate", "accumulated_identity", "a" * 64, "available")]
+        for section, field, value, status in cases:
+            bad = copy.deepcopy(good)
+            bad["unified"][section]["status"] = status
+            bad["unified"][section][field] = value
+            if section == "resources":
+                bad["unified"]["resources"]["held"] = value
+            with pytest.raises(cc.ControlRefused):
+                cc.validate_snapshot_v3(bad)
+        bad = copy.deepcopy(good)
+        bad["unified"]["resources"]["used"]["receipt_count"] = 7
+        with pytest.raises(cc.ControlRefused, match="scheduler accounting"):
+            cc.validate_snapshot_v3(bad)
+        bad = copy.deepcopy(good)
+        bad["unified"]["candidate"]["schema"] = "epyc.autokernel.unified_candidate_status.v1"
+        with pytest.raises(cc.ControlRefused):
+            cc.validate_snapshot_v3(bad)
+    finally:
+        runtime.close()
+        controller.close()
+
+
+def test_v4_sections_bound_samples_but_keep_exact_counts():
+    from types import SimpleNamespace
+    debt = tuple(f"batch-{index:03d}" for index in range(40)) + ("x" * 600,)
+    from .test_candidate_manifest import _base, _state
+    state = _state(_base()).to_dict()
+    state["validation_debt"] = list(debt)
+    assert A.candidate_projection(None, verified=False, lag=0, pending_phase=None)["status"] == "not_connected"
+    opening = A.candidate_projection(None, verified=False, lag=1, pending_phase="INTENT")
+    assert opening["status"] == "unknown" and opening["accumulated_identity"] is None
+    row = A.candidate_projection(state, verified=False, lag=2, pending_phase="PREPARED")
+    assert row["status"] == "available" and row["projection_lag_events"] == 2
+    assert row["validation_debt"]["count"] == 41 and len(row["validation_debt"]["items"]) == A.DEBT_ROWS
+    assert row["validation_debt"]["truncated"] is True
+    too_many = copy.deepcopy(row)
+    too_many["validation_debt"]["items"] = [f"b{index}" for index in range(A.DEBT_ROWS + 1)]
+    too_many["validation_debt"]["count"] = A.DEBT_ROWS + 1
+    with pytest.raises(ValueError, match="bound"):
+        A.validate_candidate(too_many)
+    gpus = {f"gpu{index}": 1.0 for index in range(12)}
+    accounting = SimpleNamespace(receipt_count=3, held_seconds=1.0, physical_region_seconds=1.0,
+                                 memory_byte_seconds=0.0, gpu_device_seconds=gpus, view_digest="d" * 64)
+    resources = A.resource_projection(connected=False, pending=None, intent=None, lifecycle=None,
+                                      accounting=accounting, clock_domain=None, incarnation=1, now=0.0)
+    assert len(resources["used"]["gpu_device_seconds"]) == A.GPU_ROWS
+    assert resources["used"]["gpu_devices_total"] == 12 and resources["requested"] is None
+    huge = copy.deepcopy(resources)
+    huge["used"]["gpu_device_seconds"] = {f"g{index}": 1.0 for index in range(A.GPU_ROWS + 1)}
+    with pytest.raises(ValueError, match="bound"):
+        A.validate_resources(huge)
+    pending = {"worker_id": "w", "worker_generation": 2, "request_digest": "e" * 64,
+               "occurred_at": "2026-11-22T00:00:00Z", "supervisor_incarnation": 1,
+               "data": {"authorization_deadline": 50.0, "clock_domain": "other"}}
+    lifecycle = SimpleNamespace(revision=4, active={}, held_receipts={})
+    foreign = A.resource_projection(connected=True, pending=pending, intent=None, lifecycle=lifecycle,
+                                    accounting=accounting, clock_domain="mine", incarnation=1, now=10.0)
+    assert foreign["requested"]["clock_known"] is False  # original expiry is not re-aged across clocks
+    assert foreign["requested"]["authorization_remaining_seconds"] is None
+    pending["data"]["clock_domain"] = "mine"
+    same = A.resource_projection(connected=True, pending=pending, intent=None, lifecycle=lifecycle,
+                                 accounting=accounting, clock_domain="mine", incarnation=1, now=10.0)
+    assert same["requested"]["authorization_remaining_seconds"] == 40.0

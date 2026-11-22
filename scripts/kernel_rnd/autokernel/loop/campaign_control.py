@@ -45,6 +45,7 @@ SNAPSHOT_SCHEMA_V3 = "epyc.autokernel.campaign_snapshot.v3"
 UNIFIED_PROJECTION_SCHEMA = "epyc.autokernel.unified_campaign_projection.v1"
 UNIFIED_PROJECTION_SCHEMA_V2 = "epyc.autokernel.unified_campaign_projection.v2"
 UNIFIED_PROJECTION_SCHEMA_V3 = "epyc.autokernel.unified_campaign_projection.v3"
+UNIFIED_PROJECTION_SCHEMA_V4 = "epyc.autokernel.unified_campaign_projection.v4"
 RUNTIME_OBSERVATION_FIELDS = frozenset({
     "status", "reason", "reason_truncated", "observed_at", "observation_sequence",
     "retry_after_seconds", "work_kind", "target_revision", "transition_id",
@@ -317,6 +318,28 @@ def validate_snapshot_v3(value: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(value, Mapping) or set(value) != SNAPSHOT_V3_FIELDS:
         raise ControlRefused("v3 snapshot has missing/unknown fields")
     row = copy.deepcopy(dict(value))
+    if isinstance(row.get("unified"), Mapping) and row["unified"].get("schema") == UNIFIED_PROJECTION_SCHEMA_V4:
+        unified, legacy = row["unified"], copy.deepcopy(row)  # v4 = v3 + owner-derived resource/candidate
+        try:
+            resources = aggregates.validate_resources(unified.get("resources"))
+            aggregates.validate_candidate(unified.get("candidate"))
+            if any(resources["used"][key] != unified["scheduler"]["accounting"][key]
+                   for key in ("receipt_count", "view_digest")):
+                raise ValueError("resource usage differs from scheduler accounting")
+            for part, key in (("requested", "occurred_at"), ("granted", "recorded_at")):
+                if resources[part] is not None and datetime.fromisoformat(resources[part][key].replace("Z", "+00:00")) \
+                        > datetime.fromisoformat(row["generated_at"].replace("Z", "+00:00")):
+                    raise ValueError("resource record is newer than snapshot")
+        except (ValueError, TypeError, KeyError, OverflowError) as exc:
+            raise ControlRefused(str(exc)) from exc
+        legacy["unified"].update(schema=UNIFIED_PROJECTION_SCHEMA_V3, resources={
+            "schema": "epyc.autokernel.unified_resource_status.v1", "status": "not_connected", "reason": "v4 carrier",
+            "requested": None, "granted": None, "held": None, "used": None}, candidate={
+            "schema": "epyc.autokernel.unified_candidate_status.v1", "status": "not_connected", "reason": "v4 carrier",
+            "accumulated_identity": None, "validated_identity": None, "frozen_production_identity": None,
+            "validation_debt": None})
+        validate_snapshot_v3(legacy)
+        return row
     if isinstance(row.get("unified"), Mapping) and row["unified"].get("schema") == UNIFIED_PROJECTION_SCHEMA_V3:
         unified = row["unified"]
         if set(unified) != {"schema", "scheduler", "resources", "actors", "evidence", "candidate",
@@ -4588,7 +4611,8 @@ class CampaignController:
             base["schema"] = SNAPSHOT_SCHEMA_V3
             base["producer_schema"] = SNAPSHOT_SCHEMA_V3
             base["unified"] = self._unified_projection_locked()
-            if base["unified"]["schema"] in {UNIFIED_PROJECTION_SCHEMA_V2, UNIFIED_PROJECTION_SCHEMA_V3}:
+            if base["unified"]["schema"] in {UNIFIED_PROJECTION_SCHEMA_V2, UNIFIED_PROJECTION_SCHEMA_V3,
+                                             UNIFIED_PROJECTION_SCHEMA_V4}:
                 base["unified"]["worker_timing"] = self._runtime_worker_timing_locked(base)
             return validate_snapshot_v3(base)
         if self.snapshot_version == 2:
@@ -4766,7 +4790,33 @@ class CampaignController:
             result["actors"] = {"schema": "epyc.autokernel.unified_actor_status.v2",
                 "status": "unknown" if any(item["status"] == "unknown" for item in parts.values()) else "available",
                 "reason": "original preparation observations; installation is not execution authority", **parts}
+            if getattr(self, "_aggregate_projection_token", None) is self._lifetime_token:
+                active = self._worker_projection.active  # <=2 entries follow the latest COMMITTED one
+                latest = next((entry for entry in reversed(self._candidate_entries[-3:])
+                               if entry.payload["phase"] == "COMMITTED"), None)
+                result.update(schema=UNIFIED_PROJECTION_SCHEMA_V4, resources=aggregates.resource_projection(
+                    connected=self._lifecycle_provider is not None, pending=self._acquisition_projection.pending,
+                    intent=next((row for row in self._active_worker_events if active
+                                 and row["event"] == "OWNED_LAUNCH_INTENT"), None),
+                    lifecycle=self._worker_projection, accounting=self._scheduler_engine.accounting_view(),
+                    clock_domain=self._runtime_clock_domain, incarnation=self.supervisor_incarnation,
+                    now=time.monotonic()), candidate=aggregates.candidate_projection(
+                    None if latest is None else latest.payload["data"]["state"],
+                    verified=latest is not None and latest.seq <= getattr(
+                        self._candidate_projection_cache, "last_seq", -1),
+                    lag=len(self._candidate_entries) - self._candidate_projection_position,
+                    pending_phase=None if self._candidate_pending is None
+                    else "PREPARED" if self._candidate_prepared else "INTENT"))
         return result
+
+    def connect_aggregate_projection(self, runtime) -> None:
+        """Opt the registered runtime's snapshots into projection v4 (report-only sections)."""
+        with self._mutex:
+            self._require_active_locked()
+            if (getattr(self, "_runtime_projection_owner", None) is not runtime
+                    or self._runtime_projection_token is not self._lifetime_token):
+                raise ControlRefused("aggregate projection requires the registered runtime owner")
+            self._aggregate_projection_token = self._lifetime_token
 
     def _runtime_worker_timing_locked(self, snapshot):
         """Project an original deadline, not activity, grants, or timeout authority."""
@@ -5030,7 +5080,7 @@ __all__ = ["ACTIVE_WORKER_V2_FIELDS", "AdmissionDecision", "CampaignController",
            "COMMAND_SCHEMA", "ControlRefused", "DriverAdmissionClosed",
            "SNAPSHOT_FILE", "SNAPSHOT_SCHEMA",
            "SNAPSHOT_SCHEMA_V2", "SNAPSHOT_V2_FIELDS", "TrustedGrant",
-           "SNAPSHOT_SCHEMA_V3", "SNAPSHOT_V3_FIELDS", "UNIFIED_PROJECTION_SCHEMA",
+           "SNAPSHOT_SCHEMA_V3", "SNAPSHOT_V3_FIELDS", "UNIFIED_PROJECTION_SCHEMA", "UNIFIED_PROJECTION_SCHEMA_V4",
            "DRIVER_SETTLEMENT_SCHEMA", "DRIVER_SETTLEMENT_RECEIPT_SCHEMA",
            "command_digest", "may_start_stage", "resolved_config_digest",
            "validate_command", "validate_snapshot_v2", "validate_snapshot_v3"]

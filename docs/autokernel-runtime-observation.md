@@ -1,7 +1,7 @@
 # Standalone runtime operational observation
 
 The existing `campaign_snapshot.v3` carrier accepts a closed
-`unified_campaign_projection.v2` and additive v3. The controller registers exactly one concrete
+`unified_campaign_projection.v2` and additive v3 and v4. The controller registers exactly one concrete
 `StandaloneRuntime` owner per controller lifetime. Controllers without that owner
 continue producing the exact old unified projection v1. This is a data-plane addition;
 ROOT's existing `/loop`, `/api/loop`, health envelope and browser consume it. There is
@@ -95,12 +95,39 @@ old source facts are historical even during a valid long owned operation. A new
 incarnation starts undated and recovers only from its own original indexes. No owner
 means explicitly `not_connected`; an installed owner not yet observed is `unknown`.
 
+## Resource and candidate sections (projection v4, AKU-09g)
+
+`unified_campaign_projection.v4` is v3 plus `unified_resource_status.v2` and
+`unified_candidate_status.v2`. It is opt-in: `connect_aggregate_projection(runtime)`
+after the runtime registers. The default producer still emits v3. The v3 validator
+path is unchanged. A v4 snapshot is checked strictly first, then validated as v3 with
+v1 `not_connected` carriers in place of the two sections.
+
+- **Resources.** `requested` comes from the pending acquisition INTENT. Its original
+  authorization deadline is aged only on the same incarnation and monotonic clock domain;
+  otherwise `clock_known=false` and there is no remainder. `granted` is the grant identity
+  recorded in the active worker's launch intent. It is **not a live grant**: the snapshot
+  still says `execution_authorized=false`. `held` counts lifecycle events, active workers
+  and retained held receipts. `used` is the scheduler accounting view. The validator checks
+  that its receipt count and view digest equal `scheduler.accounting`. Without a lifecycle
+  provider the section is `not_connected`, with only `used` present.
+- **Candidate.** The section reports the latest COMMITTED state from the controller's
+  in-memory candidate journal index: the accumulated tip, the validated pointer, the frozen
+  production ref, the validation debt (exact count, at most 16 sampled IDs of up to 128
+  characters) and `gate_due`. It also gives the pending transaction phase and how far the
+  trusted replayer's cache lags. `replay_verified` is true only once the replayer has
+  re-derived that entry. The publisher never replays. The validated pointer is not
+  validation authority. With no entries the section is `not_connected`. An opening intent
+  with no committed state is `unknown`, and no state is inferred for it.
+
+Each section is bounded to 8 KiB, and the resource GPU map to 8 sampled devices with an
+exact total. Runtime observation alone never makes either section ready.
+
 ## Remaining connections
 
-This is not all of AKU-09. Resource and candidate sections remain `not_connected`.
-Their actual lifecycle/held accounting and candidate lineage/validation/frozen-production
-sources need separate bounded projections. No resource or candidate authority is inferred
-from the connected operational/preparation/evidence observations.
+ROOT's `/loop` parser and page still accept only projection v1 to v3. They must consume v4
+before any producer opts in. Service configuration, health/freshness/control acceptance
+and monitored reliability remain AKU-12 work.
 
 Hermetic tests cross actual runtime/controller/Journal paths and ROOT/browser readers.
 Tiny child and profile/calibration provider observations are labelled fixtures, not
