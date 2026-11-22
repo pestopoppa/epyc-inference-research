@@ -14,6 +14,7 @@ import pytest
 from .. import journal as journal_module
 from . import (campaign_control, driver_execution, scheduling, standalone_runtime as sr,
                unified_driver, unified_worker, worker_lifecycle)
+from .settlement_test_support import SETTLE, settled_receipt
 from .test_driver_execution import (_command, _owned_stack, _measure,
                                     DirectUnitAuthority)
 
@@ -214,8 +215,7 @@ def test_restart_after_terminal_without_durable_held_receipt_stays_fenced(
     real_run = lifecycle.run_stage
     monkeypatch.setattr(lifecycle, "run_stage", lambda *a, **k: (
         children.__setitem__("count", children["count"] + 1) or real_run(*a, **k)))
-    monkeypatch.setattr(
-        controller, "unified_driver_settle",
+    monkeypatch.setattr(controller, SETTLE,
         lambda _value: (_ for _ in ()).throw(OSError("fixture crash before settlement")))
     try:
         assert runtime.tick().status != "settled"
@@ -240,7 +240,7 @@ def test_restart_after_settlement_reply_loss_does_not_reopen_work(tmp_path, monk
     runtime.recover()
     children = {"count": 0}
     real_run = lifecycle.run_stage
-    real_settle = controller.unified_driver_settle
+    real_settle = getattr(controller, SETTLE)
     monkeypatch.setattr(lifecycle, "run_stage", lambda *a, **k: (
         children.__setitem__("count", children["count"] + 1) or real_run(*a, **k)))
 
@@ -248,7 +248,7 @@ def test_restart_after_settlement_reply_loss_does_not_reopen_work(tmp_path, monk
         real_settle(value)
         raise OSError("fixture lost durable settlement reply")
 
-    monkeypatch.setattr(controller, "unified_driver_settle", lose_reply)
+    monkeypatch.setattr(controller, SETTLE, lose_reply)
     with pytest.raises(sr.StandaloneRuntimeUncertain):
         runtime.tick()
     reopened_runtime, reopened, _new_lifecycle, replay_engine = _reopen_runtime(
@@ -475,7 +475,7 @@ def test_refused_before_acquisition_retains_exact_intent_for_bounded_retry(tmp_p
 def test_lost_settlement_reply_retries_finished_attempt_without_reexecution(tmp_path, monkeypatch):
     runtime, controller, lifecycle, engine = _runtime(tmp_path, monkeypatch)
     runtime.recover()
-    real_settle = controller.unified_driver_settle
+    real_settle = getattr(controller, SETTLE)
     lost = {"once": True}
     executions = {"count": 0}
     real_run = lifecycle.run_stage
@@ -491,7 +491,7 @@ def test_lost_settlement_reply_retries_finished_attempt_without_reexecution(tmp_
         return result
 
     monkeypatch.setattr(lifecycle, "run_stage", count_run)
-    monkeypatch.setattr(controller, "unified_driver_settle", lose_reply)
+    monkeypatch.setattr(controller, SETTLE, lose_reply)
     try:
         with pytest.raises(sr.StandaloneRuntimeUncertain):
             runtime.tick()
@@ -538,7 +538,7 @@ def test_run_autoretries_driver_transaction_reply_loss(tmp_path, monkeypatch):
 def test_run_autoretries_lost_settlement_reply_without_second_child(tmp_path, monkeypatch):
     runtime, controller, lifecycle, engine = _runtime(tmp_path, monkeypatch)
     stop = threading.Event()
-    real_settle = controller.unified_driver_settle
+    real_settle = getattr(controller, SETTLE)
     real_execute = runtime.executor.execute
     real_run = lifecycle.run_stage
     lost = {"once": True}
@@ -559,7 +559,7 @@ def test_run_autoretries_lost_settlement_reply_without_second_child(tmp_path, mo
         stop.set()
         return receipt
 
-    monkeypatch.setattr(controller, "unified_driver_settle", lose_reply)
+    monkeypatch.setattr(controller, SETTLE, lose_reply)
     monkeypatch.setattr(lifecycle, "run_stage", count_child)
     monkeypatch.setattr(runtime.executor, "execute", execute_then_stop)
     try:
@@ -940,7 +940,7 @@ def _assert_single_held_settlement(controller, transition_id):
     held, = [row for row in worker if row["event"] == "OWNED_HELD_RECEIPT_RETAINED"]
     settled, = _payloads(controller, journal_module.KIND_UNIFIED_DRIVER_SETTLED)
     assert settled["transition_id"] == transition_id
-    assert settled["receipt"] == held["data"]["receipt"]
+    assert settled_receipt(controller, settled) == held["data"]["receipt"]
     assert settled["outcome"] == "failed"
     assert [ref.split(":")[0] for ref in settled["terminal_refs"]] == ["lifecycle"]
     assert not controller._native_records
@@ -962,7 +962,7 @@ def test_restart_after_held_append_settles_original_transition_once_and_idempote
     if settle_crash:
         # Crash after the durable stale event but before settlement: the next process
         # settles from the accounting-only index (no live lifecycle terminal exists).
-        monkeypatch.setattr(current[1], "unified_driver_settle", lambda _value: (
+        monkeypatch.setattr(current[1], SETTLE, lambda _value: (
             _ for _ in ()).throw(OSError("fixture crash before settlement")))
         assert current[0].recover().status == "recovery_required"
         assert not _payloads(current[1], journal_module.KIND_UNIFIED_DRIVER_SETTLED)
@@ -1005,7 +1005,7 @@ def test_restored_held_lookup_is_bound_to_the_original_unsettled_selection(
     runtime.recover()
     _crash_at(runtime, lifecycle, "OWNED_HELD_RECEIPT_RETAINED")
     first = _reopen_runtime(runtime, controller, engine, monkeypatch, crashed=True)
-    monkeypatch.setattr(first[1], "unified_driver_settle", lambda _value: (
+    monkeypatch.setattr(first[1], SETTLE, lambda _value: (
         _ for _ in ()).throw(OSError("fixture crash before settlement")))
     assert first[0].recover().status == "recovery_required"
     reopened_runtime, reopened, _lifecycle, _engine = _reopen_runtime(
@@ -1249,7 +1249,7 @@ def _accepted_crash(tmp_path, monkeypatch, mode, children):
     if mode == "process_crash":
         _crash_at(runtime, lifecycle, "WORKER_RESULT_ACCEPTED")
     else:
-        monkeypatch.setattr(controller, "unified_driver_settle", lambda _value: (
+        monkeypatch.setattr(controller, SETTLE, lambda _value: (
             _ for _ in ()).throw(OSError("fixture crash before settlement")))
         with pytest.raises(sr.StandaloneRuntimeUncertain):
             runtime.tick()
@@ -1295,7 +1295,7 @@ def test_restart_after_durable_accept_settles_retained_result_once_and_idempoten
         assert "WORKER_RESULT_STALE" not in {row["event"] for row in worker}
         settled, = _payloads(current[1], journal_module.KIND_UNIFIED_DRIVER_SETTLED)
         assert settled["transition_id"] == transition_id and settled["outcome"] == "failed"
-        assert settled["receipt"] == held["data"]["receipt"]
+        assert settled_receipt(current[1], settled) == held["data"]["receipt"]
         # AKU-07h3: records the first incarnation already wrote are cited, diagnostically.
         cited = ["native-retained:" + item for item in sorted(native_before)]
         assert settled["terminal_refs"][0].startswith("lifecycle:")

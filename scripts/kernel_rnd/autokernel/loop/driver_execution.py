@@ -738,14 +738,12 @@ class UnifiedDriverExecution:
                 raise DriverExecutionRefused("single-stage owner attempt differs")
         for child in children:
             terminal = worker_lifecycle.TerminalWorker(**child["terminal"])
-            exact = self.controller.worker_terminal_for_request(
-                request_id=terminal.request_id, plan_digest=terminal.plan_digest,
-                lineage_id=terminal.lineage_id, stage_id=terminal.stage_id)
+            exact, held = self.controller.operation_child_proof(  # AKU-06l3: or restored index
+                terminal, child["binding_digest"])
             if exact is None and (child["supervisor_incarnation"]
                                   < self.controller.supervisor_incarnation):
                 continue  # a prior lifetime's child: its durable verified row is the proof
-            if (exact != terminal or self.controller.worker_held_claim_receipt(
-                    exact).to_dict() != child["receipt"]):
+            if exact != terminal or held is None or held.to_dict() != child["receipt"]:
                 raise DriverExecutionRefused(
                     "operation child terminal/held receipt is not the current lifecycle proof")
         return copy.deepcopy(dict(supplied))

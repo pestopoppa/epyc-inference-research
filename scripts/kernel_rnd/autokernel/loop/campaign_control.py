@@ -32,6 +32,7 @@ from . import maintenance_execution as maintenance_module
 from . import native_retention_catalog as retention_catalog_module
 from . import retention_owner_journal as owner_journal
 from . import operation_accounting as operation_accounting_module
+from . import operation_child_proof
 from . import scheduling
 from . import worker_lifecycle as worker_lifecycle_module
 from .native_capture_control import (CurrentOwnerToken, NativeCaptureRefused,
@@ -4605,38 +4606,31 @@ class CampaignController:
             except worker_lifecycle_module.LifecycleRefused as exc:
                 raise ControlRefused(f"child accounting binding refused: {exc}") from exc
             transition = issued["transition_id"]
+            try:  # AKU-06l3: an exact retry is a duplicate, also after a lost settle reply
+                duplicate = operation_child_proof.duplicate_child(
+                    self._driver_children.get(transition, ()), terminal, receipt, role,
+                    binding.digest)
+            except operation_child_proof.ChildProofRefused as exc:
+                raise ControlRefused(f"child accounting {exc}") from exc
+            if duplicate is not None:
+                return duplicate
             if transition in self._driver_settled:
                 raise ControlRefused("child accounting targets an already settled transition")
-            exact = self._worker_lifecycle.terminal_for_request(
-                request_id=terminal.request_id, plan_digest=terminal.plan_digest,
-                lineage_id=terminal.lineage_id, stage_id=terminal.stage_id)
-            trusted = None if exact is None else \
-                self._worker_lifecycle.trusted_held_claim_receipt(exact)
+            exact, trusted = self._operation_child_proof_locked(terminal, binding.digest)
             if (exact != terminal or trusted is None or trusted != receipt
                     or receipt.ownership_generation != terminal.worker_generation
                     or receipt.allocation_generation != terminal.grant_generation):
                 raise ControlRefused(
                     "child accounting terminal/receipt is not the exact lifecycle proof")
             chain = self._driver_children.setdefault(transition, [])
-            terminal_body = {name: getattr(terminal, name) for name in (
-                "worker_id", "worker_generation", "request_id", "plan_digest",
-                "lineage_id", "stage_id", "grant_id", "grant_generation",
-                "container_id", "return_code", "result_digest", "accepted", "reason")}
+            terminal_body = operation_child_proof.terminal_body(terminal)
             if (role not in (*operation_accounting_module.ROLES,
                              operation_accounting_module.SINGLE_STAGE_ROLE)
                     or terminal.request_id in self._driver_intent_resolutions.get(
                         transition, {})):
                 raise ControlRefused("child accounting role/request is unsupported")
             # Every original invocation is its own child, in order, exactly once: a
-            # fallback repeats its role (v2 attempt), an exact retry is a duplicate.
-            prior = next((c for c in chain if c["request_id"] == terminal.request_id
-                          or c["receipt"]["receipt_id"] == receipt.receipt_id), None)
-            if prior is not None:
-                if (prior["role"] == role and prior["terminal"] == terminal_body
-                        and prior["receipt"] == receipt.to_dict()
-                        and prior["binding_digest"] == binding.digest):
-                    return {"status": "duplicate", "digest": prior["digest"], "role": role}
-                raise ControlRefused("child accounting retry differs from durable record")
+            # fallback repeats its role (v2 attempt); exact retries returned above.
             last = chain[-1] if chain else None
             attempt = (operation_accounting_module.child_attempt(last) + 1
                        if last is not None and last["role"] == role else 0)
@@ -4671,6 +4665,21 @@ class CampaignController:
                 record_id=record["digest"])
             chain.append(copy.deepcopy(record))
             return {"status": "accepted", "digest": record["digest"], "role": role}
+
+    def _operation_child_proof_locked(self, terminal, binding_digest):
+        try:  # AKU-06l3: current lifecycle terminal, else the exact restored held index
+            return operation_child_proof.child_proof(
+                self._worker_lifecycle, self._restored_held_accounting, terminal, binding_digest)
+        except operation_child_proof.ChildProofRefused as exc:
+            raise ControlRefused(f"child proof refused: {exc}") from exc
+
+    def operation_child_proof(self, terminal, binding_digest: str):
+        """Read-only (terminal, held receipt) proof of one accounted v2 child (AKU-06l3)."""
+        with self._mutex:
+            self._require_active_locked()
+            if self._worker_lifecycle is None:
+                raise ControlRefused("worker lifecycle is unavailable")
+            return self._operation_child_proof_locked(terminal, binding_digest)
 
     def _join_child_intent_locked(self, record: Mapping[str, Any]) -> None:
         """A source-build child joins its durable intent-before-launch (AKU-06l)."""

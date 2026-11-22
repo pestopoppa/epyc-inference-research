@@ -17,6 +17,7 @@ from . import campaign_control as cc, planned_serving, scheduling
 from . import profile_preparation as pp, standalone_inputs as si, standalone_runtime as sr
 from . import target_profile_execution as tp, unified_driver as ud
 from . import worker_lifecycle as wl
+from .settlement_test_support import settled_receipt
 from .test_standalone_inputs import _document, _verifier, FullHeldProvider
 from .test_campaign_control import _command
 from .test_unified_driver import runtime_driver
@@ -169,7 +170,7 @@ def test_one_installed_owner_selects_two_cpu_gpu_target_mechanisms(tmp_path):
             snapshot = controller.current_verified_profile_result(fixture[2])
             assert snapshot["profile_event"]["loaded_identity"] == fixture[3].mechanism.loaded_identity
             assert snapshot["profile_event"]["profile_content"] == ud._freeze(fixture[5])
-            assert snapshot["settlement"]["receipt"]["backend"] == materialized.inputs.profile_requests[
+            assert settled_receipt(controller, snapshot["settlement"])["backend"] == materialized.inputs.profile_requests[
                 fixture[2]].stage_proposal.backend
         assert {result.execution_receipt["provider_held_receipt"]["backend"] for result in results} == {"cpu", "gpu"}
     finally:
@@ -500,7 +501,7 @@ def test_actual_profile_restart_reopens_original_diagnosis_without_live_issuance
         settled = _settlements(store, reopened)
         assert [item["terminal_refs"] for item in settled] == [[row["verifier_ref"]]]
         assert settled[0]["outcome"] == "prerequisite"
-        assert settled[0]["receipt"] == _held_rows(store, reopened)[0]["data"]["receipt"]
+        assert settled_receipt(reopened, settled[0]) == _held_rows(store, reopened)[0]["data"]["receipt"]
         assert counter.read_text() == "x"
         # Existing planner guard: a settlement from a later incarnation than the
         # publication grants no planner authority (accounting closes; planning does not).
@@ -596,7 +597,7 @@ def test_crashed_profile_child_settles_durable_held_cost_once_on_restart(
         settled, = _settlements(store, controller)
         held, = _held_rows(store, controller)
         assert settled["transition_id"] == transition["transition_id"]
-        assert settled["outcome"] == "failed" and settled["receipt"] == held["data"]["receipt"]
+        assert settled["outcome"] == "failed" and settled_receipt(controller, settled) == held["data"]["receipt"]
         assert [ref.split(":")[0] for ref in settled["terminal_refs"]] == ["lifecycle"]
         assert counter.read_text() == "x" and not authorized
     finally:
