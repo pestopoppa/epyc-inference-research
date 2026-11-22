@@ -100,11 +100,14 @@ class ContainedAuthoringOwner:
     """Single owner of authoring attempts for one campaign driver."""
 
     def __init__(self, *, max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
-                 finished_advice: frozenset[str] = frozenset()):
+                 finished_advice: frozenset[str] = frozenset(), journal=None):
         if type(max_output_bytes) is not int or max_output_bytes < 1:
             raise AuthoringRefused("output bound must be a positive integer")
         self.max_output_bytes = max_output_bytes
-        self._finished: set[str] = set(finished_advice)
+        # A durable AuthoringChainJournal (AKU-06d4) replays finished advice on restart.
+        self.journal = journal
+        self._finished: set[str] = set(finished_advice) | (
+            set(journal.state.finished_advice) if journal is not None else set())
         self._open: dict[str, tuple[AuthoringReservation, dict[str, Any]]] = {}
 
     @property
@@ -146,6 +149,9 @@ class ContainedAuthoringOwner:
             "aka-" + secrets.token_hex(16), digest, MappingProxyType(context),
             MappingProxyType(scope), self.max_output_bytes,
             secrets.token_bytes(32))
+        if self.journal is not None:
+            self.journal.reserved(reservation.attempt_id, digest,
+                                  selected_actor_work.actor_request.proposal.target_revision_digest)
         self._open[reservation.attempt_id] = (reservation, {
             "selected_actor_work": selected_actor_work,
             "preparation_result": preparation_result, "resolved_campaign": resolved_campaign,
@@ -156,6 +162,8 @@ class ContainedAuthoringOwner:
         """Close an attempt without output; its advice is finished, never re-granted."""
         reservation, _ = self._take(attempt_id)
         self._finished.add(reservation.advice_digest)
+        if self.journal is not None:
+            self.journal.failed(attempt_id, reservation.advice_digest, "worker_failed")
 
     def _take(self, attempt_id):
         entry = self._open.pop(attempt_id, None)
@@ -170,6 +178,17 @@ class ContainedAuthoringOwner:
         """
         reservation, inputs = self._take(attempt_id)
         self._finished.add(reservation.advice_digest)
+        try:
+            authored = self._authored(reservation, inputs, attempt_id, stdout, mac)
+        except AuthoringRefused as exc:
+            if self.journal is not None:
+                self.journal.failed(attempt_id, reservation.advice_digest, exc)
+            raise
+        if self.journal is not None:
+            self.journal.authored(authored)
+        return authored
+
+    def _authored(self, reservation, inputs, attempt_id, stdout, mac) -> AuthoredPatch:
         if not isinstance(stdout, bytes) or len(stdout) > reservation.max_output_bytes:
             raise AuthoringRefused("worker output is not bounded bytes")
         if not isinstance(mac, str) or not hmac.compare_digest(
