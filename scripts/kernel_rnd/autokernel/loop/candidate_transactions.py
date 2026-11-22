@@ -390,6 +390,7 @@ class CandidateTransactions:
             self._verify_immutable("manifest", manifest.to_dict())
         from . import native_retention_catalog, retention_consumer
         prepared = native_retention_catalog.build_native_view(capture)
+        self.last_prepared = prepared  # AKU-10d2: the maintenance caller's backend view
         job, previews = retention_consumer.prepare(
             prepared.view, policy, limit=limit, now=now)
         self.controller.validate_native_retention_frontier(prepared.frontier)
