@@ -506,7 +506,13 @@ class UnifiedCampaignDriver:
                  executable_work_kinds: Collection[str] | None = None,
                  feed_owner: Any = None,
                  calibration_requests: Sequence[Any] = (),
-                 monotonic_clock=time.monotonic) -> None:
+                 monotonic_clock=time.monotonic,
+                 stop_latch: Any = None) -> None:
+        # AK-RSM-1: the file-backed graceful stop latch (stage_receipts.StopLatch) is
+        # checked at every tick boundary in addition to the caller's stop_requested.
+        if stop_latch is not None and not callable(getattr(stop_latch, "is_set", None)):
+            raise DriverRefused("stop_latch must expose is_set()")
+        self.stop_latch = stop_latch
         self.resolved = campaign.ResolvedCampaign.from_dict(resolved_campaign.to_dict())
         self.controller = controller
         if not isinstance(scheduler_engine, scheduling.SchedulerEngine):
@@ -1032,6 +1038,10 @@ class UnifiedCampaignDriver:
     def tick(self, *, now: float | None = None, stop_requested=lambda: False) -> DriverOutcome:
         if self._pending is not None or self._poisoned:
             raise DriverTransactionUncertain("exact pending transition retry is required")
+        latch = getattr(self, "stop_latch", None)
+        if latch is not None:
+            caller_stop = stop_requested
+            stop_requested = lambda: bool(caller_stop()) or latch.is_set()  # noqa: E731
         if now is None:
             now = self._monotonic_clock()
         if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(now):

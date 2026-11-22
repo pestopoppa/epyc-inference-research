@@ -226,6 +226,35 @@ def test_stop_before_enumeration_does_not_mutate_scheduler_or_controller():
     assert not instance.controller.records
 
 
+def test_stop_latch_is_checked_at_tick_boundary(tmp_path):
+    """AK-RSM-1: a set StopLatch stops the tick exactly like stop_requested."""
+    from .stage_receipts import StopLatch
+    instance, engine, _, _, _ = runtime_driver()
+    latch = StopLatch(tmp_path / "stop.latch")
+    instance.stop_latch = latch
+    latch.request("operator graceful stop")
+    before = engine.export_state()
+    outcome = instance.tick(now=1)
+    assert outcome.status == "stopped"
+    assert engine.export_state() == before
+    assert not instance.controller.records
+    latch.clear()
+    assert instance.tick(now=1).status != "stopped"
+
+
+def test_stop_latch_must_expose_is_set():
+    import pytest as _pytest
+    with _pytest.raises(driver.DriverRefused):
+        driver.UnifiedCampaignDriver.__init__(object.__new__(driver.UnifiedCampaignDriver),
+                                              resolved_campaign=None, controller=None,
+                                              scheduler_engine=None, profiles={},
+                                              evidence_index=None, runtime_anchors=None,
+                                              runtime_dimensions={}, experiment_plans={},
+                                              profile_requests={}, actor_identities={},
+                                              native_artifact_sink_ref="x",
+                                              stop_latch=object())
+
+
 def test_standalone_once_reuses_real_controller_and_waits_without_bridge(
         tmp_path, capsys):
     recipe = canonical_recipe()
