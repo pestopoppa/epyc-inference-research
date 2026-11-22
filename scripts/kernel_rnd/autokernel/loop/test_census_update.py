@@ -62,6 +62,8 @@ class Idempotency(Base):
         self.assertIn("1047 GB/s", txt)
         self.assertIn("1263 GB/s", txt)
         self.assertLess(txt.index("## Other"), txt.index(cu.JOURNAL_HEAD))
+        h = json.load(open(self.census))["records"]["27b-q8_0|ffn_gate_up_v5i|17408x5120|n8"]["history"]
+        self.assertEqual([g for _, g in h], [1047.4, 1262.7])
 
 
 class Threshold(Base):

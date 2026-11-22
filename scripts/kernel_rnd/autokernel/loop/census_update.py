@@ -221,6 +221,8 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str) -> lis
             continue
         rec = dict(old or {}, **o, source_row=row, result_sha256=sha, measured_at=measured_at)
         rec.pop("stale", None)
+        hist = list((old or {}).get("history") or ([[old["source_row"], old["gbps"]]] if old else []))
+        rec["history"] = (hist + [[row, new]])[-8:]  # trend for the dashboard: last 8 (row, GB/s)
         c["records"][k] = rec
         moved.append(k)
     c["applied"].append({"row": row, "sha256": sha})
