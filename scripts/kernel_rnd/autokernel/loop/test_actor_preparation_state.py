@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 import os
-import stat
 import time
 from types import SimpleNamespace
 
@@ -12,15 +10,8 @@ import pytest
 
 from .. import journal
 from . import actor_preparation, actor_preparation_state as state
-from . import campaign_control, target_profile_execution
-from . import scheduling, unified_driver, worker_lifecycle
-from .test_actor_lifecycle import _held_receipt, _profile_receipt
-from .test_actor_preparation import _budgets, _fake_executable, _profiles, _request, _resolved
-from .test_campaign_control import _command
-from .test_unified_driver import runtime_driver
-from .test_unified_planner import scheduler as make_scheduler
-from .test_worker_lifecycle import ReceiptProvider
-
+from . import campaign_control, scheduling, unified_driver, worker_lifecycle
+from .test_actor_preparation import _budgets
 
 def _dimensions(value):
     return {key: value for key in state.BUDGET_KEYS}
@@ -123,281 +114,214 @@ def test_native_journal_route_accepts_only_closed_actor_events(tmp_path):
     with pytest.raises(ValueError, match="actor preparation event"):
         owner.append(journal.KIND_ACTOR_PREPARATION, malformed)
 
+def _held_by_request(controller):
+    """Provider-authored held facts retained by the controller's own worker lifecycle."""
+    return {row.payload["request_id"]: row.payload["data"]["receipt"]
+            for row in controller._journal.read_all()
+            if row.kind == journal.KIND_WORKER_LIFECYCLE
+            and row.payload["event"] == "OWNED_HELD_RECEIPT_RETAINED"}
 
-def test_controller_selected_intent_finish_and_restart_projection(tmp_path):
-    import json
-    import os
-    import stat
-    from . import target_profile_execution as profile_execution
-    from .test_actor_lifecycle import _publish_test_owner_accessors
-    from .test_target_profile_execution import _sha
-    from .test_worker_lifecycle import MockProvider
 
-    resolved = _resolved()
-    binary = _fake_executable(tmp_path)
-    profiles = _profiles(binary)
-    request = _request(profiles["gpt-5.6-sol"])
-    request_row = request.to_dict()
-    request_digest = actor_preparation._digest(request_row)
-    stage_plan_digest = request_row["cache_key"]
-    selected_stage = "b" * 64
-    issued = {
-        "catalog_id": "c" * 64, "transition_id": "d" * 64,
-        "selection": {"status": "selected", "proposal_digest": selected_stage},
-        "catalog": {"work_by_stage_digest": {selected_stage: {
-            "kind": "actor_preparation", "payload": request_row,
-            "stage_plan_digest": stage_plan_digest,
-            "stage_plan_binding": "preparation_contract",
-        }}},
-    }
-    store = tmp_path / "store"
-    (tmp_path / "containers").mkdir()
-    controller = campaign_control.CampaignController(
-        resolved, store, snapshot_version=2,
-        lifecycle_provider=MockProvider(tmp_path / "containers"),
-        readiness_check=lambda: (True, None))
-    controller.__enter__()
-    controller.apply_command(_command(resolved, "resume", "resume", 0))
-    _publish_test_owner_accessors(controller)
-    now = 20.0
-    profile_request = _profile_receipt(resolved, now=now).to_dict()["profile_request"]
-    profile_request["stage_proposal"] = {
-        "target_revision": "a" * 64, "stage_class": "prerequisite"}
-    profile_stage_plan = state.digest(profile_request)
-    profile_stage = "e" * 64
-    profile_issued = {
-        "catalog_id": "f" * 64, "transition_id": "1" * 64,
-        "selection": {"status": "selected", "proposal_digest": profile_stage},
-        "catalog": {"work_by_stage_digest": {profile_stage: {
-            "kind": "profile_preparation", "payload": profile_request,
-            "stage_plan_digest": profile_stage_plan,
-            "stage_plan_binding": "preparation_contract"}}},
-    }
-    profile_content = {"hotspots": [{"symbol": "kernel_x", "samples": 1}]}
-    loaded_identity = {
-        "target_revision_digest": "a" * 64, "model_digest": "3" * 64,
-        "quantization": "Q4_K_M", "recipe_digest": "4" * 64,
-        "executable_digest": "5" * 64, "dso_digest": "6" * 64,
-    }
-    artifact_identity = {"kind": "fixture", "sha256": "2" * 64}
-    carrier = {
-        "schema": "epyc.autokernel.profile_measurement_carrier.v1",
-        "profile_source_id": profile_execution.PROFILE_SOURCE_ID,
-        "validation_source_id": profile_execution.VALIDATION_SOURCE_ID,
-        "run_id": "state-projection-profile",
-        "profile_claim_tuple": {"claim_id": "profile"},
-        "validation_claim_tuple": {"claim_id": "validation"},
-    }
-    profile_output = {
-        "schema": profile_execution.PROFILE_OUTPUT_SCHEMA,
-        "profile_content": profile_content, "loaded_identity": loaded_identity,
-        "artifact_identity": artifact_identity, "measurement_carrier": carrier,
-    }
-    profiler = tmp_path / "profile-fixture"
-    profiler.write_text("#!/usr/bin/env python3\nprint(" + repr(json.dumps(profile_output)) + ")\n")
-    profiler.chmod(profiler.stat().st_mode | stat.S_IXUSR)
-    controller._driver_issued = {profile_issued["catalog_id"]: profile_issued}
-    mechanism = profile_execution.ProfileMechanism(
-        "state-profile", profiler, _sha(profiler), tmp_path,
-        {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}, loaded_identity,
-        1.0, 0.5, 4096)
-    verified = profile_execution.TargetProfileExecution(
-        controller=controller, mechanism=mechanism).prepare(
-            profile_request=profile_request, catalog_id=profile_issued["catalog_id"],
-            transition_id=profile_issued["transition_id"],
-            stage_plan_digest=profile_stage_plan,
-            clock_domain=_profile_receipt(resolved, now=now).clock_domain,
-            verified_at=now - 1.0, valid_until=now + 30.0)
-    controller._driver_issued = {issued["catalog_id"]: issued}
-    receipt = verified
-    controller._current_actor_profile_receipts.clear()
-    with pytest.raises(campaign_control.ControlRefused, match="current producer receipt"):
-        controller.reserve_actor_preparation(
-            request=request_row, request_digest=request_digest,
-            stage_plan_digest=stage_plan_digest,
-            actor_profile=profiles["gpt-5.6-sol"].to_dict(),
-            actor_profile_digest=profiles["gpt-5.6-sol"].digest,
-            target_profile_receipt=verified.to_dict(),
-            target_profile_receipt_digest=verified.digest,
-            budgets=_budgets().to_dict(), now=now, clock_domain=receipt.clock_domain)
-    controller._current_actor_profile_receipts[verified.digest] = verified
-    reservation = controller.reserve_actor_preparation(
-        request=request_row, request_digest=request_digest,
-        stage_plan_digest=stage_plan_digest,
-        actor_profile=profiles["gpt-5.6-sol"].to_dict(),
-        actor_profile_digest=profiles["gpt-5.6-sol"].digest,
-        target_profile_receipt=verified.to_dict(),
-        target_profile_receipt_digest=verified.digest,
-        budgets=_budgets().to_dict(), now=now, clock_domain=receipt.clock_domain)
-    assert reservation["transition_id"] == issued["transition_id"]
-    with pytest.raises(campaign_control.ControlRefused, match="unresolved"):
-        controller.reserve_actor_preparation(
-            request=request_row, request_digest=request_digest,
-            stage_plan_digest=stage_plan_digest,
-            actor_profile=profiles["gpt-5.6-sol"].to_dict(),
-            actor_profile_digest=profiles["gpt-5.6-sol"].digest,
-            target_profile_receipt=verified.to_dict(),
-            target_profile_receipt_digest=verified.digest,
-            budgets=_budgets().to_dict(), now=now, clock_domain=receipt.clock_domain)
-    outcome = actor_preparation.StageOutcome(
-        reservation["reservation_id"], "completed", "{}", None, 0.25, True, True)
-    fabricated = SimpleNamespace(
-        request_id=reservation["reservation_id"], plan_digest=stage_plan_digest,
-        held_started_at=1.0, held_ended_at=1.25)
-    with pytest.raises(campaign_control.ControlRefused,
-                       match="provider-authored held cost"):
-        controller.finish_actor_preparation(
-            reservation=reservation, outcome=outcome.to_dict(),
-            disposition="proposal_ready", provider_cost_receipt=fabricated)
-    assert reservation["reservation_id"] in controller._actor_preparation_state.pending
-    terminal = SimpleNamespace(
-        request_id=reservation["reservation_id"], plan_digest=stage_plan_digest,
-        worker_id="worker-cost", worker_generation=1, grant_id="grant-cost",
-        grant_generation=1, container_id="container-cost")
-    held = _held_receipt(terminal, started_at=1.0, ended_at=1.25)
-    controller._actor_trusted_held_receipts[reservation["reservation_id"]] = (
-        held, terminal)
-    controller.finish_actor_preparation(
-        reservation=reservation, outcome=outcome.to_dict(), disposition="proposal_ready",
-        provider_cost_receipt=held)
-    controller.finish_actor_preparation(
-        reservation=reservation, outcome=outcome.to_dict(), disposition="proposal_ready",
-        provider_cost_receipt=held)
-    controller.close()
-    rows = [entry for entry in journal.Journal(
-        str(store / "journal"), campaign_id=resolved.campaign_id).read_all()
-            if entry.kind == journal.KIND_ACTOR_PREPARATION]
-    assert [row.payload["event"] for row in rows] == [
-        "PROFILE_VERIFIED", "INTENT", "FINISH"]
-    with campaign_control.CampaignController(
-            resolved, store, snapshot_version=2,
-            readiness_check=lambda: (True, None)) as recovered:
-        assert reservation["reservation_id"] in recovered._actor_preparation_state.finished
-        recovered._driver_issued = {issued["catalog_id"]: issued}
-        producer = target_profile_execution.TargetProfileExecution(
-            controller=recovered,
-            mechanism=target_profile_execution.ProfileMechanism(
-                "fixture-profile", binary, hashlib.sha256(binary.read_bytes()).hexdigest(),
-                tmp_path, {}, {
-                    "target_revision_digest": "a" * 64, "model_digest": "3" * 64,
-                    "quantization": "fixture", "recipe_digest": "4" * 64,
-                    "executable_digest": "5" * 64, "dso_digest": "6" * 64,
-                }, 1.0, 0.5, 4096))
-        recovered.register_target_profile_producer(producer)
-        refreshed = recovered.verified_target_profile(
-            request=request_row, request_digest=request_digest,
-            stage_plan_digest=stage_plan_digest,
-            campaign_digest=recovered.config_digest,
-            target_revision_digest="a" * 64, now=now,
-            clock_domain=receipt.clock_domain)
-        assert refreshed == verified
-        changed_budgets = _budgets().to_dict()
-        changed_budgets["actor_calls_per_campaign"] += 1
+def _public_actor_sequence(tmp_path):
+    """AKU-06d: installed producer -> driver-issued profile -> genuine settlement ->
+    driver-issued actor work -> contained fixture planner/critic children.
+
+    Every authority comes from the public owner path: the installed profile binding
+    registers the producer, the runtime settles through its trusted verifier, actor
+    reservations/finishes use the provider-authored held cost of each owned terminal.
+    No issuance, current-receipt or trusted-held projection is seeded."""
+    from ..execution import worktree
+    from . import actor_lifecycle
+    from .test_profile_preparation_runtime import _start
+    from .test_source_build_execution import _git, _profiled_build_runtime
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir()
+    repo_root = tmp_path / "source"
+    repo_root.mkdir()
+    repo, snapshot, head = _git(repo_root)
+    plan = worktree.BuildPlan(
+        snapshot.path,
+        worktree.SandboxPath.create(repo_root / "build", sandbox_root=repo_root,
+                                    production_trees=()),
+        worktree.SandboxPath.create(repo_root / "actor", sandbox_root=repo_root,
+                                    production_trees=()),
+        worktree.BuildParallelism(1, cpu_list="0"), targets=("fixture",),
+        cmake_defines=(("FIXTURE", "ON"),))
+    materialized, registry, target, actor_profiles = _profiled_build_runtime(
+        runtime_root, source_revision=head, build_plan=plan)
+    controller, runtime = _start(materialized, registry)
+    assert runtime.tick().status == "settled"
+    assert controller.current_verified_profile_result(target)["settlement"] is not None
+    driver = unified_driver.UnifiedCampaignDriver(
+        resolved_campaign=runtime.driver.resolved, controller=controller,
+        scheduler_engine=runtime.driver.scheduler,
+        profiles=runtime.profile_executor.planner_profiles(time.monotonic()),
+        evidence_index=runtime.driver.evidence,
+        runtime_anchors=runtime.driver.runtime_anchors,
+        runtime_dimensions=runtime.driver.runtime_dimensions,
+        experiment_plans=runtime.driver.experiment_plans,
+        profile_requests=runtime.driver.profile_requests,
+        actor_identities=runtime.driver.actor_identities,
+        native_artifact_sink_ref=runtime.driver.sink_ref,
+        execution_inputs=runtime.driver.execution_inputs,
+        executable_work_kinds={"actor_preparation"})
+    selected = driver.materialize_actor(driver.tick(now=time.monotonic()))
+    lifecycle = actor_lifecycle.ActorLifecycleAdapter(
+        controller=controller, persistence=controller,
+        config=actor_lifecycle.ActorLifecycleConfig(
+            campaign_digest=controller.config_digest, cwd=runtime_root,
+            env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+            max_stage_seconds=5.0, teardown_seconds=1.0, max_retained_output_bytes=4096),
+        target_profile_owner=controller)
+    consumer = actor_preparation.ActorPreparationConsumer(
+        resolved_campaign=runtime.driver.resolved, profiles=actor_profiles,
+        budgets=_budgets(), capability=lifecycle, clock=time.monotonic,
+        clock_domain=worker_lifecycle.monotonic_clock_domain(), max_output_bytes=4096)
+    result = consumer.prepare(selected.actor_request, stage_plan_digest=selected.stage_plan_digest)
+    return SimpleNamespace(
+        controller=controller, runtime=runtime, materialized=materialized, registry=registry,
+        target=target, selected=selected, result=result, actor_profiles=actor_profiles,
+        cleanup=lambda: repo.remove_worktree(snapshot.path, force=True))
+
+
+def _close(sequence):
+    sequence.runtime.close()
+    sequence.controller.close()
+
+
+def _settle_actor_operation(sequence):
+    """Settle the selected operation once from its durable original planner/critic children.
+
+    No build child ran in this preparation-only scope, so the closed outcome rules allow
+    only a non-prerequisite settlement; the spent child costs stay durable."""
+    controller, selected = sequence.controller, sequence.selected
+    children = controller.unified_driver_children(selected.transition_id)
+    assert [child["role"] for child in children] == ["planner", "critic"]
+    return controller.unified_driver_settle_v2({
+        "schema": campaign_control.DRIVER_SETTLEMENT_SCHEMA_V2,
+        "catalog_id": selected.catalog_id, "transition_id": selected.transition_id,
+        "selection": selected.selection.to_dict(), "outcome": "failed",
+        "children": [child["digest"] for child in children], "denial_ref": None})
+
+
+def _restart(sequence):
+    from .test_profile_preparation_runtime import _start
+    _close(sequence)
+    sequence.controller, sequence.runtime = _start(sequence.materialized, sequence.registry)
+    return sequence.controller
+
+
+def _reserve(controller, sequence, receipt, budgets):
+    request = sequence.selected.actor_request.to_dict()
+    planner = sequence.actor_profiles["actor-planner"]
+    return controller.reserve_actor_preparation(
+        request=request, request_digest=state.digest(request),
+        stage_plan_digest=sequence.selected.stage_plan_digest,
+        actor_profile=planner.to_dict(), actor_profile_digest=planner.digest,
+        target_profile_receipt=receipt.to_dict(), target_profile_receipt_digest=receipt.digest,
+        budgets=budgets, now=time.monotonic(), clock_domain=receipt.clock_domain)
+
+
+def test_driver_issued_profile_then_actor_preparation_finish_and_restart(tmp_path):
+    from . import actor_lifecycle
+    sequence = _public_actor_sequence(tmp_path)
+    try:
+        controller = sequence.controller
+        assert sequence.result.status == "proposed"
+        rows = [row.payload for row in controller._journal.read_all()
+                if row.kind == journal.KIND_ACTOR_PREPARATION]
+        assert [row["event"] for row in rows] == [
+            "PROFILE_VERIFIED", "INTENT", "FINISH", "INTENT", "FINISH"]
+        receipt = controller.current_actor_profile(sequence.target)
+        held = _held_by_request(controller)
+        for intent, finish in ((rows[1], rows[2]), (rows[3], rows[4])):
+            assert intent["catalog_id"] == sequence.selected.catalog_id
+            assert intent["transition_id"] == sequence.selected.transition_id
+            assert intent["target_profile_receipt_digest"] == receipt.digest
+            assert intent["target_profile_digest"] == rows[0]["target_profile_digest"]
+            cost = held[intent["reservation_id"]]
+            # exact held cost authored by the provider for this owned terminal
+            assert finish["charged_seconds"] == cost["ended_at"] - cost["started_at"] > 0
+            assert finish["status"] == "completed"
+        # a schema-valid but non-current receipt is not producer authority
+        forged = actor_lifecycle.TargetProfileReceipt(
+            **(receipt.to_dict() | {"verifier_ref": "caller:forged-profile"}))
+        with pytest.raises(campaign_control.ControlRefused, match="current producer receipt"):
+            _reserve(controller, sequence, forged, _budgets().to_dict())
+        settled = _settle_actor_operation(sequence)
+        assert settled["status"] == "accepted"
+        with pytest.raises(campaign_control.ControlRefused, match="one exact issued selected"):
+            _reserve(controller, sequence, receipt, _budgets().to_dict())
+        spent = controller.actor_preparation_projection().spent
+        finished = set(controller.actor_preparation_projection().finished)
+        durable = copy.deepcopy(controller._driver_settled[sequence.selected.transition_id])
+        recovered = _restart(sequence)
+        projection = recovered.actor_preparation_projection()
+        assert set(projection.finished) == finished and not projection.pending
+        assert projection.spent == spent
+        assert projection.spent["actor_calls_per_campaign"] == 2.0
+        assert recovered._driver_settled[sequence.selected.transition_id] == durable
+        assert _settle_actor_operation(sequence)["status"] == "duplicate"
+    finally:
+        _close(sequence)
+        sequence.cleanup()
+
+
+def test_durable_budget_drift_refuses_with_valid_current_producer_receipt(tmp_path):
+    sequence = _public_actor_sequence(tmp_path)
+    try:
+        controller = sequence.controller
+        request = sequence.selected.actor_request.to_dict()
+        receipt = controller.verified_target_profile(
+            request=request, request_digest=state.digest(request),
+            stage_plan_digest=sequence.selected.stage_plan_digest,
+            campaign_digest=controller.config_digest,
+            target_revision_digest=sequence.target, now=time.monotonic(),
+            clock_domain=worker_lifecycle.monotonic_clock_domain())
+        assert receipt is not None  # valid current producer authority
+        drifted = _budgets().to_dict()
+        drifted["actor_calls_per_campaign"] += 1
         with pytest.raises(campaign_control.ControlRefused,
                            match="durable campaign configuration"):
-            recovered.reserve_actor_preparation(
-                request=request_row, request_digest=request_digest,
-                stage_plan_digest=stage_plan_digest,
-                actor_profile=profiles["gpt-5.6-sol"].to_dict(),
-                actor_profile_digest=profiles["gpt-5.6-sol"].digest,
-                target_profile_receipt=refreshed.to_dict(),
-                target_profile_receipt_digest=refreshed.digest,
-                budgets=changed_budgets, now=now, clock_domain=receipt.clock_domain)
+            _reserve(controller, sequence, receipt, drifted)
+        # the unchanged durable budgets pass the drift gate and reach reinvocation refusal
+        with pytest.raises(campaign_control.ControlRefused, match="already settled"):
+            _reserve(controller, sequence, receipt, _budgets().to_dict())
+        assert not controller.actor_preparation_projection().pending
+    finally:
+        _close(sequence)
+        sequence.cleanup()
 
 
 def test_actual_driver_profile_requires_native_scheduler_binding(tmp_path):
-    driver, _fixture_engine, enrolled, target, target_digest = runtime_driver()
-    base_config, _ = make_scheduler()
-    scheduler_config = scheduling.SchedulerConfig.from_dict(
-        base_config.to_dict() | {"config_id": enrolled.campaign_id})
-    engine = scheduling.SchedulerEngine(
-        scheduler_config, scheduling.initial_state(scheduler_config, enrolled.campaign_id))
-    driver.scheduler = engine
-    cost = scheduling.ResourceVector(1.0, (), 0)
-    profile_stage = scheduling.StageProposal(
-        proposal_id="profile:actual", submitted_at=1, backend="cpu",
-        target_revision=target_digest, alias_identity=target.workload_signature,
-        frontier_id=target_digest, production_frontier=True, seed_id=None,
-        stage_class="prerequisite", estimated_duration_seconds=10,
-        estimated_claims=cost, eligible=True, eligibility_ref="2" * 64,
-        reservation_kind=None, full_region=True,
-        compatibility_authority_refs=(), safe_chunking_declared=False)
-    profile_request = unified_driver.ProfilePreparationRequest.from_dict({
-        "schema": unified_driver.PROFILE_REQUEST_SCHEMA,
-        "target_revision_digest": target_digest,
-        "stage_proposal": profile_stage.to_dict(),
-        "profile_contract": {"schema": unified_driver.PROFILE_CONTRACT_SCHEMA,
-                             "adapter_id": "fixture-profile",
-                             "adapter_digest": "9" * 64}})
-    driver.profiles = {}
-    driver.profile_requests = {target_digest: profile_request}
-    containers = tmp_path / "containers"
-    containers.mkdir()
-    provider = ReceiptProvider(containers)
-    store = tmp_path / "actual-driver-store"
-    controller = campaign_control.CampaignController(
-        enrolled, store, snapshot_version=3, scheduler_engine=engine,
-        lifecycle_provider=provider, readiness_check=lambda: (True, None))
-    controller.__enter__()
-    controller.apply_command(_command(enrolled, "resume", "resume", 0))
-    driver.controller = controller
-    issued_profile = driver.tick(now=1)
-    selected_profile = driver.materialize_profile(issued_profile)
-    loaded = {
-        "target_revision_digest": target_digest, "model_digest": "1" * 64,
-        "quantization": "fixture", "recipe_digest": "2" * 64,
-        "executable_digest": "3" * 64, "dso_digest": "4" * 64}
-    output = {
-        "schema": target_profile_execution.PROFILE_OUTPUT_SCHEMA,
-        "profile_content": {"hotspots": [{"symbol": "kernel_x", "samples": 2}]},
-        "loaded_identity": loaded,
-        "artifact_identity": {"kind": "profile-json", "sha256": "5" * 64},
-        "measurement_carrier": {
-            "schema": "epyc.autokernel.profile_measurement_carrier.v1",
-            "profile_source_id": target_profile_execution.PROFILE_SOURCE_ID,
-            "validation_source_id": target_profile_execution.VALIDATION_SOURCE_ID,
-            "run_id": "actual-profile-run",
-            "profile_claim_tuple": {"claim_id": "profile"},
-            "validation_claim_tuple": {"claim_id": "validation"}}}
-    profiler = tmp_path / "fake-profiler"
-    profiler.write_text("#!/usr/bin/env python3\nimport json\nprint(" + repr(
-        __import__("json").dumps(output)) + ")\n")
-    profiler.chmod(profiler.stat().st_mode | stat.S_IXUSR)
-    producer = target_profile_execution.TargetProfileExecution(
-        controller=controller, mechanism=target_profile_execution.ProfileMechanism(
-            "fixture-profile", profiler, hashlib.sha256(profiler.read_bytes()).hexdigest(),
-            tmp_path, {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}, loaded,
-            1.0, 0.5, 4096))
-    now = time.monotonic()
-    receipt = producer.prepare(
-        profile_request=selected_profile.profile_request.to_dict(),
-        catalog_id=selected_profile.catalog_id,
-        transition_id=selected_profile.transition_id,
-        stage_plan_digest=selected_profile.stage_plan_digest,
-        clock_domain=worker_lifecycle.monotonic_clock_domain(),
-        verified_at=now, valid_until=now + 30.0,
-        selected_work=selected_profile)
-    controller.register_target_profile_producer(producer)
-    selection = scheduling.Selection.from_dict(issued_profile.selection)
-    request_digest = state.digest(selected_profile.profile_request.to_dict())
-    terminal = controller.worker_terminal_for_request(
-        request_id="profile-" + request_digest[:24],
-        plan_digest=selected_profile.stage_plan_digest,
-        lineage_id=selected_profile.transition_id,
-        stage_id="target-profile-" + request_digest[:24])
-    assert terminal is not None
-    held = controller.actor_held_claim_receipt(terminal)
+    from .test_target_profile_execution import prepare_selected, selected_profile_owner
+    owner = selected_profile_owner(tmp_path)
+    controller = owner.controller
+    try:
+        receipt = prepare_selected(owner)
+        selected_profile = owner.selected
+        selection = scheduling.Selection.from_dict(owner.issued.selection)
+        request_digest = state.digest(selected_profile.profile_request.to_dict())
+        terminal = controller.worker_terminal_for_request(
+            request_id="profile-" + request_digest[:24],
+            plan_digest=selected_profile.stage_plan_digest,
+            lineage_id=selected_profile.transition_id,
+            stage_id="target-profile-" + request_digest[:24])
+        assert terminal is not None
+        held = controller.actor_held_claim_receipt(terminal)
 
-    class ExactFixtureSettlementValidator:
-        def __call__(self, value):
-            assert value["receipt"] == held.to_dict()
-            assert value["terminal_refs"] == [receipt.verifier_ref]
-            return value
+        class ExactFixtureSettlementValidator:
+            def __call__(self, value):
+                assert value["receipt"] == held.to_dict()
+                assert value["terminal_refs"] == [receipt.verifier_ref]
+                return value
 
-    controller.register_unified_settlement_validator(ExactFixtureSettlementValidator())
-    controller.unified_driver_settle({
-        "schema": campaign_control.DRIVER_SETTLEMENT_SCHEMA,
-        "catalog_id": selected_profile.catalog_id,
-        "transition_id": selected_profile.transition_id,
-        "selection": selection.to_dict(), "receipt": held.to_dict(),
-        "outcome": "prerequisite", "terminal_refs": [receipt.verifier_ref]})
+        controller.register_unified_settlement_validator(ExactFixtureSettlementValidator())
+        controller.unified_driver_settle({
+            "schema": campaign_control.DRIVER_SETTLEMENT_SCHEMA,
+            "catalog_id": selected_profile.catalog_id,
+            "transition_id": selected_profile.transition_id,
+            "selection": selection.to_dict(), "receipt": held.to_dict(),
+            "outcome": "prerequisite", "terminal_refs": [receipt.verifier_ref]})
+    finally:
+        controller.close()

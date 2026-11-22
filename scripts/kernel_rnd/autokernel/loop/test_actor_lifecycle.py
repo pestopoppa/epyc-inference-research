@@ -13,7 +13,7 @@ from .. import journal as journal_module
 from . import actor_lifecycle, actor_preparation, campaign_control, scheduling, worker_lifecycle
 from .test_actor_preparation import _budgets, _fake_executable, _profiles, _request, _resolved
 from .test_campaign_control import _command
-from .test_worker_lifecycle import MockProvider
+from .test_worker_lifecycle import MockProvider, ReceiptProvider
 
 
 class SelectedPersistence:
@@ -146,14 +146,14 @@ def test_actual_worker_lifecycle_runs_backend_and_retains_native_journal(tmp_pat
     target_profile_digest = "8" * 64
     persistence = SelectedPersistence(actor_request, stage_digest, target_profile_digest)
     (tmp_path / "containers").mkdir()
-    provider = MockProvider(tmp_path / "containers")
+    # AKU-06d: the provider authors the held cost; no worker accessor is monkeypatched.
+    provider = ReceiptProvider(tmp_path / "containers")
     resolved = _resolved()
     controller = campaign_control.CampaignController(
         resolved, tmp_path / "store", snapshot_version=2,
         lifecycle_provider=provider, readiness_check=lambda: (True, None))
     controller.__enter__()
     controller.apply_command(_command(resolved, "resume", "resume", 0))
-    _publish_test_owner_accessors(controller)
     journal = journal_module.Journal(
         str(tmp_path / "store" / "journal"), campaign_id=resolved.campaign_id)
     config = actor_lifecycle.ActorLifecycleConfig(

@@ -37,6 +37,7 @@ class TargetProfileExecutionReservation:
     control_revision: int
     max_output_bytes: int
     _capability: object
+    _producer: object = None  # AKU-06d: the registered producer this admission is for
 
 
 @dataclass(frozen=True)
@@ -140,7 +141,7 @@ class TargetProfileExecution:
             catalog_id=catalog_id, transition_id=transition_id,
             stage_plan_digest=stage_plan_digest,
             max_output_bytes=mechanism.max_output_bytes,
-            selected_work=selected_work)
+            selected_work=selected_work, producer=self)
         try:
             current_sha = observation_binding._artifact_identity(mechanism.binary)["sha256"]
         except (OSError, observation_binding.ObservationBindingError) as exc:

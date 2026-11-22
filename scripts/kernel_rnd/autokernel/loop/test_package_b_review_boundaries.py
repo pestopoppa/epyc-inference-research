@@ -164,12 +164,15 @@ def test_profile_receipt_defensively_freezes_nested_request_and_returns_detached
 
 
 def test_registered_producer_receipt_cannot_be_mutated_through_public_accessor(tmp_path, monkeypatch):
-    original = campaign_control.CampaignController.register_target_profile_producer
+    # AKU-06d: the producer is registered before it may execute, so the published
+    # receipt is checked right after the registered producer's publication.
+    original = campaign_control.CampaignController.record_verified_target_profile
     observed = []
-    def verify_immutable(controller, producer):
-        original(controller, producer)
-        target = producer.mechanism.loaded_identity["target_revision_digest"]
+    def verify_immutable(controller, value, **kwargs):
+        published = original(controller, value, **kwargs)
+        target = value["target_revision_digest"]
         receipt = controller.current_actor_profile(target)
+        assert receipt is published
         digest = receipt.digest
         with pytest.raises(TypeError):
             receipt.profile_request["stage_proposal"]["stage_class"] = "forged"
@@ -177,7 +180,8 @@ def test_registered_producer_receipt_cannot_be_mutated_through_public_accessor(t
         assert receipt.digest == digest
         assert controller.current_actor_profile(target) is receipt
         observed.append(digest)
-    monkeypatch.setattr(campaign_control.CampaignController, "register_target_profile_producer", verify_immutable)
+        return published
+    monkeypatch.setattr(campaign_control.CampaignController, "record_verified_target_profile", verify_immutable)
     _run_owned_profiler(tmp_path, 0)
     assert len(observed) == 1
 

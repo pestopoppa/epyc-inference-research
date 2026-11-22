@@ -3991,9 +3991,12 @@ class CampaignController:
     def reserve_target_profile_execution(
             self, *, profile_request: Mapping[str, Any], profile_request_digest: str,
             catalog_id: str, transition_id: str, stage_plan_digest: str,
-            max_output_bytes: int, selected_work=None):
-        """Admit exact current selected profile work before any producer I/O."""
-        from .target_profile_execution import TargetProfileExecutionReservation
+            max_output_bytes: int, selected_work=None, producer=None):
+        """Admit exact selected profile work for the registered producer before any I/O.
+
+        AKU-06d: typed selected advice and the one registered producer are required
+        independent of snapshot version (driver issuance itself is v3-only)."""
+        from . import target_profile_execution, unified_driver
         if (actor_state_module.digest(profile_request) != profile_request_digest
                 or isinstance(max_output_bytes, bool)
                 or not isinstance(max_output_bytes, int) or max_output_bytes < 1):
@@ -4008,23 +4011,19 @@ class CampaignController:
                 catalog_id=catalog_id, transition_id=transition_id,
                 request_digest=profile_request_digest,
                 stage_plan_digest=stage_plan_digest)
-            if self.snapshot_version == 3 and selected_work is None:
-                raise ControlRefused(
-                    "unified profile execution requires public selected profile advice")
-            if selected_work is not None:
-                from . import unified_driver
-                if not isinstance(selected_work, unified_driver.SelectedProfileWork):
-                    raise ControlRefused("selected profile advice is untyped")
-                expected_binding = self.unified_driver_materialization_binding(
-                    catalog_id=catalog_id, transition_id=transition_id,
-                    selection=selected_work.selection.to_dict())
-                if (selected_work.catalog_id != catalog_id
-                        or selected_work.transition_id != transition_id
-                        or selected_work.profile_request.to_dict() != dict(profile_request)
-                        or selected_work.stage_plan_digest != stage_plan_digest
-                        or dict(selected_work.controller_binding) != expected_binding
-                        or selected_work.execution_authorized is not False):
-                    raise ControlRefused("selected profile advice binding differs")
+            if not isinstance(selected_work, unified_driver.SelectedProfileWork):
+                raise ControlRefused("profile execution requires typed selected profile advice")
+            expected_binding = self.unified_driver_materialization_binding(
+                catalog_id=catalog_id, transition_id=transition_id,
+                selection=selected_work.selection.to_dict())
+            if (selected_work.catalog_id != catalog_id
+                    or selected_work.transition_id != transition_id
+                    or selected_work.profile_request.to_dict() != dict(profile_request)
+                    or selected_work.stage_plan_digest != stage_plan_digest
+                    or dict(selected_work.controller_binding) != expected_binding
+                    or selected_work.execution_authorized is not False
+                    or producer is None or producer is not self._actor_profile_producer):
+                raise ControlRefused("selected advice binding or registered producer differs")
             if any(item.request_id == request_id
                    for item in self._actor_profile_execution_reservations.values()):
                 raise ControlRefused("profile execution is already admitted")
@@ -4044,10 +4043,10 @@ class CampaignController:
                 "stage_plan_digest": stage_plan_digest,
                 "supervisor_incarnation": self.supervisor_incarnation,
                 "control_revision": self.control_revision})
-            reservation = TargetProfileExecutionReservation(
+            reservation = target_profile_execution.TargetProfileExecutionReservation(
                 reservation_id, catalog_id, transition_id, profile_request_digest,
                 stage_plan_digest, request_id, stage_id, self.supervisor_incarnation,
-                self.control_revision, max_output_bytes, capability)
+                self.control_revision, max_output_bytes, capability, producer)
             self._actor_profile_execution_reservations[reservation_id] = reservation
             self._actor_profile_attempt_phases[attempt_key] = "prelaunch"
             return reservation
@@ -4056,8 +4055,7 @@ class CampaignController:
             self, value: Mapping[str, Any], *, reservation, terminal,
             provider_cost_receipt):
         """Join selected work, exact terminal/cost and bounded owner-read output."""
-        from .target_profile_execution import (
-            PROFILE_OUTPUT_SCHEMA, TargetProfileExecutionReservation)
+        from .target_profile_execution import PROFILE_OUTPUT_SCHEMA, TargetProfileExecutionReservation
         from .actor_lifecycle import TargetProfileReceipt
         row = actor_state_module.validate_event(value)
         if row["event"] != "PROFILE_VERIFIED":
@@ -4074,7 +4072,12 @@ class CampaignController:
                 request_digest=row["profile_request_digest"],
                 stage_plan_digest=row["stage_plan_digest"])
             trusted = self._actor_trusted_held_receipts.get(terminal.request_id)
+            # AKU-06d: only the registered producer's admission publishes, and only the
+            # loaded identity of its own installed mechanism for this target.
             if (trusted != (provider_cost_receipt, terminal)
+                    or reservation._producer is not self._actor_profile_producer
+                    or row["loaded_identity"] != getattr(reservation._producer.mechanisms.get(
+                        row["target_revision_digest"]), "loaded_identity", None)
                     or not isinstance(provider_cost_receipt, scheduling.HeldClaimReceipt)
                     or reservation.request_id != terminal.request_id
                     or reservation.stage_id != terminal.stage_id
@@ -4090,7 +4093,7 @@ class CampaignController:
                     or row["supervisor_id"] != self._supervisor_id
                     or row["supervisor_incarnation"] != self.supervisor_incarnation
                     or row["control_revision"] != self.control_revision):
-                raise ControlRefused("profile result differs from selected current owner work")
+                raise ControlRefused("profile differs from selected owner work/registered producer")
             owner_binding = (self.supervisor_incarnation, self.control_revision,
                              self.config_digest, self.desired_state)
         raw = self.read_worker_stdout(
@@ -4283,7 +4286,9 @@ class CampaignController:
             if (isinstance(work, Mapping) and work.get("kind") == "actor_preparation"
                     and work.get("stage_plan_digest") == stage_plan_digest
                     and actor_state_module.digest(work.get("payload")) == request_digest
-                    and selection.get("status") == "selected"):
+                    and selection.get("status") == "selected"
+                    # AKU-06d: settled work admits no further actor reservation
+                    and issued.get("transition_id") not in self._driver_settled):
                 matches.append((copy.deepcopy(dict(issued)), copy.deepcopy(dict(work))))
         if len(matches) != 1:
             raise ControlRefused("actor request lacks one exact issued selected transition")
