@@ -14,6 +14,10 @@ from bisect import bisect_left, insort
 from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
+# re-exported: moved verbatim to cpu_stage_elapsed.py
+from .cpu_stage_elapsed import (  # noqa: F401
+    SchedulingRefused, _exact, _number, validate_cpu_stage_elapsed,
+)
 
 CONFIG_SCHEMA = "epyc.autokernel.scheduler_config.v1"
 VECTOR_SCHEMA = "epyc.autokernel.resource_vector.v1"
@@ -41,10 +45,6 @@ BACKENDS = frozenset({"cpu", "gpu", "both"})
 OUTCOMES = frozenset({"valid_comparison", "abstained", "invalid", "failed", "prerequisite",
                       "calibration", "validation", "reject_audit", "maintenance"})
 _DURATION_OVERRUN_FENCE = "actual held interval exceeded configured stage-plus-teardown D"
-
-
-class SchedulingRefused(ValueError):
-    """An input or transition cannot be proven within this accounting model."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,36 +107,12 @@ class AccountingPreview:
                 "preview_digest": self.preview_digest}
 
 
-def _exact(value: Any, fields: frozenset[str], label: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise SchedulingRefused(f"{label} must be an object")
-    keys = tuple(value.keys())
-    if any(not isinstance(key, str) for key in keys):
-        raise SchedulingRefused(f"{label} keys must be strings")
-    actual = set(keys)
-    if actual != fields:
-        raise SchedulingRefused(
-            f"{label} fields differ: missing={sorted(fields - actual)}, "
-            f"unknown={sorted(actual - fields)}")
-    return value
-
-
 def _text(value: Any, label: str, *, nullable: bool = False) -> str | None:
     if value is None and nullable:
         return None
     if not isinstance(value, str) or not value.strip():
         raise SchedulingRefused(f"{label} must be non-empty text")
     return value
-
-
-def _number(value: Any, label: str, *, minimum: float = 0.0,
-            maximum: float | None = None) -> float:
-    if (isinstance(value, bool) or not isinstance(value, (int, float))
-            or not math.isfinite(float(value)) or float(value) < minimum
-            or (maximum is not None and float(value) > maximum)):
-        suffix = f" and <= {maximum}" if maximum is not None else ""
-        raise SchedulingRefused(f"{label} must be finite and >= {minimum}{suffix}")
-    return float(value)
 
 
 def _integer(value: Any, label: str, *, minimum: int = 0) -> int:
@@ -1106,28 +1082,6 @@ def _check_receipt_overlaps(receipts: Sequence[HeldClaimReceipt]) -> None:
             if current[0] < prior[1]:
                 raise SchedulingRefused(
                     f"overlapping reuse of physical claim {claim}: {prior[2]}/{current[2]}")
-
-
-def validate_cpu_stage_elapsed(value):
-    """Original completed CPU scope clock frame; never a physical claim receipt."""
-    row = _exact(value, frozenset({"context_id", "domain", "started_at", "ended_at", "completed"}),
-                 "CPU stage elapsed")
-    domain = _exact(row["domain"], frozenset({"kind", "clock", "pid", "boot_id",
-        "process_start_ticks", "error"}), "CPU stage domain")
-    context = row["context_id"]
-    if (not isinstance(context, str) or len(context) != 64
-            or any(char not in "0123456789abcdef" for char in context)
-            or row["completed"] is not True or domain["kind"] != "direct_loop"
-            or domain["clock"] != "monotonic" or domain["error"] is not None
-            or type(domain["pid"]) is not int or domain["pid"] <= 0
-            or type(domain["process_start_ticks"]) is not int or domain["process_start_ticks"] <= 0
-            or not isinstance(domain["boot_id"], str) or not domain["boot_id"]):
-        raise SchedulingRefused("CPU original elapsed scope is unavailable")
-    start = _number(row["started_at"], "CPU stage elapsed start")
-    end = _number(row["ended_at"], "CPU stage elapsed end")
-    if end <= start:
-        raise SchedulingRefused("CPU stage elapsed interval must be positive")
-    return dict(row, domain=dict(domain), started_at=start, ended_at=end)
 
 
 def charge_receipts(receipts: Sequence[HeldClaimReceipt | Mapping[str, Any]]) -> AccountingView:
