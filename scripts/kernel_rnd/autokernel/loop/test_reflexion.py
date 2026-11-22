@@ -56,3 +56,24 @@ def test_broadcast_dedups_newest_first_and_bounds():
     v = rf.broadcast_view(rows)
     assert v["avoid_patterns"] == ["new", "old"] and v["try_patterns"] == ["t"]
     assert rf.broadcast_view(rows, limit=1)["try_patterns"] == []
+
+
+def test_broadcast_digest_reaches_worker_prompt_context():
+    """AK-PM-17-S2: render_context carries the reflexion broadcast digest."""
+    from . import actors
+    rows = [{"status": "kept", "mechanism_id": "akm-a",
+             "reflexion": {"lessons": ["tile by 64 on gfx90a"],
+                           "avoid_patterns": ["atomics in the epilogue"],
+                           "try_patterns": ["fuse dequant"]}}]
+    text = actors.render_context({"prior_experiments": rows})
+    assert "## Lessons from recent rounds" in text
+    assert "- Lessons: tile by 64 on gfx90a" in text
+    assert "- Avoid: atomics in the epilogue" in text and "- Try: fuse dequant" in text
+    assert "## Lessons from recent rounds" not in actors.render_context(
+        {"prior_experiments": [{"status": "kept", "mechanism_id": "akm-b"}]})
+
+
+def test_planner_prompt_asks_for_expected_outcome():
+    """AK-PM-17-S1: the planner task requests the declared expected_outcome."""
+    from . import actors
+    assert '"expected_outcome": {"direction"' in actors._HYPOTHESIS_TASK.replace("{{", "{").replace("}}", "}")

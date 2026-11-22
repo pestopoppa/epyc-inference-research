@@ -46,10 +46,10 @@ PATH_AGGREGATE_LIMITATION = (
     "that hits one weight path, prefill included -- their bandwidth is "
     "NOT a roofline reading. The ROOFLINE GAP table below is the "
     "per-node replacement for that framing.")
-CONTROL_SHA256 = "19ff8f60e6c48633f8f52f8038481f6bfca4803c0afc72d4955976b054b43dae"  # P1-G: control + relies_on_claims template delta
+CONTROL_SHA256 = "f1610dea1416f0f1a2d19d285a77b2dc2c6e168cf91f50871031143b8386c12d"  # P1-G + AK-PM-17-S1: control + relies_on_claims + expected_outcome template delta
 #: What the live planner/author actually send: the control bytes plus `\n\n` + actors.ANTI_GAMING_RULE,
 #: appended by 57f6db044 (R24-6, intentional). Verified equal to sha256(control + that one clause).
-LIVE_PROMPT_SHA256 = "17b0ec47320082089d08ca9b4eb5e613f6f4e90d4fa27835d8e83640aa6e079f"
+LIVE_PROMPT_SHA256 = "d9e5c4afaef8bc666d71573ef4f58814f92d0bc32d36739e647cdc032b1a6255"  # AK-PM-17-S1 expected_outcome
 NODE_PROFILE_SECTION_CHARS = 3878 + len(PATH_AGGREGATE_LIMITATION) + 1
 RUN8_RECORDED_SHA256 = "72c8677850d955b2598bd9d7254460b0fdead5c0ee2f150c80e897ae0ce47b99"
 CPU_FORMAT = dict(
@@ -79,8 +79,15 @@ ABSTAIN_IDENTITY_EXTENSION = (
 #: frozen fixtures predate them, so the reconciliation strips exactly these two pieces from
 #: the live suffix (an in-memory delta, never a rewrite of recorded bytes).
 RELIES_ON_TEMPLATE_DELTA = (
-    (',\n  "relies_on_claims": ["<claim id>"]', ""),
-    ('In either reply, proposal or abstention, "relies_on_claims" lists the claim ids (clm_...) '
+    (',\n  "expected_outcome": {"direction": "improve", "min_effect_fraction": 0.02}'
+     ',\n  "relies_on_claims": ["<claim id>"]', ""),
+    # AK-PM-17-S1 (2026-11-22): the planner is also asked for a declared expected_outcome.
+    ('"expected_outcome" is your prediction, declared BEFORE the run, of what the matched A/B '
+     'will show: "direction" is one of "improve", "no_change" or "regress", and '
+     '"min_effect_fraction" is the smallest effect you expect as a fraction (0.02 = 2%), or null '
+     'if you cannot size it. It is scored against the measurement afterwards as your diagnosis '
+     'accuracy; it never changes how the candidate is gated or measured.\n\n'
+     'In either reply, proposal or abstention, "relies_on_claims" lists the claim ids (clm_...) '
      'from the belief-kernel evidence section that your answer depends on; [] if none. It is '
      'optional and decides nothing about your answer. Only knob-, target- and sibling-scoped '
      'claims count; host-ceiling lines are background and are not accepted as reliance. Before '

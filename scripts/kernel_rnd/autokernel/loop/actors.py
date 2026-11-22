@@ -3040,6 +3040,16 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12,
                          "— settled, do not re-propose")
         lines.append("")
 
+    # AK-PM-17-S2: every worker sees the same reflexion broadcast digest (de-duplicated
+    # lessons / avoid / try patterns from the latest rounds) in its next-round prompt.
+    from . import reflexion as _reflexion
+    digest = _reflexion.broadcast_view(context.get("prior_experiments") or [])
+    if any(digest.values()):
+        lines.append("\n## Lessons from recent rounds (reflexion broadcast, observe-only)")
+        for key, title in (("lessons", "Lessons"), ("avoid_patterns", "Avoid"),
+                           ("try_patterns", "Try")):
+            for item in digest[key]:
+                lines.append(f"- {title}: {item}")
     lines.append("\n## Already tried")
     if prior:
         supersessions = abstention_supersessions(list(prior))
@@ -3440,7 +3450,14 @@ Propose exactly one hypothesis. Reply with ONE json object and nothing else:
   "falsifier": "<the measurement that would prove this wrong>",
   "target_surface": "<{target_path}>",
   "target_symbol": "<the function you will change>",
+  "expected_outcome": {{"direction": "improve", "min_effect_fraction": 0.02}},
   "relies_on_claims": ["<claim id>"]}}
+
+"expected_outcome" is your prediction, declared BEFORE the run, of what the matched A/B \
+will show: "direction" is one of "improve", "no_change" or "regress", and \
+"min_effect_fraction" is the smallest effect you expect as a fraction (0.02 = 2%), or null \
+if you cannot size it. It is scored against the measurement afterwards as your diagnosis \
+accuracy; it never changes how the candidate is gated or measured.
 
 In either reply, proposal or abstention, "relies_on_claims" lists the claim ids (clm_...) \
 from the belief-kernel evidence section that your answer depends on; [] if none. It is \
