@@ -506,8 +506,7 @@ def test_owner_hooks_register_each_class_and_complete_catalog_admits_view_only(
     try:
         records = controller._retention_owner_records
         assert set(records) == set(catalog.OWNER_CLASSES)
-        generation = (seed.seed_digest, controller.config_generation,
-                      controller.supervisor_incarnation)
+        generation = (seed.seed_digest, controller.config_generation)  # AKU-10f3
         assert all(item.generation == generation and not item.gaps
                    for item in records.values())
         assert records["physical_root"].artifacts[0].provenance["owners"][0]["path"] \
@@ -531,8 +530,8 @@ def test_owner_hooks_register_each_class_and_complete_catalog_admits_view_only(
     with _controller(resolved, tmp_path / "service") as reopened:
         reopened_manager = candidate_transactions.CandidateTransactions(
             reopened, git_backend=FakeGitBackend())
-        assert reopened._retention_owner_records["candidate_manifest"].generation[2] \
-            == reopened.supervisor_incarnation
+        assert reopened._retention_owner_records["candidate_manifest"].generation \
+            == (seed.seed_digest, reopened.config_generation)  # incarnation-free (AKU-10f3)
         assert reopened_manager.retention_view().uncertain_scopes == ()
 
 
@@ -550,8 +549,7 @@ def test_missing_or_stale_owner_class_keeps_refusing(tmp_path, monkeypatch):
             controller._retention_owner_records[owner_class] = saved
         controller._retention_owner_records["evidence"] = catalog.derive_owner_record(
             "evidence", seed=seed,
-            generation=(seed.seed_digest, controller.config_generation,
-                        controller.supervisor_incarnation - 1))
+            generation=(seed.seed_digest, controller.config_generation - 1))
         assert manager.retention_view().uncertain_scopes == (
             "owner_coverage_stale:evidence",)
         controller._register_retention_owners_locked("evidence")

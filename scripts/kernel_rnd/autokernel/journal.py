@@ -84,6 +84,7 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+import importlib
 import json
 import math
 import os
@@ -308,6 +309,7 @@ KIND_CAMPAIGN_COMMAND_V3 = "CAMPAIGN_COMMAND_V3"
 CAMPAIGN_COMMAND_V3_SCHEMA = "epyc.autokernel.campaign_command_transition.v3"
 KIND_MAINTENANCE_EXECUTION = "MAINTENANCE_EXECUTION"
 KIND_RETENTION_CATALOG_INSTALLED = "RETENTION_CATALOG_INSTALLED"
+KIND_RETENTION_OWNER_RECORDED = "RETENTION_OWNER_RECORDED"  # AKU-10f3, additive
 KIND_UNIFIED_DRIVER_ISSUED = "UNIFIED_DRIVER_ISSUED"
 UNIFIED_DRIVER_ISSUED_SCHEMA = "epyc.autokernel.unified_driver_issued.v1"
 KIND_UNIFIED_DRIVER_SETTLED = "UNIFIED_DRIVER_SETTLED"
@@ -363,7 +365,7 @@ NATIVE_KINDS = frozenset({
     KIND_CAMPAIGN_COMMAND_V2,
     KIND_CAMPAIGN_COMMAND_V3,
     KIND_MAINTENANCE_EXECUTION,
-    KIND_RETENTION_CATALOG_INSTALLED,
+    KIND_RETENTION_CATALOG_INSTALLED, KIND_RETENTION_OWNER_RECORDED,
     KIND_UNIFIED_DRIVER_ISSUED,
     KIND_UNIFIED_DRIVER_SETTLED,
     KIND_UNIFIED_DRIVER_CHILD_ACCOUNTED,
@@ -1369,6 +1371,12 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             validate_install_event(payload)
         except NativeRetentionCatalogRefused as exc:
             out.append(f"retention catalog event: {exc}")
+    elif kind == KIND_RETENTION_OWNER_RECORDED:
+        mod = importlib.import_module((__package__ or "autokernel") + ".loop.retention_owner_journal")
+        try:
+            mod.validate(payload)
+        except ValueError as exc:
+            out.append(f"retention owner journal event: {exc}")
     elif kind == KIND_PLANNED_SERVING_ARM_CAPTURED:
         capture_schema = payload.get("schema")
         is_v2 = capture_schema == PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2
@@ -4230,7 +4238,7 @@ __all__ = [
     "KIND_CAMPAIGN_COMMAND_V2", "CAMPAIGN_COMMAND_V2_SCHEMA",
     "KIND_CAMPAIGN_COMMAND_V3", "CAMPAIGN_COMMAND_V3_SCHEMA",
     "KIND_MAINTENANCE_EXECUTION",
-    "KIND_RETENTION_CATALOG_INSTALLED",
+    "KIND_RETENTION_CATALOG_INSTALLED", "KIND_RETENTION_OWNER_RECORDED",
     "KIND_UNIFIED_DRIVER_ISSUED", "UNIFIED_DRIVER_ISSUED_SCHEMA",
     "KIND_UNIFIED_DRIVER_SETTLED", "UNIFIED_DRIVER_SETTLED_SCHEMA",
     "UNIFIED_DRIVER_SETTLED_SCHEMA_V2", "KIND_UNIFIED_DRIVER_CHILD_ACCOUNTED",

@@ -30,6 +30,7 @@ from . import actor_preparation_state as actor_state_module
 from . import campaign_command_v2
 from . import maintenance_execution as maintenance_module
 from . import native_retention_catalog as retention_catalog_module
+from . import retention_owner_journal as owner_journal
 from . import operation_accounting as operation_accounting_module
 from . import scheduling
 from . import worker_lifecycle as worker_lifecycle_module
@@ -951,8 +952,8 @@ class CampaignController:
                 })
                 self._replay(entries)
                 self.supervisor_incarnation += 1
-                self._register_retention_owners_locked(
-                    *retention_catalog_module.OWNER_CLASSES)
+                self._retention_owner_records = owner_journal.startup_records(
+                    self, self._retention_owner_payloads)  # AKU-10f3: restore, not re-derive
                 self.stream_epoch += 1
                 self.sequence = 0
                 start_observed = self.observed_state
@@ -1003,6 +1004,7 @@ class CampaignController:
         actor_preparation_events: list[dict[str, Any]] = []
         actor_preparation_state = actor_state_module.ActorPreparationProjection()
         retention_catalog_event = None
+        self._retention_owner_payloads = []
         for entry in entries:
             self._journal_cursor = entry.seq
             if entry.campaign_id not in (None, self.resolved.campaign_id):
@@ -1073,6 +1075,9 @@ class CampaignController:
                     sources = a2_bank_sources.setdefault(bank_digest, [])
                     if row["execution_id"] not in sources:
                         sources.append(row["execution_id"])
+                continue
+            if entry.kind == journal_module.KIND_RETENTION_OWNER_RECORDED:
+                self._retention_owner_payloads.append(owner_journal.validate(entry.payload))
                 continue
             if entry.kind == journal_module.KIND_RETENTION_CATALOG_INSTALLED:
                 try:
@@ -3256,8 +3261,12 @@ class CampaignController:
             self._retention_owner_records = {}
             return
         for owner_class in owner_classes:
-            self._retention_owner_records[owner_class] = (
-                self._derive_retention_owner_locked(owner_class))
+            record = self._derive_retention_owner_locked(owner_class)
+            if getattr(self._retention_owner_records.get(owner_class), "record_digest", None) \
+                    != record.record_digest:  # AKU-10f3: journal each changed record
+                self._append_durable(journal_module.KIND_RETENTION_OWNER_RECORDED,
+                                     owner_journal.make_payload(record))
+            self._retention_owner_records[owner_class] = record
 
     def _derive_retention_owner_locked(self, owner_class: str):
         return retention_catalog_module.derive_owner_record(
@@ -3269,8 +3278,7 @@ class CampaignController:
             store_root=str(self.store))
 
     def _retention_generation_locked(self) -> tuple[Any, ...]:
-        return (self._retention_catalog_seed.seed_digest, self.config_generation,
-                self.supervisor_incarnation)
+        return (self._retention_catalog_seed.seed_digest, self.config_generation)
 
     def _retention_frontier_locked(self) -> tuple[Any, ...]:
         seed = self._retention_catalog_seed
