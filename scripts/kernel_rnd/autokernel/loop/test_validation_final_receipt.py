@@ -853,11 +853,11 @@ def test_receipt_replay_alone_never_authorizes_validation_ranking_or_promotion(r
 
 
 def test_runtime_admission_control_adapts_the_original_reopen_admission():
-    reference = dict(FIXTURE_CONTROL_REF)
+    reference = dict(FIXTURE_CONTROL_REF, verified=True)  # RuntimeAdmission takes the StoredArtifact form
     recipe = lambda digest: SimpleNamespace(execution_digest=digest)  # noqa: E731 - FIXTURE recipes
     owner = SimpleNamespace(reopen_admission=lambda ref: (
         SimpleNamespace(anchor=recipe("a" * 64), candidate=recipe("b" * 64)), ref == reference))
-    assert sa.runtime_admission_control(owner)(reference) == sa.ControlAdmission(True, "a" * 64, "b" * 64)
+    assert sa.runtime_admission_control(owner)(FIXTURE_CONTROL_REF) == sa.ControlAdmission(True, "a" * 64, "b" * 64)
     assert sa.runtime_admission_control(owner)({"locator": "x", "sha256": "0" * 64}).admitted is False
     with pytest.raises(sa.SemanticAdapterError, match="installed calibration/control owners"):
         sa.RegisteredServingDecision("owner", {}, "rule", None, lambda _r: None, fixture_only=False)

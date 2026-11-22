@@ -673,7 +673,7 @@ def runtime_admission_control(admission: Any):
     """Production control owner: ``RuntimeAdmission.reopen_admission`` rederives the original
     controls/panel and both admitted strata from its original store (its held claim/frame)."""
     def reopen(reference: Mapping[str, Any]) -> ControlAdmission:
-        pair, admitted = admission.reopen_admission(dict(reference))
+        pair, admitted = admission.reopen_admission(dict(reference, verified=True))  # StoredArtifact form
         return ControlAdmission(admitted is True, pair.anchor.execution_digest, pair.candidate.execution_digest)
     return reopen
 
