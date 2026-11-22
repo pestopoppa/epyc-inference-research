@@ -2863,6 +2863,74 @@ def check_noise_relative_tolerance(incumbent_single, incumbent_batched, candidat
                    result.status == nrt.PASS, result.reason, json.dumps(result.detail, sort_keys=True))
 
 
+#: AK-PORT-LB1.1: the four per-position logit inputs a non-bit-exact multi-row candidate must carry.
+NOISE_RELATIVE_INPUT_KEYS = ("incumbent_single", "incumbent_batched", "candidate_single",
+                             "candidate_batched")
+
+
+def noise_relative_applies(record) -> bool:
+    """True only for a candidate that DECLARES itself non-bit-exact AND multi-row (N>1).
+    Anything else (no record, bit-exact, single-row) keeps today's gate chain unchanged."""
+    if not isinstance(record, dict):
+        return False
+    rows = record.get("rows", record.get("batch_n", 1))
+    multi_row = isinstance(rows, int) and not isinstance(rows, bool) and rows > 1
+    return bool(multi_row and record.get("numerics", "bit_exact") != "bit_exact")
+
+
+def _load_logit_input(value):
+    """A per-position logits input is inline rows (list) or a path to a JSON file of rows."""
+    if isinstance(value, (list, tuple)):
+        return value
+    if isinstance(value, (str, Path)) and str(value):
+        loaded = json.loads(Path(value).read_text())
+        if isinstance(loaded, dict):
+            loaded = loaded.get("logits", loaded.get("rows"))
+        if isinstance(loaded, list):
+            return loaded
+    raise ValueError("not a list of logit rows or a JSON file holding one")
+
+
+def noise_relative_tolerance_gate(record, *, config=None) -> Verdict:
+    """Gate-chain entry for `check_noise_relative_tolerance`: reads the four logits inputs from the
+    candidate record (inline or as JSON paths). `candidate_single` is carried for the audit trail
+    but the tolerance is defined over incumbent_single/incumbent_batched/candidate_batched.
+    Any missing or unreadable input is `oracle_unavailable` (`missing_inputs: ...`), never a pass."""
+    record = record if isinstance(record, dict) else {}
+    loaded, problems = {}, []
+    for key in NOISE_RELATIVE_INPUT_KEYS:
+        if record.get(key) in (None, "", [], ()):
+            problems.append(f"{key} absent")
+            continue
+        try:
+            loaded[key] = _load_logit_input(record[key])
+        except (OSError, ValueError) as exc:
+            problems.append(f"{key} unreadable ({exc})")
+    if problems:
+        return Verdict("oracle_unavailable", False,
+                       "missing_inputs: noise-relative tolerance needs per-position logits at "
+                       "N=1 and N>1 for incumbent and candidate: " + "; ".join(problems))
+    return check_noise_relative_tolerance(loaded["incumbent_single"], loaded["incumbent_batched"],
+                                          loaded["candidate_batched"], config=config)
+
+
+def noise_relative_chain_checks(record_path) -> "list[Callable[[], Verdict]]":
+    """Checks to append to a candidate's gate chain (`run.py` gate_for). Empty unless the record at
+    `record_path` declares a non-bit-exact multi-row candidate. An unreadable record file is itself
+    a failing check, not a silent skip."""
+    path = Path(record_path)
+    if not path.is_file():
+        return []
+    try:
+        record = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        return [lambda: Verdict("oracle_unavailable", False,
+                                f"missing_inputs: candidate record {path} unreadable: {exc}")]
+    if not noise_relative_applies(record):
+        return []
+    return [lambda: noise_relative_tolerance_gate(record)]
+
+
 def _numerics_chain(passed: "Verdict", output: str) -> "Verdict":
     """AKX-ALL-31: a passing op verdict stands unless the opt-in numerics chain refuses it.
 

@@ -4904,6 +4904,10 @@ def _main(argv: list[str] | None = None) -> int:
                                 and not (admitted_route is not None
                                          and admitted_route.numerics == "ppl_contract"))
 
+            # AK-PORT-LB1.1: a candidate record declaring non-bit-exact + multi-row (N>1) gets the
+            # noise-relative tolerance gate; no record / bit-exact / single-row adds nothing.
+            noise_checks = gates.noise_relative_chain_checks(
+                Path(args.store) / "noise_relative" / f"{hypothesis.mechanism_id}.json")
             def repack_check(arm):
                 return gates.check_cpu_repack_case_set(
                     worker.build_dir, resolved_recipe=arm,
@@ -4931,6 +4935,7 @@ def _main(argv: list[str] | None = None) -> int:
                     checks.append(lambda: repack_check(arm))
                 if graph_kld_extra:
                     checks.append(graph_kld_check)
+                checks.extend(noise_checks)
                 return gates.run_all(*checks)
             # Callables, so a failed build actually short-circuits: an eagerly
             # evaluated op_correctness ran the suite against a stale binary and blamed
@@ -4987,6 +4992,7 @@ def _main(argv: list[str] | None = None) -> int:
                 ))
             if graph_kld_extra:
                 checks.append(graph_kld_check)
+            checks.extend(noise_checks)
             # Build owns only its narrow CPU claim. Every GPU correctness /
             # dispatch invocation owns quiet separately, including anchor fallback.
             if not cpu_launch:

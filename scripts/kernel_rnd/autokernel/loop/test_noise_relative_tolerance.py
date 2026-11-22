@@ -158,3 +158,66 @@ def test_gate_wrapper_maps_status_to_verdict_gate_names():
     na = gates.check_noise_relative_tolerance([], [], [])
     assert (na.gate, na.passed) == ("oracle_unavailable", False)
     assert json.loads(ok.detail)["positions"] == N
+
+
+# --- AK-PORT-LB1.1: gate-chain wiring ----------------------------------------------------------
+
+def _chain_record(**over):
+    import random as _r
+    rng = _r.Random(7)
+    single = [[rng.uniform(-5, 5) for _ in range(16)] for _ in range(12)]
+    rec = {"numerics": "ppl_contract", "rows": 4,
+           "incumbent_single": single,
+           "incumbent_batched": _shift_to_max(single, 0.01),
+           "candidate_single": single,
+           "candidate_batched": _shift_to_max(single, 0.012)}
+    rec.update(over)
+    return rec
+
+
+def test_chain_invokes_check_with_all_four_inputs(monkeypatch, tmp_path):
+    seen = {}
+    real = gates.check_noise_relative_tolerance
+
+    def spy(a, b, c, **kw):
+        seen["args"] = (a, b, c)
+        return real(a, b, c, **kw)
+    monkeypatch.setattr(gates, "check_noise_relative_tolerance", spy)
+    rec = _chain_record()
+    # incumbent_single inline, the other three via JSON paths
+    for key in ("incumbent_batched", "candidate_single", "candidate_batched"):
+        p = tmp_path / f"{key}.json"
+        p.write_text(json.dumps(rec[key]))
+        rec[key] = str(p)
+    rp = tmp_path / "rec.json"
+    rp.write_text(json.dumps(rec))
+    checks = gates.noise_relative_chain_checks(rp)
+    assert len(checks) == 1
+    verdict = checks[0]()
+    assert verdict.passed and len(seen["args"]) == 3 and len(seen["args"][0]) == 12
+
+
+@pytest.mark.parametrize("key", list(gates.NOISE_RELATIVE_INPUT_KEYS))
+def test_missing_input_fails_closed_typed(key, tmp_path):
+    rec = _chain_record()
+    del rec[key]
+    rp = tmp_path / "rec.json"
+    rp.write_text(json.dumps(rec))
+    verdict = gates.noise_relative_chain_checks(rp)[0]()
+    assert not verdict.passed and verdict.gate == "oracle_unavailable"
+    assert verdict.reason.startswith("missing_inputs") and key in verdict.reason
+
+
+def test_unreadable_path_fails_closed(tmp_path):
+    verdict = gates.noise_relative_tolerance_gate(_chain_record(candidate_batched=str(tmp_path / "nope.json")))
+    assert not verdict.passed and verdict.reason.startswith("missing_inputs")
+
+
+@pytest.mark.parametrize("over", [{"numerics": "bit_exact"}, {"rows": 1}, {"rows": True}])
+def test_bit_exact_or_single_row_skips_the_gate(over, tmp_path):
+    rec = _chain_record(**over)
+    del rec["candidate_batched"]            # would fail closed if the gate ran
+    rp = tmp_path / "rec.json"
+    rp.write_text(json.dumps(rec))
+    assert gates.noise_relative_chain_checks(rp) == []
+    assert gates.noise_relative_chain_checks(tmp_path / "absent.json") == []
