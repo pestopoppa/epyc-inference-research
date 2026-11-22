@@ -144,8 +144,10 @@ def root():
         _REAL_RMTREE(path, ignore_errors=True)
 
 
-def _runtime(path, seeded=None):
-    resolved, anchors, seed = seeded or _seed()
+def _runtime(path, seeded=None, *, artifact_root=True, bind=True):
+    # A declared artifact store lets every owner class register a gap-free record.
+    artifact_root = path / "artifacts" if artifact_root else None
+    resolved, anchors, seed = seeded or _seed(artifact_root=artifact_root)
     store = path / "service"
     store.mkdir(mode=0o700)
     store.chmod(0o700)
@@ -153,7 +155,7 @@ def _runtime(path, seeded=None):
     controller.__enter__()
     controller.install_native_retention_catalog(
         seed, runtime_anchors=anchors, model_preparations=_preparations(seed),
-        artifact_root=None)
+        artifact_root=artifact_root)
     frontier = controller.native_retention_catalog_capture()["frontier"]
     view, old = _view(path)
     node = view.nodes[-1]
@@ -163,7 +165,8 @@ def _runtime(path, seeded=None):
     prepared = _prepared(view, frontier)
     policy = _policy(path)
     job, _ = rc.prepare(view, policy, limit=1, now=NOW)
-    controller.bind_prepared_retention_job(job, prepared=prepared, policy=policy)
+    if bind:
+        controller.bind_prepared_retention_job(job, prepared=prepared, policy=policy)
     return controller, prepared, policy, job, old
 
 
@@ -312,7 +315,11 @@ def test_default_controller_backend_and_factories_leave_execution_unavailable(ru
     backend = me.CampaignMaintenanceBackend(controller, prepared, policy)
     with pytest.raises(me.MaintenanceExecutionRefused, match="provider is unavailable"):
         me.execute(job, backend=backend, now=NOW)
+    for provider in (None, me.BrokerHoldProvider(), me.MaintenanceHoldProvider()):
+        with pytest.raises(me.MaintenanceExecutionRefused, match="provider is unavailable"):
+            me.CampaignMaintenanceBackend(controller, prepared, policy, provider).admit(job)
     assert controller._maintenance_state.phase is None and old.exists()
+    assert _events(controller) == []  # refused before INTENT
     for call in (lambda: me.BrokerHoldProvider().settle(None, None, ZERO, "aborted"),
                  lambda: me.BrokerHoldProvider().resolve(None, None)):
         with pytest.raises(me.MaintenanceExecutionRefused, match="broker is unavailable"):
@@ -375,7 +382,7 @@ def _crash_after_hold(path, seeded, journaled, connection):
 @pytest.mark.parametrize("journaled", [True, False])
 def test_crash_after_hold_before_receipt_replays_uncertain_and_resolves_first(
         root, journaled):
-    seeded = _seed()
+    seeded = _seed(artifact_root=root / "artifacts")
     context = multiprocessing.get_context("fork")
     receive, send = context.Pipe(duplex=False)
     process = context.Process(target=_crash_after_hold,
@@ -421,3 +428,239 @@ def test_crash_after_hold_before_receipt_replays_uncertain_and_resolves_first(
     finally:
         if reopened._entered and not reopened._maintenance_state.owned:
             reopened.close()
+
+
+# ---------------------------------------------------------------------------
+# AKU-10d: fresh admission from complete owner coverage, and recovery ownership.
+
+
+def test_fresh_admission_requires_complete_current_owner_coverage(runtime, root):
+    controller, prepared, policy, job, old = runtime
+    broker = InMemoryMaintenanceBroker(mutex=controller._mutex)
+    backend = me.CampaignMaintenanceBackend(controller, prepared, policy, broker)
+    records = controller._retention_owner_records
+    # Missing class: even an exactly re-captured frontier cannot bind or admit.
+    for owner_class in catalog.OWNER_CLASSES:
+        saved = records.pop(owner_class)
+        frontier = controller.native_retention_catalog_capture()["frontier"]
+        with pytest.raises(Exception, match=f"coverage is incomplete: missing:{owner_class}"):
+            controller.bind_prepared_retention_job(
+                job, prepared=_prepared(prepared.view, frontier), policy=policy)
+        with pytest.raises(Exception, match="preparation|coverage"):
+            backend.admit(job)
+        records[owner_class] = saved
+    # Stale class: a durable owner write without its hook keeps the frontier but
+    # differs from the owner state re-derived at admission.
+    key = ("unhooked", 1)
+    controller._retention_worker_results[key] = {
+        "worker_id": "unhooked", "worker_generation": 1, "lineage_id": "x",
+        "stage_id": "y", "data": {"result_digest": "e" * 64}}
+    with pytest.raises(Exception, match="coverage is incomplete: stale:worker_result"):
+        backend.admit(job)
+    del controller._retention_worker_results[key]
+    assert _events(controller) == [] and broker.calls == [] and old.exists()
+    # Complete and current again: admission -> execution -> COMPLETED, bytes once.
+    size = prepared.view.nodes[-1].declared_size_bytes
+    result = me.execute(job, backend=backend, now=NOW)
+    assert not old.exists() and controller._maintenance_state.phase == "COMPLETED"
+    [row] = broker.state["ledger"]
+    assert row["cost"]["reclaimed_bytes"] == result.cost.reclaimed_bytes == size > 0
+    assert result.cost.deleted_bytes_this_attempt == size and not result.recovered
+
+
+def test_owner_gap_without_artifact_store_refuses_binding(root):
+    controller, prepared, policy, job, old = _runtime(root, artifact_root=False, bind=False)
+    try:
+        with pytest.raises(Exception, match="gap:physical_root:artifact_store_undeclared"):
+            controller.bind_prepared_retention_job(job, prepared=prepared, policy=policy)
+        broker = InMemoryMaintenanceBroker(mutex=controller._mutex)
+        backend = me.CampaignMaintenanceBackend(controller, prepared, policy, broker)
+        with pytest.raises(Exception, match="preparation"):
+            me.execute(job, backend=backend, now=NOW)
+        assert _events(controller) == [] and broker.calls == [] and old.exists()
+    finally:
+        controller.close()
+
+
+def _crash_during_execute(path, seeded, stage, connection):
+    """Forked owner: run execute and die at ``stage`` (io_complete / complete)."""
+    controller, prepared, policy, job, _old = _runtime(Path(path), seeded)
+    broker = InMemoryMaintenanceBroker(mutex=controller._mutex)
+    backend = me.CampaignMaintenanceBackend(controller, prepared, policy, broker)
+
+    def crash(*_args, **_kwargs):
+        connection.send({"state": copy.deepcopy(broker.state),
+                         "view": _plain_view(prepared.view),
+                         "job": (job.plan.to_dict(), list(job.selected_artifact_ids),
+                                 job.policy_digest),
+                         "size": prepared.view.nodes[-1].declared_size_bytes})
+        connection.close()
+        os._exit(0)
+
+    setattr(backend, stage, crash)
+    me.execute(job, backend=backend, now=NOW)
+    os._exit(3)
+
+
+def _crashed(root, stage):
+    seeded = _seed(artifact_root=root / "artifacts")
+    context = multiprocessing.get_context("fork")
+    receive, send = context.Pipe(duplex=False)
+    process = context.Process(target=_crash_during_execute,
+                              args=(str(root), seeded, stage, send))
+    process.start()
+    send.close()
+    payload = receive.recv()
+    receive.close()
+    process.join(10)
+    assert process.exitcode == 0
+    reopened = _controller(seeded[0], root / "service")
+    reopened.__enter__()
+    view = _native_view(payload["view"])
+    prepared = _prepared(view, reopened.native_retention_catalog_capture()["frontier"])
+    policy = _policy(root)
+    plan, selected, policy_digest = payload["job"]  # bytes are gone: no re-prepare
+    job = rc.RetentionJob(rc.retention.RetentionPlan.from_dict(plan), tuple(selected),
+                          policy_digest)
+    broker = InMemoryMaintenanceBroker(state=payload["state"], mutex=reopened._mutex,
+                                       clock_start=10_000)
+    backend = me.CampaignMaintenanceBackend(reopened, prepared, policy, broker)
+    return reopened, backend, broker, job, payload
+
+
+def _reclaimed(rows):
+    return sum(row["cost"]["reclaimed_bytes"] for row in rows)
+
+
+def test_crash_mid_execution_resolves_then_recovers_without_second_delete(root):
+    reopened, backend, broker, job, payload = _crashed(root, "io_complete")
+    try:
+        state = reopened._maintenance_state
+        assert state.phase == "UNRESOLVED" and state.owned and state.hold is not None
+        assert state.cost is None  # bytes removed, IO_COMPLETE never journaled
+        result = me.execute(job, backend=backend, now=NOW)
+        assert reopened._maintenance_state.phase == "COMPLETED" and not result.recovered
+        assert broker.calls[:2] == ["resolve", "acquire"] and broker.violations == []
+        assert broker.state["max_active"] == 1  # never two holds at once
+        prior, final = broker.state["ledger"]
+        assert prior["disposition"] == "aborted" and prior["cost"] == ZERO.to_dict()
+        assert final["disposition"] == "complete"
+        assert result.cost.deleted_bytes_this_attempt == 0  # replayed, not re-deleted
+        assert _reclaimed(broker.state["ledger"]) == payload["size"] > 0
+    finally:
+        if not reopened._maintenance_state.owned:
+            reopened.close()
+
+
+def test_broker_settled_complete_recovers_to_completed_without_rerun(root):
+    reopened, backend, broker, job, payload = _crashed(root, "complete")
+    try:
+        state = reopened._maintenance_state
+        assert state.phase == "UNRESOLVED" and state.cost is not None
+        [settled] = broker.state["ledger"]
+        assert settled["disposition"] == "complete"
+        result = me.execute(job, backend=backend, now=NOW)
+        assert result.recovered and result.retention is None
+        assert broker.calls == ["resolve"]  # no acquire, refresh or second settlement
+        assert broker.state["ledger"] == [settled]
+        assert result.cost.to_dict() == settled["cost"]
+        assert result.accounting.receipt_digest == settled["accounting_receipt_digest"]
+        events = _events(reopened)
+        assert [event["event"] for event in events].count("COMPLETED") == 1
+        assert events[-1]["settlement"] == settled
+        assert _reclaimed(event["settlement"] for event in events
+                          if event.get("settlement")) == payload["size"] > 0
+        resolved = reopened.resolved
+        reopened.close()
+        again = _controller(resolved, root / "service")
+        again.__enter__()
+        try:
+            assert again._maintenance_state.phase == "COMPLETED"
+            assert not again._maintenance_state.owned
+        finally:
+            again.close()
+    finally:
+        if reopened._entered and not reopened._maintenance_state.owned:
+            reopened.close()
+
+
+def test_journaled_unresolved_completion_recovers_from_broker_settlement(runtime):
+    controller, prepared, policy, job, old = runtime
+    broker = InMemoryMaintenanceBroker(mutex=controller._mutex)
+    backend = me.CampaignMaintenanceBackend(controller, prepared, policy, broker)
+
+    def lost_append(*_args, **_kwargs):
+        raise RuntimeError("COMPLETED append lost")
+
+    backend.complete = lost_append
+    with pytest.raises(RuntimeError, match="append lost"):
+        me.execute(job, backend=backend, now=NOW)
+    del backend.complete
+    assert _events(controller)[-1]["event"] == "UNRESOLVED" and not old.exists()
+    [settled] = broker.state["ledger"]
+    calls = len(broker.calls)
+    result = me.execute(job, backend=backend, now=NOW)
+    assert result.recovered and broker.calls[calls:] == ["resolve"]
+    assert broker.state["ledger"] == [settled]
+    assert controller._maintenance_state.phase == "COMPLETED"
+    token = controller._maintenance_state.token
+    original = me.ExclusionToken.from_dict(_events(controller)[0]["token"])
+    assert token.predecessor_token_digest == original.token_digest == settled["token_digest"]
+    # A recovery INTENT can never carry a complete settlement (that would re-run).
+    recovery = replace(original, token_id="r", predecessor_token_digest=original.token_digest,
+                       token_digest="")
+    with pytest.raises(me.MaintenanceExecutionRefused, match="aborted settlement"):
+        me.make_event("INTENT", recovery, occurred_at=NOW.isoformat(),
+                      settlement=me.HoldSettlement.from_dict(settled))
+
+
+def test_uncertain_resolution_keeps_unresolved_and_refuses_admission(runtime):
+    controller, prepared, policy, job, old = runtime
+    broker = InMemoryMaintenanceBroker(mutex=controller._mutex)
+    broker.fail["settle"] = me.MaintenanceExecutionRefused("settlement lost")
+    backend = me.CampaignMaintenanceBackend(controller, prepared, policy, broker)
+    with pytest.raises(me.MaintenanceExecutionRefused, match="settlement lost"):
+        me.execute(job, backend=backend, now=NOW)
+    state = controller._maintenance_state
+    assert state.phase == "UNRESOLVED" and state.hold is not None and not old.exists()
+    count = len(_events(controller))
+    other = me.MaintenanceCost(1, 1, 1, 1)
+    wrong_complete = me.HoldSettlement(
+        broker.PROVIDER_ID, state.hold.hold_id, state.hold.receipt_digest,
+        state.token.token_digest, other, "complete",
+        me.AccountingReceipt(state.hold.receipt_digest, state.token.token_digest, other,
+                             "complete").receipt_digest, 1, 2, 1, 0)
+    absent = me.NoHoldReceipt(broker.PROVIDER_ID, me._request_digest(state.token), 1,
+                              NOW.isoformat(), "claims absent while a hold is journaled")
+    for reply, expected in ((None, "could not prove"), (absent, "does not resolve"),
+                            (wrong_complete, "does not settle")):
+        broker.resolve = lambda token, hold, reply=reply: reply
+        with pytest.raises(Exception, match=expected):
+            me.execute(job, backend=backend, now=NOW)
+        assert controller._maintenance_state == state and len(_events(controller)) == count
+    del broker.resolve
+    entered, release = threading.Event(), threading.Event()
+    broker.gate["resolve"] = (entered, release)
+    bounded = me.BoundedHoldProvider(broker, mutex=controller._mutex, deadline_s=0.3)
+    slow = me.CampaignMaintenanceBackend(controller, prepared, policy, bounded)
+    try:
+        with pytest.raises(me.ProviderDeadlineExceeded, match="resolve exceeded"):
+            me.execute(job, backend=slow, now=NOW)
+        assert controller._maintenance_state == state and len(_events(controller)) == count
+        with pytest.raises(Exception, match="already owned|differs from unresolved"):
+            controller.maintenance_admit(replace(job, policy_digest="f" * 64))
+    finally:
+        release.set()
+        for thread in threading.enumerate():
+            if thread.name == "maintenance-resolve":
+                thread.join(5)
+    assert "acquire" not in broker.calls[1:]  # no second hold while uncertain
+    # The late resolve settled hold-1 aborted; recovery now proceeds exactly once.
+    del broker.gate["resolve"]
+    result = me.execute(job, backend=backend, now=NOW)
+    assert controller._maintenance_state.phase == "COMPLETED" and not result.recovered
+    prior, final = broker.state["ledger"]
+    assert prior["disposition"] == "aborted" and final["disposition"] == "complete"
+    assert broker.state["max_active"] == 1
+    assert result.cost.deleted_bytes_this_attempt == 0
+    assert _reclaimed(broker.state["ledger"]) == prepared.view.nodes[-1].declared_size_bytes

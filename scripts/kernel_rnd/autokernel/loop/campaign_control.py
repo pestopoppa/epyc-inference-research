@@ -3080,28 +3080,10 @@ class CampaignController:
             if self._candidate_pending is not None or self._candidate_context_token is not None:
                 raise ControlRefused("candidate mutation prevents maintenance admission")
             if self._maintenance_state.owned:
-                previous = self._maintenance_state.token
-                if self._maintenance_state.phase != "UNRESOLVED" or previous is None:
-                    raise ControlRefused("maintenance exclusion is already owned")
-                if (job.plan.snapshot_id, job.plan.snapshot_generation, job.plan.snapshot_digest,
-                        job.plan.plan_digest, job.policy_digest, job.selected_artifact_ids) != (
-                        previous.snapshot_id, previous.snapshot_generation,
-                        previous.snapshot_digest, previous.plan_digest,
-                        previous.policy_digest, previous.selected_artifact_ids):
-                    raise ControlRefused("maintenance recovery job differs from unresolved intent")
+                previous = self._maintenance_recovery_job_locked(job)
                 if prior_settlement is None:
                     raise ControlRefused("unresolved maintenance needs its hold resolved")
-                token = maintenance_module.ExclusionToken(
-                    "maintenance-recovery-" + schemas.content_hash({
-                        "predecessor": previous.token_digest,
-                        "supervisor_incarnation": self.supervisor_incarnation,
-                    })[:24],
-                    self.resolved.campaign_id, self.config_digest,
-                    self.config_generation, self._maintenance_supervisor_id(),
-                    self.supervisor_incarnation, previous.snapshot_id,
-                    previous.snapshot_generation, previous.snapshot_digest,
-                    previous.plan_digest, previous.policy_digest,
-                    previous.selected_artifact_ids, self.clock(), previous.token_digest)
+                token = self._maintenance_recovery_token_locked(previous)
                 self._maintenance_append_locked(maintenance_module.make_event(
                     "INTENT", token, occurred_at=self.clock(), settlement=prior_settlement))
                 self._maintenance_tombstone_intent = True
@@ -3114,6 +3096,7 @@ class CampaignController:
                     or tuple(job.selected_artifact_ids) != prepared[3]):
                 raise ControlRefused(
                     "maintenance job lacks exact current native catalog preparation")
+            self._require_retention_coverage_locked()
             token = maintenance_module.ExclusionToken(
                 "maintenance-" + job.plan.plan_digest[:24],
                 self.resolved.campaign_id, self.config_digest,
@@ -3125,6 +3108,71 @@ class CampaignController:
             self._maintenance_append_locked(maintenance_module.make_event(
                 "INTENT", token, occurred_at=self.clock()))
             return token
+
+    def _maintenance_recovery_job_locked(self, job):
+        previous = self._maintenance_state.token
+        if self._maintenance_state.phase != "UNRESOLVED" or previous is None:
+            raise ControlRefused("maintenance exclusion is already owned")
+        if (job.plan.snapshot_id, job.plan.snapshot_generation, job.plan.snapshot_digest,
+                job.plan.plan_digest, job.policy_digest, job.selected_artifact_ids) != (
+                previous.snapshot_id, previous.snapshot_generation,
+                previous.snapshot_digest, previous.plan_digest,
+                previous.policy_digest, previous.selected_artifact_ids):
+            raise ControlRefused("maintenance recovery job differs from unresolved intent")
+        return previous
+
+    def _maintenance_recovery_token_locked(self, previous):
+        return maintenance_module.ExclusionToken(
+            "maintenance-recovery-" + schemas.content_hash({
+                "predecessor": previous.token_digest,
+                "supervisor_incarnation": self.supervisor_incarnation,
+            })[:24],
+            self.resolved.campaign_id, self.config_digest,
+            self.config_generation, self._maintenance_supervisor_id(),
+            self.supervisor_incarnation, previous.snapshot_id,
+            previous.snapshot_generation, previous.snapshot_digest,
+            previous.plan_digest, previous.policy_digest,
+            previous.selected_artifact_ids, self.clock(), previous.token_digest)
+
+    def maintenance_recover_completed(self, job, settlement):
+        """Journal COMPLETED from the broker's prior complete settlement; never re-run."""
+        if not isinstance(settlement, maintenance_module.HoldSettlement):
+            raise TypeError("settlement must be a broker HoldSettlement")
+        with self._mutex:
+            self._require_active_locked()
+            state = self._maintenance_state
+            previous = self._maintenance_recovery_job_locked(job)
+            if (settlement.disposition != "complete" or state.hold is None
+                    or state.cost is None or settlement.cost != state.cost
+                    or settlement.token_digest != previous.token_digest
+                    or settlement.hold_receipt_digest != state.hold.receipt_digest
+                    or (settlement.provider_id, settlement.hold_id)
+                    != (state.hold.provider_id, state.hold.hold_id)):
+                raise ControlRefused("broker completion does not settle the unresolved I/O")
+            token = self._maintenance_recovery_token_locked(previous)
+            self._maintenance_append_locked(maintenance_module.make_event(
+                "COMPLETED", token, hold=state.hold, cost=state.cost,
+                accounting_receipt_digest=settlement.accounting_receipt_digest,
+                occurred_at=self.clock(), settlement=settlement))
+            self._maintenance_tombstone_intent = False
+            self._settle_v2_commands_locked()
+            return token
+
+    def _require_retention_coverage_locked(self) -> None:
+        """Every owner class registered, current (re-derived now) and gap-free."""
+        missing = []
+        for owner_class in retention_catalog_module.OWNER_CLASSES:
+            record = self._retention_owner_records.get(owner_class)
+            if record is None:
+                missing.append(f"missing:{owner_class}")
+            elif record.record_digest != self._derive_retention_owner_locked(
+                    owner_class).record_digest:
+                missing.append(f"stale:{owner_class}")
+            else:
+                missing.extend(f"gap:{owner_class}:{gap}" for gap in record.gaps)
+        if missing:
+            raise ControlRefused(
+                "native retention owner coverage is incomplete: " + ",".join(missing))
 
     def install_native_retention_catalog(
             self, seed, *, runtime_anchors, model_preparations, artifact_root,
@@ -3169,12 +3217,16 @@ class CampaignController:
             return
         for owner_class in owner_classes:
             self._retention_owner_records[owner_class] = (
-                retention_catalog_module.derive_owner_record(
-                    owner_class, seed=seed, generation=self._retention_generation_locked(),
-                    candidate_records=self._candidate_completed_records,
-                    native_records=self._native_records,
-                    worker_results=tuple(self._retention_worker_results.values()),
-                    store_root=str(self.store)))
+                self._derive_retention_owner_locked(owner_class))
+
+    def _derive_retention_owner_locked(self, owner_class: str):
+        return retention_catalog_module.derive_owner_record(
+            owner_class, seed=self._retention_catalog_seed,
+            generation=self._retention_generation_locked(),
+            candidate_records=self._candidate_completed_records,
+            native_records=self._native_records,
+            worker_results=tuple(self._retention_worker_results.values()),
+            store_root=str(self.store))
 
     def _retention_generation_locked(self) -> tuple[Any, ...]:
         return (self._retention_catalog_seed.seed_digest, self.config_generation,
@@ -3256,6 +3308,9 @@ class CampaignController:
                     or job.plan.snapshot_generation != max(1, int(current[2]) + 1)
                     or job.plan.snapshot_digest != prepared.view_digest):
                 raise ControlRefused("native retention catalog changed during preparation")
+            if prepared.view.uncertain_scopes:
+                raise ControlRefused("native retention view has uncertain scopes")
+            self._require_retention_coverage_locked()
             self._prepared_retention_jobs[job.plan.plan_digest] = (
                 current, prepared.view_digest, job.policy_digest,
                 tuple(job.selected_artifact_ids))

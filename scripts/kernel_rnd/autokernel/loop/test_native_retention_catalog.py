@@ -321,7 +321,8 @@ def test_inventory_reader_refuses_fifo_and_oversize_without_blocking(tmp_path):
 def test_prepared_job_binding_refuses_changed_policy_and_selected_prefix(
         retention_tmp_path):
     tmp_path = retention_tmp_path
-    resolved, anchors, seed = _seed()
+    # A declared artifact store keeps owner coverage gap-free (AKU-10d admission gate).
+    resolved, anchors, seed = _seed(artifact_root=tmp_path / "artifacts")
     store = tmp_path / "service"
     store.mkdir(mode=0o700)
     store.chmod(0o700)
@@ -330,7 +331,7 @@ def test_prepared_job_binding_refuses_changed_policy_and_selected_prefix(
     try:
         controller.install_native_retention_catalog(
             seed, runtime_anchors=anchors, model_preparations=_preparations(seed),
-            artifact_root=None)
+            artifact_root=tmp_path / "artifacts")
         frontier = controller.native_retention_catalog_capture()["frontier"]
         view, _old = _view(tmp_path)
         second_path = tmp_path / "owned" / "second"

@@ -464,9 +464,14 @@ def validate_event(value: Mapping[str, Any]) -> dict[str, Any]:
     if event == "COMPLETED" and (hold is None or cost is None or accounting is None
                                  or abort_receipt is not None or reason is not None):
         raise MaintenanceExecutionRefused("COMPLETED requires hold, cost and accounting")
+    # A chained recovery token completes with its predecessor's broker settlement.
+    bound = token.token_digest
+    if (row.get("settlement") or {}).get("token_digest") == token.predecessor_token_digest \
+            and event == "COMPLETED" and token.predecessor_token_digest is not None:
+        bound = token.predecessor_token_digest
     if event == "COMPLETED":
         expected = AccountingReceipt(
-            hold.receipt_digest, token.token_digest, cost, "complete").receipt_digest
+            hold.receipt_digest, bound, cost, "complete").receipt_digest
         if accounting != expected:
             raise MaintenanceExecutionRefused(
                 "COMPLETED accounting receipt digest is misbound")
@@ -494,13 +499,14 @@ def validate_event(value: Mapping[str, Any]) -> dict[str, Any]:
         if event == "INTENT":
             if token.predecessor_token_digest is None or (
                     isinstance(settlement, HoldSettlement)
-                    and settlement.token_digest != token.predecessor_token_digest):
+                    and (settlement.token_digest != token.predecessor_token_digest
+                         or settlement.disposition != "aborted")):
                 raise MaintenanceExecutionRefused(
-                    "only a recovery INTENT may carry its predecessor's hold settlement")
+                    "only a recovery INTENT may carry its predecessor's aborted settlement")
         elif (event not in {"COMPLETED", "ABORTED"}
               or not isinstance(settlement, HoldSettlement) or hold is None
               or settlement.hold_receipt_digest != hold.receipt_digest
-              or settlement.token_digest != token.token_digest
+              or settlement.token_digest != bound
               or settlement.accounting_receipt_digest != accounting
               or settlement.cost != cost):
             raise MaintenanceExecutionRefused(f"{event} hold settlement is misbound")
@@ -522,7 +528,7 @@ def project_events(values) -> MaintenanceState:
         "IO_COMPLETE": {"INTENT", "COMPLETED", "UNRESOLVED"},
         "COMPLETED": {"INTENT"},
         "ABORTED": {"INTENT"},
-        "UNRESOLVED": {"INTENT"},
+        "UNRESOLVED": {"INTENT", "COMPLETED"},
     }
     for value in values:
         row = validate_event(value)
@@ -540,6 +546,10 @@ def project_events(values) -> MaintenanceState:
             raise MaintenanceExecutionRefused(
                 f"maintenance transition {state.phase}->{event} is invalid")
         recovering = state.owned and event == "INTENT"
+        settled = (state.owned and event == "COMPLETED" and token != state.token
+                   and row.get("settlement") is not None and row["hold"] == (
+                       None if state.hold is None else
+                       {**state.hold.body(), "receipt_digest": state.hold.receipt_digest}))
         prior = (_settlement_from(row["settlement"])
                  if recovering and row.get("settlement") is not None else None)
         held = state.hold
@@ -564,18 +574,21 @@ def project_events(values) -> MaintenanceState:
                 "snapshot_generation", "snapshot_digest", "plan_digest", "policy_digest",
                 "selected_artifact_ids",
             )
-            if (not recovering
+            if (not (recovering or settled)
                     or token.predecessor_token_digest != previous.token_digest
                     or any(getattr(token, name) != getattr(previous, name)
                            for name in semantic)):
                 raise MaintenanceExecutionRefused("owned maintenance token changed")
         hold = HoldReceipt.from_dict(row["hold"]) if row["hold"] is not None else None
         if hold is not None:
-            _validate_hold(hold, token, previous=state.hold)
+            _validate_hold(hold, state.token if settled else token, previous=state.hold)
         cost = MaintenanceCost.from_dict(row["cost"]) if row["cost"] is not None else None
         if event == "COMPLETED" and cost != state.cost:
             raise MaintenanceExecutionRefused(
                 "COMPLETED cost differs from IO_COMPLETE")
+        if state.phase == "UNRESOLVED" and event == "COMPLETED" and not settled:
+            raise MaintenanceExecutionRefused(
+                "UNRESOLVED completes only with the broker's settlement of its own hold")
         starting = event == "INTENT"
         state = MaintenanceState(
             phase=event, token=token,
@@ -612,7 +625,8 @@ def make_event(event: str, token: ExclusionToken, *, occurred_at: str,
 @dataclass(frozen=True, slots=True)
 class Admission:
     token: ExclusionToken
-    lease: consumer.MaintenanceLease
+    lease: consumer.MaintenanceLease | None
+    recovered: HoldSettlement | None = None  # broker had already settled "complete"
 
 
 class ControllerMaintenanceBackend:
@@ -762,8 +776,17 @@ class CampaignMaintenanceBackend(ControllerMaintenanceBackend):
                               token.selected_artifact_ids))
 
     def admit(self, job):
+        if type(self.provider) in {MaintenanceHoldProvider, BrokerHoldProvider}:
+            raise MaintenanceExecutionRefused("maintenance hold provider is unavailable")
         prior = self.controller.maintenance_recovery_owner()
         resolution = None if prior is None else self.provider.resolve(*prior)
+        if prior is not None and not isinstance(resolution, (HoldSettlement, NoHoldReceipt)):
+            raise MaintenanceExecutionRefused(
+                "broker could not prove the unresolved hold settled or absent")
+        if isinstance(resolution, HoldSettlement) and resolution.disposition == "complete":
+            # The broker already settled this exclusion: journal it, never re-run.
+            token = self.controller.maintenance_recover_completed(job, resolution)
+            return Admission(token, None, resolution)
         token = self.controller.maintenance_admit(job, prior_settlement=resolution)
         return Admission(token, self._lease(token))
 
@@ -871,10 +894,11 @@ def _validate_accounting(accounting: Any, hold: HoldReceipt, token: ExclusionTok
 
 @dataclass(frozen=True, slots=True)
 class MaintenanceExecutionResult:
-    retention: consumer.HeldRetentionResult
+    retention: consumer.HeldRetentionResult | None  # None: recovered, nothing re-run
     token_digest: str
     accounting: AccountingReceipt
     cost: MaintenanceCost
+    recovered: bool = False
 
 
 def execute(job: consumer.RetentionJob, *, backend: ControllerMaintenanceBackend | None = None,
@@ -900,6 +924,10 @@ def execute(job: consumer.RetentionJob, *, backend: ControllerMaintenanceBackend
             or token.selected_artifact_ids != job.selected_artifact_ids):
         backend.unresolved(token, "controller admission token is misbound to retention job")
         raise MaintenanceExecutionRefused("controller admission token is misbound to retention job")
+    if admission.recovered is not None:
+        return MaintenanceExecutionResult(None, token.token_digest,
+                                          admission.recovered.accounting(),
+                                          admission.recovered.cost, True)
     try:
         acquired = provider.acquire(token)
         if isinstance(acquired, NoHoldReceipt):
