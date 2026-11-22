@@ -2471,7 +2471,8 @@ class CampaignController:
             return "unknown"
 
     def _pending_runtime_issued(self) -> bool:
-        """True when a v3 unsettled issued selection is runtime/calibration work."""
+        """True when a v3 unsettled issued selection has restart recovery (runtime,
+        calibration or, AKU-07h, profile work): its START reports waiting_prerequisite."""
         for issued in self._driver_issued.values() if self.snapshot_version == 3 else ():
             selection, catalog = issued.get("selection"), issued.get("catalog")
             if (issued["transition_id"] in self._driver_settled
@@ -2480,8 +2481,8 @@ class CampaignController:
             work = catalog.get("work_by_stage_digest")
             selected = (work.get(selection.get("proposal_digest"))
                         if isinstance(work, Mapping) else None)
-            if (isinstance(selected, Mapping) and selected.get("kind")
-                    in {"runtime_comparison", "calibration_preparation"}):
+            if (isinstance(selected, Mapping) and selected.get("kind") in {
+                    "runtime_comparison", "calibration_preparation", "profile_preparation"}):
                 return True
         return False
 
@@ -2505,34 +2506,71 @@ class CampaignController:
             observed = "waiting_prerequisite"
         return self.desired_state, observed, reason
 
+    def _restored_issued_locked(self, catalog_id, transition_id, selection, plan_digest=None):
+        issued = self._driver_issued.get(catalog_id)
+        proposal = selection.get("proposal") if isinstance(selection, Mapping) else None
+        work = None if issued is None else issued["catalog"]["work_by_stage_digest"].get(
+            issued["selection"].get("proposal_digest"))
+        if (issued is None or issued["transition_id"] != transition_id
+                or issued["selection"] != selection or transition_id in self._driver_settled
+                or not isinstance(proposal, Mapping) or not isinstance(work, Mapping)
+                or plan_digest not in {None, work.get("stage_plan_digest")}):
+            raise ControlRefused("restored held lookup is not the original unsettled selection")
+        return issued, proposal, work
+
     def restored_held_settlement(self, *, catalog_id: str, transition_id: str,
                                  selection: Mapping[str, Any], plan_digest: str):
-        """AKU-07j: durable stale terminal + held cost of the ORIGINAL unsettled selection.
+        """AKU-07j: durable terminal + held cost of the ORIGINAL unsettled selection.
 
-        Accounting-only (no result/stdout authority); None without a durable held record."""
+        Accounting-only (no result/stdout authority); None without a durable held record.
+        AKU-07h: profile_preparation work resolves its own exact profile lifecycle key."""
         with self._mutex:
             self._require_active_locked()
-            issued = self._driver_issued.get(catalog_id)
-            proposal = selection.get("proposal") if isinstance(selection, Mapping) else None
-            work = None if issued is None else issued["catalog"]["work_by_stage_digest"].get(
-                issued["selection"].get("proposal_digest"))
-            if (issued is None or issued["transition_id"] != transition_id
-                    or issued["selection"] != selection or transition_id in self._driver_settled
-                    or not isinstance(proposal, Mapping) or not isinstance(work, Mapping)
-                    or work.get("stage_plan_digest") != plan_digest):
-                raise ControlRefused("restored held lookup is not the original unsettled selection")
-            key = (proposal["proposal_id"], plan_digest, f"driver:{transition_id}",
-                   f"runtime:{transition_id}")
+            _issued, proposal, work = self._restored_issued_locked(
+                catalog_id, transition_id, selection, plan_digest)
+            if work.get("kind") == "profile_preparation":
+                request = actor_state_module.digest(work.get("payload"))[:24]
+                key = ("profile-" + request, plan_digest, transition_id,
+                       "target-profile-" + request)
+            else:
+                key = (proposal["proposal_id"], plan_digest, f"driver:{transition_id}",
+                       f"runtime:{transition_id}")
             if key not in self._restored_held_accounting:
                 return None
             entry = self._restored_held_accounting[key]
             binding = worker_lifecycle_module.AccountingBinding.from_selection(
                 catalog_id=catalog_id, transition_id=transition_id,
                 selection=scheduling.Selection.from_dict(selection))
-            if (entry is None or entry[1].proposal_id != key[0]
+            if (entry is None or entry[1].proposal_id != proposal["proposal_id"]
                     or entry[2] not in {None, binding.digest}):
                 raise ControlRefused("restored held accounting is ambiguous or bound elsewhere")
             return worker_lifecycle_module.TerminalWorker(**entry[0].__dict__), entry[1]
+
+    def restored_retained_acceptance(self, terminal) -> dict[str, Any]:
+        """AKU-07h: the accepting incarnation's journaled binding + launch artifact contract
+        digest for a restored ACCEPTED terminal. Accounting index only; no authority."""
+        with self._mutex:
+            self._require_active_locked()
+            entry = self._restored_held_accounting.get((
+                terminal.request_id, terminal.plan_digest, terminal.lineage_id,
+                terminal.stage_id))
+            if entry is None or entry[0] != terminal or entry[3] is None:
+                raise ControlRefused("restored terminal has no durable acceptance")
+            return dict(entry[3])
+
+    def restored_profile_binding(self, *, catalog_id: str, transition_id: str,
+                                 selection: Mapping[str, Any]) -> dict[str, Any]:
+        """AKU-07h: the issuance-incarnation binding of unsettled profile work, for the
+        restored receipt's identity only (never materialization/execution authority)."""
+        with self._mutex:
+            self._require_active_locked()
+            issued, _proposal, work = self._restored_issued_locked(
+                catalog_id, transition_id, selection)
+            if (work.get("kind") != "profile_preparation" or self._supervisor_id is None
+                    or issued["config_generation"] != self.config_generation
+                    or issued["config_digest"] != self.config_digest):
+                raise ControlRefused("restored profile binding is not the original issue")
+            return self._materialization_binding_locked(issued["supervisor_incarnation"])
 
     def reconcile_workers(self):
         """Reconcile retained v2 ownership outside the controller command lock."""
@@ -3639,19 +3677,19 @@ class CampaignController:
                     or issued["config_digest"] != self.config_digest):
                 raise ControlRefused(
                     "runtime materialization requires a current exact issued selection")
-            if self._driver_artifact_store is None:
-                from .measurement_capture import ArtifactStore
-                self._driver_artifact_store = ArtifactStore(
-                    self.store / "unified-native-artifacts")
-            return {
-                "schema": "epyc.autokernel.unified_materialization_binding.v1",
-                "campaign_id": self.resolved.campaign_id,
-                "config_digest": self.config_digest,
-                "config_generation": self.config_generation,
-                "supervisor_id": self._supervisor_id,
-                "supervisor_incarnation": self.supervisor_incarnation,
-                "artifact_root": str(self._driver_artifact_store.root),
-            }
+            return self._materialization_binding_locked(self.supervisor_incarnation)
+
+    def _materialization_binding_locked(self, incarnation: int) -> dict[str, Any]:
+        if self._driver_artifact_store is None:
+            from .measurement_capture import ArtifactStore
+            self._driver_artifact_store = ArtifactStore(self.store / "unified-native-artifacts")
+        return {
+            "schema": "epyc.autokernel.unified_materialization_binding.v1",
+            "campaign_id": self.resolved.campaign_id, "config_digest": self.config_digest,
+            "config_generation": self.config_generation, "supervisor_id": self._supervisor_id,
+            "supervisor_incarnation": incarnation,
+            "artifact_root": str(self._driver_artifact_store.root),
+        }
 
     def unified_driver_preparation_history(self, requests) -> Mapping[str, Any]:
         """Bounded immutable original issue/settlement facts, with no new authority.

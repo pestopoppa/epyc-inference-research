@@ -205,8 +205,11 @@ def test_replayed_intent_is_detached_and_digest_tampering_refuses(tmp_path, monk
 def test_restart_after_terminal_without_durable_held_receipt_stays_fenced(
     tmp_path, monkeypatch
 ):
+    # Legacy shape (AKU-07h): an ACCEPTED terminal without a durable held record has no
+    # restored accounting entry, so the post-acceptance crash keeps its existing fence.
     runtime, controller, lifecycle, engine = _runtime(tmp_path, monkeypatch)
     runtime.recover()
+    controller._lifecycle_provider.close_held_receipt = None
     children = {"count": 0}
     real_run = lifecycle.run_stage
     monkeypatch.setattr(lifecycle, "run_stage", lambda *a, **k: (
@@ -214,11 +217,14 @@ def test_restart_after_terminal_without_durable_held_receipt_stays_fenced(
     monkeypatch.setattr(
         controller, "unified_driver_settle",
         lambda _value: (_ for _ in ()).throw(OSError("fixture crash before settlement")))
-    with pytest.raises(sr.StandaloneRuntimeUncertain):
-        runtime.tick()
+    try:
+        assert runtime.tick().status != "settled"
+    except sr.StandaloneRuntimeUncertain:
+        pass
     reopened_runtime, reopened, _new_lifecycle, replay_engine = _reopen_runtime(
         runtime, controller, engine, monkeypatch, child_counter=children)
     try:
+        assert reopened._restored_held_accounting == {}
         recovered = reopened_runtime.recover()
         assert recovered.status == "recovery_required"
         assert "ownership is unknown" in recovered.reason
@@ -1226,3 +1232,129 @@ def test_runtime_result_terminal_is_closed_and_legacy_rows_unchanged(tmp_path, m
     finally:
         runtime.close()
         controller.close()
+
+
+# AKU-07h: crash after a durable WORKER_RESULT_ACCEPTED but before driver settlement.
+# The retained reference is reopened by the terminal's durable digest through the parent
+# reopen boundary and settled once with the original (labelled fixture) held cost. The
+# old-incarnation result is retained diagnostically, never natively accepted.
+
+
+def _accepted_crash(tmp_path, monkeypatch, mode, children):
+    runtime, controller, lifecycle, engine = _runtime(tmp_path, monkeypatch)
+    runtime.recover()
+    real_run = lifecycle.run_stage
+    monkeypatch.setattr(lifecycle, "run_stage", lambda *a, **k: (
+        children.__setitem__("count", children["count"] + 1) or real_run(*a, **k)))
+    if mode == "process_crash":
+        _crash_at(runtime, lifecycle, "WORKER_RESULT_ACCEPTED")
+    else:
+        monkeypatch.setattr(controller, "unified_driver_settle", lambda _value: (
+            _ for _ in ()).throw(OSError("fixture crash before settlement")))
+        with pytest.raises(sr.StandaloneRuntimeUncertain):
+            runtime.tick()
+    transition_id = controller.unified_driver_pending_intent()["transition_id"]
+    current = _reopen_runtime(runtime, controller, engine, monkeypatch, child_counter=children,
+                              crashed=mode == "process_crash")
+    return current, transition_id
+
+
+def _retained_files(controller):
+    worker = _payloads(controller, journal_module.KIND_WORKER_LIFECYCLE)
+    accepted, = [row for row in worker if row["event"] == "WORKER_RESULT_ACCEPTED"]
+    root = controller.store / "unified-native-artifacts"
+    ref_path, = root.glob(f"*-{accepted['data']['result_digest']}.json")
+    import json
+    reference = json.loads(ref_path.read_text())
+    return accepted, ref_path, root / reference["result_locator"], reference
+
+
+@pytest.mark.parametrize("mode", ["process_crash", "settlement_crash"])
+def test_restart_after_durable_accept_settles_retained_result_once_and_idempotently(
+    tmp_path, monkeypatch, mode
+):
+    children = {"count": 0}
+    current, transition_id = _accepted_crash(tmp_path, monkeypatch, mode, children)
+    try:
+        calls = _no_reacquire(current[1])
+        accepted, _ref_path, _sealed, reference = _retained_files(current[1])
+        # A process crash at ACCEPTED precedes native ingestion; a settlement crash follows
+        # the first incarnation's own durable ingestion. Restart adds no native record.
+        native_before = dict(current[1]._native_records)
+        assert bool(native_before) == (mode == "settlement_crash")
+        recovered = current[0].recover()
+        assert recovered.status == "settled", recovered.reason
+        receipt = recovered.execution_receipt
+        assert receipt["transition_id"] == transition_id
+        assert receipt["result_reference"] == reference
+        assert unified_driver._digest(reference) == accepted["data"]["result_digest"]
+        assert receipt["prepared_digest"] == reference["prepared_digest"]
+        assert receipt["terminal"]["accepted"] is True and not receipt["native_measurement_ids"]
+        worker = _payloads(current[1], journal_module.KIND_WORKER_LIFECYCLE)
+        held, = [row for row in worker if row["event"] == "OWNED_HELD_RECEIPT_RETAINED"]
+        assert "WORKER_RESULT_STALE" not in {row["event"] for row in worker}
+        settled, = _payloads(current[1], journal_module.KIND_UNIFIED_DRIVER_SETTLED)
+        assert settled["transition_id"] == transition_id and settled["outcome"] == "failed"
+        assert settled["receipt"] == held["data"]["receipt"]
+        assert [ref.split(":")[0] for ref in settled["terminal_refs"]] == ["lifecycle"]
+        assert dict(current[1]._native_records) == native_before
+        assert len(current[3].export_state().receipts) == 1
+        assert children["count"] == 1 and calls["authorize"] == 0
+        before_state = current[3].export_state()
+        before = [(e.kind, e.payload) for e in current[1]._journal.read_all()
+                  if e.kind != journal_module.KIND_CAMPAIGN_SUPERVISOR_EVENT]
+        for _ in range(2):  # restart twice: idempotent, nothing new journaled or settled
+            current = _reopen_runtime(*current[:2], current[3], monkeypatch,
+                                      child_counter=children)
+            calls = _no_reacquire(current[1])
+            assert current[1].unified_driver_pending_intent() is None
+            assert current[0].recover().status == "recovered"
+            assert current[3].export_state() == before_state
+            assert [(e.kind, e.payload) for e in current[1]._journal.read_all()
+                    if e.kind != journal_module.KIND_CAMPAIGN_SUPERVISOR_EVENT] == before
+            assert children["count"] == 1 and calls["authorize"] == 0
+    finally:
+        current[0].close()
+        current[1].close()
+
+
+@pytest.mark.parametrize("tamper, code", [
+    ("missing_reference", "retained_reference_missing"),
+    ("reference_digest_mismatch", "retained_reference_digest_mismatch"),
+    ("missing_sealed_result", "retained_result_refused"),
+])
+def test_restart_after_durable_accept_with_bad_retained_artifact_stays_fenced(
+    tmp_path, monkeypatch, tamper, code
+):
+    children = {"count": 0}
+    current, _transition_id = _accepted_crash(tmp_path, monkeypatch, "process_crash", children)
+    try:
+        _accepted, ref_path, sealed, reference = _retained_files(current[1])
+        if tamper == "missing_reference":
+            ref_path.unlink()
+        elif tamper == "missing_sealed_result":
+            sealed.unlink()
+        else:
+            import json
+            forged = dict(reference, nonce="fixture-forged-nonce")
+            with open(ref_path, "r+b") as handle:  # same inode/mode, different bytes
+                handle.write(json.dumps(forged, indent=2, sort_keys=True).encode())
+                handle.truncate()
+        pending = current[1].unified_driver_pending_intent()
+        for _ in range(2):  # every restart re-checks and stays fenced; nothing fabricated
+            calls = _no_reacquire(current[1])
+            result = current[0].recover_with_backoff(lambda _seconds: False)
+            assert result.status == "recovery_required" and code in result.reason
+            assert result.terminal == "recovery_refused"
+            with pytest.raises(driver_execution.RetainedResultFenced) as fenced:
+                current[0].executor.recover_issued(current[0]._pending_outcome)
+            assert fenced.value.code == code
+            assert current[1].unified_driver_pending_intent() == pending
+            assert not _payloads(current[1], journal_module.KIND_UNIFIED_DRIVER_SETTLED)
+            assert not current[3].export_state().receipts
+            assert children["count"] == 1 and calls["authorize"] == 0
+            current = _reopen_runtime(*current[:2], current[3], monkeypatch,
+                                      child_counter=children)
+    finally:
+        current[0].close()
+        current[1].close()

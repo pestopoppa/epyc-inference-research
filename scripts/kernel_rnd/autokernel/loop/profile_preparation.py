@@ -313,6 +313,7 @@ class _OriginalAttempt:
     held: scheduling.HeldClaimReceipt
     profile_reference: Mapping[str, Any] | None
     settlement: Mapping[str, Any]
+    restored: str | None = None  # AKU-07h: "index" (07j held index) | "reconciled"
 
 
 def _current_publication(snapshot, work, terminal, started, domain, expires):
@@ -626,6 +627,13 @@ class InstalledProfilePreparationOwner:
         held = self.controller.actor_held_claim_receipt(terminal)
         snapshot = self._profile(work.profile_request.target_revision_digest)
         row = _current_publication(snapshot, work, terminal, started, domain, expires)
+        attempt = self._original_attempt(work, terminal, held, row)
+        with self._lock:
+            self._attempts[transition] = attempt
+        return self._settle(attempt)
+
+    @staticmethod
+    def _original_attempt(work, terminal, held, row, restored=None):
         reference = None if row is None else ud._freeze({
             "profile_event_digest": state.digest(row),
             **{name: row[name] for name in ("target_profile_digest", "profile_request_digest",
@@ -639,21 +647,28 @@ class InstalledProfilePreparationOwner:
             "selection": work.selection.to_dict(), "receipt": held.to_dict(),
             "outcome": "prerequisite" if row is not None else "failed",
             "terminal_refs": [terminal_ref]})
-        attempt = _OriginalAttempt(work, terminal, held, reference, settlement)
-        with self._lock:
-            self._attempts[transition] = attempt
-        return self._settle(attempt)
+        return _OriginalAttempt(work, terminal, held, reference, settlement, restored)
 
     def verify_settlement(self, supplied):
         with self._lock:
             attempt = self._attempts.get(supplied.get("transition_id"))
         if attempt is None or _plain(attempt.settlement) != dict(supplied):
             raise ProfilePreparationRefused("settlement lacks original profile attempt")
-        terminal = self.controller.worker_terminal_for_request(
-            request_id=attempt.terminal.request_id, plan_digest=attempt.terminal.plan_digest,
-            lineage_id=attempt.terminal.lineage_id, stage_id=attempt.terminal.stage_id)
-        if (terminal != attempt.terminal
-                or self.controller.actor_held_claim_receipt(terminal) != attempt.held):
+        if attempt.restored == "index":
+            work = attempt.work
+            terminal, held = self.controller.restored_held_settlement(
+                catalog_id=work.catalog_id, transition_id=work.transition_id,
+                selection=work.selection.to_dict(), plan_digest=work.stage_plan_digest) \
+                or (None, None)
+        elif attempt.restored == "reconciled":
+            terminal = attempt.terminal
+            held = self.controller.worker_held_claim_receipt(terminal)
+        else:
+            terminal = self.controller.worker_terminal_for_request(
+                request_id=attempt.terminal.request_id, plan_digest=attempt.terminal.plan_digest,
+                lineage_id=attempt.terminal.lineage_id, stage_id=attempt.terminal.stage_id)
+            held = None if terminal is None else self.controller.actor_held_claim_receipt(terminal)
+        if terminal != attempt.terminal or held != attempt.held:
             raise ProfilePreparationRefused("profile original terminal/held receipt differs")
         if attempt.profile_reference is not None:
             original = self._profile(attempt.work.profile_request.target_revision_digest)
@@ -688,10 +703,59 @@ class InstalledProfilePreparationOwner:
         if (type(driver) is not ud.UnifiedCampaignDriver or driver.controller is not self.controller
                 or driver.issued_work_kind(outcome) != "profile_preparation"):
             raise ProfilePreparationRefused("profile recovery requires the original typed work")
-        self.controller.reconcile_workers()
+        terminal = self.controller.reconcile_workers()
         with self._lock:
             attempt = self._attempts.get(outcome.transition_id)
         if attempt is not None:
             return self.execute(driver, outcome)
-        raise cc.ControlRefused(
-            "profile recovery lacks original held issuance; no reacquisition or second child")
+        attempt = self._restored_attempt(driver, outcome, terminal)
+        if attempt is None:
+            raise cc.ControlRefused(
+                "profile recovery lacks original held issuance; no reacquisition or second child")
+        with self._lock:
+            self._outcomes[outcome.transition_id] = ud._freeze(outcome.to_dict())
+            self._attempts[outcome.transition_id] = attempt
+        return self._settle(attempt)
+
+    def _restored_attempt(self, driver, outcome, terminal):
+        """AKU-07h: settle a crashed original profile child's durable held cost once.
+
+        The terminal is the one reconcile just made stale, else the controller's
+        accounting-only held-receipt index bound to the ORIGINAL unsettled selection (the
+        AKU-07j path driver_execution.recover_issued uses). Nothing is reacquired or
+        relaunched; a durable publication of this exact terminal settles as prerequisite."""
+        selection = scheduling.Selection.from_dict(_plain(outcome.selection))
+        catalog = driver._issued_catalog
+        row = None if catalog is None or selection.proposal is None else \
+            catalog.work_by_stage_digest.get(selection.proposal.digest)
+        if row is None or row["kind"] != "profile_preparation":
+            raise ProfilePreparationRefused("profile recovery requires the original typed work")
+        request = ud.ProfilePreparationRequest.from_dict(_plain(row["payload"]))
+        digest, plan = state.digest(request.to_dict()), row["stage_plan_digest"]
+        if terminal is None:
+            restored = self.controller.restored_held_settlement(
+                catalog_id=catalog.catalog_id, transition_id=outcome.transition_id,
+                selection=selection.to_dict(), plan_digest=plan)
+            if restored is None:
+                return None
+            (terminal, held), source = restored, "index"
+        else:
+            if (terminal.request_id, terminal.plan_digest, terminal.lineage_id,
+                    terminal.stage_id) != ("profile-" + digest[:24], plan, outcome.transition_id,
+                                           "target-profile-" + digest[:24]):
+                raise cc.ControlRefused("reconciled lifecycle belongs to another issued request")
+            try:
+                held, source = self.controller.worker_held_claim_receipt(terminal), "reconciled"
+            except (wl.WaitingAuthority, wl.LifecycleRefused):
+                return None  # legacy: no durable held record, the existing fence stands
+        work = ud.SelectedProfileWork(
+            catalog.catalog_id, outcome.transition_id, selection, request, plan,
+            self.controller.restored_profile_binding(
+                catalog_id=catalog.catalog_id, transition_id=outcome.transition_id,
+                selection=selection.to_dict()))
+        snapshot = self._profile(request.target_revision_digest)
+        event = None if snapshot is None else snapshot["profile_event"]
+        published = None if event is None else _current_publication(
+            snapshot, work, terminal, event["verified_at"], event["clock_domain"],
+            event["valid_until"])
+        return self._original_attempt(work, terminal, held, published, source)

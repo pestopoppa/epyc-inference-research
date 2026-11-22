@@ -361,6 +361,31 @@ class ArtifactStore:
             raise CaptureError("artifact body is not an object")
         return _freeze(value)
 
+    def read_addressed(self, namespace: str, content_digest: str) -> Mapping[str, Any] | None:
+        """AKU-07h: read the exact object a namespace + canonical content digest name.
+
+        None when absent; never creates or recovers. Bytes must be the store's own exact
+        encoding of an object whose canonical digest is ``content_digest``."""
+        name = (f"{hashlib.sha256(_text(namespace, 'artifact namespace').encode()).hexdigest()}"
+                f"-{_sha(content_digest, 'artifact content digest')}.json")
+        with self._exclusive():
+            try:
+                self._runtime.verify()
+                if self._runtime.exists(f".{name}.stage"):
+                    raise CaptureError("addressed artifact has an unresolved staged publication")
+                if not self._runtime.exists(name):
+                    return None
+                raw = self._durable_read(name)
+            except (OSError, SecureRuntimeError) as exc:
+                raise CaptureError(f"addressed artifact read failed: {exc}") from exc
+        try:
+            expected = self._identity(namespace, json.loads(raw))
+        except (ValueError, CaptureError) as exc:
+            raise CaptureError("addressed artifact bytes differ from its content digest") from exc
+        if expected[0] != name or expected[1] != raw:
+            raise CaptureError("addressed artifact bytes differ from its content digest")
+        return _freeze(expected[2])
+
     def _verify_locked(self, namespace: str, body: Mapping[str, Any]) -> StoredArtifact:
         name, encoded, raw_body = self._identity(namespace, body)
         temporary = f".{name}.stage"

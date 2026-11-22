@@ -490,14 +490,119 @@ def test_actual_profile_restart_reopens_original_diagnosis_without_live_issuance
         before = (store / "journal").stat().st_mtime_ns
         assert restarted.profile_executor.planner_profiles(time.monotonic()) == {}
         assert (store / "journal").stat().st_mtime_ns == before
+        # AKU-07h: restart settles the ORIGINAL durable held cost once through the held
+        # index, citing the original durable publication; no relaunch or reacquisition.
         result = restarted.recover()
-        assert result.status == "recovery_required"
-        assert "original held issuance" in result.reason
+        assert result.status == "settled", result.reason
+        parsed = pp.ProfilePreparationExecutionReceipt.from_dict(result.execution_receipt)
+        assert parsed.body["disposition"] == "profile_verified"
+        row = original["profile_event"]
+        settled = _settlements(store, reopened)
+        assert [item["terminal_refs"] for item in settled] == [[row["verifier_ref"]]]
+        assert settled[0]["outcome"] == "prerequisite"
+        assert settled[0]["receipt"] == _held_rows(store, reopened)[0]["data"]["receipt"]
         assert counter.read_text() == "x"
-        assert not restarted.profile_executor._attempts
+        # Existing planner guard: a settlement from a later incarnation than the
+        # publication grants no planner authority (accounting closes; planning does not).
+        assert restarted.profile_executor.planner_profiles(row["verified_at"]) == {}
     finally:
         restarted.close()
         reopened.close()
+    _assert_restart_settles_nothing_new(factory, materialized, args, store, counter)
+
+
+def _settlements(store, controller):
+    return [row.payload for row in journal.Journal(
+        str(store / "journal"), campaign_id=controller.resolved.campaign_id).read_all()
+        if row.kind == journal.KIND_UNIFIED_DRIVER_SETTLED]
+
+
+def _held_rows(store, controller):
+    return [row.payload for row in journal.Journal(
+        str(store / "journal"), campaign_id=controller.resolved.campaign_id).read_all()
+        if row.kind == journal.KIND_WORKER_LIFECYCLE
+        and row.payload["event"] == "OWNED_HELD_RECEIPT_RETAINED"]
+
+
+def _assert_restart_settles_nothing_new(factory, materialized, args, store, counter):
+    def stable(controller):
+        return [(row.kind, row.payload) for row in journal.Journal(
+            str(store / "journal"), campaign_id=controller.resolved.campaign_id).read_all()
+            if row.kind != journal.KIND_CAMPAIGN_SUPERVISOR_EVENT]
+    before = None
+    for _ in range(2):
+        controller, runtime = factory(materialized.resolved, args)
+        try:
+            before = before or stable(controller)
+            assert controller.unified_driver_pending_intent() is None
+            assert runtime.recover().status == "recovered"
+            assert stable(controller) == before and len(_settlements(store, controller)) == 1
+            assert counter.read_text() == "x"
+        finally:
+            runtime.close()
+            controller.close()
+
+
+def _crash_release(controller):
+    """Fixture-only process death: drop the lease/journal without orderly close."""
+    from .test_standalone_runtime import _crash_release as release
+    release(controller)
+
+
+@pytest.mark.parametrize("phase, settle_crash", [
+    ("OWNED_HELD_RECEIPT_RETAINED", False), ("OWNED_HELD_RECEIPT_RETAINED", True),
+    ("WORKER_RESULT_ACCEPTED", False)])
+def test_crashed_profile_child_settles_durable_held_cost_once_on_restart(
+        tmp_path, monkeypatch, phase, settle_crash):
+    materialized, registry, _target, _, counter, _ = _fixture(tmp_path, selected_provider=True)
+    config = materialized.manifest.driver_config
+    args = SimpleNamespace(store=config.store_path,
+                           config_generation=config.config_generation, snapshot_version=3)
+    factory = si.runtime_factory(materialized, registry)
+    controller, runtime = factory(materialized.resolved, args)
+    controller.apply_command(_command(materialized.resolved, "resume", "resume", 0))
+    assert runtime.recover().status == "recovered"
+    fired = []
+
+    def crash(current):
+        if current == phase and not fired:
+            fired.append(current)
+            raise wl.SimulatedCrash(current)
+
+    controller._worker_lifecycle.fault_hook = crash
+    with pytest.raises((sr.StandaloneRuntimeUncertain, wl.SimulatedCrash)):
+        runtime.tick()
+    store, transition = controller.store, controller.unified_driver_pending_intent()
+    _crash_release(controller)
+    controller, runtime = factory(materialized.resolved, args)
+    authorized = []
+    provider = controller._lifecycle_provider
+    monkeypatch.setattr(provider, "authorize", lambda *a, **k: authorized.append(a))
+    try:
+        if settle_crash:  # crash before settlement during the first restart
+            monkeypatch.setattr(controller, "_driver_settlement_validator", lambda _value: (
+                _ for _ in ()).throw(RuntimeError("fixture crash before settlement")))
+            assert runtime.recover().status == "recovery_required"
+            assert not _settlements(store, controller)
+            runtime.close()
+            controller.close()
+            controller, runtime = factory(materialized.resolved, args)
+            monkeypatch.setattr(controller._lifecycle_provider, "authorize",
+                                lambda *a, **k: authorized.append(a))
+        result = runtime.recover()
+        assert result.status == "settled", result.reason
+        parsed = pp.ProfilePreparationExecutionReceipt.from_dict(result.execution_receipt)
+        assert parsed.body["disposition"] == "failed"  # crashed before any publication
+        settled, = _settlements(store, controller)
+        held, = _held_rows(store, controller)
+        assert settled["transition_id"] == transition["transition_id"]
+        assert settled["outcome"] == "failed" and settled["receipt"] == held["data"]["receipt"]
+        assert [ref.split(":")[0] for ref in settled["terminal_refs"]] == ["lifecycle"]
+        assert counter.read_text() == "x" and not authorized
+    finally:
+        runtime.close()
+        controller.close()
+    _assert_restart_settles_nothing_new(factory, materialized, args, store, counter)
 
 
 def _synthetic_reporting_receipt(attempt):

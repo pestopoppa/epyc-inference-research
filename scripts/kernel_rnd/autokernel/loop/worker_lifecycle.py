@@ -789,33 +789,43 @@ def project_events(events: Sequence[Mapping[str, Any]]) -> LifecycleProjection:
 
 
 def restored_stale_held_accounting(events: Sequence[Mapping[str, Any]]) -> dict:
-    """AKU-07j: accounting-only index of durably STALE workers with a held record.
+    """AKU-07j/07h: accounting-only index of durably terminal workers with a held record.
 
     Keyed by (request_id, plan_digest, lineage_id, stage_id) -> (terminal, receipt,
-    binding digest | None); a reused key maps to None. Grants no result/stdout authority;
-    legacy streams without OWNED_HELD_RECEIPT_RETAINED yield nothing."""
+    binding digest | None, durable acceptance | None); a reused key maps to None. STALE
+    and (AKU-07h) ACCEPTED finals are indexed; an ACCEPTED entry carries the accepting
+    incarnation's journaled binding + launch artifact contract digest so its retained
+    result can be reopened by digest. Grants no result/stdout authority; legacy streams
+    without OWNED_HELD_RECEIPT_RETAINED yield nothing."""
     projection = project_events(events)
     index: dict[tuple[str, str, str, str], Any] = {}
     for worker, final in projection.terminal.items():
         rows = [validate_event(row) for row in events if row.get("worker_id") == worker]
         held = next((row for row in rows if row["event"] == "OWNED_HELD_RECEIPT_RETAINED"), None)
-        if held is None or final["event"] != "WORKER_RESULT_STALE":
+        if held is None or final["event"] not in {"WORKER_RESULT_STALE",
+                                                  "WORKER_RESULT_ACCEPTED"}:
             continue
-        last = final
+        last, accepted = final, final["event"] == "WORKER_RESULT_ACCEPTED"
         retained = next((row for row in rows if row["event"] == "WORKER_RESULT_RETAINED"), None)
+        intent = next((row for row in rows if row["event"] == "OWNED_LAUNCH_INTENT"), None)
         ids = [last[name] for name in ("worker_id", "worker_generation", "request_id",
                                        "plan_digest", "lineage_id", "stage_id", "grant_id",
                                        "grant_generation", "container_id")]
         terminal = TerminalWorker(*ids, retained["data"]["return_code"] if retained else None,
-                                  last["data"]["result_digest"], False, last["data"]["reason"])
+                                  last["data"]["result_digest"], accepted, last["data"]["reason"])
         data = held["data"]
         trusted = TrustedHeldClaimReceipt(
             last["request_id"], last["plan_digest"], worker, last["worker_generation"],
             last["grant_id"], last["grant_generation"], last["container_id"],
             data["clock_domain"], data["held_started_at"], data["held_ended_at"], data["receipt"])
+        durable = None if not accepted or intent is None else _freeze_json({
+            **{name: last[name] for name in ("campaign_id", "config_digest", "config_generation",
+                                             "supervisor_id", "supervisor_incarnation")},
+            "artifact_contract_digest":
+                intent["data"]["contract"]["artifact_contract_digest"]})
         key = tuple(ids[2:6])
         index[key] = None if key in index else (
-            terminal, trusted.receipt, data.get("accounting_binding_digest"))
+            terminal, trusted.receipt, data.get("accounting_binding_digest"), durable)
     return index
 
 
@@ -1973,7 +1983,7 @@ class WorkerLifecycle:
                         self._descendant_receipts.clear()
             close_owned(outcome_read)
             outcome_read = None
-            retained_digest = (planned_invocation.reference_digest
+            retained_digest = (planned_invocation.retain_reference()  # AKU-07h: durable first
                                if planned_invocation is not None else _digest(result))
             if retained_digest is None:
                 raise LifecycleRefused("planned result reference was not retained")

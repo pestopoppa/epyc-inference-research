@@ -1970,6 +1970,19 @@ class PlannedWorkerInvocation:
     def reference_digest(self) -> str | None:
         return self._reference_digest
 
+    def retain_reference(self) -> str | None:
+        """AKU-07h: make the exact reference durable, addressed by its digest, before the
+        lifecycle's WORKER_RESULT_RETAINED names that digest (restart re-ingestion)."""
+        if self._reference is None or self._reference_digest is None:
+            return None
+        store = mc.ArtifactStore(self.prepared.artifact_root)
+        try:
+            store.write(retained_reference_namespace(self.prepared.prepared_digest),
+                        self._reference.to_dict())
+        finally:
+            store.close()
+        return self._reference_digest
+
     @property
     def channels_drained(self) -> bool:
         return not self._read_buffers and not any(self._write_buffers.values())
@@ -2140,7 +2153,8 @@ def reopen_deferred_result(reference: PlannedWorkerResultReference, *,
     """
     reference = PlannedWorkerResultReference.from_dict(reference.to_dict())
     prepared = PreparedPlannedServingStage.from_dict(prepared.to_dict())
-    start = WorkerStart.from_dict(start.to_dict())
+    if type(start) is not RetainedResultIdentity:  # AKU-07h restart: durable identity only
+        start = WorkerStart.from_dict(start.to_dict())
     v2 = prepared.native_observed
     selected = prepared.selected_range
     expected_reference_schema = (RESULT_REFERENCE_SCHEMA_V3 if selected is not None else
@@ -2280,6 +2294,96 @@ def reopen_deferred_result(reference: PlannedWorkerResultReference, *,
                              for measurement_id, payload in validated_captures)
     finally:
         store.close()
+
+
+RETAINED_RESULT_FENCES = ("retained_prepared_differs", "retained_reference_missing",
+                          "retained_reference_digest_mismatch", "retained_result_refused")
+
+
+class RetainedResultUnavailable(WorkerBridgeRefused):
+    """AKU-07h: a durable accepted result cannot be reopened; its transition stays fenced."""
+
+    def __init__(self, code: str, detail: str) -> None:
+        if code not in RETAINED_RESULT_FENCES:
+            raise ValueError("retained result fence code is not in the closed set")
+        super().__init__(f"{code}: {detail}")
+        self.code = code
+
+
+def retained_reference_namespace(prepared_digest: str) -> str:
+    return f"planned-worker-retained-reference:{_sha(prepared_digest, 'prepared_digest')}"
+
+
+# Durable lifecycle identity of an accepted terminal; no child/process authority (AKU-07h).
+RetainedResultIdentity = __import__("collections").namedtuple("RetainedResultIdentity", (
+    "nonce request_id prepared_digest plan_digest lineage_id stage_id campaign_id config_digest "
+    "config_generation supervisor_id supervisor_incarnation worker_id worker_generation "
+    "grant_id grant_generation container_id"))
+
+
+def reopen_retained_result(*, prepared: PreparedPlannedServingStage,
+                           terminal: wl.TerminalWorker,
+                           durable: Mapping[str, Any]) \
+        -> tuple[PreparedPlannedServingStage, PlannedWorkerResultReference]:
+    """AKU-07h: reopen a durably ACCEPTED result after process restart by its digest.
+
+    ``durable`` is the accepting incarnation's journaled binding plus the launch intent's
+    artifact contract digest. The reference is read by the terminal's durable digest and
+    the sealed result passes the same side-effect-free ``reopen_deferred_result`` boundary
+    under that historical acceptance fence. Returns the original prepared stage and the
+    reference. Nothing is ingested or journaled here."""
+    def fenced(code: str, detail: str, cause: BaseException | None = None):
+        raise RetainedResultUnavailable(code, detail) from cause
+
+    body = PreparedPlannedServingStage.from_dict(prepared.to_dict()).body()
+    base = dict(_plain(body["capture_context_base"]))
+    if (not isinstance(terminal, wl.TerminalWorker) or not terminal.accepted
+            or any(base[name] != durable.get(name)
+                   for name in ("campaign_id", "config_digest", "config_generation"))):
+        fenced("retained_prepared_differs", "terminal/config is not the accepted original")
+    base.update(supervisor_id=durable["supervisor_id"],
+                supervisor_incarnation=durable["supervisor_incarnation"])
+    body["capture_context_base"] = base
+    try:
+        original = PreparedPlannedServingStage.from_dict({**body, "prepared_digest": _digest(body)})
+    except WorkerBridgeRefused as exc:
+        fenced("retained_prepared_differs", str(exc), exc)
+    if (original.prepared_digest != durable.get("artifact_contract_digest")
+            or original.plan.digest != terminal.plan_digest):
+        fenced("retained_prepared_differs", "re-materialized original differs from launch intent")
+    store = mc.ArtifactStore(original.artifact_root)
+    try:
+        row = store.read_addressed(retained_reference_namespace(original.prepared_digest),
+                                   terminal.result_digest)
+    except mc.CaptureError as exc:
+        fenced("retained_reference_digest_mismatch", str(exc), exc)
+    finally:
+        store.close()
+    if row is None:
+        fenced("retained_reference_missing", "no reference is retained at the durable digest")
+    try:
+        reference = PlannedWorkerResultReference.from_dict(row)
+    except WorkerBridgeRefused as exc:
+        fenced("retained_reference_digest_mismatch", str(exc), exc)
+    if _digest(reference.to_dict()) != terminal.result_digest:
+        fenced("retained_reference_digest_mismatch", "reference differs from durable digest")
+    identity = RetainedResultIdentity(
+        reference.nonce, terminal.request_id, original.prepared_digest, terminal.plan_digest,
+        terminal.lineage_id, terminal.stage_id, durable["campaign_id"],
+        durable["config_digest"], durable["config_generation"], durable["supervisor_id"],
+        durable["supervisor_incarnation"], terminal.worker_id, terminal.worker_generation,
+        terminal.grant_id, terminal.grant_generation, terminal.container_id)
+    fence = nc.TrustedWorkerResultFence(
+        identity.campaign_id, identity.config_digest, identity.config_generation,
+        identity.supervisor_id, identity.supervisor_incarnation, terminal.worker_id,
+        terminal.worker_generation, terminal.grant_id, terminal.container_id,
+        terminal.lineage_id, True, True)  # historical: the durable ACCEPTED event's fence
+    try:
+        reopen_deferred_result(reference, prepared=original, start=identity,
+                               terminal=terminal, fence=fence)
+    except (WorkerBridgeRefused, mc.CaptureError) as exc:
+        fenced("retained_result_refused", str(exc), exc)
+    return original, reference
 
 
 def write_bounded_message(sock: socket.socket, value: Mapping[str, Any], *,
@@ -2461,7 +2565,9 @@ __all__ = ["CONTINUATION_REQUEST_SCHEMA", "CONTINUATION_SCHEMA", "HELLO_SCHEMA",
            "InheritedUnitAuthority", "MembershipProbe", "OwnedWorkerStageProvider",
            "ParentUnitEvidenceAuthority", "PlannedWorkerInvocation",
            "PlannedWorkerResult", "PlannedWorkerResultReference",
-           "PreparedPlannedServingStage", "UnitAuthority", "UnitPermit", "WorkerBridgeRefused",
-           "WorkerStart", "exact_canonical", "ingest_deferred_result",
+           "PreparedPlannedServingStage", "RETAINED_RESULT_FENCES", "RetainedResultIdentity",
+           "RetainedResultUnavailable", "UnitAuthority", "UnitPermit", "WorkerBridgeRefused",
+           "WorkerStart", "exact_canonical", "ingest_deferred_result", "reopen_retained_result",
+           "retained_reference_namespace",
            "main", "read_bounded_message", "run_from_fds", "run_prepared_stage", "verify_linux_membership",
            "write_bounded_message"]

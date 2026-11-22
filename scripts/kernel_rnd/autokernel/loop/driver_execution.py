@@ -39,6 +39,14 @@ class DriverExecutionUncertain(RuntimeError):
     """An owned attempt started and must be reconciled, never launched again."""
 
 
+class RetainedResultFenced(DriverExecutionRefused):
+    """AKU-07h: a restored ACCEPTED result cannot be reopened; its transition stays fenced."""
+
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(f"retained result fenced: {detail}")
+        self.code = code  # one of unified_worker.RETAINED_RESULT_FENCES
+
+
 def _text(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise DriverExecutionRefused(f"{label} must be nonempty text")
@@ -663,7 +671,11 @@ class UnifiedDriverExecution:
                              stage_id=attempt.terminal.stage_id))
             if recovered != attempt.terminal or trusted["terminal_refs"] != [terminal_ref]:
                 raise DriverExecutionRefused("failed lifecycle terminal differs")
-            if attempt.reference is not None:
+            if attempt.reference is not None and attempt.restored:
+                if (self._reopen_retained(attempt.prepared, attempt.terminal)
+                        != (attempt.prepared, attempt.reference)):
+                    raise DriverExecutionRefused("restored retained result differs")
+            elif attempt.reference is not None:
                 fence = self.controller.worker_result_fence(attempt.terminal)
                 if (not attempt.terminal.accepted or not fence.current
                         or not fence.result_accepted
@@ -746,9 +758,15 @@ class UnifiedDriverExecution:
                 except Exception as exc:
                     raise worker_lifecycle.WaitingAuthority(
                         "reconciled terminal lacks a trusted held receipt") from exc
+                # AKU-07h: a durably ACCEPTED result is reopened by digest and retained
+                # diagnostically; an old-incarnation result is never natively accepted.
+                reference = None
+                if restored is not None and terminal.accepted:
+                    prepared, reference = self._reopen_retained(prepared, terminal)
                 failed = _FailedAttempt(
                     self.driver._issued_catalog.catalog_id, transition_id, selection,
-                    prepared, terminal, held, recovered=True, restored=restored is not None)
+                    prepared, terminal, held, reference, recovered=True,
+                    restored=restored is not None)
                 self._launched.add(transition_id)
                 self._finished[transition_id] = failed
                 return self._finish(failed)
@@ -759,6 +777,14 @@ class UnifiedDriverExecution:
                 return self._execute_locked(outcome)
             raise worker_lifecycle.WaitingAuthority(
                 f"restored lifecycle ownership is {status}; exact recovery remains fenced")
+
+    def _reopen_retained(self, prepared, terminal):
+        try:
+            return unified_worker.reopen_retained_result(
+                prepared=prepared, terminal=terminal,
+                durable=self.controller.restored_retained_acceptance(terminal))
+        except unified_worker.RetainedResultUnavailable as exc:
+            raise RetainedResultFenced(exc.code, str(exc)) from exc
 
     def _stop_producer(self, producer: UnknownParentEvidenceProducer) \
             -> BaseException | None:
@@ -1073,6 +1099,6 @@ class UnifiedDriverExecution:
             self._closed = True
 
 
-__all__ = ["DriverExecutionReceipt", "DriverExecutionRefused",
+__all__ = ["DriverExecutionReceipt", "DriverExecutionRefused", "RetainedResultFenced",
            "DriverExecutionUncertain", "EXECUTION_RECEIPT_SCHEMA", "EXECUTION_RECEIPT_SCHEMA_V2",
            "UnifiedDriverExecution", "UnknownParentEvidenceProducer"]

@@ -218,6 +218,24 @@ def test_artifact_store_reads_only_exact_pinned_digest(tmp_path):
         store.read("../escape", receipt.sha256)
 
 
+def test_artifact_store_reads_addressed_object_by_canonical_digest_only(tmp_path):
+    # AKU-07h: restart reads a retained reference knowing only its durable digest.
+    store = mc.ArtifactStore(tmp_path / "store")
+    body = {"reference": "fixture", "n": 1}
+    digest = __import__("hashlib").sha256(mc._canonical(body)).hexdigest()
+    assert store.read_addressed("ns", digest) is None
+    receipt = store.write("ns", body)
+    assert mc._plain(store.read_addressed("ns", digest)) == body
+    assert store.read_addressed("other-ns", digest) is None
+    path = tmp_path / "store" / receipt.locator
+    with open(path, "r+b") as handle:  # same inode, bytes no longer match the digest
+        handle.write(json.dumps({"reference": "forged", "n": 1}, indent=2,
+                                sort_keys=True).encode())
+        handle.truncate()
+    with pytest.raises(mc.CaptureError, match="content digest"):
+        store.read_addressed("ns", digest)
+
+
 def test_failed_or_partial_slot_is_retained_diagnostic_without_scalar(tmp_path):
     result, entries, _ = _run(tmp_path, measure=_measure([], partial=True))
     assert not result.execution_complete
