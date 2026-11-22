@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .controller.loop_experiment_runner import _run_process
 from .lesson_admission import _evaluate_and_record, _number, violations
+from .lesson_cap import RECEIPT_KIND, verify_cap_provenance
 
 
 def _sha(data):
@@ -109,15 +110,16 @@ def _read_capture(folder, expected_prompt, expected_argv, expected_exe_sha, prot
     return speedup
 
 
-def _cap_source_valid(provenance, task_id):
+def _cap_source_valid(provenance, task_id, upper_cap=None):
     if not isinstance(task_id, str) or not isinstance(provenance, dict) or set(provenance) != {'kind', 'source'}:
         return False
     kind, source = provenance['kind'], provenance['source']
     if not isinstance(source, str) or not source.strip():
         return False
-    # A workload_roofline label and a source string are only assertions.
-    # Until there is an evidence verifier and a selected workload they cannot
-    # authorize an operational cap. Controls are explicitly isolated.
+    # A workload_roofline label is only an assertion and stays refused. A
+    # workload_receipt cap is re-derived from its receipt (lesson_cap, AK-PM-12-S2).
+    if kind == RECEIPT_KIND:
+        return verify_cap_provenance(provenance, task_id, upper_cap)
     return kind == 'control' and task_id.startswith('CONTROL-')
 
 
@@ -134,7 +136,7 @@ def produce(journal, *, artifact_root, task_id, task_prompt, candidate_id, commi
     No subprocess is started if cap is absent. The task and lesson are captured
     before execution; no earlier, unbound result is promoted into this receipt.
     """
-    if not isinstance(task_id, str) or not _cap_source_valid(cap_provenance, task_id):
+    if not isinstance(task_id, str) or not _cap_source_valid(cap_provenance, task_id, upper_cap):
         upper_cap = None
         cap_provenance = None
     preliminary = {'schema': 'autokernel.lesson_admission.v1', 'task_id': task_id,
@@ -236,7 +238,7 @@ def verify_artifacts(payload):
             ('manifest', manifest_raw), ('baseline', baseline_raw), ('verification', verify_raw))):
         raise ValueError('native capture digest mismatch')
     m = json.loads(manifest_raw)
-    if not _cap_source_valid(m.get('cap_provenance'), m.get('task_id', '')):
+    if not _cap_source_valid(m.get('cap_provenance'), m.get('task_id', ''), m.get('upper_cap')):
         raise ValueError('native cap provenance absent or invalid; legacy receipt is not qualified')
     for key in ('task_id', 'candidate_id', 'commit', 'lesson', 'reopen_when', 'upper_cap'):
         if m[key] != payload[key]:

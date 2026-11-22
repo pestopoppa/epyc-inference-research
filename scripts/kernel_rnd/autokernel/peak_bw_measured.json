@@ -1,0 +1,305 @@
+{
+ "note": "Measured streaming-read ceilings. Unknown parts refuse; no spec-sheet constant (AK-PM-15).",
+ "parts": {
+  "gfx90a": {
+   "device": "AMD Instinct MI210 (ROCm0)",
+   "lines": [
+    {
+     "TBps": 1.0556,
+     "bs": 256,
+     "ms": 28.48,
+     "nt": 0,
+     "unroll": 1,
+     "waves_per_cu": 4
+    },
+    {
+     "TBps": 1.4982,
+     "bs": 256,
+     "ms": 20.068,
+     "nt": 0,
+     "unroll": 4,
+     "waves_per_cu": 4
+    },
+    {
+     "TBps": 1.0466,
+     "bs": 256,
+     "ms": 28.727,
+     "nt": 0,
+     "unroll": 8,
+     "waves_per_cu": 4
+    },
+    {
+     "TBps": 1.0639,
+     "bs": 256,
+     "ms": 28.26,
+     "nt": 1,
+     "unroll": 1,
+     "waves_per_cu": 4
+    },
+    {
+     "TBps": 1.4784,
+     "bs": 256,
+     "ms": 20.336,
+     "nt": 1,
+     "unroll": 4,
+     "waves_per_cu": 4
+    },
+    {
+     "TBps": 1.0461,
+     "bs": 256,
+     "ms": 28.74,
+     "nt": 1,
+     "unroll": 8,
+     "waves_per_cu": 4
+    },
+    {
+     "TBps": 1.4536,
+     "bs": 256,
+     "ms": 20.683,
+     "nt": 0,
+     "unroll": 1,
+     "waves_per_cu": 8
+    },
+    {
+     "TBps": 1.0013,
+     "bs": 256,
+     "ms": 30.026,
+     "nt": 0,
+     "unroll": 4,
+     "waves_per_cu": 8
+    },
+    {
+     "TBps": 0.9966,
+     "bs": 256,
+     "ms": 30.169,
+     "nt": 0,
+     "unroll": 8,
+     "waves_per_cu": 8
+    },
+    {
+     "TBps": 1.4521,
+     "bs": 256,
+     "ms": 20.704,
+     "nt": 1,
+     "unroll": 1,
+     "waves_per_cu": 8
+    },
+    {
+     "TBps": 1.0061,
+     "bs": 256,
+     "ms": 29.882,
+     "nt": 1,
+     "unroll": 4,
+     "waves_per_cu": 8
+    },
+    {
+     "TBps": 1.0066,
+     "bs": 256,
+     "ms": 29.868,
+     "nt": 1,
+     "unroll": 8,
+     "waves_per_cu": 8
+    },
+    {
+     "TBps": 1.2345,
+     "bs": 256,
+     "ms": 24.354,
+     "nt": 0,
+     "unroll": 1,
+     "waves_per_cu": 16
+    },
+    {
+     "TBps": 1.0771,
+     "bs": 256,
+     "ms": 27.912,
+     "nt": 0,
+     "unroll": 4,
+     "waves_per_cu": 16
+    },
+    {
+     "TBps": 1.0466,
+     "bs": 256,
+     "ms": 28.725,
+     "nt": 0,
+     "unroll": 8,
+     "waves_per_cu": 16
+    },
+    {
+     "TBps": 1.1982,
+     "bs": 256,
+     "ms": 25.092,
+     "nt": 1,
+     "unroll": 1,
+     "waves_per_cu": 16
+    },
+    {
+     "TBps": 1.087,
+     "bs": 256,
+     "ms": 27.659,
+     "nt": 1,
+     "unroll": 4,
+     "waves_per_cu": 16
+    },
+    {
+     "TBps": 1.0382,
+     "bs": 256,
+     "ms": 28.958,
+     "nt": 1,
+     "unroll": 8,
+     "waves_per_cu": 16
+    },
+    {
+     "TBps": 1.0771,
+     "bs": 256,
+     "ms": 27.912,
+     "nt": 0,
+     "unroll": 1,
+     "waves_per_cu": 32
+    },
+    {
+     "TBps": 1.141,
+     "bs": 256,
+     "ms": 26.35,
+     "nt": 0,
+     "unroll": 4,
+     "waves_per_cu": 32
+    },
+    {
+     "TBps": 1.1299,
+     "bs": 256,
+     "ms": 26.608,
+     "nt": 0,
+     "unroll": 8,
+     "waves_per_cu": 32
+    },
+    {
+     "TBps": 1.0938,
+     "bs": 256,
+     "ms": 27.486,
+     "nt": 1,
+     "unroll": 1,
+     "waves_per_cu": 32
+    },
+    {
+     "TBps": 1.1484,
+     "bs": 256,
+     "ms": 26.181,
+     "nt": 1,
+     "unroll": 4,
+     "waves_per_cu": 32
+    },
+    {
+     "TBps": 1.1452,
+     "bs": 256,
+     "ms": 26.253,
+     "nt": 1,
+     "unroll": 8,
+     "waves_per_cu": 32
+    },
+    {
+     "TBps": 1.2741,
+     "bs": 1024,
+     "ms": 23.596,
+     "nt": 0,
+     "unroll": 1,
+     "waves_per_cu": 16
+    },
+    {
+     "TBps": 0.8166,
+     "bs": 1024,
+     "ms": 36.817,
+     "nt": 0,
+     "unroll": 4,
+     "waves_per_cu": 16
+    },
+    {
+     "TBps": 0.7417,
+     "bs": 1024,
+     "ms": 40.538,
+     "nt": 0,
+     "unroll": 8,
+     "waves_per_cu": 16
+    },
+    {
+     "TBps": 1.3569,
+     "bs": 1024,
+     "ms": 22.157,
+     "nt": 1,
+     "unroll": 1,
+     "waves_per_cu": 16
+    },
+    {
+     "TBps": 0.8184,
+     "bs": 1024,
+     "ms": 36.735,
+     "nt": 1,
+     "unroll": 4,
+     "waves_per_cu": 16
+    },
+    {
+     "TBps": 0.7426,
+     "bs": 1024,
+     "ms": 40.486,
+     "nt": 1,
+     "unroll": 8,
+     "waves_per_cu": 16
+    },
+    {
+     "TBps": 1.0402,
+     "bs": 1024,
+     "ms": 28.904,
+     "nt": 0,
+     "unroll": 1,
+     "waves_per_cu": 32
+    },
+    {
+     "TBps": 0.9174,
+     "bs": 1024,
+     "ms": 32.771,
+     "nt": 0,
+     "unroll": 4,
+     "waves_per_cu": 32
+    },
+    {
+     "TBps": 0.8413,
+     "bs": 1024,
+     "ms": 35.738,
+     "nt": 0,
+     "unroll": 8,
+     "waves_per_cu": 32
+    },
+    {
+     "TBps": 1.0407,
+     "bs": 1024,
+     "ms": 28.889,
+     "nt": 1,
+     "unroll": 1,
+     "waves_per_cu": 32
+    },
+    {
+     "TBps": 0.911,
+     "bs": 1024,
+     "ms": 33.002,
+     "nt": 1,
+     "unroll": 4,
+     "waves_per_cu": 32
+    },
+    {
+     "TBps": 0.8387,
+     "bs": 1024,
+     "ms": 35.848,
+     "nt": 1,
+     "unroll": 8,
+     "waves_per_cu": 32
+    }
+   ],
+   "measured_at": "2026-11-20",
+   "method": "stream.hip ./stream 28 (28 GiB read), best of the measured config grid",
+   "peak_bw_bytes_per_s": 1498200000000,
+   "source_file_sha256": "efce196e536846e5d1c4dfabe9168ba38fd9f1d7a8b83ffa0e3844e9792b1dd5",
+   "source_row": "ak-dtree0-q8mf5-gate-gpu-20261120",
+   "source_unit": "stream"
+  }
+ },
+ "schema": "autokernel.peak_bw_measured.v1"
+}
