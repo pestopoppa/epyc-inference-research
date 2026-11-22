@@ -287,6 +287,13 @@ def check_outcome_against_children(outcome: str, rows: Sequence[Mapping[str, Any
             raise OperationAccountingRefused(
                 "a single-stage operation settles one child; diagnostic only as failed")
         return
+    from . import actor_settlement_policy as actor_policy  # AKU-06d2
+    if outcome == actor_policy.ACTOR_ONLY_OUTCOME:
+        try:
+            actor_policy.check(rows, denial_ref, enrollment_ref=enrollment_ref, uncertain=uncertain)
+        except actor_policy.ActorSettlementRefused as exc:
+            raise OperationAccountingRefused(str(exc)) from exc
+        return
     if outcome not in SETTLEMENT_OUTCOMES:
         raise OperationAccountingRefused("operation settlement outcome is unsupported")
     if enrollment_ref is not None:
@@ -421,7 +428,7 @@ def validate_settled_v2(payload: Any) -> list[str]:
     if not isinstance(payload["selection"], Mapping):
         out.append("selection: required mapping")
     if payload["outcome"] not in (
-            scheduling.OUTCOMES if "operation" in payload else SETTLEMENT_OUTCOMES):
+            scheduling.OUTCOMES if "operation" in payload else (*SETTLEMENT_OUTCOMES, "abstained")):
         out.append("outcome: unsupported for an operation settlement")
     refs = payload["terminal_refs"]
     if (not isinstance(refs, list) or any(not isinstance(i, str) or not i for i in refs)
