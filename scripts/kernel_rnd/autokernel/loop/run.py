@@ -2076,6 +2076,22 @@ def submit_keep_lesson(store: Path, attempt: dict, *, producer=None) -> dict:
     return keep_lesson.submit_keep(journal, attempt, producer=producer)
 
 
+def publish_lineage_taxonomy(store: Path, producer_commit: str) -> Path | None:
+    """AK-lineage: retain the run-end lineage-taxonomy receipt over this store's
+    experiments.db (`lineage_taxonomy_wire.publish`). Observation only; never raises."""
+    try:
+        db = Path(store) / "experiments.db"
+        if not db.is_file():
+            return None
+        from . import lineage_taxonomy_wire
+        return lineage_taxonomy_wire.publish(
+            Path(store), [db], producer_commit=producer_commit, observed_at=loop._now())
+    except Exception as exc:  # noqa: BLE001 - reporting only
+        print(f"warning: lineage taxonomy receipt unavailable: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
+        return None
+
+
 def attempt_with_codegen(outcome: loop.Outcome, summaries: dict[str, dict]) -> dict:
     """Attach a keep's diagnostic to the same durable experiment row."""
     attempt = outcome.to_attempt()
@@ -8225,6 +8241,8 @@ def _main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"warning: lineage belief export unavailable: {type(exc).__name__}: "
                   f"{exc}", file=sys.stderr)
+            return
+        publish_lineage_taxonomy(args.store, source_revision)
 
     cpu_win = None
     if args.cpu_window_yield == "on" and not gpu_skip_cpu_claim \
