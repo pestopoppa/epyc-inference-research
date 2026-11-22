@@ -78,6 +78,7 @@ class StandaloneRuntimeConfig:
     shutdown_timeout_seconds: float = 10.0
     max_exact_retries: int = 3
     schema: str = CONFIG_SCHEMA
+    operation_settlement: bool = False  # AKU-06l: single-stage SETTLED.v2 (opt-in)
 
     def __post_init__(self) -> None:
         if self.schema != CONFIG_SCHEMA:
@@ -100,6 +101,8 @@ class StandaloneRuntimeConfig:
             raise StandaloneRuntimeRefused(
                 f"max_exact_retries must be from 1 through {MAX_EXACT_RETRIES}"
             )
+        if type(self.operation_settlement) is not bool:
+            raise StandaloneRuntimeRefused("operation_settlement must be a bool")
 
 
 @dataclass(frozen=True)
@@ -385,7 +388,8 @@ class StandaloneRuntime:
             driver=driver, controller=controller,
             observation_configuration=inputs.observation_configuration,
             native_evidence_configuration=inputs.native_evidence_configuration,
-            profile_executor=profile_executor)
+            profile_executor=profile_executor,
+            operation_settlement=(config or StandaloneRuntimeConfig()).operation_settlement)
         return cls(
             controller=controller,
             driver=driver,

@@ -552,7 +552,8 @@ class UnifiedDriverExecution:
                  ob.ParentObservationVerifiers(),
                  observation_configuration: ob.ParentObservationConfiguration | None = None,
                  native_evidence_configuration: Any | None = None,
-                 profile_executor: Any | None = None
+                 profile_executor: Any | None = None,
+                 operation_settlement: bool = False
                  ) -> None:
         if (not isinstance(driver, unified_driver.UnifiedCampaignDriver)
                 or not isinstance(controller, campaign_control.CampaignController)):
@@ -576,6 +577,13 @@ class UnifiedDriverExecution:
                     or profile_executor.controller is not controller):
                 raise DriverExecutionRefused("profile executor is not this concrete owner")
         self._profile_executor = profile_executor
+        # AKU-06l: settle single-stage work as one durable child + SETTLED.v2 (opt-in;
+        # off keeps the exact v1 settlement bytes).
+        if type(operation_settlement) is not bool:
+            raise DriverExecutionRefused("operation_settlement must be a bool")
+        self._operation_settlement = operation_settlement
+        if profile_executor is not None:
+            profile_executor.operation_settlement = operation_settlement
         self._launched: set[str] = set()
         self._finished: dict[str, _FinishedAttempt | _FailedAttempt] = {}
         self._trusted_settlements: dict[str, dict[str, Any]] = {}
@@ -610,6 +618,9 @@ class UnifiedDriverExecution:
             raise DriverExecutionRefused("settlement candidate is malformed")
         if supplied.get("schema") == campaign_control.DRIVER_SETTLEMENT_SCHEMA_V2:
             return self._verify_operation_settlement(supplied)
+        return self._verify_v1(supplied)
+
+    def _verify_v1(self, supplied: Mapping[str, Any]) -> Mapping[str, Any]:
         transition_id = supplied.get("transition_id")
         if (self._profile_executor is not None
                 and self._profile_executor.owns_settlement(transition_id)):
@@ -697,14 +708,32 @@ class UnifiedDriverExecution:
         with self._lock:
             if self._closed:
                 raise DriverExecutionRefused("driver execution connector is closed")
-        children = self.controller.unified_driver_children(supplied.get("transition_id"))
+        transition_id = supplied.get("transition_id")
+        children = self.controller.unified_driver_children(transition_id)
         if [child["digest"] for child in children] != list(supplied.get("children", ())):
             raise DriverExecutionRefused("operation settlement children differ from the durable prefix")
+        enrollment = supplied.get("enrollment_ref")
         try:
             oa.check_outcome_against_children(
-                supplied.get("outcome"), children, supplied.get("denial_ref"))
+                supplied.get("outcome"), children, supplied.get("denial_ref"),
+                enrollment_ref=enrollment, uncertain=len(
+                    self.controller.unified_driver_intent_resolutions(transition_id)))
         except oa.OperationAccountingRefused as exc:
             raise DriverExecutionRefused(f"operation settlement refused: {exc}") from exc
+        if (supplied.get("outcome") == "prerequisite" and children
+                and children[-1]["operation"] == "source_build" and enrollment is None):
+            raise DriverExecutionRefused(
+                "source-build prerequisite requires its enrollment reference")
+        if oa.single_stage(children):
+            # The one child carries the original receipt; the owner's exact v1 attempt
+            # checks (terminal, result, native and profile references) still decide.
+            candidate = {"schema": campaign_control.DRIVER_SETTLEMENT_SCHEMA,
+                         "receipt": children[0]["receipt"],
+                         "terminal_refs": supplied.get("evidence_refs"),
+                         **{name: supplied.get(name) for name in (
+                             "catalog_id", "transition_id", "selection", "outcome")}}
+            if dict(self._verify_v1(candidate)) != candidate:
+                raise DriverExecutionRefused("single-stage owner attempt differs")
         for child in children:
             terminal = worker_lifecycle.TerminalWorker(**child["terminal"])
             exact = self.controller.worker_terminal_for_request(
@@ -852,8 +881,8 @@ class UnifiedDriverExecution:
             raise DriverExecutionRefused("execution requires a durably issued transition")
         if transition_id in self._receipts:
             stored = self._receipts[transition_id]
-            duplicate = self.controller.unified_driver_settle(
-                unified_driver._thaw(stored.settlement_request))
+            duplicate = self.controller.unified_driver_settle(single_stage_request(
+                self.controller, unified_driver._thaw(stored.settlement_request)))
             if duplicate.get("status") != "duplicate":
                 raise DriverExecutionUncertain("durable execution retry was not idempotent")
             return stored
@@ -1026,7 +1055,7 @@ class UnifiedDriverExecution:
             with self._lock:
                 self._trusted_settlements[attempt.transition_id] = copy.deepcopy(request)
             try:
-                settlement = self.controller.unified_driver_settle(request)
+                settlement = self._settle(request, attempt)
             except BaseException as exc:
                 raise DriverExecutionUncertain(
                     "failed-attempt settlement is uncertain; exact retry required") from exc
@@ -1086,7 +1115,7 @@ class UnifiedDriverExecution:
         with self._lock:
             self._trusted_settlements[attempt.transition_id] = copy.deepcopy(request)
         try:
-            settlement = self.controller.unified_driver_settle(request)
+            settlement = self._settle(request, attempt)
         except BaseException as exc:
             raise DriverExecutionUncertain(
                 "settlement append/reply is uncertain; retry exact finished attempt") from exc
@@ -1102,13 +1131,21 @@ class UnifiedDriverExecution:
             self.driver.preparation_owner.refresh_settled()
         return receipt
 
+    def _settle(self, request: Mapping[str, Any], attempt) -> Mapping[str, Any]:
+        if not self._operation_settlement:
+            return self.controller.unified_driver_settle(request)
+        calibration = attempt.prepared.schema == unified_worker.PREPARED_SCHEMA_V3
+        return settle_single_stage(
+            self.controller, request, attempt.terminal, attempt.held,
+            "calibration_preparation" if calibration else "runtime_comparison")
+
     @staticmethod
     def retry_durable(controller: Any, receipt: DriverExecutionReceipt) -> Mapping[str, Any]:
         """Recover a lost reply only when the controller already has exact durable bytes."""
         if not isinstance(receipt, DriverExecutionReceipt):
             raise DriverExecutionRefused("durable retry requires a typed execution receipt")
-        result = controller.unified_driver_settle(
-            unified_driver._thaw(receipt.settlement_request))
+        result = controller.unified_driver_settle(single_stage_request(
+            controller, unified_driver._thaw(receipt.settlement_request)))
         if result.get("status") != "duplicate":
             raise DriverExecutionRefused(
                 "retry did not match an already durable settlement; live authority is required")
@@ -1131,6 +1168,34 @@ class UnifiedDriverExecution:
             if self.driver.preparation_owner is not None:
                 self.driver.preparation_owner.close()
             self._closed = True
+
+
+def single_stage_request(controller: Any, request: Mapping[str, Any]) -> dict[str, Any]:
+    """The exact SETTLED.v2 request of a v1-shaped single-stage attempt once its one
+    child is durable (AKU-06l); otherwise the v1 request itself, unchanged."""
+    children = controller.unified_driver_children(request.get("transition_id"))
+    if not oa.single_stage(children) or request.get("schema") \
+            != campaign_control.DRIVER_SETTLEMENT_SCHEMA:
+        return dict(request)
+    return {"schema": campaign_control.DRIVER_SETTLEMENT_SCHEMA_V2,
+            **{name: request[name] for name in (
+                "catalog_id", "transition_id", "selection", "outcome")},
+            "children": [child["digest"] for child in children], "denial_ref": None,
+            "evidence_refs": list(request["terminal_refs"])}
+
+
+def settle_single_stage(controller: Any, request: Mapping[str, Any], terminal, held,
+                        operation: str) -> Mapping[str, Any]:
+    """Account the one original child (exact retry = duplicate), then settle it as v2."""
+    selection = scheduling.Selection.from_dict(request["selection"])
+    if held.to_dict() != request["receipt"]:
+        raise DriverExecutionRefused("single-stage held receipt differs from its attempt")
+    controller.unified_driver_account_child(
+        binding=worker_lifecycle.AccountingBinding.from_selection(
+            catalog_id=request["catalog_id"], transition_id=request["transition_id"],
+            selection=selection),
+        terminal=terminal, receipt=held, role=oa.SINGLE_STAGE_ROLE, operation=operation)
+    return controller.unified_driver_settle_v2(single_stage_request(controller, request))
 
 
 __all__ = ["DriverExecutionReceipt", "DriverExecutionRefused", "RetainedResultFenced",

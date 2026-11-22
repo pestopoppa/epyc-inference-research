@@ -15,8 +15,8 @@ from typing import Any, Mapping
 
 from ..execution import worktree
 from . import (actor_lifecycle, actor_preparation, campaign_control,
-               measurement_capture, scheduling, source_build_preparation,
-               unified_driver, worker_lifecycle)
+               measurement_capture, operation_accounting, scheduling,
+               source_build_preparation, unified_driver, worker_lifecycle)
 from . import source_build_worker
 
 ENROLLMENT_SCHEMA = "epyc.autokernel.source_build_enrollment.v1"
@@ -462,12 +462,14 @@ class SourceBuildExecutionOwner:
         self.build_executor = build_executor
 
     def settle_selected(self, selected: unified_driver.SelectedActorWork, *,
-                        outcome: str, denial: Mapping[str, Any] | None = None
-                        ) -> Mapping[str, Any]:
+                        outcome: str, denial: Mapping[str, Any] | None = None,
+                        enrollment: Mapping[str, Any] | None = None) -> Mapping[str, Any]:
         """Settle the selected operation once from its durable child prefix (AKU-06l).
 
         ``denial`` is the typed terminal denial, folded into a durable reference; with
-        no children it is the explicit zero-cost no-receipt cancellation."""
+        no children it is the explicit zero-cost no-receipt cancellation. ``enrollment``
+        (a prerequisite only) is referenced through its accepted build child; it is
+        evidence beside the children, never execution completion by itself."""
         children = self.driver.controller.unified_driver_children(selected.transition_id)
         denial_ref = None
         if denial is not None:
@@ -480,7 +482,10 @@ class SourceBuildExecutionOwner:
             "schema": campaign_control.DRIVER_SETTLEMENT_SCHEMA_V2,
             "catalog_id": selected.catalog_id, "transition_id": selected.transition_id,
             "selection": selected.selection.to_dict(), "outcome": outcome,
-            "children": [c["digest"] for c in children], "denial_ref": denial_ref})
+            "children": [c["digest"] for c in children], "denial_ref": denial_ref,
+            **({} if enrollment is None else {"enrollment_ref": (
+                operation_accounting.make_enrollment_ref(
+                    unified_driver._thaw(enrollment), children))})})
 
     def execute_selected(
             self, selected: unified_driver.SelectedActorWork, *,
@@ -535,7 +540,7 @@ class SourceBuildExecutionOwner:
                 self.settle_selected(current, outcome="failed")
             raise
         if settle:
-            self.settle_selected(current, outcome="prerequisite")
+            self.settle_selected(current, outcome="prerequisite", enrollment=enrollment)
         return enrollment
 
 

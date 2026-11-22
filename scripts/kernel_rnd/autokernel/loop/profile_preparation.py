@@ -346,7 +346,20 @@ def _selected_implementation(controller, producer):
                 raise ProfilePreparationRefused("selected profile implementation differs: " + name)
 
 
+def _settled_receipt(controller, settled):
+    """The original held receipt of a durable v1 or single-stage v2 settlement."""
+    if "receipt" in settled:
+        return settled["receipt"]
+    children = controller.unified_driver_children(settled["transition_id"])
+    if [child["digest"] for child in children] != settled.get("children") \
+            or len(children) != 1:
+        raise ProfilePreparationRefused("profile v2 settlement lacks its one durable child")
+    return children[0]["receipt"]
+
+
 class InstalledProfilePreparationOwner:
+    operation_settlement = False  # AKU-06l: set by the installed executor (v2 opt-in)
+
     def __init__(self, controller, binding, producer, configured_profiles, templates=None):
         if (type(controller) is not cc.CampaignController
                 or type(binding) is not InstalledProfilePreparationBinding
@@ -428,7 +441,8 @@ class InstalledProfilePreparationOwner:
                     or row["clock_domain"] != domain
                     or not row["verified_at"] <= now < row["valid_until"]):
                 continue
-            held = scheduling.HeldClaimReceipt.from_dict(settled["receipt"])
+            held = scheduling.HeldClaimReceipt.from_dict(_settled_receipt(
+                self.controller, settled))
             selected = scheduling.Selection.from_dict(settled["selection"]).proposal
             if (held.proposal_id != selected.proposal_id or held.backend != selected.backend
                     or held.stage_class != selected.stage_class):
@@ -678,9 +692,13 @@ class InstalledProfilePreparationOwner:
         return _plain(attempt.settlement)
 
     def _settle(self, attempt):
-        from .driver_execution import _terminal_body, DriverExecutionUncertain
+        from .driver_execution import (_terminal_body, DriverExecutionUncertain,
+                                       settle_single_stage)
         try:
-            settled = self.controller.unified_driver_settle(_plain(attempt.settlement))
+            settled = (settle_single_stage(
+                self.controller, _plain(attempt.settlement), attempt.terminal, attempt.held,
+                "profile_preparation") if self.operation_settlement
+                else self.controller.unified_driver_settle(_plain(attempt.settlement)))
         except Exception as exc:
             raise DriverExecutionUncertain(
                 "profile settlement unresolved; original provider binding/held cost required") from exc

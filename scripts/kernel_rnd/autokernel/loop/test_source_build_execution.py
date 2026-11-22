@@ -537,8 +537,12 @@ def test_genuine_profile_then_actor_consumer_runs_owned_build(tmp_path):
         assert accounting.held_seconds >= sum(
             c["receipt"]["ended_at"] - c["receipt"]["started_at"] for c in children)
         digest_before = controller._scheduler_engine.operational_projection().projection_digest
+        # AKU-06l: the prerequisite references the enrollment through its build child
+        assert settled["enrollment_ref"]["build_child_digest"] == children[-1]["digest"]
+        assert settled["enrollment_ref"]["build_identity_digest"] \
+            == enrollment["build_identity_digest"]
         # exact retry is a duplicate, never a second accounting
-        retry = owner.settle_selected(selected, outcome="prerequisite")
+        retry = owner.settle_selected(selected, outcome="prerequisite", enrollment=enrollment)
         assert retry["status"] == "duplicate"
         assert controller._scheduler_engine.operational_projection().projection_digest \
             == digest_before
