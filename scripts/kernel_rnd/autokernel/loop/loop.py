@@ -2172,6 +2172,26 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             return Outcome("runtime_refused", hypothesis,
                                            [verdicts[-1].reason if verdicts else "gate refused"],
                                            gate_verdicts=verdicts)
+                        # AK-BLOCKED-VS-FAILED: a refusal caused by the host (no GPU,
+                        # residency, OOM, missing resource) is a host fact. It ends the
+                        # iteration as `host_blocked`, spends no authoring attempt and
+                        # carries the build checkpoint so the exact patch resumes.
+                        from . import host_blocked as _host_blocked
+                        blocked = (_host_blocked.classify_verdict(verdicts[-1])
+                                   if verdicts else None)
+                        if blocked is not None and blocked["class"] == _host_blocked.BLOCKED:
+                            return Outcome(
+                                _host_blocked.BLOCKED, hypothesis,
+                                [f"host blocked ({blocked['case']}) at gate "
+                                 f"{blocked['gate']}: {verdicts[-1].reason}"],
+                                gate_verdicts=verdicts, refusal_gate=blocked["gate"],
+                                resume_checkpoints=[checkpoint(
+                                    "build", hypothesis,
+                                    critic_patch=latest_accepted("critic:patch"),
+                                    refusal_gate=blocked["gate"],
+                                    refusal_reason=verdicts[-1].reason,
+                                    gate_rules_fingerprint=gate_rules_fingerprint(),
+                                    retained_patch=None)])
                         # Compile and correctness failures loop back the same way; the
                         # toolchain's own message is the reason, so no critic is needed.
                         patch_reasons.append(
