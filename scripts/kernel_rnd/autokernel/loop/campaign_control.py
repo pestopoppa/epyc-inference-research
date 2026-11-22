@@ -1950,17 +1950,68 @@ class CampaignController:
                 pre_engine_refusal(worker_lifecycle_module.WaitingAuthority(
                     "trusted grant provider is unavailable"))
             engine = self._worker_lifecycle
+            from . import a2_unit_transport
+            held = None
+            selected = a2_unit_transport.selected_prepared(planned_invocation)
+            if selected is not None:
+                # AKU-04f: an fsynced unit INTENT plus a first-issue permit for this owner
+                # incarnation precede every selected-unit launch; replayed unknown refuses.
+                try:
+                    planned_invocation.validate_request(request)
+                    identity = a2_unit_transport.selected_launch_identity(
+                        selected, campaign_id=self.resolved.campaign_id,
+                        config_generation=self.config_generation,
+                        config_digest=self.config_digest)
+                    held = a2_unit_transport.reserve(
+                        identity, owner_incarnation=self.supervisor_incarnation,
+                        prior_records=self.replay_a2_unit_records(
+                            a2_unit_transport.identity_key(identity)),
+                        append=self.append_a2_unit_record)
+                except Exception as exc:
+                    pre_engine_refusal(ControlRefused(f"selected unit launch refused: {exc}"))
             if attempt_key in self._actor_profile_attempt_phases:
                 if self._actor_profile_attempt_phases[attempt_key] != "prelaunch":
                     raise ControlRefused("target-profile admission is already attempting")
                 self._actor_profile_attempt_phases[attempt_key] = "attempting"
             self._worker_run_active = True
+        if held is not None:
+            return self._run_selected_unit_stage(held, request, engine, planned_invocation)
         try:
             return engine.run_stage(request, planned_invocation=planned_invocation)
         finally:
             with self._mutex:
                 self._worker_run_active = False
                 self._settle_v2_commands_locked()
+
+    def _run_selected_unit_stage(self, held, request, engine, planned_invocation):
+        """Consume the held permit with one launch; bind the terminal or durable absence."""
+        from . import a2_unit_transport
+        terminal = error = None
+        try:
+            terminal = engine.run_stage(request, planned_invocation=planned_invocation)
+        except BaseException as exc:
+            error = exc
+        finally:
+            with self._mutex:
+                self._worker_run_active = False
+                self._settle_v2_commands_locked()
+        fields = {"request_id": request.request_id, "plan_digest": request.plan_digest,
+                  "lineage_id": request.lineage_id, "stage_id": request.stage_id}
+        if terminal is None:
+            try:
+                terminal = self.worker_terminal_for_request(**fields)
+                absent = terminal is None and self.worker_attempt_status(
+                    **fields) == "not_acquired"
+            except Exception:
+                terminal, absent = None, False   # unclassifiable stays UNKNOWN
+            if absent:
+                a2_unit_transport.settle(held, append=self.append_a2_unit_record,
+                                         not_acquired=str(error) or type(error).__name__)
+        if terminal is not None:
+            a2_unit_transport.settle_terminal(held, terminal, append=self.append_a2_unit_record)
+        if error is not None:
+            raise error
+        return terminal
 
     def append_a2_unit_record(self, record: Mapping[str, Any]) -> Mapping[str, Any]:
         """Append one AKU-04f v2 unit record (chain-verified) or replay an exact duplicate."""
@@ -1979,6 +2030,8 @@ class CampaignController:
                 a2_unit_permit.project_unit([*(i.payload for i in entries), row])
             except a2_unit_permit.A2UnitRefused as exc:
                 raise ControlRefused(f"invalid A2 unit record: {exc}") from exc
+            if row["owner_incarnation"] != self.supervisor_incarnation:
+                raise ControlRefused("A2 unit record is not by the current owner incarnation")
             entry = self._append_durable(
                 journal_module.KIND_A2_RUNTIME_EXECUTION, row,
                 campaign_id=self.resolved.campaign_id, record_id=row["execution_id"])

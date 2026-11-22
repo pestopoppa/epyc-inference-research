@@ -12,6 +12,7 @@ import time
 
 import pytest
 
+from . import a2_unit_permit
 from . import campaign_control
 from . import driver_execution as de
 from . import experiment_plan
@@ -618,6 +619,11 @@ uw.run_from_fds(start_fd=args.start_fd, control_fd=args.control_fd,
     finally:
         producer.stop_and_join()
     assert terminal.accepted
+    a2_rows = [entry.payload for entry in controller._journal.read_all()
+               if entry.kind == journal_module.KIND_A2_RUNTIME_EXECUTION]
+    # AKU-04f: a selected launch is bracketed by its v2 unit chain; legacy writes none.
+    assert [row["kind"] for row in a2_rows] == (
+        ["INTENT", "PERMIT_ISSUED", "LAUNCHED", "TERMINAL"] if selected_dispatch else [])
     claim_threads = controller._lifecycle_provider.claim_threads
     assert all(name == "autokernel-parent-evidence" for name in claim_threads)
     checks_per_unit = 1 if search_window_configuration is None else 2
@@ -680,6 +686,11 @@ uw.run_from_fds(start_fd=args.start_fd, control_fd=args.control_fd,
         replayed_terminal = projection.terminal[terminal.worker_id]
         assert replayed_terminal["data"]["result_digest"] == terminal.result_digest
         assert restarted._acquisition_projection.pending is None
+        if a2_rows:   # replayed terminal is final: never a relaunch authority
+            state = a2_unit_permit.project_unit(list(restarted.replay_a2_unit_records(
+                a2_unit_permit.unit_key(a2_rows[0]))))
+            assert state.phase == "terminal" and state.terminal_status == "valid"
+            assert not a2_unit_permit.may_relaunch(state)
     finally:
         restarted.close()
     return prepared, reopened, tuple(identities)

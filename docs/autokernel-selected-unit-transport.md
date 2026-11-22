@@ -81,6 +81,20 @@ current owner incarnation; a replayed intent or foreign-incarnation permit never
 a launch, and a replayed non-terminal state is UNKNOWN, not absence. Only a durable
 NOT_ACQUIRED from the permit's owner permits a retry, which preserves the exact
 execution/plan/frame/range/unit/producer identity. A diagnostic terminal is final and
-claims nothing scientific. The v1 `a2_execution_state` events and validator are unchanged;
-these records are not wired into the journal or a live launch (tests use labelled synthetic
-data only).
+claims nothing scientific. The v1 `a2_execution_state` events and validator are unchanged.
+
+Installed consumer: `CampaignController.run_worker_stage` with a Prepared v4 invocation.
+Before the lifecycle engine runs, the controller validates the stage request, derives the
+launch identity from the real Prepared objects only (`a2_unit_transport.selected_launch_identity`:
+full-plan digest, membership rederived by `SelectedPlanUnitRange.units`, frame digest of the
+execution frame minus transport attempt id, artifact root and supervisor owner fields, producer
+identity = frame plus the unit arm's recipe snapshot/execution digests, execution id from the
+controller's campaign/config generation/config digest) and appends the fsynced INTENT and a
+first-issue PERMIT for its current supervisor incarnation. The permit stays inside the
+controller's reservation. A returned lifecycle terminal records LAUNCHED + TERMINAL (accepted =
+valid, else invalid; result digest binds the exact terminal); a failure with the controller's
+own `not_acquired` proof records NOT_ACQUIRED; anything else stays UNKNOWN and every later
+launch of that unit refuses, including after restart (a new incarnation cannot use, or append
+under, an old incarnation's permit). Legacy Prepared v1-v3 launches write no unit records. No
+scheduler discovery kind is enabled. Tests (`test_a2_unit_launch.py`, the real-child selected
+transport test) use labelled fixture denials/crashes and synthetic measurements.
