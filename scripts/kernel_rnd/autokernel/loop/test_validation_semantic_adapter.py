@@ -340,8 +340,19 @@ def test_prospective_compatibility_receipt_rejects_interim_pin_and_unratified_pr
             source_sha256=malformed_artifact.sha256, receipt_store=receipt_store)
 
 
+@pytest.fixture
+def isolated_root_imports(monkeypatch):
+    """AKU-08m3: the ROOT fixture puts ROOT's scripts/vidya on sys.path and imports its
+    adapters; undo both so later evidence_feed loads see their own explicit root."""
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    before = set(sys.modules)
+    yield
+    for name in set(sys.modules) - before:
+        sys.modules.pop(name, None)
+
+
 def test_final_verifier_pins_do_not_retroactively_attest_producer_source(
-        tmp_path, monkeypatch, historical_root):
+        tmp_path, monkeypatch, historical_root, isolated_root_imports):
     fixture_module = runpy.run_path(
         str(ROOT / "tests/vidya/test_autokernel_unified_arm.py"))
     source_store = mc.ArtifactStore(tmp_path / "source")
