@@ -847,6 +847,8 @@ class CampaignController:
         self._maintenance_tombstone_intent = False
         self._retention_catalog_seed = None
         self._retention_catalog_event = None
+        self._retention_owner_records: dict[str, Any] = {}
+        self._retention_worker_results: dict[tuple[str, int], dict[str, Any]] = {}
         self._prepared_retention_jobs: dict[str, tuple[Any, ...]] = {}
         self._scheduler_engine = scheduler_engine
         self._driver_issued: dict[str, dict[str, Any]] = {}
@@ -947,6 +949,8 @@ class CampaignController:
                 })
                 self._replay(entries)
                 self.supervisor_incarnation += 1
+                self._register_retention_owners_locked(
+                    *retention_catalog_module.OWNER_CLASSES)
                 self.stream_epoch += 1
                 self.sequence = 0
                 start_observed = self.observed_state
@@ -1573,6 +1577,9 @@ class CampaignController:
         self.supervisor_incarnation = last_incarnation
         self.stream_epoch = last_epoch
         self._worker_lifecycle_revision = len(worker_events) + acquisition_revision
+        self._retention_worker_results = {
+            (row["worker_id"], row["worker_generation"]): copy.deepcopy(row)
+            for row in worker_events if row["event"] == "WORKER_RESULT_RETAINED"}
         self._worker_last_generation = max(
             [row["worker_generation"] for row in worker_events]
             + [acquisition_last_generation], default=0)
@@ -1779,6 +1786,10 @@ class CampaignController:
             projection = worker_lifecycle_module.project_events(candidate_events)
             entry = self._append_durable(journal_module.KIND_WORKER_LIFECYCLE, row)
             self._worker_lifecycle_revision += 1
+            if row["event"] == "WORKER_RESULT_RETAINED":
+                self._retention_worker_results[
+                    (row["worker_id"], row["worker_generation"])] = copy.deepcopy(row)
+                self._register_retention_owners_locked("worker_result")
             self._worker_last_generation = max(
                 self._worker_last_generation, row["worker_generation"])
             self._worker_projection = projection
@@ -2977,6 +2988,7 @@ class CampaignController:
             self._journal_cursor = entry.seq
             self._native_records[measurement_id] = copy.deepcopy(entry)
             self._native_payload_digests[measurement_id] = supplied_digest
+            self._register_retention_owners_locked("evidence")
         except BaseException:
             self._poisoned = True
             raise
@@ -3102,7 +3114,27 @@ class CampaignController:
                 record_id=seed.seed_digest)
             self._retention_catalog_seed = seed
             self._retention_catalog_event = copy.deepcopy(row)
+            self._register_retention_owners_locked(*retention_catalog_module.OWNER_CLASSES)
             return copy.deepcopy(row)
+
+    def _register_retention_owners_locked(self, *owner_classes: str) -> None:
+        """Owner write hook: record each class's own roots for the current generation."""
+        seed = self._retention_catalog_seed
+        if seed is None:
+            self._retention_owner_records = {}
+            return
+        for owner_class in owner_classes:
+            self._retention_owner_records[owner_class] = (
+                retention_catalog_module.derive_owner_record(
+                    owner_class, seed=seed, generation=self._retention_generation_locked(),
+                    candidate_records=self._candidate_completed_records,
+                    native_records=self._native_records,
+                    worker_results=tuple(self._retention_worker_results.values()),
+                    store_root=str(self.store)))
+
+    def _retention_generation_locked(self) -> tuple[Any, ...]:
+        return (self._retention_catalog_seed.seed_digest, self.config_generation,
+                self.supervisor_incarnation)
 
     def _retention_frontier_locked(self) -> tuple[Any, ...]:
         seed = self._retention_catalog_seed
@@ -3116,7 +3148,9 @@ class CampaignController:
                 tuple(sorted((key, row["transition_id"])
                              for key, row in self._driver_issued.items())),
                 tuple(sorted(self._driver_settled)),
-                self.supervisor_incarnation, self.control_revision)
+                self.supervisor_incarnation, self.control_revision,
+                tuple(sorted((key, row.record_digest)
+                             for key, row in self._retention_owner_records.items())))
 
     def native_retention_catalog_capture(self) -> Mapping[str, Any]:
         """Capture declarations and exact dynamic owner frontier; performs no file I/O."""
@@ -3132,6 +3166,10 @@ class CampaignController:
                 "native_records": copy.deepcopy(self._native_records),
                 "driver_issued": copy.deepcopy(self._driver_issued),
                 "driver_settled": copy.deepcopy(self._driver_settled),
+                "generation": self._retention_generation_locked(),
+                "owner_records": dict(self._retention_owner_records),
+                "worker_results": copy.deepcopy(tuple(self._retention_worker_results.values())),
+                "store_root": str(self.store),
             }
 
     def _native_retention_catalog_capture_locked(self, candidate_state) -> Mapping[str, Any]:
@@ -3498,6 +3536,7 @@ class CampaignController:
             self._candidate_pending = None
             self._candidate_pending_payload = None
             self._candidate_prepared = False
+            self._register_retention_owners_locked("candidate_manifest", "build_dependency")
         return entry
 
     def _update_candidate_projection_cache_locked(
@@ -5139,6 +5178,8 @@ class CampaignController:
             self._native_capabilities = set()
             self._retention_catalog_seed = None
             self._retention_catalog_event = None
+            self._retention_owner_records = {}
+            self._retention_worker_results = {}
             self._prepared_retention_jobs = {}
             self._command_requests = {}
             self._driver_issued = {}

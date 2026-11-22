@@ -36,7 +36,7 @@ def retention_tmp_path():
         shutil.rmtree(path, ignore_errors=True)
 
 
-def _seed(*, shared=False, manifest_path=None):
+def _seed(*, shared=False, manifest_path=None, artifact_root=None):
     recipe = canonical_recipe()
     resolved = campaign_for_recipe(recipe)
     if shared:
@@ -72,7 +72,7 @@ def _seed(*, shared=False, manifest_path=None):
                 body | {"preparation_digest": worker_lifecycle._digest(body)})}
     return resolved, anchors, catalog.build_seed(
         resolved, anchors, config_digest=campaign_control.resolved_config_digest(resolved),
-        model_preparations=preparations, artifact_root=None)
+        model_preparations=preparations, artifact_root=artifact_root)
 
 
 def test_seed_is_closed_and_install_event_round_trips():
@@ -463,6 +463,185 @@ def test_actual_issued_driver_intent_roots_selected_recipe_dependencies(
             not in view.uncertain_scopes
         worker.join(6)
         assert not worker.is_alive() and not errors and terminals[0].accepted
+        results = controller._retention_owner_records["worker_result"].artifacts
+        assert [item.provenance["owners"][0]["stage_id"] for item in results] \
+            == ["retention-live-stage"]
+        assert results[0].retention_class == "hash_and_provenance_only" \
+            and results[0].root_kinds == ("retained_evidence",)
         kinds = [entry.kind for entry in controller._journal.read_all()]
         assert journal_module.KIND_WORKER_LIFECYCLE in kinds
         assert journal_module.KIND_WORKER_ACQUISITION in kinds
+
+
+def _complete_controller(tmp_path, monkeypatch, *, artifact_root=True):
+    """Fixture campaign whose every owner class can register a complete record."""
+    manifest_path = tmp_path / "inventory.json"
+    manifest_path.write_text(json.dumps({
+        "schema": "epyc.autokernel.model_identity.v1", "model_path": "/models",
+        "files": [{"path": "model.gguf", "sha256": canonical_recipe().model.sha256}],
+    }, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    artifact_root = tmp_path / "artifacts" if artifact_root else None
+    resolved, anchors, seed = _seed(manifest_path=manifest_path, artifact_root=artifact_root)
+    monkeypatch.setattr(catalog.storage, "hash_tree_manifest", lambda _path: "d" * 64)
+    controller = _controller(resolved, tmp_path / "service")
+    controller.__enter__()
+    controller.install_native_retention_catalog(
+        seed, runtime_anchors=anchors, model_preparations=_preparations(seed),
+        artifact_root=artifact_root)
+    manager = candidate_transactions.CandidateTransactions(
+        controller, git_backend=FakeGitBackend())
+    return resolved, anchors, seed, controller, manager
+
+
+def _plan(view):
+    return catalog.retention.plan_retention(
+        retention_consumer.collect_native_snapshot(view))
+
+
+def test_owner_hooks_register_each_class_and_complete_catalog_admits_view_only(
+        tmp_path, monkeypatch):
+    resolved, anchors, seed, controller, manager = _complete_controller(
+        tmp_path, monkeypatch)
+    try:
+        records = controller._retention_owner_records
+        assert set(records) == set(catalog.OWNER_CLASSES)
+        generation = (seed.seed_digest, controller.config_generation,
+                      controller.supervisor_incarnation)
+        assert all(item.generation == generation and not item.gaps
+                   for item in records.values())
+        assert records["physical_root"].artifacts[0].provenance["owners"][0]["path"] \
+            == str(controller.store)
+        before = records["candidate_manifest"].record_digest
+        base = _base()
+        manager.initialize(request_id="init", state=_state(base), manifest=base)
+        manifest_ids = {item.path for item in records["candidate_manifest"].artifacts}
+        assert records["candidate_manifest"].record_digest != before
+        assert manifest_ids == {base.builds[0].executable.path,
+                                base.builds[0].dsos[0].path}
+        view = manager.retention_view()
+        plan = _plan(view)
+        assert view.uncertain_scopes == () and plan.complete and not plan.expirable_ids
+        job, previews = retention_consumer.prepare(view, _policy(tmp_path))
+        assert job is None and previews == ()
+        with pytest.raises(retention_consumer.RetentionConsumerRefused, match="unavailable"):
+            retention_consumer.MaintenanceOwner().held(lambda lease: lease)
+    finally:
+        controller.close()
+    with _controller(resolved, tmp_path / "service") as reopened:
+        reopened_manager = candidate_transactions.CandidateTransactions(
+            reopened, git_backend=FakeGitBackend())
+        assert reopened._retention_owner_records["candidate_manifest"].generation[2] \
+            == reopened.supervisor_incarnation
+        assert reopened_manager.retention_view().uncertain_scopes == ()
+
+
+def test_missing_or_stale_owner_class_keeps_refusing(tmp_path, monkeypatch):
+    _resolved, _anchors, seed, controller, manager = _complete_controller(
+        tmp_path, monkeypatch)
+    try:
+        base = _base()
+        manager.initialize(request_id="init", state=_state(base), manifest=base)
+        for owner_class in catalog.OWNER_CLASSES:
+            saved = controller._retention_owner_records.pop(owner_class)
+            view = manager.retention_view()
+            assert view.uncertain_scopes == (f"owner_coverage_missing:{owner_class}",)
+            assert not _plan(view).complete
+            controller._retention_owner_records[owner_class] = saved
+        controller._retention_owner_records["evidence"] = catalog.derive_owner_record(
+            "evidence", seed=seed,
+            generation=(seed.seed_digest, controller.config_generation,
+                        controller.supervisor_incarnation - 1))
+        assert manager.retention_view().uncertain_scopes == (
+            "owner_coverage_stale:evidence",)
+        controller._register_retention_owners_locked("evidence")
+        # A durable owner write without its hook leaves that class stale.
+        controller._retention_worker_results[("unhooked", 1)] = {
+            "worker_id": "unhooked", "worker_generation": 1, "lineage_id": "x",
+            "stage_id": "y", "data": {"result_digest": "e" * 64}}
+        assert manager.retention_view().uncertain_scopes == (
+            "owner_coverage_stale:worker_result",)
+    finally:
+        controller.close()
+
+
+def test_owner_gaps_refuse_without_artifact_store(tmp_path, monkeypatch):
+    _resolved, _anchors, seed, controller, manager = _complete_controller(
+        tmp_path, monkeypatch, artifact_root=False)
+    try:
+        base = _base()
+        manager.initialize(request_id="init", state=_state(base), manifest=base)
+        assert manager.retention_view().uncertain_scopes == (
+            "owner_coverage_gap:physical_root:artifact_store_undeclared",)
+    finally:
+        controller.close()
+    record = catalog.derive_owner_record(
+        "evidence", seed=seed, generation=(seed.seed_digest, 1, 1),
+        native_records={"m1": {"payload": {"artifact": {
+            "locator": "objects/m1", "sha256": "c" * 64}}}})
+    assert record.gaps == ("native_capture_artifact_root_missing",)
+
+
+def test_caller_supplied_roots_or_membership_are_rejected(tmp_path, monkeypatch):
+    _resolved, _anchors, seed, controller, manager = _complete_controller(
+        tmp_path, monkeypatch)
+    try:
+        base = _base()
+        manager.initialize(request_id="init", state=_state(base), manifest=base)
+        record = controller._retention_owner_records["worker_result"]
+        extra = catalog.CatalogArtifact(
+            "caller:root", "evidence_record", None, "f" * 64, "file_sha256", (),
+            "hash_and_provenance_only", ("production",), {"owners": [{"role": "caller"}]})
+        with pytest.raises(catalog.NativeRetentionCatalogRefused, match="derivation"):
+            catalog.OwnerRecord(*[getattr(record, name) for name in (
+                "owner_class", "generation", "inputs_digest", "artifacts", "gaps",
+                "record_digest")], object())
+        with pytest.raises(catalog.NativeRetentionCatalogRefused, match="digest differs"):
+            replace(record, artifacts=(extra,))
+        values = (record.owner_class, record.generation, record.inputs_digest,
+                  (extra,), ())
+        forged = catalog.OwnerRecord(
+            *values, catalog._digest(catalog._owner_body(*values)), catalog._OWNER_TOKEN)
+        controller._retention_owner_records["worker_result"] = forged
+        with pytest.raises(catalog.NativeRetentionCatalogRefused,
+                           match="differs from owner state"):
+            manager.retention_view()
+        controller._retention_owner_records["worker_result"] = record
+        capture = dict(controller.candidate_transaction(
+            lambda context: controller._native_retention_catalog_capture_locked(
+                manager._replay(context).state)))
+        capture["owner_records"] = {**capture["owner_records"],
+                                    "worker_result": record.body()}
+        with pytest.raises(catalog.NativeRetentionCatalogRefused, match="owner-derived"):
+            catalog.build_native_view(capture)
+        assert manager.retention_view().uncertain_scopes == ()
+    finally:
+        controller.close()
+
+
+def test_build_dso_and_runpath_dependencies_are_transitively_retained(
+        tmp_path, monkeypatch):
+    _resolved, _anchors, seed, controller, manager = _complete_controller(
+        tmp_path, monkeypatch)
+    try:
+        base = _base()
+        manager.initialize(request_id="init", state=_state(base), manifest=base)
+        view = manager.retention_view()
+        nodes = {item.artifact_id: item for item in view.nodes}
+        build = base.builds[0]
+        executable = catalog._build_artifact_id(seed, build.executable)
+        dso = catalog._build_artifact_id(seed, build.dsos[0])
+        runpath = catalog._directory_id(str(Path(build.dsos[0].path).parent))
+        assert set(nodes[executable].dependencies) == {dso, runpath}
+        assert nodes[runpath].dependencies and dso in nodes[runpath].dependencies
+        plan = _plan(view)
+        for artifact_id in (executable, dso, runpath):
+            assert artifact_id in plan.retained_ids
+            assert any(reason.startswith("integration_candidate:")
+                       for reason in plan.retained_reasons[artifact_id])
+        recipe_executable = next(item for item in seed.artifacts if any(
+            owner.get("role") == "executable" for owner in item.provenance.get("owners", ())))
+        recipe_runpaths = {item.artifact_id for item in seed.artifacts if any(
+            owner.get("role") == "runpath" for owner in item.provenance.get("owners", ()))}
+        assert recipe_runpaths <= set(nodes[recipe_executable.artifact_id].dependencies)
+    finally:
+        controller.close()

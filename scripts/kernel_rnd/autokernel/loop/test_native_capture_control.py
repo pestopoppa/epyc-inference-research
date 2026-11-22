@@ -169,9 +169,13 @@ def _prepared(controller, tmp_path, *, partial=False):
 def test_producer_store_controller_restart_and_exact_retry(tmp_path):
     service = tmp_path / "service"
     with control.CampaignController(_resolved(), service) as controller:
+        hooked = []  # AKU-10f: the evidence owner records its roots at write time.
+        real_hook = controller._register_retention_owners_locked
+        controller._register_retention_owners_locked = \
+            lambda *classes: (hooked.extend(classes), real_hook(*classes))
         result, payloads, _context_value, store = _produce(controller, tmp_path)
         assert result.execution_complete
-        assert len(payloads) == 2
+        assert len(payloads) == 2 and hooked == ["evidence", "evidence"]
         for produced in payloads.values():
             assert produced["carrier"]["status"] == "measurement"
             assert produced["carrier"]["measurement"] == {

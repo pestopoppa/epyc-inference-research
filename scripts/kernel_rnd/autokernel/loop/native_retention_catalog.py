@@ -423,6 +423,195 @@ def build_seed(resolved: campaign.ResolvedCampaign,
         tuple(inventories), tuple(sorted(uncertain)), _digest(body), SEED_SCHEMA, _TOKEN)
 
 
+OWNER_RECORD_SCHEMA = "epyc.autokernel.native_retention_owner_record.v1"
+OWNER_CLASSES = ("build_dependency", "candidate_manifest", "evidence", "physical_root",
+                 "worker_result")
+_OWNER_TOKEN = object()
+_MANIFEST_KEYS = {"init": ("manifest",), "integrate": ("previous", "candidate"),
+                  "start_batch": ("candidate", "comparator"),
+                  "advance_validated": ("candidate", "comparator")}
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerRecord:
+    """One owner class's complete root/dependency set for one catalog generation.
+
+    Only :func:`derive_owner_record` constructs records, from the owner's own durable
+    state at write time; callers cannot supply roots, membership or completeness.
+    """
+
+    owner_class: str
+    generation: tuple[Any, ...]
+    inputs_digest: str
+    artifacts: tuple[CatalogArtifact, ...]
+    gaps: tuple[str, ...]
+    record_digest: str
+    _token: object
+
+    def __post_init__(self) -> None:
+        if self._token is not _OWNER_TOKEN or self.owner_class not in OWNER_CLASSES:
+            raise NativeRetentionCatalogRefused("owner record lacks native owner derivation")
+        if self.record_digest != _digest(_owner_body(*self.body_fields())):
+            raise NativeRetentionCatalogRefused("owner record digest differs")
+
+    def body_fields(self) -> tuple[Any, ...]:
+        return (self.owner_class, self.generation, self.inputs_digest, self.artifacts,
+                self.gaps)
+
+    def body(self) -> dict[str, Any]:
+        return _owner_body(*self.body_fields())
+
+
+def _owner_body(owner_class, generation, inputs_digest, artifacts, gaps) -> dict[str, Any]:
+    return {"schema": OWNER_RECORD_SCHEMA, "owner_class": owner_class,
+            "generation": list(generation), "inputs_digest": _sha(inputs_digest, "inputs"),
+            "artifacts": [item.to_dict() for item in artifacts], "gaps": list(gaps)}
+
+
+def _manifests_from_records(records: Mapping[str, Any]) -> dict[str, cm.CandidateManifest]:
+    manifests = {}
+    for completed in records.values():
+        intent = completed.get("intent", {})
+        payload = intent.get("data", {}).get("operation_payload", {})
+        for key in _MANIFEST_KEYS.get(intent.get("operation"), ()):
+            if key in payload:
+                manifest = cm.CandidateManifest.from_dict(payload[key])
+                manifests[manifest.manifest_digest] = manifest
+    return manifests
+
+
+def _directory_id(path: str) -> str:
+    return "native:directory:" + _digest({"path": path})
+
+
+def _build_artifact_id(seed: NativeRetentionCatalogSeed, artifact: Any) -> str:
+    return next((item.artifact_id for item in seed.artifacts
+                 if (item.path, item.sha256) == (artifact.path, artifact.sha256)),
+                _artifact_id("candidate-build", artifact.path, artifact.sha256))
+
+
+def derive_owner_record(owner_class: str, *, seed: NativeRetentionCatalogSeed,
+                        generation: tuple[Any, ...], candidate_records=None,
+                        native_records=None, worker_results=None,
+                        store_root: str | None = None) -> OwnerRecord:
+    """Derive one owner's record from that owner's durable state only (no file I/O)."""
+    if not isinstance(seed, NativeRetentionCatalogSeed):
+        raise NativeRetentionCatalogRefused("owner record requires the installed seed")
+    rows: list[CatalogArtifact] = []
+    gaps: list[str] = []
+    manifests = sorted(_manifests_from_records(candidate_records or {}).items())
+    store = next((item.provenance.get("path") for item in seed.artifacts
+                  if item.provenance.get("role") == "native_artifact_store"), None)
+
+    def row(artifact_id, kind, path, digest, deps, owner, roots=(), klass="permanent_large"):
+        rows.append(CatalogArtifact(
+            artifact_id, kind, path, digest,
+            "file_sha256" if digest else "directory_pending_measurement",
+            tuple(deps), klass, roots, {"owners": [owner]}))
+
+    inputs: list[Any] = [seed.seed_digest, [digest for digest, _ in manifests]]
+    if owner_class == "candidate_manifest":
+        for digest, manifest in manifests:
+            for artifact in (item for build in manifest.builds
+                             for item in (build.executable, *build.dsos)):
+                row(_build_artifact_id(seed, artifact), "candidate_artifact", artifact.path,
+                    artifact.sha256, (), {"role": artifact.role, "manifest_digest": digest})
+    elif owner_class == "build_dependency":
+        # Seed recipes: an executable also depends on each RUNPATH directory it loads.
+        runpaths: dict[str, list[str]] = {}
+        for item in seed.artifacts:
+            for owner in item.provenance.get("owners", ()):
+                if owner.get("role") == "runpath":
+                    runpaths.setdefault(owner["recipe_execution_digest"], []).append(
+                        item.artifact_id)
+        for item in seed.artifacts:
+            for owner in item.provenance.get("owners", ()):
+                recipe = owner.get("recipe_execution_digest")
+                if owner.get("role") == "executable" and runpaths.get(recipe):
+                    row(item.artifact_id, item.artifact_kind, item.path, item.sha256,
+                        sorted(set(runpaths[recipe])),
+                        {"role": "build_dependency", "recipe_execution_digest": recipe})
+        # Candidate builds: executable -> DSOs and loader directories -> DSOs.
+        for digest, manifest in manifests:
+            for build in manifest.builds:
+                owner = {"role": "build_dependency", "build_id": build.build_id,
+                         "manifest_digest": digest}
+                dsos = {item.path: _build_artifact_id(seed, item) for item in build.dsos}
+                dirs: dict[str, list[str]] = {}
+                for item in build.dsos:
+                    row(dsos[item.path], "candidate_artifact", item.path, item.sha256, (), owner)
+                    dirs.setdefault(str(Path(item.path).parent), []).append(dsos[item.path])
+                for directory, members in sorted(dirs.items()):
+                    row(_directory_id(directory), "shared_dso_dir", directory, None,
+                        sorted(members), owner)
+                row(_build_artifact_id(seed, build.executable), "candidate_artifact",
+                    build.executable.path, build.executable.sha256,
+                    sorted({*dsos.values(), *map(_directory_id, dirs)}), owner)
+    elif owner_class == "evidence":
+        inputs = [store]
+        if native_records and store is None:
+            gaps.append("native_capture_artifact_root_missing")
+        for measurement_id, entry in sorted((native_records or {}).items()):
+            artifact = (entry.payload if hasattr(entry, "payload") else entry["payload"])[
+                "artifact"]
+            inputs.append([measurement_id, artifact["locator"], artifact["sha256"]])
+            row(f"native:evidence:{measurement_id}", "evidence_record",
+                None if store is None else str(Path(store) / artifact["locator"]),
+                artifact["sha256"], (),
+                {"role": "native_capture", "measurement_id": measurement_id},
+                ("retained_evidence",))
+    elif owner_class == "worker_result":
+        inputs = []
+        for result in sorted(worker_results or (), key=lambda item: (
+                item["worker_id"], item["worker_generation"])):
+            key = [result["worker_id"], result["worker_generation"],
+                   _sha(result["data"]["result_digest"], "worker result digest")]
+            inputs.append(key)
+            row("native:worker-result:" + _digest(key), "evidence_record", None, key[2], (),
+                {"role": "worker_result", **{name: result[name] for name in (
+                    "worker_id", "worker_generation", "lineage_id", "stage_id")}},
+                ("retained_evidence",), "hash_and_provenance_only")
+    elif owner_class == "physical_root":
+        inputs = [seed.seed_digest, store_root]
+        gaps.extend(gap for gap, missing in (
+            ("controller_store_root_unavailable", store_root is None),
+            ("artifact_store_undeclared", store is None)) if missing)
+        if store_root is not None:
+            row("native:physical-root:" + _digest({"path": store_root}), "evidence_record",
+                None, None, (), {"role": "controller_store", "path": store_root},
+                ("retained_evidence",))
+    else:
+        raise NativeRetentionCatalogRefused("owner class is unsupported")
+    values = (owner_class, tuple(generation), _digest(inputs),
+              tuple(_merge_artifacts(rows).values()), tuple(sorted(set(gaps))))
+    return OwnerRecord(*values, _digest(_owner_body(*values)), _OWNER_TOKEN)
+
+
+def _merge_artifacts(rows) -> dict[str, CatalogArtifact]:
+    """Union owner declarations of one identity; conflicting identities refuse."""
+    merged: dict[str, CatalogArtifact] = {}
+    for item in rows:
+        prior = merged.setdefault(item.artifact_id, item)
+        if prior is item:
+            continue
+        if ((prior.path, prior.sha256, prior.identity_kind, prior.retention_class)
+                != (item.path, item.sha256, item.identity_kind, item.retention_class)
+                or (prior.artifact_kind != item.artifact_kind and not {
+                    prior.artifact_kind, item.artifact_kind} <= {"build_dir", "shared_dso_dir"})):
+            raise NativeRetentionCatalogRefused(
+                f"owner declarations conflict for {item.artifact_id}")
+        owners = [owner for value in (prior.provenance, item.provenance)
+                  for owner in _plain(value).get("owners", [_plain(value)])]
+        merged[item.artifact_id] = CatalogArtifact(
+            item.artifact_id, prior.artifact_kind, item.path, item.sha256,
+            item.identity_kind, (*prior.dependencies, *set(item.dependencies)
+                                 - set(prior.dependencies)),
+            item.retention_class, (*prior.root_kinds, *set(item.root_kinds)
+                                   - set(prior.root_kinds)),
+            {"owners": list({_canonical(owner): owner for owner in owners}.values())})
+    return dict(sorted(merged.items()))
+
+
 def make_install_event(seed: NativeRetentionCatalogSeed, *, config_generation: int,
                        supervisor_incarnation: int) -> dict[str, Any]:
     if not isinstance(seed, NativeRetentionCatalogSeed):
@@ -472,24 +661,14 @@ def build_native_view(capture: Mapping[str, Any]) -> PreparedCatalogView:
     if not isinstance(capture, Mapping) or set(capture) != {
             "seed", "frontier", "candidate_state", "candidate_records",
             "active_workers", "active_acquisitions", "native_records",
-            "driver_issued", "driver_settled"}:
+            "driver_issued", "driver_settled", "generation", "owner_records",
+            "worker_results", "store_root"}:
         raise NativeRetentionCatalogRefused("catalog capture fields differ")
     seed = capture["seed"]
     if not isinstance(seed, NativeRetentionCatalogSeed):
         raise NativeRetentionCatalogRefused("catalog capture lacks its native seed")
     state = cm.CandidateState.from_dict(capture["candidate_state"])
-    manifests: dict[str, cm.CandidateManifest] = {}
-    for completed in capture["candidate_records"].values():
-        intent = completed.get("intent", {})
-        operation = intent.get("operation")
-        payload = intent.get("data", {}).get("operation_payload", {})
-        keys = {"init": ("manifest",), "integrate": ("previous", "candidate"),
-                "start_batch": ("candidate", "comparator"),
-                "advance_validated": ("candidate", "comparator")}.get(operation, ())
-        for key in keys:
-            if key in payload:
-                manifest = cm.CandidateManifest.from_dict(payload[key])
-                manifests[manifest.manifest_digest] = manifest
+    manifests = _manifests_from_records(capture["candidate_records"])
     if not manifests:
         raise NativeRetentionCatalogRefused("catalog lacks durable candidate manifests")
     if not any(item.sources for item in manifests.values()):
@@ -519,7 +698,32 @@ def build_native_view(capture: Mapping[str, Any]) -> PreparedCatalogView:
             if field is not None:
                 roots[field].add(item.artifact_id)
 
-    for item in seed.artifacts:
+    # Owner coverage: each class must have registered, at write time, the exact record
+    # re-derived here from the same captured owner state for the current generation.
+    uncertain: list[str] = []
+    owned: list[CatalogArtifact] = []
+    for owner_class in OWNER_CLASSES:
+        registered = capture["owner_records"].get(owner_class)
+        expected = derive_owner_record(
+            owner_class, seed=seed, generation=capture["generation"],
+            candidate_records=capture["candidate_records"],
+            native_records=capture["native_records"],
+            worker_results=capture["worker_results"], store_root=capture["store_root"])
+        if registered is None:
+            uncertain.append(f"owner_coverage_missing:{owner_class}")
+            continue
+        if not isinstance(registered, OwnerRecord) or registered.owner_class != owner_class:
+            raise NativeRetentionCatalogRefused("owner coverage record is not owner-derived")
+        if (registered.generation != expected.generation
+                or registered.inputs_digest != expected.inputs_digest):
+            uncertain.append(f"owner_coverage_stale:{owner_class}")
+            continue
+        if registered.record_digest != expected.record_digest:
+            raise NativeRetentionCatalogRefused(
+                f"owner coverage record for {owner_class} differs from owner state")
+        uncertain.extend(f"owner_coverage_gap:{owner_class}:{gap}" for gap in registered.gaps)
+        owned.extend(registered.artifacts)
+    for item in _merge_artifacts((*seed.artifacts, *owned)).values():
         insert(item)
     # Expand the complete bounded model manifest into every declared shard.  This
     # reads only the small inventory, never model bytes.
@@ -574,35 +778,16 @@ def build_native_view(capture: Mapping[str, Any]) -> PreparedCatalogView:
         if not entry_seen:
             raise NativeRetentionCatalogRefused(
                 "model inventory omits the enrolled recipe entry")
-    by_key = {(item.path, item.sha256): item.artifact_id for item in seed.artifacts}
     bindings = []
     for manifest in manifests.values():
-        artifact_ids = []
-        for build in manifest.builds:
-            for artifact in (build.executable, *build.dsos):
-                artifact_id = by_key.get((artifact.path, artifact.sha256))
-                if artifact_id is None:
-                    artifact_id = _artifact_id("candidate-build", artifact.path, artifact.sha256)
-                    insert(CatalogArtifact(
-                        artifact_id, "candidate_artifact", artifact.path, artifact.sha256,
-                        "file_sha256", (), "permanent_large", (),
-                        {"owners": [{"role": artifact.role,
-                                     "manifest_digest": manifest.manifest_digest}]}))
-                artifact_ids.append(artifact_id)
+        artifact_ids = [_build_artifact_id(seed, artifact) for build in manifest.builds
+                        for artifact in (build.executable, *build.dsos)]
+        if any(item not in nodes for item in artifact_ids):
+            uncertain.append(f"owner_coverage_missing:manifest:{manifest.manifest_digest}")
+            artifact_ids = [item for item in artifact_ids if item in nodes]
         if not artifact_ids:
             raise NativeRetentionCatalogRefused("candidate manifest has no catalog artifacts")
         bindings.append(consumer.ManifestArtifacts(manifest, tuple(sorted(set(artifact_ids)))))
-    # Durable native capture artifacts are retained evidence roots.
-    artifact_store = next((item.provenance.get("path") for item in seed.artifacts
-                           if item.provenance.get("role") == "native_artifact_store"), None)
-    for measurement_id, entry in capture["native_records"].items():
-        artifact = entry.payload["artifact"] if hasattr(entry, "payload") else entry["payload"]["artifact"]
-        artifact_id = f"native:evidence:{measurement_id}"
-        path = None if artifact_store is None else str(Path(artifact_store) / artifact["locator"])
-        insert(CatalogArtifact(
-            artifact_id, "evidence_record", path, artifact["sha256"], "file_sha256", (),
-            "permanent_large", ("retained_evidence",),
-            {"owners": [{"role": "native_capture", "measurement_id": measurement_id}]}))
     active_driver_lineages: set[str] = set()
     for issued in capture["driver_issued"].values():
         transition_id = issued["transition_id"]
@@ -641,11 +826,9 @@ def build_native_view(capture: Mapping[str, Any]) -> PreparedCatalogView:
                 "issued work has no exact catalog dependency join")
         roots["launch_intents"].update(matched)
     verified_targets = {item["target_revision_digest"] for item in seed.model_inventories}
-    uncertain = [item for item in seed.uncertain_scopes
-                 if not (item.endswith(":model_inventory_unverified")
-                         and item.split(":", 2)[1] in verified_targets)]
-    if capture["native_records"] and artifact_store is None:
-        uncertain.append("native_capture_artifact_root_missing")
+    uncertain.extend(item for item in seed.uncertain_scopes
+                     if not (item.endswith(":model_inventory_unverified")
+                             and item.split(":", 2)[1] in verified_targets))
     active_lineages = {
         row.get("lineage_id") or row.get("data", {}).get("lineage_id")
         for row in (*capture["active_workers"], *capture["active_acquisitions"])
@@ -673,6 +856,6 @@ def build_native_view(capture: Mapping[str, Any]) -> PreparedCatalogView:
 
 
 __all__ = ["CatalogArtifact", "EVENT_SCHEMA", "NativeRetentionCatalogRefused",
-           "PreparedCatalogView",
-           "NativeRetentionCatalogSeed", "SEED_SCHEMA", "build_seed",
+           "OWNER_CLASSES", "OWNER_RECORD_SCHEMA", "OwnerRecord", "PreparedCatalogView",
+           "NativeRetentionCatalogSeed", "derive_owner_record", "SEED_SCHEMA", "build_seed",
            "build_native_view", "make_install_event", "validate_install_event"]
