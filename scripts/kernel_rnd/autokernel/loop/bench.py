@@ -30,6 +30,7 @@ import time
 from typing import Callable, Sequence
 
 from ..controller import host_idle
+from .. import path_counters
 from ..execution import microbench
 from . import residency
 from .floor_units import FLOOR_UNITS, UNIT_PROCESS
@@ -414,14 +415,13 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
             continue
         break
     if done.returncode != 0:
-        killed = " (external kill, retried "
-        killed = (f"{killed}{KILL_RETRIES}x and still killed)"
+        killed = (f" (external kill, retried {KILL_RETRIES}x and still killed)"
                   if done.returncode in EXTERNAL_KILL_CODES else "")
         raise BenchFailed(
             f"llama-bench rc={done.returncode}{killed}: {done.stderr[-400:]}")
     row = hardened_row(done.stdout, pp=pp, tg=tg, reps=reps)
-    idle = (idle_pre, host_idle.observe("post", CPU_LIST))
-    return float(row.avg_ts), {**sampler.proof, "host_idle": idle}
+    idle, counters = (idle_pre, host_idle.observe("post", CPU_LIST)), path_counters.of(done)
+    return float(row.avg_ts), {**sampler.proof, "host_idle": idle, "path_counters": counters}
 
 
 def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
@@ -523,8 +523,9 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
         effect=(st.median(candidate_samples) / centre) - 1.0,
         estimator="median_over_median", pairs=pairs,
         noise_floor_pct=noise_floor_pct, calibrated=calibrated, model=str(model),
-        residency={"invocations": len(proofs),
-                   "resident": len(resident),
+        residency={"invocations": len(proofs), "resident": len(resident),
+                   # AK-WIN-CNT-1: per-window path counters, report-only (never gates).
+                   "path_counters": path_counters.sidecar(p.get("path_counters") for p in proofs),
                    "peak_vram_bytes": max(p["peak_vram_bytes"] for p in proofs),
                    "peak_kfd_processes": max(p["peak_kfd_processes"] for p in proofs),
                    # Aggregated across every invocation in the comparison: if the
