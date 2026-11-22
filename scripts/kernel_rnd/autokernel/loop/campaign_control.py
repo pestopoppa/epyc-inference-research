@@ -864,6 +864,7 @@ class CampaignController:
         self._actor_profile_producer: Any = None
         self._current_actor_profile_receipts: dict[str, Any] = {}
         self._actor_trusted_held_receipts: dict[str, tuple[Any, Any]] = {}
+        self._restored_held_accounting: dict[tuple[str, ...], Any] = {}
         self._actor_profile_execution_reservations: dict[str, Any] = {}
         self._actor_profile_execution_settlements: dict[str, Any] = {}
         self._actor_profile_cancelled_attempts: set[tuple[Any, ...]] = set()
@@ -949,24 +950,7 @@ class CampaignController:
                 self.stream_epoch += 1
                 self.sequence = 0
                 start_observed = self.observed_state
-                pending_runtime = False
-                for issued in self._driver_issued.values():
-                    if issued["transition_id"] in self._driver_settled:
-                        continue
-                    selection = issued.get("selection")
-                    catalog = issued.get("catalog")
-                    if not isinstance(selection, Mapping) or not isinstance(catalog, Mapping):
-                        continue
-                    work = catalog.get("work_by_stage_digest")
-                    selected = (work.get(selection.get("proposal_digest"))
-                                if isinstance(work, Mapping) else None)
-                    if (isinstance(selected, Mapping)
-                            and selected.get("kind") in {"runtime_comparison", "calibration_preparation"}):
-                        pending_runtime = True
-                        break
-                if (self.snapshot_version == 3
-                        and start_observed == "ownership_unresolved"
-                        and pending_runtime):
+                if start_observed == "ownership_unresolved" and self._pending_runtime_issued():
                     start_observed = "waiting_prerequisite"
                 self._append_event("START", {
                     "desired_state": self.desired_state,
@@ -1538,9 +1522,11 @@ class CampaignController:
                     if data["desired_state"] != "paused" or data["observed_state"] != "paused":
                         raise journal_module.JournalCorruption(
                             "first campaign supervisor START must be paused")
-                elif (data["desired_state"] != self.desired_state
-                      or data["observed_state"] != self.observed_state
-                      or data.get("prerequisite_reason") != self.prerequisite_reason):
+                elif ((recorded := (data["desired_state"], data["observed_state"],
+                                    data.get("prerequisite_reason")))
+                      != (self.desired_state, self.observed_state, self.prerequisite_reason)
+                      and recorded != self._replayed_start_state(
+                          worker_events, acquisition_events)):
                     raise journal_module.JournalCorruption(
                         "campaign supervisor START does not preserve replayed state")
                 last_incarnation = row["supervisor_incarnation"]
@@ -1600,6 +1586,8 @@ class CampaignController:
         try:
             worker_lifecycle_module.validate_accounting_binding_history(
                 worker_events, self._driver_issued)
+            self._restored_held_accounting = \
+                worker_lifecycle_module.restored_stale_held_accounting(worker_events)
         except worker_lifecycle_module.LifecycleRefused as exc:
             raise journal_module.JournalCorruption(
                 f"worker accounting binding recovery refused: {exc}") from exc
@@ -2470,6 +2458,70 @@ class CampaignController:
                         and work.get("stage_plan_digest") == plan_digest):
                     return "not_acquired"
             return "unknown"
+
+    def _pending_runtime_issued(self) -> bool:
+        """True when a v3 unsettled issued selection is runtime/calibration work."""
+        for issued in self._driver_issued.values() if self.snapshot_version == 3 else ():
+            selection, catalog = issued.get("selection"), issued.get("catalog")
+            if (issued["transition_id"] in self._driver_settled
+                    or not isinstance(selection, Mapping) or not isinstance(catalog, Mapping)):
+                continue
+            work = catalog.get("work_by_stage_digest")
+            selected = (work.get(selection.get("proposal_digest"))
+                        if isinstance(work, Mapping) else None)
+            if (isinstance(selected, Mapping) and selected.get("kind")
+                    in {"runtime_comparison", "calibration_preparation"}):
+                return True
+        return False
+
+    def _replayed_start_state(self, worker_events, acquisition_events) -> tuple:
+        """AKU-07j: the (desired, observed, reason) a START emitted after this replay prefix."""
+        try:
+            active = worker_lifecycle_module.project_events(worker_events).active
+            pending = worker_lifecycle_module.project_acquisitions(acquisition_events).pending
+        except worker_lifecycle_module.LifecycleRefused as exc:
+            raise journal_module.JournalCorruption(
+                f"worker lifecycle replay is inconsistent: {exc}") from exc
+        observed, reason = self.observed_state, self.prerequisite_reason
+        if pending is not None:
+            observed = "ownership_unresolved"
+            reason = "worker_acquisition_pending:" + str(pending["request_id"])
+        elif active:
+            observed, reason = "ownership_unresolved", "owned worker reconciliation required"
+        elif reason == "owned worker reconciliation required":
+            observed, reason = self.desired_state, None
+        if observed == "ownership_unresolved" and self._pending_runtime_issued():
+            observed = "waiting_prerequisite"
+        return self.desired_state, observed, reason
+
+    def restored_held_settlement(self, *, catalog_id: str, transition_id: str,
+                                 selection: Mapping[str, Any], plan_digest: str):
+        """AKU-07j: durable stale terminal + held cost of the ORIGINAL unsettled selection.
+
+        Accounting-only (no result/stdout authority); None without a durable held record."""
+        with self._mutex:
+            self._require_active_locked()
+            issued = self._driver_issued.get(catalog_id)
+            proposal = selection.get("proposal") if isinstance(selection, Mapping) else None
+            work = None if issued is None else issued["catalog"]["work_by_stage_digest"].get(
+                issued["selection"].get("proposal_digest"))
+            if (issued is None or issued["transition_id"] != transition_id
+                    or issued["selection"] != selection or transition_id in self._driver_settled
+                    or not isinstance(proposal, Mapping) or not isinstance(work, Mapping)
+                    or work.get("stage_plan_digest") != plan_digest):
+                raise ControlRefused("restored held lookup is not the original unsettled selection")
+            key = (proposal["proposal_id"], plan_digest, f"driver:{transition_id}",
+                   f"runtime:{transition_id}")
+            if key not in self._restored_held_accounting:
+                return None
+            entry = self._restored_held_accounting[key]
+            binding = worker_lifecycle_module.AccountingBinding.from_selection(
+                catalog_id=catalog_id, transition_id=transition_id,
+                selection=scheduling.Selection.from_dict(selection))
+            if (entry is None or entry[1].proposal_id != key[0]
+                    or entry[2] not in {None, binding.digest}):
+                raise ControlRefused("restored held accounting is ambiguous or bound elsewhere")
+            return worker_lifecycle_module.TerminalWorker(**entry[0].__dict__), entry[1]
 
     def reconcile_workers(self):
         """Reconcile retained v2 ownership outside the controller command lock."""
@@ -5102,6 +5154,7 @@ class CampaignController:
             self._actor_profile_producer = None
             self._current_actor_profile_receipts = {}
             self._actor_trusted_held_receipts = {}
+            self._restored_held_accounting = {}
             self._actor_profile_execution_reservations = {}
             self._actor_profile_execution_settlements = {}
             self._actor_profile_cancelled_attempts = set()

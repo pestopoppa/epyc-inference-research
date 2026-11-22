@@ -788,6 +788,37 @@ def project_events(events: Sequence[Mapping[str, Any]]) -> LifecycleProjection:
                                 for worker, row in held_receipts.items()}))
 
 
+def restored_stale_held_accounting(events: Sequence[Mapping[str, Any]]) -> dict:
+    """AKU-07j: accounting-only index of durably STALE workers with a held record.
+
+    Keyed by (request_id, plan_digest, lineage_id, stage_id) -> (terminal, receipt,
+    binding digest | None); a reused key maps to None. Grants no result/stdout authority;
+    legacy streams without OWNED_HELD_RECEIPT_RETAINED yield nothing."""
+    projection = project_events(events)
+    index: dict[tuple[str, str, str, str], Any] = {}
+    for worker, final in projection.terminal.items():
+        rows = [validate_event(row) for row in events if row.get("worker_id") == worker]
+        held = next((row for row in rows if row["event"] == "OWNED_HELD_RECEIPT_RETAINED"), None)
+        if held is None or final["event"] != "WORKER_RESULT_STALE":
+            continue
+        last = final
+        retained = next((row for row in rows if row["event"] == "WORKER_RESULT_RETAINED"), None)
+        ids = [last[name] for name in ("worker_id", "worker_generation", "request_id",
+                                       "plan_digest", "lineage_id", "stage_id", "grant_id",
+                                       "grant_generation", "container_id")]
+        terminal = TerminalWorker(*ids, retained["data"]["return_code"] if retained else None,
+                                  last["data"]["result_digest"], False, last["data"]["reason"])
+        data = held["data"]
+        trusted = TrustedHeldClaimReceipt(
+            last["request_id"], last["plan_digest"], worker, last["worker_generation"],
+            last["grant_id"], last["grant_generation"], last["container_id"],
+            data["clock_domain"], data["held_started_at"], data["held_ended_at"], data["receipt"])
+        key = tuple(ids[2:6])
+        index[key] = None if key in index else (
+            terminal, trusted.receipt, data.get("accounting_binding_digest"))
+    return index
+
+
 def process_identity(pid: int) -> ProcessIdentity:
     if not isinstance(pid, int) or isinstance(pid, bool) or pid < 1:
         raise LifecycleRefused("PID must be positive")
@@ -2743,6 +2774,7 @@ __all__ = ["ACCOUNTING_BINDING_SCHEMA", "ADMISSION_DENIAL_CLASSES", "AccountingB
            "WaitingAuthority", "WorkerLifecycle", "process_identity", "same_process",
            "monotonic_clock_domain", "project_acquisitions", "project_events",
            "prospective_identity_from_transition", "prospective_request_digest",
+           "restored_stale_held_accounting",
            "validate_acquisition_transition", "validate_command_result_v2",
            "validate_accounting_binding_history",
            "validate_command_transition_v2", "validate_event",

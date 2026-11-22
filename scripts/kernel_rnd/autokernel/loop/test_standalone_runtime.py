@@ -882,3 +882,169 @@ def test_concurrent_stop_does_not_swallow_unrelated_driver_refusal(tmp_path, mon
         thread.join(2)
         runtime.close()
         controller.close()
+
+
+# AKU-07j restart consumer: durable held receipts settle the ORIGINAL unsettled driver
+# selection exactly once after process restart. All receipts here are labelled fixtures
+# from HeldProvider; they prove accounting wiring, not real resource ownership.
+
+
+def _crash_at(runtime, lifecycle, phase):
+    fired = {"value": False}
+
+    def crash(current):
+        if current == phase and not fired["value"]:
+            fired["value"] = True
+            raise worker_lifecycle.SimulatedCrash(current)
+
+    lifecycle.fault_hook = crash
+    with pytest.raises(sr.StandaloneRuntimeUncertain):
+        runtime.tick()
+
+
+def _payloads(controller, kind):
+    return [entry.payload for entry in controller._journal.read_all() if entry.kind == kind]
+
+
+def _no_reacquire(controller):
+    calls = {"authorize": 0}
+    provider = controller._lifecycle_provider
+    real = provider.authorize
+
+    def counted(*args, **kwargs):
+        calls["authorize"] += 1
+        return real(*args, **kwargs)
+
+    provider.authorize = counted
+    return calls
+
+
+def _lookup_args(controller):
+    pending = controller.unified_driver_pending_intent()
+    selection = pending["selection"]
+    work = pending["catalog"]["work_by_stage_digest"][selection["proposal_digest"]]
+    return {"catalog_id": pending["catalog_id"], "transition_id": pending["transition_id"],
+            "selection": selection, "plan_digest": work["stage_plan_digest"]}
+
+
+def _assert_single_held_settlement(controller, transition_id):
+    worker = _payloads(controller, journal_module.KIND_WORKER_LIFECYCLE)
+    assert [row["event"] for row in worker].count("WORKER_RESULT_STALE") == 1
+    assert "WORKER_RESULT_ACCEPTED" not in {row["event"] for row in worker}
+    held, = [row for row in worker if row["event"] == "OWNED_HELD_RECEIPT_RETAINED"]
+    settled, = _payloads(controller, journal_module.KIND_UNIFIED_DRIVER_SETTLED)
+    assert settled["transition_id"] == transition_id
+    assert settled["receipt"] == held["data"]["receipt"]
+    assert settled["outcome"] == "failed"
+    assert [ref.split(":")[0] for ref in settled["terminal_refs"]] == ["lifecycle"]
+    assert not controller._native_records
+    return settled
+
+
+@pytest.mark.parametrize("settle_crash", [False, True])
+def test_restart_after_held_append_settles_original_transition_once_and_idempotently(
+    tmp_path, monkeypatch, settle_crash
+):
+    runtime, controller, lifecycle, engine = _runtime(tmp_path, monkeypatch)
+    runtime.recover()
+    _crash_at(runtime, lifecycle, "OWNED_HELD_RECEIPT_RETAINED")
+    transition_id = controller.unified_driver_pending_intent()["transition_id"]
+    children = {"count": 0}
+    current = _reopen_runtime(runtime, controller, engine, monkeypatch,
+                              child_counter=children, crashed=True)
+    calls = _no_reacquire(current[1])
+    if settle_crash:
+        # Crash after the durable stale event but before settlement: the next process
+        # settles from the accounting-only index (no live lifecycle terminal exists).
+        monkeypatch.setattr(current[1], "unified_driver_settle", lambda _value: (
+            _ for _ in ()).throw(OSError("fixture crash before settlement")))
+        assert current[0].recover().status == "recovery_required"
+        assert not _payloads(current[1], journal_module.KIND_UNIFIED_DRIVER_SETTLED)
+        current = _reopen_runtime(*current[:2], current[3], monkeypatch,
+                                  child_counter=children, crashed=True)
+        calls = _no_reacquire(current[1])
+        assert current[1]._worker_lifecycle._terminals == {}
+    recovered = current[0].recover()
+    assert recovered.status == "settled", recovered.reason
+    assert recovered.driver_outcome["transition_id"] == transition_id
+    assert not recovered.execution_receipt["native_measurement_ids"]
+    settled = _assert_single_held_settlement(current[1], transition_id)
+    assert len(current[3].export_state().receipts) == 1
+    assert children["count"] == 0 and calls["authorize"] == 0
+    before_state = current[3].export_state()
+    before = [(e.kind, e.payload) for e in current[1]._journal.read_all()
+              if e.kind != journal_module.KIND_CAMPAIGN_SUPERVISOR_EVENT]
+    again = _reopen_runtime(*current[:2], current[3], monkeypatch, child_counter=children)
+    try:
+        calls = _no_reacquire(again[1])
+        assert again[1].unified_driver_pending_intent() is None
+        assert again[0].recover().status == "recovered"
+        assert again[3].export_state() == before_state
+        assert again[1]._journal.read_all()[-1].kind == \
+            journal_module.KIND_CAMPAIGN_SUPERVISOR_EVENT
+        after = [(e.kind, e.payload) for e in again[1]._journal.read_all()
+                 if e.kind != journal_module.KIND_CAMPAIGN_SUPERVISOR_EVENT]
+        assert after == before
+        assert _assert_single_held_settlement(again[1], transition_id) == settled
+        assert children["count"] == 0 and calls["authorize"] == 0
+    finally:
+        again[0].close()
+        again[1].close()
+
+
+def test_restored_held_lookup_is_bound_to_the_original_unsettled_selection(
+    tmp_path, monkeypatch
+):
+    runtime, controller, lifecycle, engine = _runtime(tmp_path, monkeypatch)
+    runtime.recover()
+    _crash_at(runtime, lifecycle, "OWNED_HELD_RECEIPT_RETAINED")
+    first = _reopen_runtime(runtime, controller, engine, monkeypatch, crashed=True)
+    monkeypatch.setattr(first[1], "unified_driver_settle", lambda _value: (
+        _ for _ in ()).throw(OSError("fixture crash before settlement")))
+    assert first[0].recover().status == "recovery_required"
+    reopened_runtime, reopened, _lifecycle, _engine = _reopen_runtime(
+        *first[:2], first[3], monkeypatch, crashed=True)
+    try:
+        args = _lookup_args(reopened)
+        terminal, receipt = reopened.restored_held_settlement(**args)
+        assert terminal.accepted is False and receipt.proposal_id == terminal.request_id
+        # Accounting only: the restored terminal grants no lifecycle result authority.
+        assert reopened.worker_terminal_for_request(
+            request_id=terminal.request_id, plan_digest=terminal.plan_digest,
+            lineage_id=terminal.lineage_id, stage_id=terminal.stage_id) is None
+        with pytest.raises(worker_lifecycle.LifecycleRefused):
+            reopened.worker_held_claim_receipt(terminal)
+        other_request = copy.deepcopy(args["selection"])
+        other_request["proposal"]["proposal_id"] = "fixture-other-request"
+        for bad in ({"transition_id": "0" * 64}, {"catalog_id": "1" * 64},
+                    {"plan_digest": "2" * 64}, {"selection": other_request}):
+            with pytest.raises(campaign_control.ControlRefused, match="original unsettled"):
+                reopened.restored_held_settlement(**(args | bad))
+        assert reopened_runtime.recover().status == "settled"
+        with pytest.raises(campaign_control.ControlRefused, match="original unsettled"):
+            reopened.restored_held_settlement(**args)
+    finally:
+        reopened_runtime.close()
+        reopened.close()
+
+
+def test_legacy_restart_without_held_record_keeps_existing_fence(tmp_path, monkeypatch):
+    runtime, controller, lifecycle, engine = _runtime(tmp_path, monkeypatch)
+    runtime.recover()
+    _crash_at(runtime, lifecycle, "OWNED_TERMINAL")
+    first = _reopen_runtime(runtime, controller, engine, monkeypatch, crashed=True)
+    recovered = first[0].recover()
+    assert recovered.status == "recovery_required"
+    assert "trusted held receipt" in recovered.reason
+    second = _reopen_runtime(*first[:2], first[3], monkeypatch, crashed=True)
+    try:
+        assert second[1]._restored_held_accounting == {}
+        assert second[1].restored_held_settlement(**_lookup_args(second[1])) is None
+        again = second[0].recover()
+        assert again.status == "recovery_required"
+        assert "ownership is unknown" in again.reason
+        assert not second[3].export_state().receipts
+        assert not _payloads(second[1], journal_module.KIND_UNIFIED_DRIVER_SETTLED)
+    finally:
+        second[0].close()
+        second[1].close()

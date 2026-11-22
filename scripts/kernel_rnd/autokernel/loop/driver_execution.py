@@ -531,6 +531,7 @@ class _FailedAttempt:
     held: scheduling.HeldClaimReceipt
     reference: unified_worker.PlannedWorkerResultReference | None = None
     recovered: bool = False
+    restored: bool = False  # AKU-07j: from the controller's accounting-only held index
 
 
 class UnifiedDriverExecution:
@@ -612,7 +613,15 @@ class UnifiedDriverExecution:
             attempt = self._finished.get(transition_id)
         if trusted is None or attempt is None or dict(supplied) != trusted:
             raise DriverExecutionRefused("settlement differs from the owned finished attempt")
-        held = self.controller.worker_held_claim_receipt(attempt.terminal)
+        if isinstance(attempt, _FailedAttempt) and attempt.restored:
+            restored = self.controller.restored_held_settlement(
+                catalog_id=attempt.catalog_id, transition_id=transition_id,
+                selection=attempt.selection.to_dict(), plan_digest=attempt.terminal.plan_digest)
+            if restored is None or restored[0] != attempt.terminal:
+                raise DriverExecutionRefused("restored held accounting differs")
+            held = restored[1]
+        else:
+            held = self.controller.worker_held_claim_receipt(attempt.terminal)
         if held.to_dict() != trusted["receipt"]:
             raise DriverExecutionRefused("trusted held receipt differs")
         if isinstance(attempt, _FinishedAttempt):
@@ -715,6 +724,15 @@ class UnifiedDriverExecution:
             lineage_id = f"driver:{transition_id}"
             stage_id = f"runtime:{transition_id}"
             terminal = self.controller.reconcile_workers()
+            restored = None
+            if terminal is None:
+                # AKU-07j: a durable stale terminal + held record of this exact selection
+                # settles once from accounting-only indexes; nothing is reacquired or rerun.
+                restored = self.controller.restored_held_settlement(
+                    catalog_id=self.driver._issued_catalog.catalog_id,
+                    transition_id=transition_id, selection=selection.to_dict(),
+                    plan_digest=prepared.plan.digest)
+                terminal = None if restored is None else restored[0]
             if terminal is not None:
                 if (terminal.request_id != request_id
                         or terminal.plan_digest != prepared.plan.digest
@@ -723,13 +741,14 @@ class UnifiedDriverExecution:
                     raise DriverExecutionUncertain(
                         "reconciled lifecycle belongs to another issued request")
                 try:
-                    held = self.controller.worker_held_claim_receipt(terminal)
+                    held = (restored[1] if restored is not None
+                            else self.controller.worker_held_claim_receipt(terminal))
                 except Exception as exc:
                     raise worker_lifecycle.WaitingAuthority(
                         "reconciled terminal lacks a trusted held receipt") from exc
                 failed = _FailedAttempt(
                     self.driver._issued_catalog.catalog_id, transition_id, selection,
-                    prepared, terminal, held, recovered=True)
+                    prepared, terminal, held, recovered=True, restored=restored is not None)
                 self._launched.add(transition_id)
                 self._finished[transition_id] = failed
                 return self._finish(failed)
