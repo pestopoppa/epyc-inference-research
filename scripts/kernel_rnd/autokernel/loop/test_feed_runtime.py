@@ -610,3 +610,109 @@ raise SystemExit(result)
             if process.poll() is None:
                 process.terminate()
                 process.wait(timeout=3)
+
+
+# AKU-08c: receipt-backed finding projector. The comparison receipt is a labelled FIXTURE:
+# no producer journals the registered effect-question/comparison receipt yet.
+def _fixture_comparison_lookup(candidate_measurement_id, *, anchor_measurement_id=None):
+    from . import validation_claim_receipt as cr
+
+    def sha(label):
+        return hashlib.sha256(label.encode()).hexdigest()
+
+    def ref(arm):
+        return cr.ClaimGradeReceiptReference(f"fixture-{arm}", f"fixture-{arm}.json", sha(arm))
+    anchor_id = anchor_measurement_id or sha("fixture-anchor-measurement")
+    pair = cr.ClaimGradeReceiptPairReference(ref("anchor"), ref("candidate"), anchor_id,
+                                             candidate_measurement_id, sha("fixture-view"))
+    receipt = F.RegisteredComparisonReceipt(
+        "fixture-comparison-1", sha("fixture-comparison-1"), pair, E.ClaimKey.from_dict(claim_dict()),
+        "positive", 3.0, "strict_search", "screen_out", True)
+    return {anchor_id: receipt, candidate_measurement_id: receipt}.get
+
+
+def _receipt_feed(tmp_path, base, lookup, eligibility, reader_id="receipt-feed"):
+    return evidence_feed.EvidenceFeed(
+        source_root=tmp_path / "source", corpus_root=tmp_path / "corpus",
+        ledger_path=base / "ledger.jsonl", store_root=base / "store", root_repo=_root_repo(),
+        current_epoch="epoch-1", reader_id=reader_id,
+        finding_projector=F.ReceiptBackedFindingProjector(lookup, eligibility, epoch="epoch-1"),
+        scope_verifier=lambda *_: True, use_verifier=lambda *_: True,
+        result_verifier=lambda *_: True, support_rule_identity="test:comparison-receipt:v1")
+
+
+def test_receipt_projector_advances_once_acks_after_durable_and_replays(tmp_path, monkeypatch):
+    (tmp_path / "corpus").mkdir()
+    journal, carrier = _native_event(tmp_path / "source", tmp_path / "corpus", _root_repo())
+    lookup = _fixture_comparison_lookup(carrier["measurement_id"])
+    calls = []
+
+    def eligible(receipt):
+        calls.append(receipt.receipt_id)
+        return ()
+    feed = _receipt_feed(tmp_path, tmp_path / "a", lookup, eligible)
+    monkeypatch.setattr(feed, "_save_state", lambda: (_ for _ in ()).throw(OSError("store unavailable")))
+    with pytest.raises(OSError, match="store unavailable"):
+        feed.drain_once()
+    assert journal.cursor(feed.reader_id).last_seq == 0  # never ACKed before durable projection
+    feed.close()
+    resumed = _receipt_feed(tmp_path, tmp_path / "a", lookup, eligible)
+    resumed.drain_once()
+    assert journal.cursor(resumed.reader_id).last_seq == 1
+    [finding] = resumed.index().findings
+    assert (finding.frontier, finding.authority_reference) == (1, "fixture:fixture-comparison-1")
+    claim = finding.claim_key
+    assert resumed.planner_view(claim.target_scope, claim, "screen_out")["status"] == "supported"
+    state = dict(resumed.state)
+    assert resumed.drain_once()["events_read"] == 0 and len(resumed.index().findings) == 1
+    resumed.close()
+    assert calls == ["fixture-comparison-1"] * 2
+    restarted = _receipt_feed(tmp_path, tmp_path / "a", lookup, eligible)
+    assert [item.digest for item in restarted.index().findings] == [finding.digest]
+    assert restarted.state["projection_digest"] == state["projection_digest"]
+    restarted.close()
+    assert len(calls) == 2  # restart restores the durable projection; no re-advance
+    replay = _receipt_feed(tmp_path, tmp_path / "b", lookup, eligible, reader_id="receipt-replay")
+    replay.drain_once()
+    assert [item.digest for item in replay.index().findings] == [finding.digest]
+    assert (replay.state["projected_frontier"], replay.state["projection_digest"]) == (
+        1, state["projection_digest"])
+    replay.close()
+
+
+def test_receipt_projector_invalidation_refusal_and_anchor_never_project(tmp_path):
+    (tmp_path / "corpus").mkdir()
+    journal, carrier = _native_event(tmp_path / "source", tmp_path / "corpus", _root_repo())
+    feed = _receipt_feed(tmp_path, tmp_path / "a", _fixture_comparison_lookup(carrier["measurement_id"]),
+                         lambda _receipt: ())
+    feed.drain_once()
+    [finding] = feed.index().findings
+    claim = finding.claim_key
+    journal.append_superseded(journal.read_all()[0].event_id, "fixture receipt withdrawal")
+    feed.drain_once()
+    assert journal.cursor(feed.reader_id).last_seq == 2
+    assert feed.index().dependency_generations["recipe:cpu"] == 1
+    assert feed.planner_view(claim.target_scope, claim, "screen_out")["status"] == "unknown"
+    feed.close()
+    refused = F.ReceiptBackedFindingProjector(
+        _fixture_comparison_lookup(carrier["measurement_id"]),
+        lambda _receipt: ("producer_provenance_unwarranted", "producer_source_closure_absent"),
+        epoch="epoch-1")
+    anchor_only = F.ReceiptBackedFindingProjector(
+        _fixture_comparison_lookup(hashlib.sha256(b"other").hexdigest(),
+                                   anchor_measurement_id=carrier["measurement_id"]),
+        lambda _receipt: pytest.fail("anchor arm alone reached eligibility"), epoch="epoch-1")
+    for index, projector in enumerate((refused, anchor_only)):
+        other = evidence_feed.EvidenceFeed(
+            source_root=tmp_path / "source", corpus_root=tmp_path / "corpus",
+            ledger_path=tmp_path / f"r{index}" / "ledger.jsonl", store_root=tmp_path / f"r{index}" / "store",
+            root_repo=_root_repo(), current_epoch="epoch-1", reader_id=f"receipt-refused-{index}",
+            finding_projector=projector, scope_verifier=lambda *_: True, use_verifier=lambda *_: True,
+            result_verifier=lambda *_: True, support_rule_identity="test:comparison-receipt:v1")
+        other.drain_once()
+        assert other.index().findings == () or list(other.index().findings) == []
+        assert journal.cursor(other.reader_id).last_seq == 2  # level-only rows still ACK
+        other.close()
+    event_id = journal.read_all()[0].event_id
+    assert refused.refusals == {event_id: ("producer_provenance_unwarranted", "producer_source_closure_absent")}
+    assert anchor_only.refusals == {}

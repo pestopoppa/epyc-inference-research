@@ -22,6 +22,10 @@ from . import measurement_capture as mc
 from . import native_capture_control as nc
 
 
+HISTORICAL_V3 = "epyc.autokernel.validation_native_pair.v3"
+HISTORICAL_V4 = "epyc.autokernel.validation_native_pair.v4"  # + typed receipt eligibility
+
+
 class ValidationConsumerError(RuntimeError):
     """Evidence or candidate state cannot safely make the requested transition."""
 
@@ -377,7 +381,7 @@ class ValidationConsumer:
 
     def _validate_reopened_bundle(self, bundle: Mapping[str, Any],
                                   receipt: cm.RowReceipt) -> Mapping[str, Any]:
-        if isinstance(bundle, Mapping) and bundle.get("schema") == "epyc.autokernel.validation_native_pair.v3":
+        if isinstance(bundle, Mapping) and bundle.get("schema") in {HISTORICAL_V3, HISTORICAL_V4}:
             return self._reopen_historical_row(bundle, receipt)
         fields = {"schema", "batch", "row", "candidate", "comparator", "row_set",
                   "plan_digest", "native", "calibration", "semantic_authority_id",
@@ -512,9 +516,14 @@ class ValidationConsumer:
             raise ValidationConsumerError("historical row requires the exact installed semantic registration")
         return authority
 
-    def _historical_body(self, batch, row, row_set, candidate, comparator, pair, authority_id):
-        """Consume historical facts; this path cannot pass or advance a row."""
+    def _historical_body(self, batch, row, row_set, candidate, comparator, pair, authority_id,
+                         schema=HISTORICAL_V4):
+        """Consume historical facts; this path cannot pass or advance a row.
+
+        v4 additively records the typed receipt eligibility disposition; v3 replays unchanged.
+        """
         from . import observation_binding as ob
+        from .validation_semantic_adapter import RegisteredClaimGradeEligibility
         authority = self._historical_registration(authority_id)
         actual = authority.claim_grade_verifier.reopen_pair(pair)
         debt = self._binding_debt(row, actual.plan, candidate, comparator)
@@ -524,22 +533,31 @@ class ValidationConsumer:
         if (type(decision) is not SemanticDecision or decision.permitted
                 or decision.intended_use != "validate_production" or not decision.reasons):
             raise ValidationConsumerError("historical receipt cannot authorize validation")
-        body = {"schema": "epyc.autokernel.validation_native_pair.v3",
+        prerequisites = set(decision.reasons)
+        body = {"schema": schema,
             "batch": batch.to_dict(), "row": row.to_dict(), "candidate": candidate.to_dict(),
             "comparator": comparator.to_dict(), "row_set": row_set.to_dict(),
             "plan_digest": actual.plan.digest, "claim_grade_pair": pair.to_dict(),
             "semantic_authority_id": authority.authority_id,
             "semantic_decision": ob._plain(decision.__dict__),
             "source_identity": ob._plain(actual.anchor["source_identity"]),
-            "final_view_digest": actual.view.view_digest,
-            "prerequisites": sorted(set(decision.reasons))}
+            "final_view_digest": actual.view.view_digest}
+        if schema == HISTORICAL_V4:
+            # The receipts are reprojected now (independently of the plan's use); a typed
+            # code is recorded and never passes a historical row.
+            typed = RegisteredClaimGradeEligibility(authority.claim_grade_verifier, pair)
+            codes = list(typed.discharge(actual.plan, actual.view))
+            use = _structural_use(actual.plan, view=actual.view, registered_claim_grade=typed)
+            body["eligibility"] = {"disposition": use.to_dict(), "receipt_codes": codes}
+            prerequisites.update(f"eligibility:{code}" for code in codes)
+        body["prerequisites"] = sorted(prerequisites)
         return body
 
     def _reopen_historical_row(self, bundle, receipt):
         from .validation_claim_receipt import ClaimGradeReceiptPairReference
         fields = {"schema", "batch", "row", "candidate", "comparator", "row_set", "plan_digest",
             "claim_grade_pair", "semantic_authority_id", "semantic_decision", "source_identity",
-            "final_view_digest", "prerequisites"}
+            "final_view_digest", "prerequisites"} | ({"eligibility"} if bundle["schema"] == HISTORICAL_V4 else set())
         if set(bundle) != fields:
             raise ValidationConsumerError("historical row bundle has missing/unknown fields")
         try:
@@ -559,7 +577,7 @@ class ValidationConsumer:
                 or receipt.comparator_manifest_digest != comparator.manifest_digest):
             raise ValidationConsumerError("historical row receipt differs from original binding")
         expected = self._historical_body(batch, row, row_set, candidate, comparator,
-                                         pair, bundle["semantic_authority_id"])
+                                         pair, bundle["semantic_authority_id"], bundle["schema"])
         if mc._plain(bundle) != expected:
             raise ValidationConsumerError("historical row differs from complete receipt replay")
         return bundle
@@ -637,15 +655,17 @@ def plan_view(carrier: Mapping[str, Any]) -> Mapping[str, Any]:
     return value
 
 
-def _structural_use(plan: ep.ExperimentPlan,
-                    carrier: Mapping[str, Any]) -> ep.UseDisposition:
-    value = plan_view(carrier)
-    view = ep.AdmissibleUnitView(
-        **{key: item for key, item in value.items() if key != "selected_rows"},
-        selected_rows=tuple(ep.RawUnit.from_dict(item)
-                            for item in value["selected_rows"]))
-    return ep.eligibility(
-        plan, view, plan.intended_use, current_epoch=plan.epoch)
+def _structural_use(plan: ep.ExperimentPlan, carrier: Mapping[str, Any] | None = None, *,
+                    view: ep.AdmissibleUnitView | None = None,
+                    registered_claim_grade: Any = None) -> ep.UseDisposition:
+    if view is None:
+        value = plan_view(carrier)
+        view = ep.AdmissibleUnitView(
+            **{key: item for key, item in value.items() if key != "selected_rows"},
+            selected_rows=tuple(ep.RawUnit.from_dict(item)
+                                for item in value["selected_rows"]))
+    return ep.eligibility(plan, view, plan.intended_use, current_epoch=plan.epoch,
+                          registered_claim_grade=registered_claim_grade)
 
 
 __all__ = ["BatchAssembly", "NativeRowEvidence", "HistoricalReceiptRowEvidence", "RegisteredSemanticAuthority",

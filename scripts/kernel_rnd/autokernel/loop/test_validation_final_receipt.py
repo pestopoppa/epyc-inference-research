@@ -1,8 +1,10 @@
 """Actual original final-v3 semantic receipts: diagnostic, immutable and replayable."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import replace
 import hashlib
+from types import SimpleNamespace
 
 import pytest
 
@@ -244,6 +246,11 @@ def test_actual_validation_consumer_records_and_restarts_without_live_issuance(r
                 assert reopened["semantic_decision"]["permitted"] is False
                 assert reopened["source_identity"] == real["bodies"]["anchor"]["source_identity"]
                 assert reopened["claim_grade_pair"] == real["pair"].to_dict()
+                # v4: the warranted diagnostic pair is reprojected and stops at qualification.
+                assert reopened["schema"] == vc.HISTORICAL_V4
+                assert list(reopened["eligibility"]["receipt_codes"]) == ["claim_grade_receipt_unqualified"]
+                assert reopened["eligibility"]["disposition"]["status"] == "refused"
+                assert "eligibility:claim_grade_receipt_unqualified" in list(reopened["prerequisites"])
             assert len(controller._journal.read_all()) == count
             assert manager.inspect()["state"]["validated_candidate"] is None
             changed = ob._plain(original_bundle)
@@ -493,3 +500,148 @@ print(json.dumps({"bodies": [schemas.content_hash(mc._plain(b)) for b in (actual
         for seed in (1, 977)]
     expected = [sa.schemas.content_hash(ob._plain(real["bodies"][arm])) for arm in ("anchor", "candidate")]
     assert rows == [{"bodies": expected, "codes": ["claim_grade_receipt_unqualified"], "warranted": True}] * 2
+
+
+
+# AKU-08c second child: the historical consumer records typed receipt eligibility in v4.
+@contextmanager
+def _historical_consumer(real, tmp_path, projection=None, receipts_root=None):
+    """Real transaction WAL and actual receipts; candidate metadata is hermetic (as above)."""
+    plan = ep.ExperimentPlan.from_dict(real["events"]["anchor"]["payload"]["carrier"]["plan"])
+    library = real["controller"].parent / "candidate/build/bin/libggml-base.so"
+    dso = rr.ArtifactDigest.from_dict({"schema": rr.ARTIFACT_SCHEMA, "role": "dso",
+        "path": str(library), "sha256": hashlib.sha256(library.read_bytes()).hexdigest()}, role="dso")
+    comparator, chain = _candidate_chain(plan, 1, dsos={"anchor": (dso,), "candidate": (dso,)})
+    candidate = chain[-1]
+    production, _ = _row(plan, candidate, comparator)
+    diagnostic = cm.ValidationRow.from_dict(production.to_dict() | {
+        "row_id": "original-candidate-diagnostic", "row_kind": "seed", "required": False,
+        "category": plan.category,
+        "instrument_digest": dict(plan.anchor_identity)["instrument_identity_sha256"]})
+    rows = cm.RequiredRowSet.from_dict(cm.RequiredRowSet("actual-final-v4", (diagnostic, production)).to_dict())
+    controller = control.CampaignController(_resolved(), tmp_path / "consumer-service")
+    controller.__enter__()
+    source = mc.ArtifactStore(real["source"].root)
+    receipts = mc.ArtifactStore(receipts_root or real["receipts"].root)
+    store = mc.ArtifactStore(tmp_path / "consumer-evidence")
+    try:
+        manager = ct.CandidateTransactions(controller, git_backend=FakeGitBackend())
+        projection = projection or sa.PinnedRootProjection(real["root"], source_closure=real["closure"])
+        authority = sa.ValidationSemanticAdapter(projection).registered_authority(
+            transaction_verifier_id="current-semantic/v2", source_store=source, receipt_store=receipts)
+        validator = nc.NativeCaptureValidator(binding=nc.NativeCaptureBinding(
+            controller.resolved.campaign_id, controller.config_digest,
+            controller.config_generation, "unused-historical-consumer", 1), store=source)
+        consumer = vc.ValidationConsumer(transactions=manager, native_validator=validator,
+            evidence_store=store, semantic_authorities={authority.authority_id: authority})
+        manager.initialize(request_id="initialize", state=_state(comparator), manifest=comparator)
+        manager.integrate(request_id="integrate", previous=comparator, candidate=candidate, threshold_signal=True)
+        assembly = consumer.assemble_due_batch(request_id="assemble", candidate=candidate,
+            comparator=comparator, row_set=rows)
+
+        def record(pair):
+            return consumer.record_native_row(request_id="diagnostic", assembly=assembly,
+                candidate=candidate, comparator=comparator, authority_id=authority.authority_id,
+                evidence=vc.HistoricalReceiptRowEvidence(diagnostic.row_id, pair))
+        yield SimpleNamespace(consumer=consumer, assembly=assembly, candidate=candidate,
+            comparator=comparator, diagnostic=diagnostic, authority=authority, store=store, record=record)
+    finally:
+        store.close()
+        receipts.close()
+        source.close()
+        controller.close()
+
+
+def _rewrite(store, receipt, body):
+    stored = store.write("candidate-validation-row", body)
+    return replace(receipt, native_evidence_ref=stored.locator, native_evidence_digest=stored.sha256), stored
+
+
+def test_v3_historical_rows_reopen_unchanged_and_v3_reader_refuses_v4(real, tmp_path):
+    with _historical_consumer(real, tmp_path) as h:
+        recorded = h.record(real["pair"])
+        v4 = ob._plain(h.consumer.reopen_row(recorded.receipt))
+        v3 = h.consumer._historical_body(h.assembly.batch, h.diagnostic, h.assembly.row_set,
+            h.candidate, h.comparator, real["pair"], h.authority.authority_id, vc.HISTORICAL_V3)
+        # v4 is additive: every v3 field except schema/prerequisites is identical.
+        assert set(v4) - set(v3) == {"eligibility"} and "eligibility" not in v3
+        common = set(v3) - {"schema", "prerequisites"}
+        assert {key: v4[key] for key in common} == {key: v3[key] for key in common}
+        assert v3["schema"] == vc.HISTORICAL_V3
+        assert v3["prerequisites"] == sorted(set(v3["semantic_decision"]["reasons"]))
+        legacy, stored = _rewrite(h.store, recorded.receipt, v3)
+        raw = (h.store.root / stored.locator).read_bytes()
+        for _ in range(2):
+            assert ob._plain(h.consumer.reopen_row(legacy)) == v3
+        assert (h.store.root / stored.locator).read_bytes() == raw
+        # A v3 reader (exact v3 field set) refuses a v4 row, and v4 refuses losing its disposition.
+        for body in (v4 | {"schema": vc.HISTORICAL_V3},
+                     {key: value for key, value in v4.items() if key != "eligibility"}):
+            forged, _ = _rewrite(h.store, recorded.receipt, body)
+            with pytest.raises(vc.ValidationConsumerError, match="missing/unknown fields"):
+                h.consumer.reopen_row(forged)
+        changed = ob._plain(v4)
+        changed["eligibility"]["receipt_codes"] = []
+        forged, _ = _rewrite(h.store, recorded.receipt, changed)
+        with pytest.raises(vc.ValidationConsumerError, match="complete receipt replay"):
+            h.consumer.reopen_row(forged)
+
+
+def test_consumer_records_unwarranted_receipts_with_typed_eligibility_codes(real, tmp_path):
+    expected = ob._plain(real["closure"].expected_native_producer_source)
+    expected["measurement_capture"]["callables"][0]["identity"]["implementation_sha256"] = "e" * 64
+    closure = sa.ProjectionSourceClosure(real["closure"].root_commit,
+                                         dict(real["closure"].root_source_sha256), expected)
+    projection = sa.PinnedRootProjection(real["root"], source_closure=closure)
+    receipts_root = tmp_path / "unwarranted-receipts"
+    receipts = mc.ArtifactStore(receipts_root)
+    try:
+        refs = {}
+        for arm, ref in (("anchor", real["pair"].anchor), ("candidate", real["pair"].candidate)):
+            event = real["receipts"].read(ref.locator, ref.sha256)["source_event"]
+            refs[arm] = projection.produce_receipt(source_store=real["source"],
+                source_locator=event["locator"], source_sha256=event["sha256"], receipt_store=receipts)
+    finally:
+        receipts.close()
+    pair = replace(real["pair"], anchor=refs["anchor"], candidate=refs["candidate"])
+    with _historical_consumer(real, tmp_path, projection, receipts_root) as h:
+        state = h.record(pair)
+        bundle = h.consumer.reopen_row(state.receipt)
+        assert bundle["schema"] == vc.HISTORICAL_V4
+        assert list(bundle["eligibility"]["receipt_codes"]) == [
+            "producer_provenance_unwarranted", "producer_implementation_differs"]
+        assert state.status == "prerequisite_missing"
+        assert "eligibility:producer_provenance_unwarranted" in state.reason
+        assert state.receipt.use_disposition == "policy_undefined"
+
+
+def test_registered_eligibility_gates_receipt_backed_findings(real, monkeypatch):
+    from .test_scoped_evidence import claim_dict
+    plan = ep.ExperimentPlan.from_dict(real["events"]["anchor"]["payload"]["carrier"]["plan"])
+    verifier = sa.RegisteredClaimGradeVerifier(real["projection"], real["source"], real["receipts"])
+    # FIXTURE comparison receipt over the actual pair: no producer journals the real one yet.
+    receipt = feed.RegisteredComparisonReceipt(
+        "fixture-comparison", hashlib.sha256(b"fixture-comparison").hexdigest(), real["pair"],
+        feed.evidence.ClaimKey.from_dict(claim_dict()), "positive", 3.0, "strict_search",
+        plan.intended_use, True)
+    row = SimpleNamespace(payload={"measurement_id": real["pair"].candidate_measurement_id},
+                          event_id="candidate-event")
+    codes = feed.registered_claim_grade_eligibility(verifier)
+    # The actual warranted pair is diagnostic: reprojected, typed refusal, no Finding.
+    assert codes(receipt) == ("claim_grade_receipt_unqualified",)
+    assert feed.registered_claim_grade_eligibility(object())(receipt) == ("claim_grade_receipt_unregistered",)
+    projector = feed.ReceiptBackedFindingProjector({row.payload["measurement_id"]: receipt}.get,
+                                                   codes, epoch="epoch-1")
+    assert projector(None, ("Witnessed", "Attested"), row, 7) is None
+    assert projector.refusals == {"candidate-event": ("claim_grade_receipt_unqualified",)}
+    # Hermetic warranted measurement relabel: eligible for its own non-deployment use only.
+    for use, expected in (("validate_production", ("comparison_use_policy_undefined",)), ("validate", ())):
+        other, view = _complete(intended_use=use, instrument="serving", category="OPTIMUM")
+        shaped = _shaped(real, other, view, current.ProducerProvenance(True, ()))
+        monkeypatch.setattr(sa.RegisteredClaimGradeVerifier, "reopen_pair", lambda _self, _pair: shaped)
+        assert codes(replace(receipt, intended_use=use)) == expected
+    projector = feed.ReceiptBackedFindingProjector(
+        {row.payload["measurement_id"]: replace(receipt, intended_use="validate")}.get, codes, epoch="epoch-1")
+    finding = projector(None, ("Witnessed", "Attested"), row, 7)
+    assert (finding.frontier, finding.authority_reference) == (7, "fixture:fixture-comparison")
+    assert finding.intended_use_disposition["disposition"] == "exploration_only"

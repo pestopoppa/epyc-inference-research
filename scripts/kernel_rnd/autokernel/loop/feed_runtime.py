@@ -284,6 +284,101 @@ class InstalledFeedBinding:
         return LoadedFeedProjection.load(self.root_repo, self.root_source_sha256)
 
 
+@dataclass(frozen=True)
+class RegisteredComparisonReceipt:
+    """Interface for the prospective effect-question/comparison receipt (AKU-08c).
+
+    No producer journals one yet. The real receipt must be immutable and content-addressed,
+    written before the run, and bind one exact canonical claim-grade receipt pair to the
+    pre-registered ClaimKey plus the owning comparison estimator's conclusion/value.
+    Per-arm levels never become one; hermetic fixtures must set ``fixture_only``.
+    """
+
+    receipt_id: str
+    receipt_sha256: str
+    pair: Any
+    claim_key: evidence.ClaimKey
+    conclusion: str
+    value: float | None
+    record_class: str
+    intended_use: str
+    fixture_only: bool
+
+    def __post_init__(self) -> None:
+        from .validation_claim_receipt import ClaimGradeReceiptPairReference
+        if (type(self.pair) is not ClaimGradeReceiptPairReference
+                or type(self.claim_key) is not evidence.ClaimKey or type(self.fixture_only) is not bool):
+            raise FeedRuntimeRefused("comparison receipt requires a typed receipt pair and claim key")
+        _text(self.receipt_id, "comparison receipt id")
+        _text(self.receipt_sha256, "comparison receipt digest")
+
+
+def registered_claim_grade_eligibility(verifier: Any) -> Callable[[RegisteredComparisonReceipt], tuple[str, ...]]:
+    """Reproject the pair now, whatever the use; then ep.eligibility must permit that use."""
+    from . import experiment_plan as ep
+    from .validation_semantic_adapter import RegisteredClaimGradeEligibility, RegisteredClaimGradeVerifier
+
+    def codes(receipt: RegisteredComparisonReceipt) -> tuple[str, ...]:
+        if type(verifier) is not RegisteredClaimGradeVerifier:
+            return ("claim_grade_receipt_unregistered",)
+        try:
+            actual = verifier.reopen_pair(receipt.pair)
+        except Exception:  # Tampered, rewritten or foreign receipts fail closed.
+            return ("claim_grade_receipt_unverified",)
+        typed = RegisteredClaimGradeEligibility(verifier, receipt.pair)
+        refused = typed.discharge(actual.plan, actual.view)
+        if refused:
+            return refused
+        use = ep.eligibility(actual.plan, actual.view, receipt.intended_use,
+                             current_epoch=actual.plan.epoch, registered_claim_grade=typed)
+        return () if use.status == "permitted" else (f"comparison_use_{use.status}",)
+    return codes
+
+
+class ReceiptBackedFindingProjector:
+    """EvidenceFeed ``finding_projector``: only an eligible comparison receipt yields a Finding.
+
+    ``receipts(measurement_id)`` returns the immutable receipt whose candidate arm is that
+    measurement (else None); ``eligibility(receipt)`` returns typed refusal codes, ``()``
+    when eligible. The feed caches the Finding durably before its sole source ACK.
+    """
+
+    def __init__(self, receipts: Callable[[str], RegisteredComparisonReceipt | None],
+                 eligibility: Callable[[RegisteredComparisonReceipt], tuple[str, ...]], *, epoch: str) -> None:
+        if not callable(receipts) or not callable(eligibility):
+            raise FeedRuntimeRefused("receipt projector requires installed receipt and eligibility owners")
+        self.receipts, self.eligibility, self.epoch = receipts, eligibility, _text(epoch, "projector epoch")
+        self.refusals: dict[str, tuple[str, ...]] = {}
+
+    def __call__(self, _projected: Any, grade: Any, row: Any, frontier: int) -> evidence.Finding | None:
+        measurement_id = row.payload.get("measurement_id")
+        receipt = self.receipts(measurement_id)
+        if receipt is None:
+            return None
+        if type(receipt) is not RegisteredComparisonReceipt:
+            raise FeedRuntimeRefused("comparison receipt lookup returned an untyped value")
+        if receipt.pair.candidate_measurement_id != measurement_id:
+            return None  # The anchor arm alone is a level, never an effect.
+        codes = tuple(self.eligibility(receipt))
+        if codes:
+            self.refusals[row.event_id] = codes
+            return None
+        claim = receipt.claim_key.to_dict()
+        return evidence.Finding.from_dict({
+            "schema": evidence.FINDING_SCHEMA, "finding_id": f"comparison:{receipt.receipt_sha256}",
+            "source": {"schema": evidence.SOURCE_REF_SCHEMA, "event_id": row.event_id,
+                       "artifact_digest": receipt.receipt_sha256, "locator": receipt.receipt_id},
+            "claim_key": claim, "conclusion": receipt.conclusion, "value": receipt.value,
+            "tested_scope": claim["target_scope"], "tested_question": claim["effect_question"],
+            "raw_grade": {"Q": grade[0], "T": grade[1]}, "epoch": self.epoch,
+            "record_class": receipt.record_class,
+            "dependency_generations": {dep: 0 for dep in claim["dependency_identities"]},
+            "intended_use_disposition": {"intended_use": receipt.intended_use, "disposition":
+                "exploration_only" if receipt.fixture_only else "certificate_candidate"},
+            "authority_reference": ("fixture:" if receipt.fixture_only else "") + receipt.receipt_id,
+            "frontier": frontier})
+
+
 class FeedEvidenceView:
     """Stable concrete planner interface; it never retains a replaceable cache."""
 
