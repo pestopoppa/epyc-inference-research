@@ -1,8 +1,10 @@
 """Closed registry for restartable provider constructors.
 
-No production provider is registered. Enrollment is a source change: entries
-bind a local Python file, its SHA-256 and a top-level no-argument function.
-The supervisor starts a fresh interpreter before importing this file's target.
+Enrollment is a source change: entries bind a local Python file, its SHA-256
+and a top-level no-argument function. The supervisor starts a fresh
+interpreter before importing this file's target. `host_claim_v1` (AKU-11) is
+selected only by an explicit --provider-factory and installs nothing without
+its operator activation record (`host_claim_provider.ACTIVATION_ENV`).
 """
 from __future__ import annotations
 
@@ -13,6 +15,9 @@ import inspect
 from pathlib import Path
 
 REGISTERED_FACTORIES = {}
+REGISTERED_FACTORIES["host_claim_v1"] = (
+    "host_claim_provider.py", "make_registry",
+    "6ecba1c1c47f769abeeeba57563a6d6273c0e69e2a64961f21126c1d0c1afe30")
 
 
 def source(factory_id):
