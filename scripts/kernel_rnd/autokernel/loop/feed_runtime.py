@@ -288,7 +288,7 @@ class InstalledFeedBinding:
 class RegisteredComparisonReceipt:
     """Interface for the prospective effect-question/comparison receipt (AKU-08c).
 
-    No producer journals one yet. The real receipt must be immutable and content-addressed,
+    Produced by comparison_receipt_journal (AKU-08c3). The receipt must be immutable and content-addressed,
     written before the run, and bind one exact canonical claim-grade receipt pair to the
     pre-registered ClaimKey plus the owning comparison estimator's conclusion/value.
     Per-arm levels never become one; hermetic fixtures must set ``fixture_only``.
