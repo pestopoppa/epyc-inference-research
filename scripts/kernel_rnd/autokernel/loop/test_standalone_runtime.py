@@ -1296,7 +1296,10 @@ def test_restart_after_durable_accept_settles_retained_result_once_and_idempoten
         settled, = _payloads(current[1], journal_module.KIND_UNIFIED_DRIVER_SETTLED)
         assert settled["transition_id"] == transition_id and settled["outcome"] == "failed"
         assert settled["receipt"] == held["data"]["receipt"]
-        assert [ref.split(":")[0] for ref in settled["terminal_refs"]] == ["lifecycle"]
+        # AKU-07h3: records the first incarnation already wrote are cited, diagnostically.
+        cited = ["native-retained:" + item for item in sorted(native_before)]
+        assert settled["terminal_refs"][0].startswith("lifecycle:")
+        assert settled["terminal_refs"][1:] == cited and bool(cited) == (mode == "settlement_crash")
         assert dict(current[1]._native_records) == native_before
         assert len(current[3].export_state().receipts) == 1
         assert children["count"] == 1 and calls["authorize"] == 0

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from . import restart_native_citations as citations
 from . import campaign_control
 from . import experiment_plan as ep
 from . import measurement_capture as mc
@@ -464,9 +465,9 @@ class DriverExecutionReceipt:
             else:
                 terminal_digest = unified_driver._digest(
                     unified_driver._thaw(self.terminal))
-                if (self.native_measurement_ids
-                        or selection_request["terminal_refs"]
-                           != [f"lifecycle:{terminal_digest}"]):
+                refs = selection_request["terminal_refs"]  # AKU-07h3: + retained citations
+                if (self.native_measurement_ids or refs[:1] != [f"lifecycle:{terminal_digest}"]
+                        or not all(map(citations.is_retained_ref, refs[1:]))):
                     raise DriverExecutionRefused(
                         "operational failure receipt binding differs")
         else:
@@ -683,7 +684,8 @@ class UnifiedDriverExecution:
                              plan_digest=attempt.terminal.plan_digest,
                              lineage_id=attempt.terminal.lineage_id,
                              stage_id=attempt.terminal.stage_id))
-            if recovered != attempt.terminal or trusted["terminal_refs"] != [terminal_ref]:
+            if recovered != attempt.terminal or trusted["terminal_refs"] != [
+                    terminal_ref, *citations.refs(self.controller, attempt)]:
                 raise DriverExecutionRefused("failed lifecycle terminal differs")
             if attempt.reference is not None and attempt.restored:
                 if (self._reopen_retained(attempt.prepared, attempt.terminal)
@@ -1050,7 +1052,8 @@ class UnifiedDriverExecution:
                 "schema": campaign_control.DRIVER_SETTLEMENT_SCHEMA,
                 "catalog_id": attempt.catalog_id, "transition_id": attempt.transition_id,
                 "selection": attempt.selection.to_dict(), "receipt": attempt.held.to_dict(),
-                "outcome": "failed", "terminal_refs": [terminal_ref],
+                "outcome": "failed",
+                "terminal_refs": [terminal_ref, *citations.refs(self.controller, attempt)],
             }
             with self._lock:
                 self._trusted_settlements[attempt.transition_id] = copy.deepcopy(request)
