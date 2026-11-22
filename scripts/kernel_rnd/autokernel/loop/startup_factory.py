@@ -142,6 +142,17 @@ def _write_new(directory: Path, name: str, value: Any) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _kfd_entry(config, request) -> dict[str, Any]:
+    """AKU-07o2: held-device -> KFD gpu_id map (topology, then manifest fallback)."""
+    from . import kfd_topology
+    try:
+        mapping = kfd_topology.gpu_id_map(tuple(config.capacity.gpu_devices),
+                                          manifest=request.get("kfd_gpu_ids"))
+    except kfd_topology.KfdTopologyRefused as exc:
+        raise StartupFactoryRefused(str(exc)) from exc
+    return {} if mapping is None else {"kfd_gpu_ids": mapping}
+
+
 def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, Any]:
     """Write a new startup bundle from explicit choices and verified small inputs."""
     from . import standalone_inputs
@@ -161,6 +172,8 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
         fields |= {"native_evidence"}
     if preparation_mode:
         fields |= {"serving_preparation"}
+    if "kfd_gpu_ids" in request:  # AKU-07o2: optional manifest fallback map
+        fields |= {"kfd_gpu_ids"}
     request = _closed(request, fields, "factory request")
     if request["schema"] not in {REQUEST_SCHEMA, FEED_REQUEST_SCHEMA,
                                  NATIVE_REQUEST_SCHEMA, PREPARATION_REQUEST_SCHEMA}:
@@ -384,9 +397,11 @@ def build_startup(request: Mapping[str, Any], *, output_dir: Path) -> dict[str, 
         "runtime_anchors": anchors, "runtime_dimensions": dimensions, "profiles": profiles,
         "profile_requests": profile_requests, "experiment_plans": plans, "execution_inputs": executions,
         "native_artifact_sink_ref": request["native_artifact_sink_ref"],
+        **_kfd_entry(config, request),
     })
     config_body = {field: unified_driver._thaw(getattr(driver_config, field))
-                   for field in driver_config.__dataclass_fields__}
+                   for field in driver_config.__dataclass_fields__
+                   if field != "kfd_gpu_ids" or driver_config.kfd_gpu_ids is not None}
     body = {"schema": standalone_inputs.MANIFEST_SCHEMA, "driver_config": config_body,
             "actor_identities": request["actor_identities"],
             "lifecycle_provider_id": providers["lifecycle"], "readiness_provider_id": providers["readiness"],

@@ -492,6 +492,8 @@ def _pinned_source_revision(resolved: campaign.ResolvedCampaign) -> str:
 class UnifiedCampaignDriver:
     """One-tick consumer; actual execution remains with the controller-owned bridge."""
 
+    kfd_gpu_ids: Mapping[str, str] | None = None  # AKU-07o2: set by the standalone runtime
+
     def __init__(self, *, resolved_campaign: campaign.ResolvedCampaign,
                  controller: Any, scheduler_engine: scheduling.SchedulerEngine,
                  profiles: Mapping[str, Mapping[str, Any] | unified_planner.TargetProfile],
@@ -893,6 +895,7 @@ class UnifiedCampaignDriver:
             "source_identities": sources,
         }
         body = {
+            **({"kfd_gpu_ids": dict(self.kfd_gpu_ids)} if self.kfd_gpu_ids else {}),
             "schema": prepared_schema,
             "dispatch": dispatch.to_dict(), "plan": plan.to_dict(),
             "prompt_manifest": execution_input.prompt_manifest.to_dict(),
@@ -1189,6 +1192,7 @@ class DriverConfig:
     native_artifact_sink_ref: str
     config_generation: int
     schema: str = CONFIG_SCHEMA
+    kfd_gpu_ids: Mapping[str, str] | None = None  # AKU-07o2, additive (absent = legacy)
 
     @classmethod
     def from_dict(cls, value: Any) -> "DriverConfig":
@@ -1197,7 +1201,9 @@ class DriverConfig:
                   "experiment_plans", "profile_requests", "native_artifact_sink_ref",
                   "execution_inputs", "config_generation"}
         row = dict(_mapping(value, "driver config"))
-        if set(row) != fields or row.pop("schema") != CONFIG_SCHEMA:
+        from .kfd_topology import validate_map
+        row["kfd_gpu_ids"] = validate_map(row.pop("kfd_gpu_ids", None))
+        if set(row) != fields | {"kfd_gpu_ids"} or row.pop("schema") != CONFIG_SCHEMA:
             raise DriverRefused("driver config fields/schema differ")
         for name in ("resolved_campaign_path", "store_path"):
             path = Path(row[name]) if isinstance(row[name], str) else Path()

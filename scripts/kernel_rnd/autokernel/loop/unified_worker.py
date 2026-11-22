@@ -241,6 +241,7 @@ class PreparedPlannedServingStage:
     max_stage_seconds: float
     teardown_seconds: float
     schema: str = PREPARED_SCHEMA
+    kfd_gpu_ids: Mapping[str, str] | None = None  # AKU-07o2, additive (absent = legacy)
 
     @property
     def native_observed(self) -> bool:
@@ -267,14 +268,20 @@ class PreparedPlannedServingStage:
 
     @classmethod
     def from_dict(cls, value: Any) -> "PreparedPlannedServingStage":
+        value = dict(value) if isinstance(value, Mapping) else value
+        kfd = value.pop("kfd_gpu_ids", None) if isinstance(value, dict) else None
         row = _exact(value, {"schema", "dispatch", "plan", "prompt_manifest",
                              "runtime_pair", "capture_context_base", "artifact_root",
                              "previous", "max_stage_seconds", "teardown_seconds",
                              "prepared_digest"}, "prepared planned-serving stage")
+        if kfd is not None:
+            from .kfd_topology import validate_map
+            row["kfd_gpu_ids"] = validate_map(kfd)
         if row["schema"] not in {PREPARED_SCHEMA, PREPARED_SCHEMA_V2, PREPARED_SCHEMA_V3,
                                  PREPARED_SCHEMA_V4}:
             raise WorkerBridgeRefused("prepared stage schema is unsupported")
         supplied_digest = _sha(row.pop("prepared_digest"), "prepared_digest")
+        kfd = row.get("kfd_gpu_ids")
         if supplied_digest != _digest(row):
             raise WorkerBridgeRefused("prepared stage digest mismatch")
         try:
@@ -374,7 +381,7 @@ class PreparedPlannedServingStage:
                    None if previous is None else _freeze(previous),
                    _finite(row["max_stage_seconds"], "max_stage_seconds", positive=True),
                    _finite(row["teardown_seconds"], "teardown_seconds", positive=True),
-                   row["schema"])
+                   row["schema"], None if kfd is None else _freeze(kfd))
 
     def body(self) -> dict[str, Any]:
         return {"schema": self.schema, "dispatch": _plain(self.dispatch),
@@ -384,7 +391,8 @@ class PreparedPlannedServingStage:
                 "artifact_root": str(self.artifact_root),
                 "previous": None if self.previous is None else _plain(self.previous),
                 "max_stage_seconds": self.max_stage_seconds,
-                "teardown_seconds": self.teardown_seconds}
+                "teardown_seconds": self.teardown_seconds,
+                **({"kfd_gpu_ids": _plain(self.kfd_gpu_ids)} if self.kfd_gpu_ids else {})}
 
     @property
     def prepared_digest(self) -> str:
@@ -2072,7 +2080,8 @@ def run_prepared_stage(prepared: PreparedPlannedServingStage, start: WorkerStart
                     "actual loaded serving instrument differs or is incomplete")
             probe = _test_observation_probe
             if probe is None:
-                probe = lo.FilesystemProbe()
+                from .kfd_topology import reader_for
+                probe = lo.FilesystemProbe(kfd_consumer_reader=reader_for(prepared))
             observation_factory = ob.ContainedObservationFactory(
                 authority=active_authority, store=store, instrument=instrument,
                 probe=probe, monotonic=clock, wall_clock=wall_clock,

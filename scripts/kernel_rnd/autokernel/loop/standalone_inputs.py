@@ -164,6 +164,8 @@ class StartupManifest:
                 "execution_inputs": unified_driver._thaw(self.driver_config.execution_inputs),
                 "native_artifact_sink_ref": self.driver_config.native_artifact_sink_ref,
                 "config_generation": self.driver_config.config_generation,
+                **({"kfd_gpu_ids": dict(self.driver_config.kfd_gpu_ids)}  # AKU-07o2
+                   if self.driver_config.kfd_gpu_ids else {}),
             },
             "evidence_index": _thaw(self.evidence_index),
             "actor_identities": {
@@ -706,6 +708,7 @@ def materialize(value: StartupManifest) -> MaterializedInputs:
         None, native_configuration, native_identity,
         None if native_reference is None else _freeze(native_reference.to_dict()),
         native_artifact_root, observation_configuration)
+    inputs = replace(inputs, kfd_gpu_ids=config.kfd_gpu_ids)  # AKU-07o2
     if retention_catalog_seed is not None:
         inputs = replace(
             inputs, retention_catalog_seed=retention_catalog_seed,

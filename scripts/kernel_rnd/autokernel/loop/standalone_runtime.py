@@ -129,6 +129,7 @@ class StandaloneRuntimeInputs:
     retention_runtime_recipe_snapshots: Any = None
     calibration_requests: tuple = ()
     profile_binding: Any = None
+    kfd_gpu_ids: Mapping[str, str] | None = None  # AKU-07o2
 
 
 @dataclass(frozen=True)
@@ -384,6 +385,7 @@ class StandaloneRuntime:
             calibration_requests=inputs.calibration_requests,
             feed_owner=inputs.feed_owner,
         )
+        driver.kfd_gpu_ids = inputs.kfd_gpu_ids
         executor = driver_execution.UnifiedDriverExecution(
             driver=driver, controller=controller,
             observation_configuration=inputs.observation_configuration,
