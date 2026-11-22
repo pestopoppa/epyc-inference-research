@@ -45,7 +45,7 @@ def window_configuration(tmp_path: Path):
         search_window.source_digest())
 
 
-def native_document(tmp_path: Path, *, window=None):
+def native_document(tmp_path: Path, *, window=None, selection=None):
     old = _document(tmp_path)
     cfg = replace(feed_config(tmp_path),
                   source_root=old["driver_config"]["store_path"] + "/journal")
@@ -56,7 +56,7 @@ def native_document(tmp_path: Path, *, window=None):
         key: value for key, value in old.items() if key != "manifest_digest"})
     parsed = inputs.materialize(inputs.StartupManifest.from_dict(old))
     root = Path(old["driver_config"]["store_path"]) / "unified-native-artifacts"
-    selection = {"schema": inputs.SCIENTIFIC_SELECTION_SCHEMA,
+    selection = selection or {"schema": inputs.SCIENTIFIC_SELECTION_SCHEMA,
                  "correctness": {"adapter_id": nsw.ADAPTER_ID, "max_units": 8},
                  "purpose": None, "contention": None, "residency": None}
     states, dsos, preparations = {}, {}, {}
