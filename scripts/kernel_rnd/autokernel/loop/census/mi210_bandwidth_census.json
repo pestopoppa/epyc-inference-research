@@ -7,6 +7,10 @@
   {
    "row": "a3b-cpu-gap-census-20261121",
    "sha256": "e06640638cfdda230ffb5310a76a2c9d57cfdfec955a1b1934caa09ebc225010"
+  },
+  {
+   "row": "ak-q38fn-cpu-gap-census-20261122",
+   "sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8"
   }
  ],
  "ceiling_gbps": 1500.0,
@@ -560,7 +564,7 @@
    "measured_at": "",
    "model": "a3b-q8_0-cpu",
    "n": 1,
-   "rank": 6,
+   "rank": 24,
    "recoverable_ms_per_round": 0.0,
    "result_sha256": "e06640638cfdda230ffb5310a76a2c9d57cfdfec955a1b1934caa09ebc225010",
    "shape": "quarter-24t",
@@ -582,7 +586,7 @@
    "measured_at": "",
    "model": "a3b-q8_0-cpu",
    "n": 1,
-   "rank": 5,
+   "rank": 23,
    "recoverable_ms_per_round": 0.147,
    "result_sha256": "e06640638cfdda230ffb5310a76a2c9d57cfdfec955a1b1934caa09ebc225010",
    "shape": "quarter-24t",
@@ -604,7 +608,7 @@
    "measured_at": "",
    "model": "a3b-q8_0-cpu",
    "n": 1,
-   "rank": 7,
+   "rank": 25,
    "recoverable_ms_per_round": 0.0,
    "result_sha256": "e06640638cfdda230ffb5310a76a2c9d57cfdfec955a1b1934caa09ebc225010",
    "shape": "quarter-24t",
@@ -626,7 +630,7 @@
    "measured_at": "",
    "model": "a3b-q8_0-cpu",
    "n": 1,
-   "rank": 3,
+   "rank": 21,
    "recoverable_ms_per_round": 0.215,
    "result_sha256": "e06640638cfdda230ffb5310a76a2c9d57cfdfec955a1b1934caa09ebc225010",
    "seed": "CPU-A3B-SHEXP",
@@ -649,7 +653,7 @@
    "measured_at": "",
    "model": "a3b-q8_0-cpu",
    "n": 1,
-   "rank": 4,
+   "rank": 22,
    "recoverable_ms_per_round": 0.182,
    "result_sha256": "e06640638cfdda230ffb5310a76a2c9d57cfdfec955a1b1934caa09ebc225010",
    "shape": "quarter-24t",
@@ -671,7 +675,7 @@
    "measured_at": "",
    "model": "a3b-q8_0-cpu",
    "n": 1,
-   "rank": 2,
+   "rank": 17,
    "recoverable_ms_per_round": 0.726,
    "result_sha256": "e06640638cfdda230ffb5310a76a2c9d57cfdfec955a1b1934caa09ebc225010",
    "seed": "CPU-A3B-MMID",
@@ -680,6 +684,528 @@
    "source_row": "a3b-cpu-gap-census-20261121",
    "status": "open_surface",
    "us_per_call": 7587.2
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:fullattn_proj|quarter-24t-d1k|n1": {
+   "arm": "plain-greedy-d1k",
+   "bytes_per_call": 635043840,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.674,
+   "gbps": 87.5,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     87.5
+    ]
+   ],
+   "kernel_class": "MUL_MAT:fullattn_proj",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 15,
+   "recoverable_ms_per_round": 1.145,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d1k",
+   "share_of_round": 0.0801,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 7256.1
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:fullattn_proj|quarter-24t-d32k|n1": {
+   "arm": "plain-greedy-d32k",
+   "bytes_per_call": 635043840,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.293,
+   "gbps": 38.1,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     38.1
+    ]
+   ],
+   "kernel_class": "MUL_MAT:fullattn_proj",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 5,
+   "recoverable_ms_per_round": 10.542,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d32k",
+   "share_of_round": 0.072,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 16652.8
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:gdn_proj|quarter-24t-d1k|n1": {
+   "arm": "plain-greedy-d1k",
+   "bytes_per_call": 2247229440,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.643,
+   "gbps": 83.5,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     83.5
+    ]
+   ],
+   "kernel_class": "MUL_MAT:gdn_proj",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 8,
+   "recoverable_ms_per_round": 5.275,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d1k",
+   "share_of_round": 0.297,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 26899.2
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:gdn_proj|quarter-24t-d32k|n1": {
+   "arm": "plain-greedy-d32k",
+   "bytes_per_call": 2247229440,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.283,
+   "gbps": 36.7,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     36.7
+    ]
+   ],
+   "kernel_class": "MUL_MAT:gdn_proj",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 1,
+   "recoverable_ms_per_round": 39.549,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d32k",
+   "share_of_round": 0.2644,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 61173.8
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:indexer|quarter-24t-d1k|n1": {
+   "arm": "plain-greedy-d1k",
+   "bytes_per_call": 39321600,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.506,
+   "gbps": 65.7,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     65.7
+    ]
+   ],
+   "kernel_class": "MUL_MAT:indexer",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 20,
+   "recoverable_ms_per_round": 0.22,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d1k",
+   "share_of_round": 0.0066,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 598.8
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:indexer|quarter-24t-d32k|n1": {
+   "arm": "plain-greedy-d32k",
+   "bytes_per_call": 39321600,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.192,
+   "gbps": 25.0,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     25.0
+    ]
+   ],
+   "kernel_class": "MUL_MAT:indexer",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 14,
+   "recoverable_ms_per_round": 1.197,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d32k",
+   "share_of_round": 0.0068,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 1575.8
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:lm_head|quarter-24t-d1k|n1": {
+   "arm": "plain-greedy-d1k",
+   "bytes_per_call": 528435200,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.723,
+   "gbps": 93.9,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     93.9
+    ]
+   ],
+   "kernel_class": "MUL_MAT:lm_head",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 18,
+   "recoverable_ms_per_round": 0.545,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d1k",
+   "share_of_round": 0.0622,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 5629.9
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:lm_head|quarter-24t-d32k|n1": {
+   "arm": "plain-greedy-d32k",
+   "bytes_per_call": 528435200,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.29,
+   "gbps": 37.7,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     37.7
+    ]
+   ],
+   "kernel_class": "MUL_MAT:lm_head",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 6,
+   "recoverable_ms_per_round": 8.946,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d32k",
+   "share_of_round": 0.0606,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 14030.8
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:moe_router|quarter-24t-d1k|n1": {
+   "arm": "plain-greedy-d1k",
+   "bytes_per_call": 251658240,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.67,
+   "gbps": 87.0,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     87.0
+    ]
+   ],
+   "kernel_class": "MUL_MAT:moe_router",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 19,
+   "recoverable_ms_per_round": 0.472,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d1k",
+   "share_of_round": 0.0319,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 2893.2
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:moe_router|quarter-24t-d32k|n1": {
+   "arm": "plain-greedy-d32k",
+   "bytes_per_call": 251658240,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.275,
+   "gbps": 35.7,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     35.7
+    ]
+   ],
+   "kernel_class": "MUL_MAT:moe_router",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 9,
+   "recoverable_ms_per_round": 4.62,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d32k",
+   "share_of_round": 0.0304,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 7041.6
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:other_weight|quarter-24t-d1k|n1": {
+   "arm": "plain-greedy-d1k",
+   "bytes_per_call": 719175680,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.574,
+   "gbps": 74.6,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     74.6
+    ]
+   ],
+   "kernel_class": "MUL_MAT:other_weight",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 11,
+   "recoverable_ms_per_round": 2.716,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d1k",
+   "share_of_round": 0.1064,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 9636.2
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:other_weight|quarter-24t-d32k|n1": {
+   "arm": "plain-greedy-d32k",
+   "bytes_per_call": 719175680,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.264,
+   "gbps": 34.3,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     34.3
+    ]
+   ],
+   "kernel_class": "MUL_MAT:other_weight",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 3,
+   "recoverable_ms_per_round": 14.045,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d32k",
+   "share_of_round": 0.0906,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 20965.5
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:shared_expert|quarter-24t-d1k|n1": {
+   "arm": "plain-greedy-d1k",
+   "bytes_per_call": 250675200,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.604,
+   "gbps": 78.5,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     78.5
+    ]
+   ],
+   "kernel_class": "MUL_MAT:shared_expert",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 16,
+   "recoverable_ms_per_round": 0.781,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d1k",
+   "share_of_round": 0.0353,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 3193.6
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:shared_expert|quarter-24t-d32k|n1": {
+   "arm": "plain-greedy-d32k",
+   "bytes_per_call": 250675200,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.283,
+   "gbps": 36.7,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     36.7
+    ]
+   ],
+   "kernel_class": "MUL_MAT:shared_expert",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 10,
+   "recoverable_ms_per_round": 4.411,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d32k",
+   "share_of_round": 0.0295,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 6823.5
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT_ID:exps_down|quarter-24t-d1k|n1": {
+   "arm": "plain-greedy-d1k",
+   "bytes_per_call": 483328000,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.636,
+   "gbps": 82.6,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     82.6
+    ]
+   ],
+   "kernel_class": "MUL_MAT_ID:exps_down",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 13,
+   "recoverable_ms_per_round": 1.198,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d1k",
+   "share_of_round": 0.0646,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 5849.3
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT_ID:exps_down|quarter-24t-d32k|n1": {
+   "arm": "plain-greedy-d32k",
+   "bytes_per_call": 483328000,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.28,
+   "gbps": 36.4,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     36.4
+    ]
+   ],
+   "kernel_class": "MUL_MAT_ID:exps_down",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 7,
+   "recoverable_ms_per_round": 8.643,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d32k",
+   "share_of_round": 0.0575,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 13294.0
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT_ID:exps_gate_up|quarter-24t-d1k|n1": {
+   "arm": "plain-greedy-d1k",
+   "bytes_per_call": 679168000,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.567,
+   "gbps": 73.7,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     73.7
+    ]
+   ],
+   "kernel_class": "MUL_MAT_ID:exps_gate_up",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 12,
+   "recoverable_ms_per_round": 2.682,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d1k",
+   "share_of_round": 0.1018,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 9217.3
+  },
+  "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT_ID:exps_gate_up|quarter-24t-d32k|n1": {
+   "arm": "plain-greedy-d32k",
+   "bytes_per_call": 679168000,
+   "calls_per_round": 1,
+   "ceiling_gbps": 129.9,
+   "config": "quarter-24t",
+   "device": "cpu",
+   "frac_of_ceiling": 0.256,
+   "gbps": 33.3,
+   "history": [
+    [
+     "ak-q38fn-cpu-gap-census-20261122",
+     33.3
+    ]
+   ],
+   "kernel_class": "MUL_MAT_ID:exps_gate_up",
+   "measured_at": "2026-11-22T22:12:12Z",
+   "model": "q38fn-ud-iq4xs-cpu",
+   "n": 1,
+   "rank": 4,
+   "recoverable_ms_per_round": 13.869,
+   "result_sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8",
+   "shape": "quarter-24t-d32k",
+   "share_of_round": 0.0882,
+   "source_row": "ak-q38fn-cpu-gap-census-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 20404.7
   },
   "cpu|q38fn-ud-iq4xs-cpu|forward_m1_dense|quarter-24t|n1": {
    "arm": "r3 D1K M=1",
@@ -694,7 +1220,7 @@
    "measured_at": "2026-11-22",
    "model": "q38fn-ud-iq4xs-cpu",
    "n": 1,
-   "rank": 1,
+   "rank": 2,
    "recoverable_ms_per_round": 39.15,
    "result_sha256": null,
    "seed": "CPU-Q38FN-M1-DENSE",
@@ -721,6 +1247,96 @@
    "gbps": 998.9,
    "record": "27b-q8_0|ssm_out+attn_output_v5i|5120x6144|n4",
    "source_row": "ak-q8wv-split16-gpu-20261122-r3"
+  },
+  {
+   "gbps": 87.5,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:fullattn_proj|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 38.1,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:fullattn_proj|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 83.5,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:gdn_proj|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 36.7,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:gdn_proj|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 65.7,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:indexer|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 25.0,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:indexer|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 93.9,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:lm_head|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 37.7,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:lm_head|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 87.0,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:moe_router|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 35.7,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:moe_router|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 74.6,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:other_weight|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 34.3,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:other_weight|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 78.5,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:shared_expert|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 36.7,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:shared_expert|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 82.6,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT_ID:exps_down|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 36.4,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT_ID:exps_down|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 73.7,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT_ID:exps_gate_up|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 33.3,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT_ID:exps_gate_up|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
   }
  ],
  "seeds": {
