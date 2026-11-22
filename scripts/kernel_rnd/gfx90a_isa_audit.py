@@ -562,6 +562,26 @@ def occupancy(vgpr_total: int, sgpr: int, lds: int, wg_size: int) -> dict:
             "occupancy_limiter": limiter}
 
 
+def occupancy_from_notes(text: str) -> dict[str, dict]:
+    """Static occupancy per kernel from ``llvm-readelf --notes`` text (AMDSK-OCC-CALC-1).
+
+    Reads ONLY the code-object metadata (no GPU, no disassembly). ``.vgpr_count`` in the
+    gfx90a note is the unified arch+acc total, so the AGPR count is not added again; the pool
+    is 512 registers per lane at granularity 8, LDS is 64 KB per CU and SGPRs are
+    limited per SIMD. Returns ``{kernel: {vgpr, agpr, sgpr, lds_bytes, wg_size, **occupancy}}``.
+    """
+    out: dict[str, dict] = {}
+    for name, meta in parse_notes_text(text).items():
+        reqd = meta.get(".reqd_workgroup_size")
+        wg = int(math.prod(reqd)) if reqd else int(meta.get(".max_flat_workgroup_size") or 0)
+        row = {"vgpr": int(meta.get(".vgpr_count") or 0), "agpr": int(meta.get(".agpr_count") or 0),
+               "sgpr": int(meta.get(".sgpr_count") or 0),
+               "lds_bytes": int(meta.get(".group_segment_fixed_size") or 0), "wg_size": wg}
+        row.update(occupancy(row["vgpr"], row["sgpr"], row["lds_bytes"], wg))
+        out[name] = row
+    return out
+
+
 # ------------------------------------------------------------------- audit
 
 

@@ -422,3 +422,41 @@ def test_integration_production_q8_0_j64(tmp_path):
     assert r["n_hot_loops"] == 2
     assert sorted(h["spill_reloads"] for h in r["hot_loops_detail"]) == [10, 12]
     assert doc["mfma_form_regime"] == ["mayneedagprs_rule_pre_159493"]
+
+
+# AMDSK-OCC-CALC-1: the a10 IQ2_XXS VGPR lever table
+# (evidence/quant-ladder-20260816/a10_iq2_vgpr_lever_20260812.md), read from the shipped
+# gfx90a code object: (vgpr, agpr, sgpr, lds, waves/SIMD).
+A10_LEVER = [
+    ("<IQ2_XXS,1,false,false>", 63, 0, 28, 256, 8),
+    ("<IQ2_XXS,1,true,false>", 78, 0, 46, 512, 6),
+    ("<IQ2_XXS,1,false,true>", 125, 0, 28, 512, 4),
+    ("<IQ2_XXS,1,true,true>", 90, 0, 50, 1024, 5),
+]
+
+
+def _lever_notes(rows) -> str:
+    body = "".join(
+        f"  - .agpr_count:     {a}\n    .group_segment_fixed_size: {lds}\n"
+        f"    .max_flat_workgroup_size: 64\n    .name:           k{i}\n"
+        f"    .sgpr_count:     {s}\n    .sgpr_spill_count: 0\n    .vgpr_count:     {v}\n"
+        f"    .vgpr_spill_count: 0\n    .wavefront_size: 64\n"
+        for i, (_, v, a, s, lds, _) in enumerate(rows))
+    return "AMDGPU Metadata:\n---\namdhsa.kernels:\n" + body + "amdhsa.version:\n  - 1\n"
+
+
+def test_occupancy_from_notes_reproduces_a10_lever_table():
+    got = ga.occupancy_from_notes(_lever_notes(A10_LEVER))
+    for i, (_, v, _a, _s, _l, waves) in enumerate(A10_LEVER):
+        assert got[f"k{i}"]["vgpr"] == v
+        assert got[f"k{i}"]["waves_per_simd_vgpr_limit"] == waves
+        assert got[f"k{i}"]["occupancy_waves_per_simd"] == float(waves)
+        assert got[f"k{i}"]["occupancy_limiter"] == "vgpr" or waves == 8
+
+
+def test_occupancy_unified_pool_counts_agpr_once():
+    # .vgpr_count is the arch+acc total: 64 arch + 64 acc = 128 -> 4 waves, not 2.
+    notes = _lever_notes([("x", 128, 64, 32, 0, 4)])
+    assert ga.occupancy_from_notes(notes)["k0"]["occupancy_waves_per_simd"] == 4.0
+    # granule 8: 65 rounds to 72 -> 512 // 72 = 7
+    assert ga.occupancy(65, 16, 0, 64)["waves_per_simd_vgpr_limit"] == 7
