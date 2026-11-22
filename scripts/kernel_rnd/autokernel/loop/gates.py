@@ -2905,7 +2905,24 @@ def _numerics_chain(passed: "Verdict", output: str) -> "Verdict":
                     else "correctness")
             return Verdict(gate, False, f"{verdict.gate}: {verdict.reason}", verdict.detail,
                            case_records=passed.case_records)
-    for receipt in guard_bands.parse_receipts(output):
+    return passed
+
+
+def _guard_band_chain(passed: "Verdict", output: str, *, backend: "str | None") -> "Verdict":
+    """AKX-ALL-29.5 / 29.5a: every `AK_GUARD_BANDS_V1` receipt the run printed must be intact.
+    On a GPU leg (`ROCm<N>`) with the gate on (default since 29.5a; AK_GUARD_BANDS_GATE=0 opts
+    out) at least one receipt is REQUIRED: absence is the instrument's fault
+    (`oracle_unavailable`), never a pass. A failing `passed` is returned unchanged."""
+    from . import guard_bands
+    if not passed.passed:
+        return passed
+    receipts = guard_bands.parse_receipts(output)
+    if not receipts and backend is not None and guard_bands.required_for(backend):
+        return Verdict("oracle_unavailable", False,
+                       f"guard_band_receipt_missing: no {guard_bands.SCHEMA} receipt on {backend} "
+                       "with AKX_GUARD_BANDS=1; this is a harness fault, NOT evidence about the patch",
+                       output[-2000:], case_records=passed.case_records)
+    for receipt in receipts:
         verdict = guard_bands.verdict_from_receipt(receipt)
         if not verdict.passed:
             gate = ("oracle_unavailable" if verdict.reason.startswith("guard_band_receipt_")
@@ -2966,6 +2983,10 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
     environment.pop("AUTOKERNEL_BOUNDARY_CASE_SET", None)
     if environment_overrides:
         environment = {**environment, **dict(environment_overrides)}
+    from . import guard_bands as _gb
+    if _gb.required_for(backend):
+        # AKX-ALL-29.5a: the GPU leg runs guard-banded by default (the producer prints receipts).
+        environment = {**environment, _gb.PRODUCER_ENV: "1"}
     if require_reference:
         # An older test-backend-ops rejected --suite-seed and printed usage. The
         # selected binary, not the source tree or an anchor, must prove support.
@@ -3063,11 +3084,13 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
             "tolerance": ref.tolerance,
             "raw_output_sha256": hashlib.sha256(output.encode()).hexdigest(),
         }
-        return _numerics_chain(
+        return _guard_band_chain(_numerics_chain(
             Verdict("correctness", True, detail=json.dumps(receipt, sort_keys=True),
-                    case_records=gate_case_records(plain, backend, op)), plain)
-    return _numerics_chain(Verdict("correctness", True, detail=done.stdout[-500:],
-                                   case_records=gate_case_records(plain, backend, op)), plain)
+                    case_records=gate_case_records(plain, backend, op)), plain), plain,
+            backend=backend)
+    return _guard_band_chain(_numerics_chain(
+        Verdict("correctness", True, detail=done.stdout[-500:],
+                case_records=gate_case_records(plain, backend, op)), plain), plain, backend=backend)
 
 
 def boundary_matrix_correctness(build_dir: Path, *, op: str, backend: str,

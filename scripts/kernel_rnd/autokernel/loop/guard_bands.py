@@ -9,7 +9,8 @@ which view was touched and where.
 Pure Python over host bytes, so the logic runs on CPU buffers. A GPU producer copies
 the arena to the device, runs the kernel with each view's pointer at `offset(name)`,
 copies the arena back and calls `check()`; the receipt it emits is judged by
-`verdict_from_receipt`, which is opt-in (not part of the default gate chain) and
+`verdict_from_receipt`. Since AKX-ALL-29.5a it is in the default GPU gate chain
+(`gates._guard_band_chain`; AK_GUARD_BANDS_GATE=0 opts out) and it
 treats an absent or incomplete receipt as a failure of THAT call, never as a pass.
 
 The band pattern is position-dependent, so a stray write of 0x00, 0xFF, a repeated
@@ -27,6 +28,27 @@ GATE = "guard_bands"
 DEFAULT_BAND_BYTES = 4096        # one page: also catches a whole stray row or cache line
 ALIGN = 256                      # device allocation alignment each view starts on
 MAX_REPORTED = 8
+#: AKX-ALL-29.5a: default ON for GPU legs. The env flag below opts a run out (0) or in (1).
+GATE_DEFAULT = True
+ENV_FLAG = "AK_GUARD_BANDS_GATE"
+#: The variable the test-backend-ops producer reads to emit AK_GUARD_BANDS_V1 receipts.
+PRODUCER_ENV = "AKX_GUARD_BANDS"
+
+
+def enabled(environ: "Mapping[str, str] | None" = None) -> bool:
+    import os
+    raw = (environ if environ is not None else os.environ).get(ENV_FLAG, "").strip().lower()
+    if raw in ("1", "true", "on", "yes"):
+        return True
+    if raw in ("0", "false", "off", "no"):
+        return False
+    return GATE_DEFAULT
+
+
+def required_for(backend: str, environ: "Mapping[str, str] | None" = None) -> bool:
+    """True on a GPU (ROCm<N>) leg with the gate on: run guard-banded, require a receipt."""
+    import re
+    return bool(re.fullmatch(r"ROCm[0-9]+", backend or "")) and enabled(environ)
 
 
 def poison_byte(index: int) -> int:

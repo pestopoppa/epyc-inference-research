@@ -188,3 +188,5 @@ def _numerics_chain_off_unless_asked(monkeypatch):
     fake a passing test-backend-ops run print no AK_NUMERICS_V1 receipt, so they opt out here;
     the numerics tests set the flag (or clear the env to test the default) themselves."""
     monkeypatch.setenv("AK_NUMERICS_GATES", "0")
+    # AKX-ALL-29.5a: same for the default-on GPU guard-band receipt requirement.
+    monkeypatch.setenv("AK_GUARD_BANDS_GATE", "0")
