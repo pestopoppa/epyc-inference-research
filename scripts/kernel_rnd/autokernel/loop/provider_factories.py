@@ -17,7 +17,7 @@ from pathlib import Path
 REGISTERED_FACTORIES = {}
 REGISTERED_FACTORIES["host_claim_v1"] = (
     "host_claim_provider.py", "make_registry",
-    "6ecba1c1c47f769abeeeba57563a6d6273c0e69e2a64961f21126c1d0c1afe30")
+    "00cfd7fa439f202ab550d7ce72a80ac55aece0d1c0f8951848d8c3f0b7eb8f6d")
 
 
 def source(factory_id):

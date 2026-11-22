@@ -53,11 +53,24 @@ class ClaimSpec:
     cpu_list: str = ""
     device_id: str = ""
     device_lock: str = ""
+    role: str = ""  # AKU-11c: "" -> CPU_ROLE; "build" folds SMT siblings into regions
+    jobs: int = 0  # AKU-11c: build-role parallel jobs cap (1..len(logical_cpus))
+    gpu_quiet_exclusive: bool = False  # AKU-11c: GPU phase also holds gpu-quiet EXCLUSIVE
 
     def __post_init__(self) -> None:
         if self.backend not in {"cpu", "gpu"} or (self.backend == "cpu") != bool(self.cpu_list) \
                 or (self.backend == "gpu") != bool(self.device_id and self.device_lock):
             raise HostClaimRefused("claim spec is not a closed CPU region or GPU device claim")
+        build = self.role == "build"
+        if (self.role not in {"", CPU_ROLE, "build"} or (build and self.backend != "cpu")
+                or type(self.jobs) is not int or build != (self.jobs > 0)
+                or (build and self.jobs > len(self.logical_cpus))
+                or (self.gpu_quiet_exclusive and self.backend != "gpu")):
+            raise HostClaimRefused("claim spec role/jobs/gpu-quiet phase is not closed")
+
+    @property
+    def cpu_role(self) -> str:
+        return self.role or CPU_ROLE
 
     @property
     def logical_cpus(self) -> tuple[int, ...]:
@@ -136,11 +149,19 @@ class OrchestratorHostLockBackend:
         stack = ExitStack()
         try:
             receipt = stack.enter_context(
-                claim.hold_cpu(spec.cpu_list, role=CPU_ROLE) if spec.backend == "cpu"
+                claim.hold_cpu(spec.cpu_list, role=spec.cpu_role) if spec.backend == "cpu"
                 else claim.hold(Path(spec.device_lock), device_id=spec.device_id))
             opened = receipt.observe()
             if opened["status"] != "held" or not opened["locks"]:
                 raise HostClaimRefused(f"acquired claim is not provably held: {opened['error']}")
+            locks = list(opened["locks"])
+            if spec.gpu_quiet_exclusive:  # AKU-11c: exclusive GPU measurement phase
+                quiet = stack.enter_context(claim.hold_gpu_quiet_measurement(
+                    max(timeout_s, self.min_acquire_s), retain=True))
+                held_quiet = quiet.observe()
+                if held_quiet["status"] != "held" or not held_quiet["locks"]:
+                    raise HostClaimRefused("gpu-quiet EXCLUSIVE phase is not provably held")
+                locks.extend(held_quiet["locks"])
         except BaseException as exc:
             stack.close()
             if isinstance(exc, claim.ClaimRefused) or claim.region_lock_busy(exc):
@@ -150,7 +171,7 @@ class OrchestratorHostLockBackend:
         cpu = spec.backend == "cpu"
         return LockHandle(
             boot, os.getpid(), claim._process_start_ticks(os.getpid()) or 0,
-            tuple(f"{boot}:flock:{row['device']}:{row['inode']}" for row in opened["locks"]),
+            tuple(f"{boot}:flock:{row['device']}:{row['inode']}" for row in locks),
             getattr(receipt, "_ownership_generation", 1),
             receipt._region_fraction if cpu else 0.0,
             () if cpu else (spec.device_id,), tuple(receipt._affinity), (stack, receipt))
@@ -192,6 +213,7 @@ class _Held:
     authorization: Any
     acquired_at: float
     released_at: float | None = None
+    spec: ClaimSpec | None = None
 
 
 class HostClaimProvider:
@@ -237,7 +259,7 @@ class HostClaimProvider:
         wl = self._wl
         remaining = deadline - self.clock()
         binding = request.accounting_binding
-        spec = None if binding is None else self.specs.get(binding.backend)
+        spec = None if binding is None else self.spec_for(binding)
         reason = ("provider deadline expired before acquisition" if remaining <= 0
                   else "no enrolled host claim for this accounting backend" if spec is None
                   else None)
@@ -260,8 +282,20 @@ class HostClaimProvider:
         except BaseException:
             self.backend.release(handle)
             raise
-        self._held[container_id] = _Held(handle, authorization, acquired_at)
+        self._held[container_id] = _Held(handle, authorization, acquired_at, spec=spec)
         return authorization
+
+    def spec_for(self, binding: Any) -> ClaimSpec | None:
+        """AKU-11c: a stage-class spec ("cpu:build", "gpu:search") wins over the backend's."""
+        return self.specs.get(f"{binding.backend}:{binding.scheduler_stage_class}",
+                              self.specs.get(binding.backend))
+
+    def build_jobs(self, authorization: Any) -> int:
+        """The parallel-jobs cap of a held build-role claim; refused for any other claim."""
+        held = self._exact(authorization, self._held)
+        if held is None or held.spec is None or held.spec.role != "build":
+            raise HostClaimRefused("no held build-role claim for this authorization")
+        return held.spec.jobs
 
     def refresh(self, authorization: Any, deadline: float):
         grant = authorization.grant
@@ -376,7 +410,7 @@ class HostClaimProvider:
         wl = self._wl
         held = self._exact(authorization, self._held)
         binding = request.accounting_binding
-        spec = None if binding is None else self.specs.get(binding.backend)
+        spec = None if binding is None else self.spec_for(binding)
         if (held is None or spec is None or not spec.logical_cpus or self.clock() >= deadline
                 or self.backend.observe(held.handle) != "held"):
             raise wl.WaitingAuthority("no provable held CPU claim to describe")
