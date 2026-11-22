@@ -23,7 +23,7 @@ def main(argv=None, *, out=None):
     args = parser.parse_args(argv)
     config = json.loads(Path(args.config).read_text())
     provenance = config.get("cap_provenance")
-    expected_kind = "control" if args.control else "workload_roofline"
+    expected_kind = "control" if args.control else "workload_receipt"  # roofline: never admitted
     valid = (isinstance(provenance, dict)
              and set(provenance) == {"kind", "source"}
              and provenance.get("kind") == expected_kind

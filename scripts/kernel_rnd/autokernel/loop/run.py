@@ -1890,7 +1890,7 @@ def submit_keep_lesson(store: Path, attempt: dict, *, producer=None) -> dict:
     (task_id, candidate_id, commit). Never raises: an unopenable journal is returned as a
     reason, exactly like a producer refusal.
     """
-    from . import keep_lesson
+    from ..lesson_caps_config import submit_keep_with_caps  # caps only under AUTOKERNEL_LESSON_CAPS=1 (AK-PM-12-S4)
     try:
         from ..journal import Journal
         journal = Journal(str(Path(store) / KEEP_LESSON_JOURNAL))
@@ -1898,7 +1898,7 @@ def submit_keep_lesson(store: Path, attempt: dict, *, producer=None) -> dict:
     except Exception as exc:  # noqa: BLE001 - observe-only write side
         return {"recorded": False, "reason": f"journal_unavailable: {type(exc).__name__}: {exc}"[:300],
                 "decision": None}
-    return keep_lesson.submit_keep(journal, attempt, producer=producer)
+    return submit_keep_with_caps(journal, attempt, producer=producer)
 
 
 def publish_lineage_taxonomy(store: Path, producer_commit: str) -> Path | None:
