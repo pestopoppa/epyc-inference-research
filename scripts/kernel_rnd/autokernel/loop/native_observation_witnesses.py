@@ -15,9 +15,12 @@ are diagnostic, never a veto; only a VERIFIED foreign model-inference process wi
 overlapping the held claim contradicts a clean contention reading. Any gap, unverified overlap or
 incomplete census stays `unknown`. A witness is never `pass` from absence of evidence.
 
-Evidence these witnesses CANNOT see (kept unknown, see `UNCAPTURED`): foreign GPU consumers (the
-observation records only global VRAM and the target's own attribution), and the purpose witness
-(intended-use authority is a policy decision of the validation semantic adapter, not a sealed fact).
+Foreign GPU consumers (GPU arm): v2 lifecycle samples carry the in-window KFD per-process VRAM
+census of the held devices; `derive_foreign_gpu_consumers` reads none/present/unknown from it (owner
+excluded, late samples excluded, owner must be visible or the census is not trusted). `present`
+makes contention FAIL; anything but `none` keeps it from PASS (legacy v1 samples -> unknown).
+Still uncaptured (see `UNCAPTURED`): node bandwidth/LLC, and purpose, a policy witness; the plan's
+declared category/intended use is exposed by `declared_purpose` as a declared input, never sealed.
 """
 from __future__ import annotations
 
@@ -34,12 +37,15 @@ ADAPTER_ID_CONTENTION = "epyc.autokernel.observation_contention_witness.v1"
 ADAPTER_ID_RESIDENCY = "epyc.autokernel.observation_residency_witness.v1"
 REPLAY_COVERAGE = "original_in_window_lifecycle_observation_replay_by_owning_protocol"
 ADAPTER_ROLES = ("__init__", "evaluate", "reopen", "source_identity")
-HELPER_ROLES = ("derive_contention", "derive_residency", "_replayed_observation_blocks")
+HELPER_ROLES = ("derive_contention", "derive_residency", "_replayed_observation_blocks",
+                "derive_foreign_gpu_consumers")  # historical sources carry the first three
 WITNESSES = {"contention": ADAPTER_ID_CONTENTION, "residency": ADAPTER_ID_RESIDENCY}
 UNCAPTURED = {
     "purpose": "intended-use authority is a validation_semantic_adapter policy decision; no sealed record carries it",
-    "contention_gpu": "foreign GPU consumers are not captured: the observation holds global VRAM and target-only attribution",
-    "contention_numa_bandwidth": "no per-node memory-bandwidth or LLC counters are captured in the observation",
+    "contention_gpu": "foreign GPU consumers are not captured: no in-window sample carries a KFD census (sample v2)",
+    "contention_numa_bandwidth": "no per-node memory-bandwidth or LLC counters are captured in the observation; "
+        "needs a sealed per-marker uncore read (amd_df/amd_umc DRAM + amd_l3 PMUs, not exposed in the "
+        "container's event_source list) with multiplex/reset state and a declared threshold policy",
 }
 
 
@@ -50,6 +56,57 @@ def _replayed_observation_blocks(observation: Mapping[str, Any]) -> tuple[Any, A
     return intervals, issues
 
 
+def _measurement_window(observation: Mapping[str, Any]) -> tuple[float, float] | None:
+    bounds = sorted(observation["phase_boundaries"], key=lambda row: row["monotonic_s"])
+    starts = [row["monotonic_s"] for row in bounds if row["phase"] == "measurement"]
+    ends = [row["monotonic_s"] for row in bounds if starts and row["monotonic_s"] > starts[0]
+            and row["phase"] != "measurement"] + [observation["ended_monotonic_s"]]
+    ends = [value for value in ends if isinstance(value, (int, float))]
+    return (starts[0], min(ends)) if len(starts) == 1 and ends else None
+
+
+def derive_foreign_gpu_consumers(observation: Mapping[str, Any], *, backend: str) -> dict[str, Any]:
+    """none/present/unknown from in-window v2 KFD censuses; the held-allocation owner is excluded."""
+    if backend != "gpu":
+        return {"status": "not_applicable", "reason": "CPU arm", "facts": {}}
+    window, devices = _measurement_window(observation), set(observation["held_claim"]["gpu_devices"])
+    owner = (observation["target_binding"] or {}).get("pid")
+    rows = [row for row in observation["samples"] if row["phase"] == "measurement"]
+    timely = [window is not None and window[0] <= row["read_started_monotonic_s"]
+              <= row["read_ended_monotonic_s"] <= window[1] for row in rows]
+    censuses = [(row["gpu"] or {}).get("kfd_consumers") if row["schema"] == lo.SAMPLE_SCHEMA_V2 else None
+                for row, ok in zip(rows, timely) if ok]
+    foreign, idle, owner_seen = [], [], 0
+    for index, census in enumerate(censuses):
+        for item in census["processes"] if census and census["status"] == "observed" else ():
+            held = sum(value for device, value in item["vram_bytes"].items() if device in devices)
+            if item["pid"] == owner:
+                owner_seen += int(held > 0)
+            else:
+                (foreign if held > 0 else idle).append(
+                    {"sample": index, "pid": item["pid"], "held_device_vram_bytes": held})
+    captured = sum(bool(census) and census["status"] == "observed" for census in censuses)
+    facts = {"measurement_window": list(window) if window else None, "in_window_samples": len(censuses),
+             "late_samples_excluded": timely.count(False), "captured_samples": captured,
+             "owner_pid": owner, "owner_visible_samples": owner_seen, "foreign_consumers": foreign,
+             "foreign_kfd_without_held_vram": idle}
+    if foreign:
+        return {"status": "present", "facts": facts,
+                "reason": "a foreign process held VRAM on the held GPU device during the measurement window"}
+    if owner is None or len(censuses) < 2 or captured != len(censuses) or owner_seen != captured:
+        return {"status": "unknown", "facts": facts, "reason": "in-window KFD census missing, unreadable, "
+                "too short, or does not show the owner's own allocation"}
+    return {"status": "none", "facts": facts,
+            "reason": "only the held allocation's owner held VRAM on the held device in every in-window census"}
+
+
+def declared_purpose(plan: Any) -> dict[str, Any]:
+    """Purpose is a policy witness: expose the plan's DECLARED intent, never sealed, never concrete."""
+    return {"status": "unknown", "reason": UNCAPTURED["purpose"], "facts": {
+        "basis": "declared_plan_input_not_sealed", "declared": {"category": plan.category,
+            "intended_use": plan.intended_use, "record_class": plan.record_class}}}
+
+
 def derive_contention(observation: Mapping[str, Any], *, backend: str) -> dict[str, Any]:
     """Facts-only contention finding from the recorded in-window intervals."""
     replayed, _issues = _replayed_observation_blocks(observation)
@@ -57,10 +114,13 @@ def derive_contention(observation: Mapping[str, Any], *, backend: str) -> dict[s
         return {"status": "unknown", "reason": "recorded intervals differ from owning-protocol replay",
                 "facts": {"measurement_intervals": None}}
     intervals = [row for row in replayed if row["phase"] == "measurement"]
+    gpu = derive_foreign_gpu_consumers(observation, backend=backend) if backend == "gpu" else None
     facts: dict[str, Any] = {"measurement_intervals": len(intervals),
         "observation_completeness": observation["completeness"], "uncaptured": [
             UNCAPTURED["contention_numa_bandwidth"]] + (
-            [UNCAPTURED["contention_gpu"]] if backend == "gpu" else [])}
+            [UNCAPTURED["contention_gpu"]] if gpu and not gpu["facts"]["captured_samples"] else [])}
+    if gpu:
+        facts["foreign_gpu_consumers"] = gpu
     if not intervals:
         return {"status": "unknown", "reason": "no measurement-phase interval was observed", "facts": facts}
     contradictions, unverified, diagnostic = [], [], []
@@ -84,7 +144,10 @@ def derive_contention(observation: Mapping[str, Any], *, backend: str) -> dict[s
     if contradictions:
         return {"status": "fail", "reason": "verified foreign model inference overlapped the held claim "
                 "during the measurement window", "facts": facts}
-    if gaps or unverified or observation["completeness"] != "complete" or observation["issues"]:
+    if gpu and gpu["status"] == "present":
+        return {"status": "fail", "reason": gpu["reason"], "facts": facts}
+    if (gaps or unverified or observation["completeness"] != "complete" or observation["issues"]
+            or gpu and gpu["status"] != "none"):
         return {"status": "unknown", "reason": "measurement window coverage or foreign verification is incomplete",
                 "facts": facts}
     return {"status": "pass", "reason": "no verified foreign inference overlapped the held claim in a "
@@ -168,7 +231,8 @@ def validate_observation_source(value: Any, witness: str) -> Mapping[str, Any]:
     if witness not in WITNESSES or row["adapter_id"] != WITNESSES[witness] or row["witness"] != witness:
         raise scientific.ScientificWitnessRefused("unsupported observation witness adapter")
     row["callables"] = _callables(row["callables"], ADAPTER_ROLES)
-    row["helpers"] = _callables(row["helpers"], HELPER_ROLES)
+    roles = HELPER_ROLES if type(row["helpers"]) in (list, tuple) and len(row["helpers"]) == 4 else HELPER_ROLES[:3]
+    row["helpers"] = _callables(row["helpers"], roles)
     if type(row["owning_protocols"]) not in (list, tuple) or len(row["owning_protocols"]) != 2:
         raise scientific.ScientificWitnessRefused("observation witness owning protocol set differs")
     row["owning_protocols"] = [_identity(item) for item in row["owning_protocols"]]

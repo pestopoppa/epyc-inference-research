@@ -655,6 +655,9 @@ class ParentScientificWitnessAdapters:
             except Exception as exc:
                 result[name] = {"status": "unknown", "reason": "owning T0 evidence unavailable",
                     "facts": {"refusal_type": type(exc).__name__, "detail": str(exc)}}
+        if self.schema == ADAPTERS_SCHEMA_V3:  # declared (unsealed) purpose input; always unknown
+            from .native_observation_witnesses import declared_purpose
+            result["purpose"] = declared_purpose(context.plan)
         return ob._freeze(result)
 
 

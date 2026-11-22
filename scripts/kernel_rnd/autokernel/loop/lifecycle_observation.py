@@ -25,6 +25,10 @@ from typing import Any
 
 CONTEXT_SCHEMA = "epyc.autokernel.lifecycle_observation_context.v1"
 SAMPLE_SCHEMA = "epyc.autokernel.lifecycle_observation_sample.v1"
+# v2 (AKU-07o, additive): the GPU block also carries `kfd_consumers`, the in-window per-process
+# KFD VRAM census of the held devices. v1 samples are unchanged; v1 readers refuse v2.
+SAMPLE_SCHEMA_V2 = "epyc.autokernel.lifecycle_observation_sample.v2"
+KFD_PROC_ROOT = Path("/sys/class/kfd/kfd/proc")  # the residency.KFD_PROC source
 OBSERVATION_SCHEMA = "epyc.autokernel.lifecycle_observation.v1"
 INSTRUMENT_SCHEMA = "epyc.autokernel.loaded_serving_instrument.v1"
 ARTIFACT_SCHEMA = "epyc.autokernel.prepared_artifact_identity.v1"
@@ -686,6 +690,51 @@ def _numa_maps(text: str, maximum: int) -> list[dict[str, Any]]:
     return rows
 
 
+def _kfd_row(value: Any) -> Mapping[str, Any]:
+    row = _closed(value, {"pid", "vram_bytes"}, "KFD consumer row")
+    if not isinstance(row["vram_bytes"], Mapping):
+        raise ObservationError("KFD consumer VRAM must be a device mapping")
+    return row
+
+
+def _kfd_block(value: Any) -> dict[str, Any]:
+    """Closed KFD consumer census: observed rows, or unknown with a reason and no rows."""
+    row = _closed(value, {"status", "processes", "reason"}, "KFD consumer census")
+    if row["status"] not in {"observed", "unknown"} or not isinstance(row["processes"], list):
+        raise ObservationError("KFD consumer census state is unsupported")
+    processes = sorted(({"pid": _integer(item["pid"], "KFD PID", 1), "vram_bytes": {
+        _text(key, "GPU device", maximum=256): _integer(bytes_, "KFD VRAM")
+        for key, bytes_ in sorted(item["vram_bytes"].items())}} for item in (
+        _kfd_row(item) for item in row["processes"])),
+        key=lambda item: item["pid"])
+    if (len({item["pid"] for item in processes}) != len(processes)
+            or (row["status"] == "unknown") != (row["reason"] is not None)
+            or (row["status"] == "unknown" and processes)):
+        raise ObservationError("KFD consumer census is inconsistent")
+    return {"status": row["status"], "processes": processes, "reason": None
+            if row["reason"] is None else _text(row["reason"], "KFD census reason")}
+
+
+def kfd_consumer_reader(gpu_ids: Mapping[str, str], *, root: Path = KFD_PROC_ROOT
+                        ) -> Callable[[Sequence[str], Mapping[str, Any]], dict[str, Any]]:
+    """Bounded reader of `<root>/<pid>/vram_<gpu_id>` for the held devices (unbound -> absent)."""
+    mapping = {_text(device, "GPU device"): _text(gpu_id, "KFD gpu_id")
+               for device, gpu_id in gpu_ids.items()}
+
+    def read(devices: Sequence[str], budget: Mapping[str, Any]) -> dict[str, Any]:
+        if not set(devices) <= set(mapping):
+            raise ObservationError("held GPU device has no KFD gpu_id mapping")
+        rows = []
+        for entry in _bounded_entries(Path(root), budget["max_processes"], "KFD processes"):
+            paths = {device: entry / f"vram_{mapping[device]}" for device in devices}
+            vram = {device: int(_bounded_text(path, budget["max_read_bytes"], "KFD VRAM").strip())
+                    for device, path in paths.items() if entry.name.isdigit() and path.exists()}
+            if entry.name.isdigit() and entry.is_dir():  # an exited PID's directory vanishes
+                rows.append({"pid": int(entry.name), "vram_bytes": vram})
+        return {"status": "observed", "processes": rows, "reason": None}
+    return read
+
+
 def _mapping_rows(text: str, maximum: int) -> list[dict[str, Any]]:
     rows = []
     for line in text.splitlines():
@@ -718,7 +767,9 @@ class FilesystemProbe:
                  cgroup_root: Path = Path("/sys/fs/cgroup"),
                  target_gpu_adapter: Callable[[Mapping[str, Any], Sequence[str],
                                                Mapping[str, Any]], Mapping[str, Any]] | None = None,
-                 global_vram_paths: Mapping[str, Path] | None = None) -> None:
+                 global_vram_paths: Mapping[str, Path] | None = None,
+                 kfd_consumer_reader: Callable[[Sequence[str], Mapping[str, Any]],
+                                               Mapping[str, Any]] | None = None) -> None:
         self.proc_root = Path(proc_root)
         self.sysfs_cpu_root = Path(sysfs_cpu_root)
         self.boot_id_path = Path(boot_id_path)
@@ -728,6 +779,7 @@ class FilesystemProbe:
         self.target_gpu_adapter = target_gpu_adapter
         self.global_vram_paths = {
             key: Path(path) for key, path in (global_vram_paths or {}).items()}
+        self.kfd_consumer_reader = kfd_consumer_reader
 
     def boot_id(self, budget: Mapping[str, Any]) -> str:
         return _text(_bounded_text(self.boot_id_path, budget["max_read_bytes"],
@@ -892,6 +944,15 @@ class FilesystemProbe:
                       "reason": f"{type(exc).__name__}: {exc}"}
         return {"global_vram_bytes": global_vram, "target_attribution": target}
 
+    def _kfd_consumers(self, devices: Sequence[str], budget: Mapping[str, Any]) -> dict[str, Any]:
+        try:
+            block = _kfd_block(self.kfd_consumer_reader(tuple(devices), budget))
+            if any(not set(row["vram_bytes"]) <= set(devices) for row in block["processes"]):
+                raise ObservationError("KFD census names a device outside the held claim")
+            return block
+        except Exception as exc:
+            return {"status": "unknown", "processes": [], "reason": f"{type(exc).__name__}: {exc}"}
+
     def capture(self, *, context: Mapping[str, Any], topology: Mapping[str, Any],
                 target_binding: Mapping[str, Any] | None) -> dict[str, Any]:
         budget = context["budgets"]
@@ -961,6 +1022,8 @@ class FilesystemProbe:
                                           "start_ticks": None, "allocated_bytes": {},
                                           "evidence_ref": None,
                                           "reason": "CPU arm"}})
+        if gpu is not None and context["backend"] == "gpu" and self.kfd_consumer_reader is not None:
+            gpu["kfd_consumers"] = self._kfd_consumers(context["held_claim"]["gpu_devices"], budget)
         return {"processes": processes, "census_gaps": census_gaps,
                 "subprobe_errors": subprobe_errors,
                 "target": target, "target_error": target_error,
@@ -1286,7 +1349,8 @@ class ObservationSession:
         read_end_mono, read_end_wall = self._time_pair()
         if read_end_mono < read_start_mono:
             status, error = "unknown", "ObservationError: probe clock moved backwards"
-        sample = {"schema": SAMPLE_SCHEMA, "status": status,
+        sample = {"schema": SAMPLE_SCHEMA_V2 if "kfd_consumers" in (payload["gpu"] or {})
+                  else SAMPLE_SCHEMA, "status": status,
                   "phase": marker["phase"], "kind": marker["kind"],
                   "marker_label": marker["marker_label"],
                   "marker_monotonic_s": marker["marker_monotonic_s"],
@@ -1651,7 +1715,8 @@ def _validate_sample(value: Any) -> None:
               "thp_effective", "effective_readback", "gpu", "runtime_witnesses", "error",
               "probe_over_budget"}
     row = _closed(value, fields, "lifecycle sample")
-    if (row["schema"] != SAMPLE_SCHEMA or row["phase"] not in PHASES
+    v2 = row["schema"] == SAMPLE_SCHEMA_V2
+    if (row["schema"] not in (SAMPLE_SCHEMA, SAMPLE_SCHEMA_V2) or row["phase"] not in PHASES
             or row["status"] not in {"observed", "unknown"}
             or row["kind"] not in {
                 "boundary", "periodic", "target_attached", "checkpoint"}):
@@ -1679,8 +1744,13 @@ def _validate_sample(value: Any) -> None:
             _closed(item, {"avg10", "avg60", "avg300", "total"}, "memory PSI row")
     if row["thp_effective"] is not None:
         _closed(row["thp_effective"], {"raw", "selected"}, "THP effective state")
+    if v2 and row["gpu"] is None:
+        raise ObservationError("v2 lifecycle sample lacks its KFD consumer census")
     if row["gpu"] is not None:
-        gpu = _closed(row["gpu"], {"global_vram_bytes", "target_attribution"}, "GPU state")
+        gpu = _closed(row["gpu"], {"global_vram_bytes", "target_attribution"}
+                      | ({"kfd_consumers"} if v2 else set()), "GPU state")
+        if v2:
+            _kfd_block(gpu["kfd_consumers"])
         _closed(gpu["target_attribution"],
                 {"status", "pid", "start_ticks", "allocated_bytes", "evidence_ref",
                  "reason"},
@@ -1807,7 +1877,7 @@ def validate_observation(value: Mapping[str, Any]) -> dict[str, Any]:
 __all__ = ["ARTIFACT_SCHEMA", "CONTEXT_SCHEMA", "DETECTOR_VERSION", "FilesystemProbe",
            "FOREIGN_KINDS", "INSTRUMENT_SCHEMA", "OBSERVATION_SCHEMA", "ObservationError",
            "ObservationSession", "ObserverShutdownUnresolved", "PHASES",
-           "RUNTIME_WITNESS_STATES", "SAMPLE_SCHEMA",
+           "RUNTIME_WITNESS_STATES", "SAMPLE_SCHEMA", "SAMPLE_SCHEMA_V2", "kfd_consumer_reader",
            "callable_identity", "loaded_instrument_identity", "parse_cpu_list",
            "parse_proc_stat", "physical_footprint", "prepare_artifact_identity",
            "read_topology", "validate_context", "validate_instrument_identity",
