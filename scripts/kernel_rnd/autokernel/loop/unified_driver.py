@@ -21,7 +21,7 @@ from typing import Any, Collection, Literal, Mapping, Sequence
 
 from .. import journal as journal_module
 from . import campaign, campaign_control, campaign_service, experiment_plan, planned_serving
-from . import scheduling, scoped_evidence, unified_planner
+from . import authoring_chain, scheduling, scoped_evidence, unified_planner
 
 CONFIG_SCHEMA = "epyc.autokernel.unified_driver_config.v1"
 PROFILE_REQUEST_SCHEMA = "epyc.autokernel.profile_preparation_request.v1"
@@ -509,7 +509,8 @@ class UnifiedCampaignDriver:
                  feed_owner: Any = None,
                  calibration_requests: Sequence[Any] = (),
                  monotonic_clock=time.monotonic,
-                 stop_latch: Any = None) -> None:
+                 stop_latch: Any = None,
+                 authoring_chain_path: str | None = None) -> None:
         # AK-RSM-1: the file-backed graceful stop latch (stage_receipts.StopLatch) is
         # checked at every tick boundary in addition to the caller's stop_requested.
         if stop_latch is not None and not callable(getattr(stop_latch, "is_set", None)):
@@ -532,6 +533,7 @@ class UnifiedCampaignDriver:
         if feed_owner is not None:
             self.evidence = feed_owner.view
         self.runtime_anchors = runtime_anchors
+        self.authoring_chain_path = authoring_chain_path  # AKU-06d4 verified-build refresh
         self.runtime_dimensions = MappingProxyType({
             key: tuple(item if isinstance(item, unified_planner.RuntimeDimension)
                        else unified_planner.RuntimeDimension.from_dict(item)
@@ -1067,7 +1069,9 @@ class UnifiedCampaignDriver:
             return DriverOutcome("waiting", (readiness["reason"],), None, None)
         planning = unified_planner.plan_iteration(
             resolved_campaign=self.resolved, profiles=self.profiles,
-            evidence_index=self.evidence, runtime_anchors=self.runtime_anchors,
+            evidence_index=self.evidence,
+            runtime_anchors=authoring_chain.refreshed_runtime_anchors(
+                self.runtime_anchors, self.authoring_chain_path),
             runtime_dimensions=self.runtime_dimensions, source_actor=None, build_actor=None,
             scheduler_engine=self.scheduler, experiment_plans=self.experiment_plans,
             now=now, native_artifact_sink_ref=self.sink_ref,

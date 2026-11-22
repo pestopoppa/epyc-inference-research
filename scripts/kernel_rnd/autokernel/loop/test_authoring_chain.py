@@ -120,3 +120,27 @@ def test_tampered_or_reordered_journal_refuses_replay(actor_state, tmp_path):  #
     (tmp_path / "s.jsonl").write_bytes(lines[0] + b"\n" + chain._canon(bad) + b"\n")
     with pytest.raises(chain.ChainRefused, match="out of order"):
         chain.replay(str(tmp_path / "s.jsonl"))
+
+
+def test_driver_planner_hook_consumes_replayed_verified_builds(tmp_path):
+    from . import unified_planner as up
+    path = str(tmp_path / "chain.jsonl")
+    target, other = _h("target"), _h("other")
+    prepared = up.PreparedRuntimeAnchors(
+        "c", "m", "r", {}, {target: (chain.BUILD_PREREQUISITE,),
+                            other: (chain.BUILD_PREREQUISITE, "x")}, (), up._PREPARED_TOKEN)
+    assert chain.refreshed_runtime_anchors(prepared, None) is prepared
+    assert chain.refreshed_runtime_anchors(prepared, path) is prepared  # no journal yet
+    j = chain.AuthoringChainJournal(path)
+    advice = _h("advice")
+    j._append("RESERVED", attempt_id="a1", advice_digest=advice, target_revision_digest=target)
+    j._append("AUTHORED", attempt_id="a1", advice_digest=advice, patch_bundle_sha256=_h("p"),
+              preparation_digest=_h("prep"), stdout_sha256=_h("o"))
+    j._append("COMMITTED", advice_digest=advice, preparation_digest=_h("prep"),
+              source_commit="c" * 40, source_tree_digest=_h("t"), patch_bundle_sha256=_h("p"))
+    assert chain.refreshed_runtime_anchors(prepared, path) is prepared  # committed != verified
+    j._append("BUILD_VERIFIED", advice_digest=advice, source_commit="c" * 40,
+              candidate_id="k", build_identity_sha256=_h("b"), output_binary_sha256=_h("bin"))
+    out = chain.refreshed_runtime_anchors(prepared, path)  # fresh replay = restart
+    assert dict(out.runtime_prerequisites) == {other: (chain.BUILD_PREREQUISITE, "x")}
+    assert out._token is up._PREPARED_TOKEN and out.recipes == prepared.recipes

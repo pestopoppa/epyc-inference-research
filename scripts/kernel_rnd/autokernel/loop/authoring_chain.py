@@ -206,3 +206,18 @@ def refresh_prerequisites(runtime_prerequisites: Mapping[str, tuple[str, ...]],
         if kept:
             out[target] = kept
     return MappingProxyType(out)
+
+
+def refreshed_runtime_anchors(prepared: Any, journal_path: str | None) -> Any:
+    """Planner hook: replay the chain journal and drop verified build prerequisites.
+
+    Replays from disk each call so a restarted driver consumes exactly the durable
+    BUILD_VERIFIED records; with no journal the prepared anchors pass through unchanged.
+    """
+    if not journal_path:
+        return prepared
+    from dataclasses import replace
+    refreshed = refresh_prerequisites(prepared.runtime_prerequisites, replay(journal_path))
+    if dict(refreshed) == dict(prepared.runtime_prerequisites):
+        return prepared
+    return replace(prepared, runtime_prerequisites=refreshed)
