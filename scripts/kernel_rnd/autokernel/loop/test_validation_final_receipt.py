@@ -258,3 +258,62 @@ def test_actual_validation_consumer_records_and_restarts_without_live_issuance(r
             receipts.close()
             source.close()
             controller.close()
+
+
+def test_reopened_pair_rederives_matching_producer_provenance_warrant(real):
+    actual = sa.RegisteredClaimGradeVerifier(real["projection"], real["source"],
+                                             real["receipts"]).reopen_pair(real["pair"])
+    assert actual.producer_provenance == current.ProducerProvenance(True, ())
+
+
+def test_receipt_scope_cannot_disagree_with_reopened_provenance(real, monkeypatch):
+    original = current.ProducerProvenance
+    monkeypatch.setattr(current, "ProducerProvenance", lambda *_args: original(False, ()))
+    with pytest.raises(sa.SemanticAdapterError, match="authority scope differs"):
+        sa.RegisteredClaimGradeVerifier(real["projection"], real["source"],
+                                        real["receipts"]).reopen_pair(real["pair"])
+
+
+@pytest.mark.parametrize("change,code", [("bytes", "producer_implementation_differs"),
+                                         ("slot", "configured_verifier_slot_differs")])
+def test_installed_closure_change_reopens_typed_compatibility_only(real, tmp_path, monkeypatch, change, code):
+    expected = ob._plain(real["closure"].expected_native_producer_source)
+    first = expected["measurement_capture"]["callables"][0]["identity"]
+    if change == "bytes":
+        first["implementation_sha256"] = "e" * 64
+    else:
+        expected["native_validator"]["observation_verifiers"]["purpose"] = dict(first)
+    closure = sa.ProjectionSourceClosure(real["closure"].root_commit,
+                                         dict(real["closure"].root_source_sha256), expected)
+    projection = sa.PinnedRootProjection(real["root"], source_closure=closure)
+    receipts = mc.ArtifactStore(tmp_path / "receipts")
+    try:
+        refs = {}
+        for arm, ref in (("anchor", real["pair"].anchor), ("candidate", real["pair"].candidate)):
+            event = real["receipts"].read(ref.locator, ref.sha256)["source_event"]
+            refs[arm] = projection.produce_receipt(source_store=real["source"],
+                source_locator=event["locator"], source_sha256=event["sha256"], receipt_store=receipts)
+        pair = replace(real["pair"], anchor=refs["anchor"], candidate=refs["candidate"])
+        verifier = sa.RegisteredClaimGradeVerifier(projection, real["source"], receipts)
+        actual = verifier.reopen_pair(pair)
+        assert {actual.anchor["authority_scope"], actual.candidate["authority_scope"]} == {"compatibility_only"}
+        assert not actual.producer_provenance.warranted and code in actual.producer_provenance.reasons
+        # A measurement-shaped pair (hermetic relabel of the reopened bodies) still
+        # never becomes eligible: typed Unavailable decision, typed verify refusal.
+        def measured(body):
+            return ob._plain(body) | {"projection": {"status": "measurement",
+                "source_grade": "Witnessed", "trace_grade": "Attested"}}
+        shaped = replace(actual, anchor=measured(actual.anchor), candidate=measured(actual.candidate),
+                         view=replace(actual.view, complete=True))
+        monkeypatch.setattr(sa.RegisteredClaimGradeVerifier, "reopen_pair", lambda _self, _pair: shaped)
+        decision = sa.ValidationSemanticAdapter(projection).evaluate(
+            actual.plan, {"claim_grade_pair": pair}, claim_grade_verifier=verifier)
+        assert (decision.source_grade, decision.permitted) == ("Unavailable", False)
+        assert code in decision.reasons
+        # The relabelled view is hermetic, so bypass only the structural view re-check.
+        monkeypatch.setattr(ep, "_validated_view", lambda _plan, view: view)
+        with pytest.raises(sa.ProducerProvenanceRefused) as refused:
+            verifier.verify(actual.plan, shaped.view, pair)
+        assert code in refused.value.reasons
+    finally:
+        receipts.close()

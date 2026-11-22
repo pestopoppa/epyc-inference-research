@@ -134,21 +134,49 @@ def reopen_native(projection, event, store):
     return projected, carrier, plan, view, provenance
 
 
-def native_sources_bound(provenance, expected):
+@dataclass(frozen=True)
+class ProducerProvenance:
+    """Typed original-producer provenance warrant; never a grade or use permission."""
+    warranted: bool
+    reasons: tuple[str, ...]
+
+
+def native_sources_bound(provenance, expected, *, typed=False):
+    """Match the captured closure to the installed expected closure (typed codes on request)."""
     from .native_final_trial import source_identities
     from .native_server_t0_witness import server_source_identities
-    original = provenance["producer_source_closure"]
-    if original is None or original != expected or not nps.producer_source_closure_complete(original):
-        return False
-    selected = expected.get("scientific_adapters", {}).get("correctness")
-    final = provenance["parent_final_source_identity"]
-    if (not isinstance(selected, Mapping)
-            or final.get("selected_scientific_adapter") != selected
-            or final.get("finalizer") != selected.get("owning_source_pins", {}).get("final_trial_source")):
-        return False
-    identities = source_identities(final["finalizer"]) + server_source_identities(selected)
-    return all(item["implementation_status"] == item["configuration_status"] == "pinned"
-               for item in identities)
+
+    def differences(a, b):
+        if a.get("schema") != b.get("schema") or set(a) != set(b):
+            return ["producer_source_closure_differs"]
+        found = []
+        for group in ("measurement_capture", "observation_binding", "native_validator"):
+            left, right = dict(a[group]), dict(b[group])
+            if left.pop("observation_verifiers", None) != right.pop("observation_verifiers", None):
+                found.append("configured_verifier_slot_differs")
+            if left != right:
+                found.append("producer_implementation_differs")
+        if a.get("scientific_adapters") != b.get("scientific_adapters"):
+            found.append("scientific_adapter_source_differs")
+        return found or ["producer_source_closure_differs"]
+    original, reasons = provenance["producer_source_closure"], []
+    if original is None:  # Historical instruments: absence is never reconstructed.
+        reasons.append("producer_source_closure_absent")
+    elif original != expected:
+        reasons.extend(differences(ob._plain(original), ob._plain(expected)))
+    elif not nps.producer_source_closure_complete(original):
+        reasons.append("producer_source_closure_incomplete")
+    else:
+        selected = expected.get("scientific_adapters", {}).get("correctness")
+        final = provenance["parent_final_source_identity"]
+        if (not isinstance(selected, Mapping)
+                or final.get("selected_scientific_adapter") != selected
+                or final.get("finalizer") != selected.get("owning_source_pins", {}).get("final_trial_source")):
+            reasons.append("parent_final_source_unbound")
+        elif not all(item["implementation_status"] == item["configuration_status"] == "pinned"
+                     for item in source_identities(final["finalizer"]) + server_source_identities(selected)):
+            reasons.append("parent_final_source_incomplete")
+    return ProducerProvenance(not reasons, tuple(reasons)) if typed else not reasons
 
 
 def build_receipt(projection, event, *, source_store, source_reference):

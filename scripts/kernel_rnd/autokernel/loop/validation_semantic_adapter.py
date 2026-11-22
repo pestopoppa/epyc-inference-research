@@ -60,6 +60,15 @@ class SemanticAdapterError(RuntimeError):
     """The installed canonical source or an evidence binding is unavailable."""
 
 
+class ProducerProvenanceRefused(SemanticAdapterError):
+    """Typed refusal: no original-producer provenance warrant; reasons are codes."""
+
+    def __init__(self, reasons: tuple[str, ...]):
+        super().__init__("canonical receipt pair lacks a native producer provenance warrant: "
+                         + ", ".join(reasons))
+        self.reasons = tuple(reasons)
+
+
 def _digest(path: Path) -> str:
     return hashlib.sha256(_source_bytes(path)).hexdigest()
 
@@ -371,6 +380,7 @@ class ReopenedClaimReceiptPair:
     candidate: Mapping[str, Any]
     anchor_carrier: Mapping[str, Any]
     candidate_carrier: Mapping[str, Any]
+    producer_provenance: Any  # validation_projection_source.ProducerProvenance
 
 
 @dataclass(frozen=True)
@@ -409,8 +419,8 @@ class RegisteredClaimGradeVerifier:
             source = body["source_event"]
             event = mc._plain(self.source_store.read(source["locator"], source["sha256"]))
             native.append(current.reopen_native(self.projection, event, self.source_store))
-        _a_projection, a, plan, view, _a_provenance = native[0]
-        _c_projection, c, other_plan, other_view, _c_provenance = native[1]
+        _a_projection, a, plan, view, a_provenance = native[0]
+        _c_projection, c, other_plan, other_view, c_provenance = native[1]
         if (a["measurement_id"] != pair.anchor_measurement_id
                 or c["measurement_id"] != pair.candidate_measurement_id
                 or plan.to_dict() != other_plan.to_dict() or view.to_dict() != other_view.to_dict()
@@ -418,7 +428,20 @@ class RegisteredClaimGradeVerifier:
                 or a["parent_final_trial"] != c["parent_final_trial"]
                 or receipts[0]["source_identity"] != receipts[1]["source_identity"]):
             raise SemanticAdapterError("canonical receipt pair differs from original full final evidence")
-        return ReopenedClaimReceiptPair(plan, view, receipts[0], receipts[1], ob._freeze(a), ob._freeze(c))
+        # Rederive the provenance warrant from reopened original instruments
+        # against the installed expected closure; the receipt string is a cross-check.
+        expected = ob._plain(self.projection.source_closure.expected_native_producer_source)
+        reasons = [code for provenance in (a_provenance, c_provenance)
+                   for code in current.native_sources_bound(provenance, expected, typed=True).reasons]
+        if any(item["identity"]["implementation_status"] != "pinned"
+               or item["identity"]["configuration_status"] != "pinned"
+               for item in receipts[0]["source_identity"]["receipt_producer"]["callables"]):
+            reasons.append("receipt_producer_unpinned")
+        warrant = current.ProducerProvenance(not reasons, tuple(dict.fromkeys(reasons)))
+        if warrant.warranted != all(body["authority_scope"] == "final_pinned_source" for body in receipts):
+            raise SemanticAdapterError("receipt authority scope differs from reopened producer provenance")
+        return ReopenedClaimReceiptPair(plan, view, receipts[0], receipts[1], ob._freeze(a), ob._freeze(c),
+                                        warrant)
 
     def verify(self, plan: ep.ExperimentPlan, view: ep.AdmissibleUnitView,
                pair: cr.ClaimGradeReceiptPairReference) -> ep.AdmissibleUnitView:
@@ -430,9 +453,10 @@ class RegisteredClaimGradeVerifier:
                 or not actual.view.complete or any(
                     body["projection"].get("status") != "measurement"
                     or (body["projection"].get("source_grade"), body["projection"].get("trace_grade"))
-                    != ("Witnessed", "Attested") or body["authority_scope"] != "final_pinned_source"
-                    for body in (actual.anchor, actual.candidate))):
+                    != ("Witnessed", "Attested") for body in (actual.anchor, actual.candidate))):
             raise SemanticAdapterError("canonical receipt pair lacks complete qualified measurement evidence")
+        if not actual.producer_provenance.warranted:
+            raise ProducerProvenanceRefused(actual.producer_provenance.reasons)
         return actual.view
 
 
@@ -523,6 +547,10 @@ class ValidationSemanticAdapter:
                     ("canonical final-trial projection is diagnostic; no ClaimTuple or grade exists",
                      "complete_native_measurement_pair", "original_control_evidence_unavailable",
                      "original_calibration_evidence_unavailable"))
+            if not actual.producer_provenance.warranted:  # Compatibility-only: typed, never eligible.
+                return vc.SemanticDecision("Unavailable", "Unavailable", "validate_production", False,
+                    ("native producer source identity is compatibility-only",)
+                    + actual.producer_provenance.reasons)
             # The same strict registration serves the future owning qualified
             # serving-decision route; source/grade proof alone is not that rule.
             claim_grade_verifier.verify(plan, actual.view, evidence["claim_grade_pair"])
@@ -566,4 +594,4 @@ class RegisteredServingSemanticEvaluator:
 __all__ = ["ARM_ADAPTER_ID", "ARM_PROJECTOR_SHA256", "AUTHORITY_ID",
            "CLAIM_TUPLE_SHA256", "CanonicalGrade", "PinnedRootProjection",
            "ProjectionSourceClosure", "RegisteredClaimGradeVerifier", "RegisteredServingSemanticEvaluator",
-           "SemanticAdapterError", "ValidationSemanticAdapter"]
+           "ProducerProvenanceRefused", "SemanticAdapterError", "ValidationSemanticAdapter"]
