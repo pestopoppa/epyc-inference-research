@@ -267,7 +267,7 @@ def table_md(c: dict, top: int = 40) -> str:
         out.append(f"| {r['rank']} | {r['model']} | {r['kernel_class']} | {r.get('config', '-')} | "
                    f"{r['bytes_per_call'] / 1e6:.0f} | {r['us_per_call'] / 1e3:.2f} | {r['gbps']:.1f} | "
                    f"{r.get('ceiling_gbps', 0):.1f} | {'-' if fr is None else f'{fr:.0%}'} | "
-                   f"{r.get('share_of_round', 0):.1%} | {r['recoverable_ms_per_round']:.2f} | {r['status']} | "
+                   f"{'-' if r.get('share_of_round') is None else format(r['share_of_round'], '.1%')} | {r['recoverable_ms_per_round']:.2f} | {r['status']} | "
                    f"{r.get('seed', '-')} | `{r['source_row']}` |")
     out += ["", END]
     return "\n".join(out)

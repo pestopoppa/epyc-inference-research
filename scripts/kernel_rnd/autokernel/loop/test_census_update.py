@@ -140,6 +140,14 @@ class Cpu(Base):
         self.assertEqual(sum("cpu|" in k for k in c["records"]), 2)  # MTP config skipped
         self.assertIn("### CPU (EPYC 9655", open(self.doc).read())
 
+    def test_record_without_share_renders(self):
+        c = cu.empty_census()
+        c["records"]["cpu|m|k|quarter-24t|n1"] = {"device": "cpu", "model": "m", "kernel_class": "k", "shape": "quarter-24t",
+            "config": "quarter-24t", "n": 1, "bytes_per_call": 5.7e9, "us_per_call": 94000.0, "calls_per_round": 1,
+            "share_of_round": None, "source_row": "doc"}
+        cu.rerank(c)
+        self.assertIn("| doc |".replace("doc", "`doc`"), cu.table_md(c))
+
     def test_flag_frac_is_a_tunable_parameter(self):
         c = cu.empty_census()
         c["cpu"]["flag_frac"] = 0.70
