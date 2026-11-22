@@ -21,6 +21,7 @@ from . import experiment_plan as ep
 from . import measurement_capture as mc
 from . import native_capture_control as nc
 from . import observation_binding as ob
+from . import operation_accounting as oa
 from . import planned_serving as ps
 from . import scheduling
 from . import unified_driver
@@ -607,6 +608,8 @@ class UnifiedDriverExecution:
     def _verify_settlement(self, supplied: Mapping[str, Any]) -> Mapping[str, Any]:
         if not isinstance(supplied, Mapping):
             raise DriverExecutionRefused("settlement candidate is malformed")
+        if supplied.get("schema") == campaign_control.DRIVER_SETTLEMENT_SCHEMA_V2:
+            return self._verify_operation_settlement(supplied)
         transition_id = supplied.get("transition_id")
         if (self._profile_executor is not None
                 and self._profile_executor.owns_settlement(transition_id)):
@@ -684,6 +687,37 @@ class UnifiedDriverExecution:
                     raise DriverExecutionRefused(
                         "operational failure terminal/result differs")
         return copy.deepcopy(trusted)
+
+    def _verify_operation_settlement(self, supplied: Mapping[str, Any]) -> Mapping[str, Any]:
+        """AKU-06l: the sole registered validator for a v2 operation settlement.
+
+        Reads only controller-owned durable state: the exact ordered child prefix, the
+        closed role/disposition rules, and each current-lifetime child's lifecycle terminal
+        and provider-held receipt. A v1 caller receipt is never accepted here."""
+        with self._lock:
+            if self._closed:
+                raise DriverExecutionRefused("driver execution connector is closed")
+        children = self.controller.unified_driver_children(supplied.get("transition_id"))
+        if [child["digest"] for child in children] != list(supplied.get("children", ())):
+            raise DriverExecutionRefused("operation settlement children differ from the durable prefix")
+        try:
+            oa.check_outcome_against_children(
+                supplied.get("outcome"), children, supplied.get("denial_ref"))
+        except oa.OperationAccountingRefused as exc:
+            raise DriverExecutionRefused(f"operation settlement refused: {exc}") from exc
+        for child in children:
+            terminal = worker_lifecycle.TerminalWorker(**child["terminal"])
+            exact = self.controller.worker_terminal_for_request(
+                request_id=terminal.request_id, plan_digest=terminal.plan_digest,
+                lineage_id=terminal.lineage_id, stage_id=terminal.stage_id)
+            if exact is None and (child["supervisor_incarnation"]
+                                  < self.controller.supervisor_incarnation):
+                continue  # a prior lifetime's child: its durable verified row is the proof
+            if (exact != terminal or self.controller.worker_held_claim_receipt(
+                    exact).to_dict() != child["receipt"]):
+                raise DriverExecutionRefused(
+                    "operation child terminal/held receipt is not the current lifecycle proof")
+        return copy.deepcopy(dict(supplied))
 
     def _install_capture_validator(self, prepared: unified_worker.PreparedPlannedServingStage) \
             -> None:

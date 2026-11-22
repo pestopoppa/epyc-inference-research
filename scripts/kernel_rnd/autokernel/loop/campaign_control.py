@@ -854,6 +854,7 @@ class CampaignController:
         self._driver_issued: dict[str, dict[str, Any]] = {}
         self._driver_settled: dict[str, dict[str, Any]] = {}
         self._driver_children: dict[str, list[dict[str, Any]]] = {}
+        self._driver_child_intents: dict[str, dict[str, dict[str, Any]]] = {}
         self._driver_settlement_validator: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None
         self._driver_artifact_store: Any = None
         self._a2_execution_entries: dict[str, list[Any]] = {}
@@ -1363,6 +1364,24 @@ class CampaignController:
                         "unified driver catalog is issued more than once")
                 self._driver_issued[row["catalog_id"]] = row
                 continue
+            if entry.kind == journal_module.KIND_UNIFIED_DRIVER_CHILD_INTENT:
+                violations = journal_module._validate_native_payload(entry.kind, entry.payload)
+                row = copy.deepcopy(dict(entry.payload))
+                issued = self._driver_issued.get(row["catalog_id"]) if not violations else None
+                intents = self._driver_child_intents.setdefault(row.get("transition_id"), {})
+                if (violations or self.snapshot_version != 3 or not saw_start
+                        or issued is None or row["transition_id"] != issued["transition_id"]
+                        or (row["campaign_id"], row["config_generation"], row["config_digest"])
+                        != (self.resolved.campaign_id, self.config_generation,
+                            self.config_digest)
+                        or row["supervisor_incarnation"] > last_incarnation
+                        or row["request_id"] in intents
+                        or row["transition_id"] in self._driver_settled):
+                    raise journal_module.JournalCorruption(
+                        "unified child intent breaks issued/controller binding: "
+                        + "; ".join(violations))
+                intents[row["request_id"]] = row
+                continue
             if entry.kind == journal_module.KIND_UNIFIED_DRIVER_CHILD_ACCOUNTED:
                 violations = journal_module._validate_native_payload(entry.kind, entry.payload)
                 if violations:
@@ -1387,7 +1406,9 @@ class CampaignController:
                         "unified child accounting breaks issued/controller binding")
                 try:
                     operation_accounting_module.validate_child_chain([*chain, row])
-                except operation_accounting_module.OperationAccountingRefused as exc:
+                    self._join_child_intent_locked(row)
+                except (operation_accounting_module.OperationAccountingRefused,
+                        ControlRefused) as exc:
                     raise journal_module.JournalCorruption(
                         f"unified child accounting chain is inconsistent: {exc}") from exc
                 chain.append(row)
@@ -4556,14 +4577,21 @@ class CampaignController:
                 "container_id", "return_code", "result_digest", "accepted", "reason")}
             if role not in operation_accounting_module.ROLES:
                 raise ControlRefused("child accounting role is unsupported")
-            prior = next((c for c in chain if c["role"] == role), None)
+            # Every original invocation is its own child, in order, exactly once: a
+            # fallback repeats its role (v2 attempt), an exact retry is a duplicate.
+            prior = next((c for c in chain if c["request_id"] == terminal.request_id
+                          or c["receipt"]["receipt_id"] == receipt.receipt_id), None)
             if prior is not None:
-                if (prior["terminal"] == terminal_body
+                if (prior["role"] == role and prior["terminal"] == terminal_body
                         and prior["receipt"] == receipt.to_dict()
                         and prior["binding_digest"] == binding.digest):
                     return {"status": "duplicate", "digest": prior["digest"], "role": role}
                 raise ControlRefused("child accounting retry differs from durable record")
-            if len(chain) != operation_accounting_module.ROLES.index(role):
+            last = chain[-1] if chain else None
+            attempt = (operation_accounting_module.child_attempt(last) + 1
+                       if last is not None and last["role"] == role else 0)
+            if not scheduling.ordered_operation_roles(
+                    [*(c["role"] for c in chain), role]):
                 raise ControlRefused("child accounting role is out of order")
             try:
                 record = operation_accounting_module.make_child_record(
@@ -4578,13 +4606,14 @@ class CampaignController:
                     receipt=receipt.to_dict(),
                     disposition=("accepted" if terminal.accepted
                                  and terminal.return_code == 0 else "diagnostic"),
-                    predecessor=chain[-1]["digest"] if chain else None)
+                    predecessor=chain[-1]["digest"] if chain else None, attempt=attempt)
             except operation_accounting_module.OperationAccountingRefused as exc:
                 raise ControlRefused(f"child accounting refused: {exc}") from exc
             try:
                 operation_accounting_module.validate_child_chain([*chain, record])
             except operation_accounting_module.OperationAccountingRefused as exc:
                 raise ControlRefused(f"child accounting refused: {exc}") from exc
+            self._join_child_intent_locked(record)
             self._verify_store()
             assert self._journal is not None
             entry = self._append_durable(
@@ -4592,6 +4621,79 @@ class CampaignController:
                 record_id=record["digest"])
             chain.append(copy.deepcopy(record))
             return {"status": "accepted", "digest": record["digest"], "role": role}
+
+    def _join_child_intent_locked(self, record: Mapping[str, Any]) -> None:
+        """A source-build child joins its durable intent-before-launch (AKU-06l)."""
+        if record["operation"] != "source_build" or record["role"] != "build":
+            return
+        intent = self._driver_child_intents.get(record["transition_id"], {}).get(
+            record["request_id"])
+        if intent is None or any(intent[name] != record[name] for name in (
+                "binding_digest", "plan_digest", "lineage_id", "stage_id")):
+            raise ControlRefused("build child has no matching durable intent before launch")
+
+    def unified_driver_child_intent(self, request: Any) -> dict[str, Any]:
+        """Durably record a bound source-build child's intent before its launch.
+
+        ``replayed`` marks an intent from an earlier controller lifetime: with no exact
+        terminal it is accounting uncertainty, so the caller must not relaunch."""
+        binding = getattr(request, "accounting_binding", None)
+        if (not isinstance(request, worker_lifecycle_module.StageRequest)
+                or request.stage != "build"
+                or not isinstance(binding, worker_lifecycle_module.AccountingBinding)):
+            raise ControlRefused("child intent requires a bound typed build request")
+        with self._mutex:
+            self._require_active_locked()
+            if self.snapshot_version != 3 or self._scheduler_engine is None:
+                raise ControlRefused("child intent requires the unified v3 controller")
+            issued = self._driver_issued.get(binding.catalog_digest)
+            try:
+                binding.verify_issued(issued)
+            except worker_lifecycle_module.LifecycleRefused as exc:
+                raise ControlRefused(f"child intent binding refused: {exc}") from exc
+            transition = issued["transition_id"]
+            if transition in self._driver_settled:
+                raise ControlRefused("child intent targets an already settled transition")
+            try:
+                row = operation_accounting_module.make_child_intent(
+                    campaign_id=self.resolved.campaign_id,
+                    config_generation=self.config_generation,
+                    config_digest=self.config_digest,
+                    supervisor_incarnation=self.supervisor_incarnation,
+                    catalog_id=issued["catalog_id"], transition_id=transition,
+                    selection_digest=scheduling.Selection.from_dict(
+                        issued["selection"]).digest, operation="source_build",
+                    role="build", binding_digest=binding.digest,
+                    request_id=request.request_id, plan_digest=request.plan_digest,
+                    lineage_id=request.lineage_id, stage_id=request.stage_id,
+                    artifact_contract_digest=request.artifact_contract_digest)
+            except operation_accounting_module.OperationAccountingRefused as exc:
+                raise ControlRefused(f"child intent refused: {exc}") from exc
+            intents = self._driver_child_intents.setdefault(transition, {})
+            prior = intents.get(request.request_id)
+            if prior is not None:
+                if {**prior, "supervisor_incarnation": 0, "digest": ""} != {
+                        **row, "supervisor_incarnation": 0, "digest": ""}:
+                    raise ControlRefused("child intent retry differs from durable record")
+                return {"status": "duplicate", "digest": prior["digest"],
+                        "replayed": prior["supervisor_incarnation"]
+                        < self.supervisor_incarnation}
+            self._verify_store()
+            self._append_durable(journal_module.KIND_UNIFIED_DRIVER_CHILD_INTENT, row,
+                                 record_id=row["digest"])
+            intents[request.request_id] = copy.deepcopy(row)
+            return {"status": "accepted", "digest": row["digest"], "replayed": False}
+
+    def unified_driver_uncertain_children(self, transition_id: str) -> tuple[str, ...]:
+        """Request ids with a durable intent but no accounted child: accounting uncertainty."""
+        with self._mutex:
+            self._require_active_locked()
+            return self._uncertain_children_locked(transition_id)
+
+    def _uncertain_children_locked(self, transition_id: str) -> tuple[str, ...]:
+        accounted = {c["request_id"] for c in self._driver_children.get(transition_id, ())}
+        return tuple(sorted(set(self._driver_child_intents.get(transition_id, {}))
+                            - accounted))
 
     def unified_driver_children(self, transition_id: str) -> tuple[dict[str, Any], ...]:
         """Read the durable ordered child prefix of one transition (copies)."""
@@ -4603,7 +4705,10 @@ class CampaignController:
         """Settle one selected operation once from its durable ordered child prefix.
 
         Carries child digests, never a caller-chosen receipt. An empty prefix with a
-        ``denial_ref`` is the explicit zero-cost no-receipt cancellation."""
+        ``denial_ref`` is the explicit zero-cost no-receipt cancellation. A registered
+        settlement validator is the sole execution validator for v2 as for v1: it is
+        consulted outside the mutex and must return the exact request (a v1-only
+        validator therefore refuses v2)."""
         fields = {"schema", "catalog_id", "transition_id", "selection", "outcome",
                   "children", "denial_ref"}
         if not isinstance(value, Mapping) or set(value) != fields \
@@ -4612,60 +4717,89 @@ class CampaignController:
         request = copy.deepcopy(dict(value))
         with self._mutex:
             self._require_active_locked()
-            if self.snapshot_version != 3 or self._scheduler_engine is None:
-                raise ControlRefused("operation settlement requires the unified v3 controller")
-            issued = self._driver_issued.get(request["catalog_id"])
-            if (issued is None or issued["transition_id"] != request["transition_id"]
-                    or issued["selection"] != request["selection"]):
-                raise ControlRefused("settlement does not bind an issued transition")
-            prior = self._driver_settled.get(request["transition_id"])
-            if prior is not None:
-                if (prior["schema"] == journal_module.UNIFIED_DRIVER_SETTLED_SCHEMA_V2
-                        and all(prior[name] == request[name] for name in (
-                            "catalog_id", "transition_id", "selection", "outcome",
-                            "children", "denial_ref"))):
-                    return {"schema": DRIVER_SETTLEMENT_RECEIPT_SCHEMA,
-                            "transition_id": request["transition_id"],
-                            "status": "duplicate",
-                            "accounting_projection_digest":
-                                prior["after_projection_digest"]}
-                raise ControlRefused("settlement retry conflicts with durable content")
-            children = list(self._driver_children.get(request["transition_id"], ()))
-            refs = ([f"lifecycle:{child['terminal_digest']}" for child in children]
-                    + ([f"denial:{request['denial_ref']}"]
-                       if request["denial_ref"] is not None else []))
-            event = {
-                "schema": journal_module.UNIFIED_DRIVER_SETTLED_SCHEMA_V2,
-                "catalog_id": request["catalog_id"], "transition_id": request["transition_id"],
-                "campaign_id": self.resolved.campaign_id,
-                "config_generation": self.config_generation,
-                "config_digest": self.config_digest,
-                "supervisor_incarnation": self.supervisor_incarnation,
-                "selection": request["selection"], "outcome": request["outcome"],
-                "children": list(request["children"]), "denial_ref": request["denial_ref"],
-                "terminal_refs": refs, "prior_projection_digest": "0" * 64,
-                "after_projection_digest": "0" * 64}
+            checked = self._operation_settle_locked(request, append=False)
+            if checked["status"] == "duplicate":
+                return checked
+            validator = self._driver_settlement_validator
+            token, incarnation = self._lifetime_token, self.supervisor_incarnation
+        if validator is not None:
             try:
-                preview = self._operation_preview_locked(event)
-            except (scheduling.SchedulingRefused,
-                    operation_accounting_module.OperationAccountingRefused) as exc:
-                raise ControlRefused(f"operation settlement refused: {exc}") from exc
-            event["prior_projection_digest"] = preview.prior.projection_digest
-            event["after_projection_digest"] = preview.after.projection_digest
-            violations = journal_module._validate_native_payload(
-                journal_module.KIND_UNIFIED_DRIVER_SETTLED, event)
-            if violations:
-                raise ControlRefused("operation settlement is invalid: " + "; ".join(violations))
-            self._verify_store()
-            assert self._journal is not None
-            entry = self._append_durable(
-                journal_module.KIND_UNIFIED_DRIVER_SETTLED, event,
-                record_id=request["transition_id"],
-                after=lambda: self._scheduler_engine.apply_operation_preview(preview))
-            self._driver_settled[request["transition_id"]] = copy.deepcopy(event)
-            return {"schema": DRIVER_SETTLEMENT_RECEIPT_SCHEMA,
-                    "transition_id": request["transition_id"], "status": "accepted",
-                    "accounting_projection_digest": preview.after.projection_digest}
+                verified = validator(copy.deepcopy(request))
+            except Exception as exc:
+                raise ControlRefused(
+                    f"trusted operation settlement verification failed: {exc}") from exc
+            if not isinstance(verified, Mapping) or dict(verified) != request:
+                raise ControlRefused("trusted operation settlement verifier returned other data")
+        with self._mutex:
+            self._require_active_locked()
+            if (token is not self._lifetime_token or incarnation != self.supervisor_incarnation
+                    or validator is not self._driver_settlement_validator):
+                raise ControlRefused(
+                    "settlement verification belongs to a stale controller lifetime")
+            return self._operation_settle_locked(request, append=True)
+
+    def _operation_settle_locked(self, request: dict[str, Any], *, append: bool
+                                 ) -> dict[str, Any]:
+        """Derive (and, when ``append``, durably settle) one v2 operation under the mutex."""
+        if self.snapshot_version != 3 or self._scheduler_engine is None:
+            raise ControlRefused("operation settlement requires the unified v3 controller")
+        issued = self._driver_issued.get(request["catalog_id"])
+        if (issued is None or issued["transition_id"] != request["transition_id"]
+                or issued["selection"] != request["selection"]):
+            raise ControlRefused("settlement does not bind an issued transition")
+        prior = self._driver_settled.get(request["transition_id"])
+        if prior is not None:
+            if (prior["schema"] == journal_module.UNIFIED_DRIVER_SETTLED_SCHEMA_V2
+                    and all(prior[name] == request[name] for name in (
+                        "catalog_id", "transition_id", "selection", "outcome",
+                        "children", "denial_ref"))):
+                return {"schema": DRIVER_SETTLEMENT_RECEIPT_SCHEMA,
+                        "transition_id": request["transition_id"],
+                        "status": "duplicate",
+                        "accounting_projection_digest":
+                            prior["after_projection_digest"]}
+            raise ControlRefused("settlement retry conflicts with durable content")
+        if self._uncertain_children_locked(request["transition_id"]):
+            raise ControlRefused(
+                "operation has a child intent without accounted cost; accounting is uncertain")
+        children = list(self._driver_children.get(request["transition_id"], ()))
+        refs = ([f"lifecycle:{child['terminal_digest']}" for child in children]
+                + ([f"denial:{request['denial_ref']}"]
+                   if request["denial_ref"] is not None else []))
+        event = {
+            "schema": journal_module.UNIFIED_DRIVER_SETTLED_SCHEMA_V2,
+            "catalog_id": request["catalog_id"], "transition_id": request["transition_id"],
+            "campaign_id": self.resolved.campaign_id,
+            "config_generation": self.config_generation,
+            "config_digest": self.config_digest,
+            "supervisor_incarnation": self.supervisor_incarnation,
+            "selection": request["selection"], "outcome": request["outcome"],
+            "children": list(request["children"]), "denial_ref": request["denial_ref"],
+            "terminal_refs": refs, "prior_projection_digest": "0" * 64,
+            "after_projection_digest": "0" * 64}
+        try:
+            preview = self._operation_preview_locked(event)
+        except (scheduling.SchedulingRefused,
+                operation_accounting_module.OperationAccountingRefused) as exc:
+            raise ControlRefused(f"operation settlement refused: {exc}") from exc
+        event["prior_projection_digest"] = preview.prior.projection_digest
+        event["after_projection_digest"] = preview.after.projection_digest
+        violations = journal_module._validate_native_payload(
+            journal_module.KIND_UNIFIED_DRIVER_SETTLED, event)
+        if violations:
+            raise ControlRefused("operation settlement is invalid: " + "; ".join(violations))
+        if not append:
+            return {"status": "checked"}
+        self._verify_store()
+        assert self._journal is not None
+        self._append_durable(
+            journal_module.KIND_UNIFIED_DRIVER_SETTLED, event,
+            record_id=request["transition_id"],
+            after=lambda: self._scheduler_engine.apply_operation_preview(preview))
+        self._driver_settled[request["transition_id"]] = copy.deepcopy(event)
+        return {"schema": DRIVER_SETTLEMENT_RECEIPT_SCHEMA,
+                "transition_id": request["transition_id"], "status": "accepted",
+                "accounting_projection_digest": preview.after.projection_digest}
 
     def unified_driver_settle(self, value: Mapping[str, Any]) -> dict[str, Any]:
         """Verify outside the mutex, then journal and apply exact held accounting."""
@@ -5280,6 +5414,7 @@ class CampaignController:
             self._driver_issued = {}
             self._driver_settled = {}
             self._driver_children = {}
+            self._driver_child_intents = {}
             self._driver_settlement_validator = None
             artifact_store, self._driver_artifact_store = self._driver_artifact_store, None
             self._a2_execution_entries = {}

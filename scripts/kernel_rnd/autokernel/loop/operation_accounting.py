@@ -11,7 +11,12 @@ from typing import Any, Mapping, Sequence
 from . import scheduling
 
 CHILD_ACCOUNTED_SCHEMA = "epyc.autokernel.unified_driver_child_accounted.v1"
+# v2 = a fallback invocation (attempt >= 1) of an already accounted role; v1 stays the
+# exact first-invocation record, so single-invocation chains are byte-identical.
+CHILD_ACCOUNTED_SCHEMA_V2 = "epyc.autokernel.unified_driver_child_accounted.v2"
+MAX_OPERATION_CHILDREN = 32
 SETTLED_V2_SCHEMA = "epyc.autokernel.unified_driver_settled.v2"
+CHILD_INTENT_SCHEMA = "epyc.autokernel.unified_driver_child_intent.v1"
 SETTLEMENT_REQUEST_V2_SCHEMA = "epyc.autokernel.unified_driver_settlement_request.v2"
 OPERATIONS = ("source_build", "actor_preparation")
 ROLES = scheduling.OPERATION_ROLES
@@ -24,6 +29,12 @@ _CHILD_FIELDS = frozenset({
     "catalog_id", "transition_id", "selection_digest", "operation", "role", "ordinal",
     "binding_digest", "request_id", "plan_digest", "lineage_id", "stage_id", "terminal",
     "terminal_digest", "receipt", "receipt_digest", "disposition", "predecessor", "digest"})
+_CHILD_FIELDS_V2 = _CHILD_FIELDS | {"attempt"}
+_INTENT_FIELDS = frozenset({
+    "schema", "campaign_id", "config_generation", "config_digest", "supervisor_incarnation",
+    "catalog_id", "transition_id", "selection_digest", "operation", "role",
+    "binding_digest", "request_id", "plan_digest", "lineage_id", "stage_id",
+    "artifact_contract_digest", "digest"})
 _TERMINAL_FIELDS = frozenset({
     "worker_id", "worker_generation", "request_id", "plan_digest", "lineage_id", "stage_id",
     "grant_id", "grant_generation", "container_id", "return_code", "result_digest",
@@ -70,10 +81,11 @@ def make_child_record(*, campaign_id: str, config_generation: int, config_digest
                       selection_digest: str, operation: str, role: str,
                       binding_digest: str, terminal: Mapping[str, Any],
                       receipt: Mapping[str, Any], disposition: str,
-                      predecessor: str | None) -> dict[str, Any]:
-    """Build one closed child accounting record (digest included)."""
+                      predecessor: str | None, attempt: int = 0) -> dict[str, Any]:
+    """Build one closed child accounting record (digest included); v2 iff attempt > 0."""
     body = {
-        "schema": CHILD_ACCOUNTED_SCHEMA, "campaign_id": campaign_id,
+        "schema": CHILD_ACCOUNTED_SCHEMA_V2 if attempt else CHILD_ACCOUNTED_SCHEMA,
+        "campaign_id": campaign_id,
         "config_generation": config_generation, "config_digest": config_digest,
         "supervisor_incarnation": supervisor_incarnation, "catalog_id": catalog_id,
         "transition_id": transition_id, "selection_digest": selection_digest,
@@ -84,18 +96,21 @@ def make_child_record(*, campaign_id: str, config_generation: int, config_digest
         "stage_id": terminal.get("stage_id"), "terminal": dict(terminal),
         "terminal_digest": _digest(dict(terminal)), "receipt": dict(receipt),
         "receipt_digest": _digest(dict(receipt)), "disposition": disposition,
-        "predecessor": predecessor}
+        "predecessor": predecessor, **({"attempt": attempt} if attempt else {})}
     body["digest"] = child_digest(body)
     return validate_child_record(body)
 
 
 def validate_child_record(value: Any) -> dict[str, Any]:
     """Closed-shape and self-consistency validation; unknown fields/roles refuse."""
-    if not isinstance(value, Mapping) or set(value) != _CHILD_FIELDS:
+    v2 = isinstance(value, Mapping) and value.get("schema") == CHILD_ACCOUNTED_SCHEMA_V2
+    if not isinstance(value, Mapping) or set(value) != (_CHILD_FIELDS_V2 if v2 else _CHILD_FIELDS):
         raise OperationAccountingRefused("child accounting record has missing/unknown fields")
     row = copy.deepcopy(dict(value))
-    if row["schema"] != CHILD_ACCOUNTED_SCHEMA:
+    if row["schema"] not in (CHILD_ACCOUNTED_SCHEMA, CHILD_ACCOUNTED_SCHEMA_V2):
         raise OperationAccountingRefused("child accounting record schema is unsupported")
+    if v2:
+        _positive(row["attempt"], "attempt")
     _text(row["campaign_id"], "campaign_id")
     _positive(row["config_generation"], "config_generation")
     _positive(row["supervisor_incarnation"], "supervisor_incarnation")
@@ -111,7 +126,7 @@ def validate_child_record(value: Any) -> dict[str, Any]:
         raise OperationAccountingRefused("child accounting disposition is invalid")
     for name in ("request_id", "lineage_id", "stage_id"):
         _text(row[name], name)
-    if row["ordinal"] == 0:
+    if row["ordinal"] == 0 and not v2:
         if row["predecessor"] is not None:
             raise OperationAccountingRefused("first child cannot name a predecessor")
     else:
@@ -139,14 +154,57 @@ def validate_child_record(value: Any) -> dict[str, Any]:
     return row
 
 
+def child_attempt(row: Mapping[str, Any]) -> int:
+    """The per-role invocation index (0 = first, v1; >= 1 = fallback, v2)."""
+    return row.get("attempt", 0)
+
+
+def make_child_intent(**fields: Any) -> dict[str, Any]:
+    """One closed build-intent-before-launch record (digest included).
+
+    Written before the child is launched; a replayed intent with no accounted child
+    is accounting uncertainty, never success and never zero cost."""
+    body = {"schema": CHILD_INTENT_SCHEMA, **fields}
+    body["digest"] = child_digest(body)
+    return validate_child_intent(body)
+
+
+def validate_child_intent(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != _INTENT_FIELDS \
+            or value["schema"] != CHILD_INTENT_SCHEMA:
+        raise OperationAccountingRefused("child intent has missing/unknown fields or schema")
+    row = copy.deepcopy(dict(value))
+    _text(row["campaign_id"], "campaign_id")
+    _positive(row["config_generation"], "config_generation")
+    _positive(row["supervisor_incarnation"], "supervisor_incarnation")
+    for name in ("config_digest", "catalog_id", "transition_id", "selection_digest",
+                 "binding_digest", "plan_digest", "artifact_contract_digest", "digest"):
+        _sha(row[name], name)
+    for name in ("request_id", "lineage_id", "stage_id"):
+        _text(row[name], name)
+    if row["operation"] != "source_build" or row["role"] != "build":
+        raise OperationAccountingRefused("child intent is defined only for a source build")
+    if child_digest(row) != row["digest"]:
+        raise OperationAccountingRefused("child intent content digest differs")
+    return row
+
+
 def validate_child_chain(children: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """An ordered planner/critic/build prefix with exact predecessors and no reuse."""
+    """An ordered planner/critic/build sequence with exact predecessors and no reuse.
+
+    Each role may repeat (fallback invocations, attempt 0, 1, ...) before the next role;
+    no role is skipped or revisited."""
     rows = [validate_child_record(item) for item in children]
+    if len(rows) > MAX_OPERATION_CHILDREN:
+        raise OperationAccountingRefused("operation has too many child records")
     seen_requests: set[str] = set()
     seen_receipts: set[str] = set()
     previous: dict[str, Any] | None = None
-    for index, row in enumerate(rows):
-        if row["ordinal"] != index:
+    for row in rows:
+        expected = ((0, 0) if previous is None else
+                    (previous["ordinal"], child_attempt(previous) + 1)
+                    if row["ordinal"] == previous["ordinal"] else (previous["ordinal"] + 1, 0))
+        if (row["ordinal"], child_attempt(row)) != expected:
             raise OperationAccountingRefused("child records are not an ordered role prefix")
         if row["request_id"] in seen_requests:
             raise OperationAccountingRefused("child request is reused by another role")
@@ -186,8 +244,9 @@ def check_outcome_against_children(outcome: str, rows: Sequence[Mapping[str, Any
         _sha(denial_ref, "denial_ref")
         return
     if outcome == "prerequisite":
-        if (tuple(row["role"] for row in rows) != ROLES
-                or any(row["disposition"] != "accepted" for row in rows)):
+        last = {row["role"]: row for row in rows}  # each role's final invocation
+        if (tuple(last) != ROLES
+                or any(row["disposition"] != "accepted" for row in last.values())):
             raise OperationAccountingRefused(
                 "prerequisite requires accepted planner, critic and build children")
         if denial_ref is not None:
@@ -228,7 +287,8 @@ def validate_settled_v2(payload: Any) -> list[str]:
     if (not isinstance(children, list)
             or any(not isinstance(i, str) or len(i) != 64 or any(c not in _SHA for c in i)
                    for i in children)
-            or len(children) != len(set(children)) or len(children) > len(ROLES)):
+            or len(children) != len(set(children))
+            or len(children) > MAX_OPERATION_CHILDREN):
         out.append("children: required unique ordered child digests")
     denial = payload["denial_ref"]
     if denial is not None:
@@ -240,7 +300,7 @@ def validate_settled_v2(payload: Any) -> list[str]:
             denial is None or payload["outcome"] != "failed"):
         out.append("children: an empty prefix requires a failed outcome and denial_ref")
     if isinstance(children, list) and children and payload["outcome"] == "prerequisite" \
-            and (len(children) != len(ROLES) or denial is not None):
+            and (len(children) < len(ROLES) or denial is not None):
         out.append("outcome: prerequisite requires every role and no denial")
     try:
         json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -250,7 +310,9 @@ def validate_settled_v2(payload: Any) -> list[str]:
 
 
 __all__ = [
-    "CHILD_ACCOUNTED_SCHEMA", "SETTLED_V2_SCHEMA", "SETTLEMENT_REQUEST_V2_SCHEMA",
+    "CHILD_INTENT_SCHEMA", "make_child_intent", "validate_child_intent",
+    "CHILD_ACCOUNTED_SCHEMA", "CHILD_ACCOUNTED_SCHEMA_V2", "MAX_OPERATION_CHILDREN",
+    "child_attempt", "SETTLED_V2_SCHEMA", "SETTLEMENT_REQUEST_V2_SCHEMA",
     "OPERATIONS", "ROLES", "DISPOSITIONS", "SETTLEMENT_OUTCOMES",
     "OperationAccountingRefused", "child_digest", "make_child_record",
     "validate_child_record", "validate_child_chain", "operation_children",

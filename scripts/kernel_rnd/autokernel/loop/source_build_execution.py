@@ -324,6 +324,14 @@ class SourceBuildStageExecutor:
             accounting_binding=self._accounting_binding)
         lookup = dict(request_id=request.request_id, plan_digest=request.plan_digest,
                       lineage_id=request.lineage_id, stage_id=request.stage_id)
+        if request.accounting_binding is not None:
+            # AKU-06l: the bound build intent is durable before launch; an earlier
+            # lifetime's intent without a terminal is uncertain and never relaunched.
+            intent = self.controller.unified_driver_child_intent(request)
+            if intent["replayed"] and self.controller.worker_terminal_for_request(
+                    **lookup) is None:
+                raise SourceBuildExecutionUncertain(
+                    "build intent from an earlier lifetime has no terminal; cost is uncertain")
         try:
             terminal = self.controller.worker_terminal_for_request(**lookup)
             if terminal is None:

@@ -617,6 +617,14 @@ class SeedAccount:
 OPERATION_ROLES = ("planner", "critic", "build")
 
 
+def ordered_operation_roles(roles: Sequence[str]) -> bool:
+    """A planner-first role sequence; each child repeats its role (a fallback
+    invocation) or advances to the next role, never skipping or going back."""
+    index = [OPERATION_ROLES.index(r) if r in OPERATION_ROLES else -9 for r in roles]
+    return bool(index) and index[0] == 0 and all(
+        b - a in (0, 1) for a, b in zip(index, index[1:]))
+
+
 @dataclass(frozen=True, slots=True)
 class OperationChild:
     """One original provider receipt bound to a selected operation role (AKU-06l)."""
@@ -2046,7 +2054,7 @@ class SchedulerEngine:
             and not receipt.gpu_device_ids for receipt in receipts)
         if operation:
             roles = tuple(operation_roles)
-            if (len(roles) != len(receipts) or roles != OPERATION_ROLES[:len(roles)]):
+            if len(roles) != len(receipts) or not ordered_operation_roles(roles):
                 raise SchedulingRefused(
                     "operation child roles must be an ordered planner/critic/build prefix")
         if cpu_segments:
