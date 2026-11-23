@@ -43,7 +43,8 @@
    "target_surface": "ggml/src/ggml-cuda/ggml-cuda.cu",
    "target_symbol": "ggml_cuda_graph_get_key",
    "effect_fraction": -0.02,
-   "reason": "IMPLEMENTED env-gated and measured NEUTRAL, not landed. Clean re-eval (quiet card, strictly sequential, fresh server per run, single request; 3/3 reps byte-identical): Q8 spec-dec 107.2 vs 109.5 t/s (-2%) with output BYTE-IDENTICAL to default, so the change is numerically transparent but gives no speedup. Q4 spec-dec +6% but Q4 stayed noisy (2 output variants), not conclusive. Note the collision itself is UNCONFIRMED: the [SHAPE_KEY] keylog never fired because backend GGML_LOG_INFO is filtered during decode. Patch preserved at /mnt/raid0/llm/llama.cpp-experimental/lever-a-shape-key.patch. Revisit only if a profile shows verify re-capture is a MEASURED bottleneck, and fix the keylog to fprintf(stderr) first. Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md."
+   "reason": "IMPLEMENTED env-gated and measured NEUTRAL, not landed. Clean re-eval (quiet card, strictly sequential, fresh server per run, single request; 3/3 reps byte-identical): Q8 spec-dec 107.2 vs 109.5 t/s (-2%) with output BYTE-IDENTICAL to default, so the change is numerically transparent but gives no speedup. Q4 spec-dec +6% but Q4 stayed noisy (2 output variants), not conclusive. Note the collision itself is UNCONFIRMED: the [SHAPE_KEY] keylog never fired because backend GGML_LOG_INFO is filtered during decode. Patch preserved at /mnt/raid0/llm/llama.cpp-experimental/lever-a-shape-key.patch. Revisit only if a profile shows verify re-capture is a MEASURED bottleneck, and fix the keylog to fprintf(stderr) first. Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md.",
+   "sampling": "unknown"
   },
   {
    "status": "measured_null",
@@ -143,7 +144,8 @@
    "target_surface": "src/models/dflash.cpp + common/speculative.cpp (draft-dspine spec type)",
    "target_symbol": "draft-dspine (branch llama.cpp-experimental-c9-dspine-20261108, tuned 01ca8760d)",
    "effect_fraction": -0.093,
-   "reason": "MEASURED NOT_OUTPERFORMS (stopped on futility), 27B Q8_0, q8_0 KV, np1, Q8_0 drafter. n7 0.907x M1 / 0.970x LongHealth; n15 0.815x / 1.045x, 0 garbage. The n15 LongHealth +4.5% is one first-pass number with no noise estimate. Tune row: best arm Q8_0 n7 0.915x DFlash2 n7. Q8_0 beat BF16 1.33/1.25/1.21x at n7/n11/n15, so no BF16 rerun. Dynamic verification and ReplaySSM were not ported. Source: evidence /mnt/raid0/llm/tmp/dspine-b16-vs-dflash2-20261108/out/RESULT.json."
+   "reason": "MEASURED NOT_OUTPERFORMS (stopped on futility), 27B Q8_0, q8_0 KV, np1, Q8_0 drafter. n7 0.907x M1 / 0.970x LongHealth; n15 0.815x / 1.045x, 0 garbage. The n15 LongHealth +4.5% is one first-pass number with no noise estimate. Tune row: best arm Q8_0 n7 0.915x DFlash2 n7. Q8_0 beat BF16 1.33/1.25/1.21x at n7/n11/n15, so no BF16 rerun. Dynamic verification and ReplaySSM were not ported. Source: evidence /mnt/raid0/llm/tmp/dspine-b16-vs-dflash2-20261108/out/RESULT.json.",
+   "sampling": "unknown"
   },
   {
    "status": "measured_null",
@@ -153,7 +155,16 @@
    "target_surface": "common/speculative.cpp + ggml-cuda verify path (DF2 tree port)",
    "target_symbol": "llama.cpp-experimental-c10-dftree-20261109 @ 84934b297 (unpushed)",
    "effect_fraction": null,
-   "reason": "PREMISE MEASURED, TREE NOT MEASURED, no effect size. C9 d210f85c2 store, 27B Q8_0, q8_0 KV, MI210, flat chain batches rows 8..16 (not a true tree-masked verify): s = 2.39 ms/row (95% CI 2.26-2.51) at d512, 2 repeats, pass value 0.5; d32768 2.29 ms/row but CI -0.78..5.36, unresolved. Row verdict FUTILE_CLOSE_HYBRID_TREE_PORT. Inferred: net at B=8 needs tau_ratio about 1.17 for the 1.05 bar against an estimated +2-8%. Tree port code ran only 12/12 synthetic replay tests. Reopen if s falls below 0.5 ms or a top-512 trained head (T2) fires. Source: evidence /mnt/raid0/llm/tmp/c10-verify-slope-20261109/out/RESULT.json. Served-T re-test 2026-11-23 (da6e2f5ae): stands at every T; real bar is tau 1.28 (W12) / 1.51 (W16), not ~1.17 (that holds only for ~2 extra rows); DICE gives 1.10-1.12; reopen only if s < 0.5 ms/row."
+   "reason": "PREMISE MEASURED, TREE NOT MEASURED, no effect size. C9 d210f85c2 store, 27B Q8_0, q8_0 KV, MI210, flat chain batches rows 8..16 (not a true tree-masked verify): s = 2.39 ms/row (95% CI 2.26-2.51) at d512, 2 repeats, pass value 0.5; d32768 2.29 ms/row but CI -0.78..5.36, unresolved. Row verdict FUTILE_CLOSE_HYBRID_TREE_PORT. Inferred: net at B=8 needs tau_ratio about 1.17 for the 1.05 bar against an estimated +2-8%. Tree port code ran only 12/12 synthetic replay tests. Reopen if s falls below 0.5 ms or a top-512 trained head (T2) fires. Source: evidence /mnt/raid0/llm/tmp/c10-verify-slope-20261109/out/RESULT.json. Served-T re-test 2026-11-23 (da6e2f5ae): stands at every T; real bar is tau 1.28 (W12) / 1.51 (W16), not ~1.17 (that holds only for ~2 extra rows); DICE gives 1.10-1.12; reopen only if s < 0.5 ms/row.",
+   "sampling": [
+    {
+     "temperature": 0.0,
+     "top_p": null,
+     "top_k": null,
+     "exact_path": null,
+     "basis": "handoffs/active/autokernel-loop.md DTREE-STOCH-VERIFY note: all dtree work is greedy-only with an oracle gate"
+    }
+   ]
   },
   {
    "status": "measured_null",
@@ -273,7 +284,8 @@
    "target_surface": "drafter GGUF quant (DF2-11)",
    "target_symbol": "DF2-11",
    "effect_fraction": -0.05,
-   "reason": "MEASURED DF2-11-SWEEP-B: FFNQ4 0.787, FCQ8 0.951, Q2KC 0.890 (95% t-CI all < 1); BF16 0.824x REF even after the MMVF cap-8 fix. Q8_0 drafter stays. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+   "reason": "MEASURED DF2-11-SWEEP-B: FFNQ4 0.787, FCQ8 0.951, Q2KC 0.890 (95% t-CI all < 1); BF16 0.824x REF even after the MMVF cap-8 fix. Q8_0 drafter stays. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md",
+   "sampling": "unknown"
   },
   {
    "status": "measured_null",
@@ -283,7 +295,16 @@
    "target_surface": "tools/server tree verify",
    "target_symbol": "DTREE T12",
    "effect_fraction": -0.076,
-   "reason": "MEASURED: T12/L 0.924 (tree-on-V5I r4); ruled out even with device tree accept (rowcost projection). Only T16 reaches parity, and needs DTREE-GDN-BATCH to win. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+   "reason": "MEASURED: T12/L 0.924 (tree-on-V5I r4); ruled out even with device tree accept (rowcost projection). Only T16 reaches parity, and needs DTREE-GDN-BATCH to win. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md",
+   "sampling": [
+    {
+     "temperature": 0.0,
+     "top_p": null,
+     "top_k": null,
+     "exact_path": null,
+     "basis": "handoffs/active/autokernel-loop.md DTREE-STOCH-VERIFY note: all dtree work is greedy-only with an oracle gate"
+    }
+   ]
   },
   {
    "status": "measured_null",

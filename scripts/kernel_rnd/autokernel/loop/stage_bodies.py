@@ -44,6 +44,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from . import sampling_axis
+
 SCHEMA = "epyc.autokernel.stage_result.v1"
 STAGES = ("build", "oracle-kld", "ab-timing", "fold-check")
 CANONICAL_TREE = Path("/mnt/raid0/llm/llama.cpp")
@@ -271,7 +273,8 @@ def trigger_lineage(event: Mapping[str, Any], *, out_root: Path | None = None,
 def _base(stage: str, cand: Mapping[str, Any]) -> dict:
     return {"schema": SCHEMA, "stage": stage, "row": cand.get("row"), "candidate": cand.get("id"),
             "base_sha": cand.get("base_sha"), "patch_sha": cand.get("patch_sha"),
-            "hypothesis_id": cand.get("hypothesis_id"), "at": _now(), "complete": True}
+            "hypothesis_id": cand.get("hypothesis_id"), "at": _now(), "complete": True,
+            "sampling": sampling_axis.normalize(cand.get("sampling"))}
 
 
 def _build_dir(cand: Mapping[str, Any], which: str = "candidate") -> Path:

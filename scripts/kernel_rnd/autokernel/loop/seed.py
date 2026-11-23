@@ -63,8 +63,11 @@ def install(store_root: Path, *, seeds: Path = SEEDS) -> dict:
         # time-based (two transients minutes apart are genuinely distinct events), so
         # seeds carry an explicit content digest, which `_attempt_id` prefers.
         record = dict(record)
+        # `sampling` (AK-TEMP-AXIS-1) is metadata added after these records were first
+        # seeded: it stays out of the digest so existing stores do not re-add them.
+        legacy = {k: v for k, v in record.items() if k != "sampling"}
         record.setdefault("proposal_sha256", hashlib.sha256(json.dumps(
-            record, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest())
+            legacy, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest())
         if archive.record(store_root, record, epoch=epoch, recorded_at=now,
                           campaign_id="ak-loop-seed"):
             added += 1
