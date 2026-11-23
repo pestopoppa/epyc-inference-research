@@ -44,8 +44,12 @@ def _stable_code_projection(code: types.CodeType) -> dict[str, Any]:
     }
 
 
-def _loaded_producer_build_identity() -> dict[str, Any]:
-    """Hash loaded callable bytecode and selected constants, with exact scope."""
+def _loaded_producer_build_identity(namespace: dict, module_name: str) -> dict[str, Any]:
+    """Hash loaded callable bytecode and selected constants, with exact scope.
+
+    `namespace`/`module_name` name the module whose code is identified (campaign_control, via its thin wrapper);
+    the verbatim move into this file had silently narrowed the scope to THIS module's globals.
+    """
     digest = hashlib.sha256()
     included: list[str] = []
 
@@ -60,10 +64,10 @@ def _loaded_producer_build_identity() -> dict[str, Any]:
             separators=(",", ":"), ensure_ascii=False).encode())
         included.append(label)
 
-    for name, value in sorted(globals().items()):
-        if isinstance(value, types.FunctionType) and value.__module__ == __name__:
+    for name, value in sorted(dict(namespace).items()):
+        if isinstance(value, types.FunctionType) and value.__module__ == module_name:
             add_callable(name, value, "module_function")
-        elif isinstance(value, type) and value.__module__ == __name__:
+        elif isinstance(value, type) and value.__module__ == module_name:
             for member_name, member in sorted(vars(value).items()):
                 symbol = f"{name}.{member_name}"
                 if isinstance(member, types.FunctionType):
@@ -93,7 +97,7 @@ def _loaded_producer_build_identity() -> dict[str, Any]:
     included.append("installed_dependency:runtime_aggregates")
     return {"schema": "epyc.autokernel.loaded_producer_build.v1",
             "scope": "campaign_control_callable_bytecode_and_selected_constants",
-            "module": __name__,
+            "module": module_name,
             "identity_basis": "loaded_callable_bytecode_and_constants_sha256",
             "included_symbols": included,
             "excluded_scope": ["campaign_service_transport", "journal_validator",

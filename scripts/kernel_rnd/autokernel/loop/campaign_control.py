@@ -46,8 +46,12 @@ from .campaign_snapshot_validation import (  # noqa: F401
 )
 # re-exported: moved verbatim to campaign_build_identity.py
 from .campaign_build_identity import (  # noqa: F401
-    _loaded_producer_build_identity, _stable_code_projection,
+    _loaded_producer_build_identity as _build_identity, _stable_code_projection,
 )
+
+
+def _loaded_producer_build_identity() -> dict[str, Any]:
+    return _build_identity(globals(), __name__)  # scope = THIS module's code, as before the move
 # re-exported: moved verbatim to campaign_command_validation.py
 from .campaign_command_validation import (  # noqa: F401
     COMMAND_SCHEMA, OPERATIONS, command_digest, validate_command,
