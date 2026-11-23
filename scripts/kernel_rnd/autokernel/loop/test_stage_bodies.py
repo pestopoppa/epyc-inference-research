@@ -171,7 +171,11 @@ def test_fixture_repo_cas_is_real_compare_and_swap(tmp_path):
     assert g("rev-parse", REF) == patch
 
 
-def test_cli_writes_result(tmp_path):
+def test_cli_writes_result(tmp_path, monkeypatch):
+    # main() mutates os.environ (guard_device); register the keys so monkeypatch restores them (CTC-2-TI)
+    for k in ("HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES"):
+        monkeypatch.setenv(k, "")
+        monkeypatch.delenv(k)
     c = cand(tmp_path)
     cp = tmp_path / "c.json"
     cp.write_text(json.dumps(c))
@@ -189,3 +193,14 @@ def test_trigger_lineage_runs_generate(tmp_path):
                            run=lambda argv: seen.append(argv) or 0)
     assert seen and seen[0][0] == "generate" and "--repo" in seen[0]
     assert r["lineage_rc"] == 0 and (Path(r["lineage_out"]) / "event.json").exists()
+
+
+def test_cli_does_not_leak_device_env(tmp_path, monkeypatch):
+    """CTC-2-TI regression: the CLI's os.environ mutation must be undone after the test."""
+    import os
+    monkeypatch.delenv("HIP_VISIBLE_DEVICES", raising=False)
+    monkeypatch.delenv("ROCR_VISIBLE_DEVICES", raising=False)
+    test_cli_writes_result(tmp_path, monkeypatch)
+    assert os.environ.get("HIP_VISIBLE_DEVICES") == "-1"   # set during the test ...
+    monkeypatch.undo()                                      # ... and removed by teardown
+    assert "HIP_VISIBLE_DEVICES" not in os.environ
