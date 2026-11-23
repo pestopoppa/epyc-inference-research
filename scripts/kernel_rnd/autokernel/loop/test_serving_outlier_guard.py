@@ -42,7 +42,7 @@ def _isolated_gpu_exclusion(tmp_path, monkeypatch):
 
 def _inputs():
     recipe = serving.Recipe(name="outlier-guard", model="/fixture-model", device="none",
-                            ngl=0, np=1)
+                            ngl=0, np=1, temperature=0.6)
     return recipe, _resolve(recipe, backend="cpu")
 
 

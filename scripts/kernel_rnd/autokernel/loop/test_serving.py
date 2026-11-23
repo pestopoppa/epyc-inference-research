@@ -18,7 +18,7 @@ from autokernel.loop.loop import ActorStopped
 RECIPE = serving.Recipe(
     name="t", model="/m/target.gguf",
     spec_decode={"type": "draft-dflash", "drafter": "/m/draft.gguf", "ngld": 99, "draft_n_max": 8},
-    np=4, ctx=16384)
+    np=4, ctx=16384, temperature=0.6)
 
 
 PLAIN = dataclasses.replace(RECIPE, name="t-plain", spec_decode={"type": "none"})
@@ -95,7 +95,7 @@ class Arithmetic(unittest.TestCase):
 
 class PlannedObservationSeam(unittest.TestCase):
     def test_warm_kv_round_refuses_a_stub_server_that_reprefilled(self):
-        recipe = serving.Recipe(name="warm", model="/m", np=2, n_predict=4)
+        recipe = serving.Recipe(name="warm", model="/m", np=2, n_predict=4, temperature=0.6)
         body = json.dumps({"prompt": [1] * serving.PREFILL_HEAVY_TOKENS,
                            "cache_prompt": True}).encode()
         requests = (("p0", body), ("p1", body + b" "))
@@ -142,7 +142,7 @@ class PlannedObservationSeam(unittest.TestCase):
             serve(32768)
 
     def test_frozen_requests_drive_actual_launcher_seam_and_collect_slots(self):
-        recipe = serving.Recipe(name="planned", model="/m", np=2, n_predict=4)
+        recipe = serving.Recipe(name="planned", model="/m", np=2, n_predict=4, temperature=0.6)
         requests = tuple((f"p{i}", json.dumps({"prompt": f"prompt-{i}"}).encode())
                          for i in range(2))
 
@@ -209,7 +209,7 @@ class PlannedObservationSeam(unittest.TestCase):
             "schema", "process_pid", "requests", "residency", "teardown", "failure"})
 
     def test_partial_slot_failure_retains_warmup_and_measurement_records(self):
-        recipe = serving.Recipe(name="planned", model="/m", np=2, n_predict=4)
+        recipe = serving.Recipe(name="planned", model="/m", np=2, n_predict=4, temperature=0.6)
         requests = tuple((f"p{i}", json.dumps({"prompt": f"prompt-{i}"}).encode())
                          for i in range(2))
 
@@ -363,7 +363,7 @@ class LifecycleObservationHook(unittest.TestCase):
 
     @staticmethod
     def _recipe():
-        return serving.Recipe(name="hook", model="/m", np=1, n_predict=4)
+        return serving.Recipe(name="hook", model="/m", np=1, n_predict=4, temperature=0.6)
 
     @staticmethod
     def _requests():
@@ -510,22 +510,22 @@ class ServerAffinity(unittest.TestCase):
     """
 
     def test_unpinned_is_the_default_and_prepends_nothing(self):
-        r = serving.Recipe(name="r", model="/m.gguf")
+        r = serving.Recipe(name="r", model="/m.gguf", temperature=0.6)
         self.assertIsNone(r.cpu_list)
         argv = r.server_argv(Path("/b"), 8080)
         self.assertTrue(argv[0].endswith("llama-server"), argv[0])
         self.assertNotIn("taskset", argv)
 
     def test_cpu_list_prepends_taskset_before_the_binary(self):
-        r = serving.Recipe(name="r", model="/m.gguf", cpu_list="184-191")
+        r = serving.Recipe(name="r", model="/m.gguf", cpu_list="184-191", temperature=0.6)
         argv = r.server_argv(Path("/b"), 8080)
         self.assertEqual(argv[:3], ["taskset", "-c", "184-191"])
         self.assertTrue(argv[3].endswith("llama-server"), argv[3])
 
     def test_describe_states_the_pin_so_an_artifact_records_the_condition(self):
-        self.assertIn("cpu=unpinned", serving.Recipe(name="r", model="/m").describe())
+        self.assertIn("cpu=unpinned", serving.Recipe(name="r", model="/m", temperature=0.6).describe())
         self.assertIn("cpu=184-191",
-                      serving.Recipe(name="r", model="/m", cpu_list="184-191").describe())
+                      serving.Recipe(name="r", model="/m", cpu_list="184-191", temperature=0.6).describe())
 
 class CalibrationCancellation(unittest.TestCase):
     def test_legacy_calibration_stops_before_the_next_launch(self):

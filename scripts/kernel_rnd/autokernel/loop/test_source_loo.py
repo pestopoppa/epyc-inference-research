@@ -102,7 +102,7 @@ def _inputs(tmp_path, backend="cpu"):
     model.write_bytes(b"tiny model identity fixture, never launched")
     recipe = serving.Recipe(name="tiny", model=str(model), cpu_list=str(cpu), np=1,
         ctx=512, threads=1, batch=512, ubatch=512, device="none" if backend == "cpu" else "ROCm0",
-        ngl=0 if backend == "cpu" else 99)
+        ngl=0 if backend == "cpu" else 99, temperature=0.6)
     full, old = tmp_path / "full", tmp_path / "old"
     for build, commit in ((full, tip), (old, parent)):
         _files(build)

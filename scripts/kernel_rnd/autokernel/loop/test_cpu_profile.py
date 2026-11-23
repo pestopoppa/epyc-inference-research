@@ -151,7 +151,7 @@ def test_completion_refuses_truncation_wrong_length_and_wrong_shapes(raw):
 def test_gpu_recipe_cannot_choose_cpu_no_gpu_sampler(tmp_path):
     from . import serving
     with pytest.raises(serving.RecipeError, match="frozen CPU"):
-        serving._measure_once(serving.Recipe(name="refused", model="unused"), tmp_path, 1,
+        serving._measure_once(serving.Recipe(name="refused", model="unused", temperature=0.6), tmp_path, 1,
             resolved_recipe=SimpleNamespace(backend="hip"), frozen_requests=(),
             cpu_profile_capture=object.__new__(cp.CpuProfileCapture))
 

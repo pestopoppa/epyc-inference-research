@@ -34,7 +34,7 @@ from unittest import mock
 from autokernel.loop import bench, instruments, serving
 
 
-RECIPE = serving.Recipe(name="t", model="/m/target.gguf", np=4, ctx=16384)
+RECIPE = serving.Recipe(name="t", model="/m/target.gguf", np=4, ctx=16384, temperature=0.6)
 
 
 def _row(recipe: serving.Recipe = RECIPE, floor_pct: float = 3.536, **extra) -> dict:

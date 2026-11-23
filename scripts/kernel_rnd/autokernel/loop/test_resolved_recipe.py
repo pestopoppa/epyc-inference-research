@@ -55,7 +55,7 @@ def _rehash(value: rr.ResolvedRecipe) -> rr.ResolvedRecipe:
 
 
 def test_resolved_recipe_is_immutable_round_trips_and_allows_repeated_argv_values():
-    recipe = serving.Recipe(name="gpu", model="/models/main.gguf")
+    recipe = serving.Recipe(temperature=0.6, name="gpu", model="/models/main.gguf")
     resolved = _resolve(recipe)
     assert resolved.argv.count("8") >= 2
     assert rr.ResolvedRecipe.from_dict(resolved.to_dict()) == resolved
@@ -86,7 +86,7 @@ def test_canonical_topology_accepts_retained_taskset_then_numactl_order():
         assert rr.canonical_recipe_projection(
             name="closed", command_argv=command, topology_prefix=prefix).cpu_list == "0-95"
 def test_normalized_identity_ignores_only_relocation_label_and_listen_port():
-    first_recipe = serving.Recipe(name="first-label", model="/models/one.gguf")
+    first_recipe = serving.Recipe(temperature=0.6, name="first-label", model="/models/one.gguf")
     first = _resolve(first_recipe, build=Path("/build-one"), port=18001)
     moved_recipe = replace(first_recipe, name="other-label", model="/relocated/model.gguf")
     moved = _resolve(moved_recipe, build=Path("/relocated/build"), port=19002)
@@ -95,7 +95,7 @@ def test_normalized_identity_ignores_only_relocation_label_and_listen_port():
 
 
 def test_normalized_identity_changes_for_execution_and_artifact_content():
-    recipe = serving.Recipe(name="gpu", model="/m", env={"KNOB": "1"})
+    recipe = serving.Recipe(temperature=0.6, name="gpu", model="/m", env={"KNOB": "1"})
     base = _resolve(recipe, policy=_policy("KNOB"))
     assert _resolve(replace(recipe, threads=9), policy=_policy("KNOB")).execution_digest \
         != base.execution_digest
@@ -118,7 +118,7 @@ def test_normalized_identity_changes_for_execution_and_artifact_content():
 
 
 def test_parent_environment_is_copied_allowlisted_and_credentials_are_absent():
-    recipe = serving.Recipe(name="gpu", model="/m", env={"EMPTY": ""})
+    recipe = serving.Recipe(temperature=0.6, name="gpu", model="/m", env={"EMPTY": ""})
     parent = {"PATH": "/usr/bin", "AUTHORIZATION_TOKEN": "do-not-serialize"}
     resolved = _resolve(recipe, policy=_policy("EMPTY", inherit=("PATH",)),
                         inherited=parent)
@@ -133,7 +133,7 @@ def test_parent_environment_is_copied_allowlisted_and_credentials_are_absent():
 def test_inherited_treatment_and_explicit_unset_control_freeze_opposite_readbacks():
     check = ({"field": "THP_enabled", "env": "GGML_NOHUGEPAGE_PROCESS",
               "expect": {"1": "0", serving.UNSET: "1"}},)
-    template = serving.Recipe(name="base", model="/m", env_readback=check)
+    template = serving.Recipe(temperature=0.6, name="base", model="/m", env_readback=check)
     policy = _policy("GGML_NOHUGEPAGE_PROCESS",
                      inherit=("GGML_NOHUGEPAGE_PROCESS",), witness="recipe_readback")
     parent = {"GGML_NOHUGEPAGE_PROCESS": "1"}
@@ -148,7 +148,7 @@ def test_inherited_treatment_and_explicit_unset_control_freeze_opposite_readback
 
 
 def test_runtime_set_and_master_off_are_declared_unknown_not_inferred_from_env():
-    recipe = serving.Recipe(name="gpu", model="/m", env={"RUNTIME_SET": "1",
+    recipe = serving.Recipe(temperature=0.6, name="gpu", model="/m", env={"RUNTIME_SET": "1",
                                                            "MASTER_OFF": "0"})
     policy = _policy("RUNTIME_SET", "MASTER_OFF")
     policy["witnesses"]["MASTER_OFF"] = "master_off"
@@ -162,24 +162,24 @@ def test_runtime_set_and_master_off_are_declared_unknown_not_inferred_from_env()
     ("temperature", float("nan")), ("top_p", float("inf")), ("np", 0), ("ngl", -1),
 ])
 def test_nonfinite_or_malformed_numeric_fields_refuse(field, value):
-    recipe = replace(serving.Recipe(name="gpu", model="/m"), **{field: value})
+    recipe = replace(serving.Recipe(temperature=0.6, name="gpu", model="/m"), **{field: value})
     with pytest.raises(rr.ResolutionError, match=field):
         _resolve(recipe)
 
 
 @pytest.mark.parametrize("flag", ["-ngl", "-ngl=999", "--device=none", "-m"])
 def test_extra_flags_cannot_override_structured_execution_fields(flag):
-    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0,
+    recipe = serving.Recipe(temperature=0.6, name="cpu", model="/m", device="none", ngl=0,
                             extra_flags=(flag, "999"))
     with pytest.raises(rr.ResolutionError, match="structured launch fields"):
         _resolve(recipe, backend="cpu")
 
 
 def test_unknown_speculation_type_and_mismatched_artifact_paths_refuse():
-    recipe = serving.Recipe(name="gpu", model="/m", spec_decode={"type": "invented"})
+    recipe = serving.Recipe(temperature=0.6, name="gpu", model="/m", spec_decode={"type": "invented"})
     with pytest.raises(rr.ResolutionError, match="unknown recipe speculation"):
         _resolve(recipe)
-    recipe = serving.Recipe(name="gpu", model="/m")
+    recipe = serving.Recipe(temperature=0.6, name="gpu", model="/m")
     artifacts = _artifacts(recipe)
     artifacts["model"]["path"] = "/other"
     with pytest.raises(rr.ResolutionError, match="model artifact path"):
@@ -187,7 +187,7 @@ def test_unknown_speculation_type_and_mismatched_artifact_paths_refuse():
 
 
 def test_none_self_and_external_speculation_are_distinct():
-    none = serving.Recipe(name="none", model="/m")
+    none = serving.Recipe(temperature=0.6, name="none", model="/m")
     self_draft = replace(none, spec_decode={"type": "draft-mtp"})
     external = replace(none, spec_decode={"type": "draft-dflash", "drafter": "/d",
                                          "ngld": 99})
@@ -197,7 +197,7 @@ def test_none_self_and_external_speculation_are_distinct():
 
 
 def test_cpu_requires_explicit_none_device_zero_ngl_and_mixed_draft_is_structured():
-    cpu = serving.Recipe(name="cpu", model="/m", device="none", ngl=0)
+    cpu = serving.Recipe(temperature=0.6, name="cpu", model="/m", device="none", ngl=0)
     assert _resolve(cpu, backend="cpu").capability.supported
     wrong = replace(cpu, ngl=1)
     report = _resolve(wrong, backend="cpu").capability
@@ -215,8 +215,8 @@ def test_cpu_requires_explicit_none_device_zero_ngl_and_mixed_draft_is_structure
 
 
 def test_multi_device_and_rpc_are_explicitly_unsupported():
-    multi = serving.Recipe(name="gpu", model="/m", device="ROCm0,ROCm1")
-    rpc = serving.Recipe(name="gpu", model="/m", extra_flags=("--rpc-server", "x"))
+    multi = serving.Recipe(temperature=0.6, name="gpu", model="/m", device="ROCm0,ROCm1")
+    rpc = serving.Recipe(temperature=0.6, name="gpu", model="/m", extra_flags=("--rpc-server", "x"))
     assert "multi_device_unsupported" in {
         reason.code for reason in _resolve(multi).capability.reasons}
     assert "rpc_unsupported" in {reason.code for reason in _resolve(rpc).capability.reasons}
@@ -228,7 +228,7 @@ def test_multi_device_and_rpc_are_explicitly_unsupported():
     (("--device-draft=ROCm0,ROCm1",), "multi_device_unsupported"),
 ])
 def test_external_gpu_draft_device_must_be_valid_and_same_device(draft_flag, reason):
-    recipe = serving.Recipe(
+    recipe = serving.Recipe(temperature=0.6, 
         name="gpu", model="/m", spec_decode={"type": "draft-dflash", "drafter": "/d",
                                                "ngld": 99},
         extra_flags=draft_flag)
@@ -238,7 +238,7 @@ def test_external_gpu_draft_device_must_be_valid_and_same_device(draft_flag, rea
 
 
 def test_forged_supported_cpu_on_gpu_argv_and_env_inconsistency_refuse_roundtrip():
-    resolved = _resolve(serving.Recipe(name="gpu", model="/m"))
+    resolved = _resolve(serving.Recipe(temperature=0.6, name="gpu", model="/m"))
     capability = rr.CapabilityReport(
         True, "cpu", resolved.capability.speculation, (), resolved.capability.witnesses,
         "not_applicable", "unproven", "unproven")
@@ -255,7 +255,7 @@ def test_forged_supported_cpu_on_gpu_argv_and_env_inconsistency_refuse_roundtrip
 
 
 def test_duplicate_dso_paths_and_mutated_typed_policy_refuse():
-    recipe = serving.Recipe(name="gpu", model="/m")
+    recipe = serving.Recipe(temperature=0.6, name="gpu", model="/m")
     artifacts = _artifacts(recipe)
     artifacts["dsos"].append(dict(artifacts["dsos"][0]))
     with pytest.raises(rr.ResolutionError, match="unique loader"):

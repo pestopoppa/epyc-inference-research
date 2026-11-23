@@ -20,7 +20,7 @@ def _fixture(tmp_path):
     model = tmp_path / "not-a-model"
     model.write_bytes(b"fixture: no model is loaded")
     recipe = serving.Recipe(name="runtime-http", model=str(model), device="none", ngl=0,
-                            np=2, n_predict=8, cpu_list=None)
+                            np=2, n_predict=8, cpu_list=None, temperature=0.6)
     anchor, log, pids = _server(tmp_path / "same-build", recipe, port, 10.0)
     pair = enumerate_runtime_dimensions(anchor, (RuntimeDimension(
         "threads-test", "threads", recipe.threads, recipe.threads + 1,

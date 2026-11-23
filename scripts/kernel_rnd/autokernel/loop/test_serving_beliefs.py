@@ -22,7 +22,7 @@ def test_missing_root_is_a_lazy_diagnostic_failure(tmp_path, monkeypatch):
 
 
 def comparison(monkeypatch, *, resolved=True, floor_pct=5.0):
-    recipe = serving.Recipe(name="fixture", model="/fixture-model", device="none", ngl=0, np=1)
+    recipe = serving.Recipe(name="fixture", model="/fixture-model", device="none", ngl=0, np=1, temperature=0.6)
     launch = _resolve(recipe, backend="cpu") if resolved else None
     requests = (("fixture-prompt", b'{"prompt":[1,2],"n_predict":64}'),)
     samples = iter([10.0, 20.0, 12.0, 18.0])
@@ -380,7 +380,7 @@ def test_summary_is_complete_or_unavailable_never_partial():
 
 def steps_comparison(monkeypatch, *, anchor_ms=(1000.0, 1000.0), candidate_ms=(800.0, 800.0)):
     """compare() whose fake launches report synthetic response timings through the real helpers."""
-    recipe = serving.Recipe(name="fixture", model="/fixture-model", device="none", ngl=0, np=1)
+    recipe = serving.Recipe(name="fixture", model="/fixture-model", device="none", ngl=0, np=1, temperature=0.6)
     launch = _resolve(recipe, backend="cpu")
     requests = (("fixture-prompt", b'{"prompt":[1,2],"n_predict":64}'),)
     ms = {"anchor": iter(anchor_ms), "candidate": iter(candidate_ms)}

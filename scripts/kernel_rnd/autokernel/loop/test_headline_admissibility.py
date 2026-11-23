@@ -60,7 +60,7 @@ def test_floor_producers_name_the_same_headline_contract():
     assert '"headline_admissibility": headline_admissibility.contract()' in source
     with mock.patch.object(serving, "_measure_once", side_effect=[100.0] * 24):
         row = serving.calibrate_floor(
-            serving.Recipe(name="floor-contract", model="/m.gguf"),
+            serving.Recipe(name="floor-contract", model="/m.gguf", temperature=0.6),
             Path("/build"), samples=24)
     assert row["headline_admissibility"] == H.contract()
 

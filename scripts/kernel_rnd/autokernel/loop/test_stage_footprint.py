@@ -100,7 +100,7 @@ def test_smt_siblings_fold_into_one_physical_region():
 def test_mixed_offload_keeps_its_explicit_refusal_from_the_real_capability_owner():
     template = serving.Recipe(name="t", model="/m/x.gguf", device="ROCm0", ngl=99,
                               spec_decode={"type": "draft", "drafter": "/m/d.gguf", "ngld": 0},
-                              np=1, ctx=4096, threads=8, cpu_list="88-95")
+                              np=1, ctx=4096, threads=8, cpu_list="88-95", temperature=0.6)
     capability = resolved_recipe._capability(template, "gpu", object(), ())
     assert not capability.supported
     launch = _launch("gpu", "88-95")

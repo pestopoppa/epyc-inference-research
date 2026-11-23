@@ -170,7 +170,8 @@ def test_exported_recipe_without_measurement_keys_keeps_its_template_identity(tm
         export, environment_policy=_policy())["targets"][0]["resolved_recipe"])
     projected = rr.canonical_recipe_projection(
         name=f"production:{target['target_id']}", command_argv=target["command_argv"],
-        topology_prefix=target["topology"]["argv_prefix"])
+        topology_prefix=target["topology"]["argv_prefix"],
+        temperature=serving.LEGACY_UNDECLARED_TEMPERATURE)
     # (Compared by serialized identity: the snapshot round trip turns env None into {}.)
     assert resolved.template.to_dict() == projected.to_dict()
     assert resolved.template_hash == projected.recipe_hash

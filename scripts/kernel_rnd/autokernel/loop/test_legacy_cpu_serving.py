@@ -85,7 +85,7 @@ def test_actual_cpu_http_comparison_and_request_bound_calibration(tmp_path, monk
     model = tmp_path / "not-a-model"
     model.write_bytes(b"no inference is performed")
     recipe = serving.Recipe(name="cpu-http", model=str(model), device="none", ngl=0,
-                            np=2, n_predict=8, cpu_list=None)
+                            np=2, n_predict=8, cpu_list=None, temperature=0.6)
     anchor, a_log, a_pids = _server(tmp_path / "anchor", recipe, port, 10.0)
     candidate, c_log, c_pids = _server(tmp_path / "candidate", recipe, port, 12.0)
     monkeypatch.setattr(serving.residency, "Sampler", _sampler_class(_proof(peak=0, median=0, kfd=0)))
@@ -120,7 +120,7 @@ def test_actual_cpu_http_comparison_and_request_bound_calibration(tmp_path, monk
 
 
 def test_forwarding_refuses_partial_or_mismatched_arm_before_any_measurement(monkeypatch):
-    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=2)
+    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=2, temperature=0.6)
     anchor = _resolve(recipe, backend="cpu", build=Path("/a"))
     candidate = _resolve(recipe, backend="cpu", build=Path("/c"))
     def forbidden(*args, **kwargs):
@@ -139,7 +139,7 @@ def test_forwarding_refuses_partial_or_mismatched_arm_before_any_measurement(mon
 
 
 def test_custom_requests_cannot_borrow_or_overwrite_legacy_floor(tmp_path):
-    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=2)
+    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=2, temperature=0.6)
     requests = _requests()
     legacy = serving.write_floor(tmp_path, recipe, {"floor_pct": 1.0, "n": 5},
                                  unit=serving.CALIBRATION_UNIT)
@@ -165,7 +165,7 @@ def test_custom_requests_cannot_borrow_or_overwrite_legacy_floor(tmp_path):
 
 
 def test_uncalibrated_custom_requests_still_measure_without_decisive_keep(monkeypatch):
-    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=2)
+    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=2, temperature=0.6)
     requests = _requests()
     calls = []
     def measure(recipe, build, port, **kwargs):

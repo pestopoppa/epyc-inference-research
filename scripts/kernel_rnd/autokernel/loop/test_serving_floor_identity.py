@@ -31,7 +31,7 @@ import unittest
 from autokernel.loop import serving
 
 
-BASE = serving.Recipe(name="t", model="/m/target.gguf", np=4, ctx=16384)
+BASE = serving.Recipe(name="t", model="/m/target.gguf", np=4, ctx=16384, temperature=0.6)
 SHIPPED = (Path(__file__).resolve().parents[4]
            / "artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json")
 

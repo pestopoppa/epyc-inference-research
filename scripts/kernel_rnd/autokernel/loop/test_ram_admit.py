@@ -105,7 +105,7 @@ def order_log(result):
 
 
 def measure_once(model):
-    rec = serving.Recipe(name="t", model=model, device="none", ngl=0)
+    rec = serving.Recipe(name="t", model=model, device="none", ngl=0, temperature=0.6)
     return lambda: serving._measure_once(rec, Path("/nonexistent/build"), 59999, boot_timeout_s=2)
 
 

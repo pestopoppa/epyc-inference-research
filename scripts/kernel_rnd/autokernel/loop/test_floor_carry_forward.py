@@ -40,7 +40,7 @@ def _isolated(tmp_path, monkeypatch):
 
 
 def _recipe(name="matched", np=1):
-    return serving.Recipe(name=name, model="/fixture-model", device="none", ngl=0, np=np)
+    return serving.Recipe(name=name, model="/fixture-model", device="none", ngl=0, np=np, temperature=0.6)
 
 
 def _launch(recipe, build):
@@ -238,7 +238,7 @@ def test_aas_for_another_commit_or_recipe_are_not_evidence(tmp_path):
 def test_refused_across_a_runtime_recipe_hash_change(tmp_path):
     before = _recipe()
     after = serving.Recipe(name="matched", model="/fixture-model", device="none", ngl=0,
-                           np=1, threads=4)  # an adopted runtime recipe (cpu-half)
+                           np=1, threads=4, temperature=0.6)  # an adopted runtime recipe (cpu-half)
     assert after.recipe_hash != before.recipe_hash
     _parent, row, parent_path = _calibrated(tmp_path, before, "/parent")
     _aa(tmp_path, before, effect_pct=0.0, recorded_at=_later(row))

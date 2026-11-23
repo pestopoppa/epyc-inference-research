@@ -25,7 +25,7 @@ def _isolated_gpu_exclusion(tmp_path, monkeypatch):
 
 
 def _inputs():
-    recipe = serving.Recipe(name="matched", model="/fixture-model", device="none", ngl=0, np=1)
+    recipe = serving.Recipe(name="matched", model="/fixture-model", device="none", ngl=0, np=1, temperature=0.6)
     return recipe, _resolve(recipe, backend="cpu"), (("p", b'{"prompt":[1],"n_predict":8}'),)
 
 
@@ -178,7 +178,7 @@ def test_actual_http_counterbalanced_requests_archive_and_teardown(tmp_path, mon
     model = tmp_path / "not-a-model"
     model.write_bytes(b"no inference")
     recipe = serving.Recipe(name="matched-http", model=str(model), device="none", ngl=0,
-                            np=2, n_predict=8, cpu_list=None)
+                            np=2, n_predict=8, cpu_list=None, temperature=0.6)
     anchor, a_log, a_pids = _server(tmp_path / "anchor", recipe, port, 10.0)
     candidate, c_log, c_pids = _server(tmp_path / "candidate", recipe, port, 12.0)
     monkeypatch.setattr(serving.residency, "Sampler", _sampler_class(_proof(peak=0, median=0, kfd=0)))

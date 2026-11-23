@@ -121,7 +121,7 @@ else:
         port = probe.getsockname()[1]
     cpus = sorted(os.sched_getaffinity(0))[:4]
     template = serving.Recipe(name="synthetic-cpu-profile", model=str(model), device="none",
-        ngl=0, cpu_list=",".join(map(str, cpus)), threads=4, np=1, ctx=128, n_predict=2)
+        ngl=0, cpu_list=",".join(map(str, cpus)), threads=4, np=1, ctx=128, n_predict=2, temperature=0.6)
     if original_request is not None:
         from dataclasses import replace
         template = replace(template, ctx=8192, n_predict=original_request["n_predict"],

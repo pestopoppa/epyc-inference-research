@@ -72,7 +72,7 @@ def test_linkage_script_is_the_research_repo_verifier():
 
 
 def test_serving_refuses_a_refuted_hip_launch():
-    recipe = serving.Recipe(name="g", model="/m.gguf", np=1, ngl=99, device="ROCm0")
+    recipe = serving.Recipe(name="g", model="/m.gguf", np=1, ngl=99, device="ROCm0", temperature=0.6)
     record = {"status": serving.RESIDENCY_PROVEN,
               "hip_proof": {"status": hp.REFUTED, "legs": {"linkage": hp.REFUTED}}}
     with pytest.raises(serving.ServingNotResident, match="HIP LAUNCH REFUTED"):

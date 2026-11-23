@@ -415,7 +415,7 @@ def test_a_contended_cpu_launch_is_measurement_invalid(tmp_path, monkeypatch):
     model = tmp_path / "not-a-model"
     model.write_bytes(b"no inference is performed")
     recipe = serving.Recipe(name="cpu-guard", model=str(model), device="none", ngl=0,
-                            np=2, n_predict=8, cpu_list=None)
+                            np=2, n_predict=8, cpu_list=None, temperature=0.6)
     anchor, _log, _pids = _server(tmp_path / "anchor", recipe, port, 10.0)
     monkeypatch.setattr(serving.residency, "Sampler",
                         _sampler_class(_proof(peak=0, median=0, kfd=0)))

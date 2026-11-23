@@ -26,7 +26,7 @@ from unittest import mock
 from autokernel.loop import residency, serving
 
 
-RECIPE = serving.Recipe(name="rt", model="/m/t.gguf", np=2, n_predict=8)
+RECIPE = serving.Recipe(name="rt", model="/m/t.gguf", np=2, n_predict=8, temperature=0.6)
 
 #: A launch record's residency window, for the stubbed `_measure_once`. Enclosing, so a
 #: stub cannot accidentally manufacture the covering property the real path must earn.

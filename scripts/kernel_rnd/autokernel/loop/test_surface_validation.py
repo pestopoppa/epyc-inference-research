@@ -33,7 +33,7 @@ def _launch(tmp_path: Path, recipe: serving.Recipe, build: Path):
 def test_actual_serving_compare_row_preserves_existing_nonregression_policy(tmp_path, monkeypatch):
     recipe = serving.Recipe(name="test", model=str(tmp_path / "model.gguf"), device="none",
                             ngl=0, np=1, ctx=512, threads=1, batch=512, ubatch=512,
-                            cpu_list="0")
+                            cpu_list="0", temperature=0.6)
     anchor_build, candidate_build = tmp_path / "a", tmp_path / "b"
     anchor, candidate = _launch(tmp_path, recipe, anchor_build), _launch(tmp_path, recipe, candidate_build)
     frozen = (("prompt-0", b'{"prompt":"hello"}'),)

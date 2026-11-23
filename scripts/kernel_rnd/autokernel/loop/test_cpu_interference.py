@@ -106,7 +106,7 @@ def test_only_post_ready_original_contradictions_invalidate(tmp_path):
 
 
 def test_invalid_candidate_preserves_exact_arm_and_does_not_replace_a_sample():
-    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=1, cpu_list="0-95")
+    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=1, cpu_list="0-95", temperature=0.6)
     resolved = _resolve(recipe, backend="cpu")
     requests = (("original", b'{"prompt":"literal whitespace", "n_predict":8}'),)
     invalid = loop.MeasurementInvalid("original placement mismatch", {"original": "raw"})
@@ -160,7 +160,7 @@ def test_actual_main_reschedules_original_source_or_runtime_once(runtime_only):
 @pytest.mark.parametrize("mode", ["budget", "stop", "stop_after_archive", "twice", "cleanup"])
 def test_existing_tail_reschedule_limits_keep_original_invalid_record(tmp_path, mode):
     from . import pipeline, run
-    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=1, cpu_list="0-95")
+    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=1, cpu_list="0-95", temperature=0.6)
     resolved = _resolve(recipe, backend="cpu")
     calls, archived, resets, gates_seen = [], [], [], []
     stopped = [False]

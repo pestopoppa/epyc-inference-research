@@ -23,9 +23,14 @@ surface is `regresses-on-production-shape`, which also refuses promotion.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Mapping, Optional
 
+from . import sampling_axis
+
 FAMILY = "q27b-gpu-dflash2"
+#: Registry model whose roles share the :8083 server (architect_critic, coder_escalation, ...).
+SERVED_MODEL = "Qwen3.8-27B-Q8_0"
 
 NOT_YET_TRANSFERABLE = "not-yet-transferable"
 REGRESSES = "regresses-on-production-shape"
@@ -38,6 +43,10 @@ class Surface:
     kind: str                    # "uniform" | "ragged"
     slot_rows: tuple[int, ...]   # verify rows contributed by each slot
     anchor: bool                 # the width the campaign recipe measures today
+    #: REQUIRED (AK-TEMP-AXIS-3): the served temperature this surface's traffic samples at.
+    #: :8083 direct agent traffic is 1.0; the registry role defaults on the same server are
+    #: `served_temperatures()`. A surface that does not say has no census key.
+    temperature: float
 
     @property
     def ne11(self) -> int:
@@ -45,14 +54,28 @@ class Surface:
         return sum(self.slot_rows)
 
 
+T8083 = sampling_axis.DIRECT_8083_TEMPERATURE
+
 #: `--spec-draft-n-max 7` => 8 rows per drafting slot (7 drafts + the bonus token).
 SURFACES: tuple[Surface, ...] = (
-    Surface("n8", "uniform", (8,), anchor=True),            # np 1: what the recipe measures today
-    Surface("n16", "uniform", (8, 8), anchor=False),        # two drafting slots
-    Surface("n32", "uniform", (8, 8, 8, 8), anchor=False),  # np 4, all slots drafting
-    Surface("ragged_1_8_8_8", "ragged", (1, 8, 8, 8), anchor=False),  # ne11 25: one slot plain decode
+    Surface("n8", "uniform", (8,), anchor=True, temperature=T8083),            # np 1: what the recipe measures today
+    Surface("n16", "uniform", (8, 8), anchor=False, temperature=T8083),        # two drafting slots
+    Surface("n32", "uniform", (8, 8, 8, 8), anchor=False, temperature=T8083),  # np 4, all slots drafting
+    Surface("ragged_1_8_8_8", "ragged", (1, 8, 8, 8), anchor=False, temperature=T8083),  # ne11 25: one slot plain decode
 )
 BY_ID = {s.surface_id: s for s in SURFACES}
+
+
+def served_temperatures(registry: "Mapping | Path | None" = None) -> tuple[float, ...]:
+    """Every temperature the :8083 27B serves: its roles' registry defaults plus direct traffic."""
+    return tuple(sorted({*sampling_axis.role_temperatures(registry, model_name=SERVED_MODEL).values(),
+                         T8083}))
+
+
+def census_keys(registry: "Mapping | Path | None" = None) -> tuple[tuple[str, float], ...]:
+    """The verify ne11 / accepted-length census is keyed by (surface, temperature): accepted
+    length, and so the rows a verify batch really carries, moves with the sampling regime."""
+    return tuple((s.surface_id, t) for s in production_surfaces() for t in served_temperatures(registry))
 
 
 def production_surfaces() -> tuple[Surface, ...]:
@@ -94,6 +117,21 @@ def assess(measured: Mapping[str, Optional[float]], *, floor_pct: float) -> Asse
     return Assessment(TRANSFERABLE, missing, regressed)
 
 
+def assess_by_temperature(measured: Mapping[tuple[str, float], Optional[float]], *, floor_pct: float,
+                          registry: "Mapping | Path | None" = None) -> Assessment:
+    """`assess` over the (surface, temperature) census: every production surface must be measured
+    at EVERY served temperature. A surface key whose temperature is not served is a caller error."""
+    keys = census_keys(registry)
+    unknown = sorted(set(measured) - set(keys) - {(s.surface_id, s.temperature) for s in SURFACES})
+    if unknown:
+        raise ValueError(f"unknown (surface, temperature) key(s) {unknown}; declared: {sorted(keys)}")
+    label = lambda k: f"{k[0]}@T{k[1]:g}"  # noqa: E731
+    missing = tuple(label(k) for k in keys if measured.get(k) is None)
+    regressed = tuple(label(k) for k in keys if measured.get(k) is not None and measured[k] < -floor_pct)
+    verdict = NOT_YET_TRANSFERABLE if missing else REGRESSES if regressed else TRANSFERABLE
+    return Assessment(verdict, missing, regressed)
+
+
 def promotion_refusal(assessment: Assessment) -> Optional[str]:
     """The reason promotion is refused, or None."""
     if assessment.promotable:
@@ -105,4 +143,4 @@ def promotion_refusal(assessment: Assessment) -> Optional[str]:
 
 
 __all__ = ["FAMILY", "Surface", "SURFACES", "BY_ID", "Assessment", "assess", "promotion_refusal",
-           "production_surfaces", "NOT_YET_TRANSFERABLE", "REGRESSES", "TRANSFERABLE"]
+           "production_surfaces", "served_temperatures", "census_keys", "assess_by_temperature", "T8083", "SERVED_MODEL", "NOT_YET_TRANSFERABLE", "REGRESSES", "TRANSFERABLE"]

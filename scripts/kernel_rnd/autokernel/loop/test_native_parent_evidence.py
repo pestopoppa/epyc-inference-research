@@ -44,7 +44,7 @@ def _case(tmp_path, *, capture=True, thp="0", required=(), status_field="THP_ena
                                           fence_clock=time.monotonic, serving_timer=time.time)
     template = serving.Recipe(name="fixture-cpu", model="/fixture-model", np=2,
         device="none", ngl=0, cpu_list="0", env={"THP_CONTROL": "off"},
-        env_readback=({"env": "THP_CONTROL", "field": status_field, "expect": "0"},))
+        env_readback=({"env": "THP_CONTROL", "field": status_field, "expect": "0"},), temperature=0.6)
     recipe = _resolve(template, backend="cpu", policy=_policy("THP_CONTROL", witness="recipe_readback"))
     prompts = _prompts(template)
     plan_body = plan_dict(n=1, instrument="serving", unit="process")

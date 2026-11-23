@@ -35,7 +35,7 @@ def _prompts(recipe: serving.Recipe) -> ps.FrozenPromptManifest:
 
 
 def _recipes(*, cpu=True):
-    base = serving.Recipe(name="anchor", model="/m", np=2,
+    base = serving.Recipe(temperature=0.6, name="anchor", model="/m", np=2,
                           device="none" if cpu else "ROCm0", ngl=0 if cpu else 99)
     policy = _policy("KNOB")
     anchor = _resolve(base, backend="cpu" if cpu else "gpu", policy=policy)

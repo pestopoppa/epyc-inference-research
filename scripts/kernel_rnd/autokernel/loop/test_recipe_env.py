@@ -29,7 +29,7 @@ from unittest import mock
 from autokernel.loop import serving
 
 
-BASE = serving.Recipe(name="t", model="/m/target.gguf", np=4, ctx=16384)
+BASE = serving.Recipe(name="t", model="/m/target.gguf", np=4, ctx=16384, temperature=0.6)
 #: The paired arm this whole change exists to make expressible.
 THP = {"GGML_NOHUGEPAGE_PROCESS": "1"}
 #: One declaration, both directions: shim ON => THP_enabled 0, shim absent => THP_enabled 1.

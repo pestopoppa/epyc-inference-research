@@ -25,7 +25,7 @@ from unittest import mock
 from autokernel.loop import serving
 
 
-RECIPE = serving.Recipe(name="t", model="/m/target.gguf", np=4, ctx=16384)
+RECIPE = serving.Recipe(name="t", model="/m/target.gguf", np=4, ctx=16384, temperature=0.6)
 
 #: 24 launch values with a real tail, shaped like the champion's A/A (~161 tok/s, ~4-7%).
 RUNS = [163.1, 154.2, 154.3, 168.5, 160.6, 168.1, 161.5, 154.2, 163.2, 159.2, 171.9, 166.0,

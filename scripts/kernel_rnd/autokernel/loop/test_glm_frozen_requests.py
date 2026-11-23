@@ -62,7 +62,7 @@ def test_exact_token_request_roundtrip_immutable_and_legacy_unchanged():
     request["prompt"][0] = 0
     assert manifest.prompts[0].body == expected
     assert isinstance(manifest.prompts[0].prompt, tuple)
-    old = _prompts(serving.Recipe("old-gpu", "/m"))
+    old = _prompts(serving.Recipe("old-gpu", "/m", temperature=0.6))
     assert old.schema == ps.PROMPT_SCHEMA
     assert ps.FrozenPromptManifest.from_dict(old.to_dict()).to_dict() == old.to_dict()
     assert not any(key in json.loads(old.prompts[0].body)
@@ -121,7 +121,7 @@ def test_native_request_byte_bound_and_legacy_row_cannot_smuggle_options(monkeyp
     monkeypatch.setattr(native_server_response, "MAX_REQUEST_BYTES", 64)
     with pytest.raises(ps.PlannedServingError, match="bounded|bound"):
         _manifest(_request())
-    old = _prompts(serving.Recipe("old-gpu", "/m")).to_dict()
+    old = _prompts(serving.Recipe("old-gpu", "/m", temperature=0.6)).to_dict()
     old["prompts"][0]["seed"] = 42
     with pytest.raises(ps.PlannedServingError, match="unknown"):
         ps.FrozenPromptManifest.from_dict(old)

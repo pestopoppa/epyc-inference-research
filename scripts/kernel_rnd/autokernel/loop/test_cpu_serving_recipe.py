@@ -54,7 +54,7 @@ def _launch(recipe, resolved, proof, evidence=None):
 
 
 def test_cpu_zero_vram_is_not_a_gpu_veto_and_evidence_stays_unproven():
-    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=2)
+    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=2, temperature=0.6)
     resolved = _resolve(recipe, backend="cpu")
     evidence = []
     value, seen, _ = _launch(recipe, resolved, _proof(peak=0, median=0, kfd=0), evidence)
@@ -68,13 +68,13 @@ def test_cpu_zero_vram_is_not_a_gpu_veto_and_evidence_stays_unproven():
 
 def test_numa_is_opt_in_identity_and_exact_cpu_launch_prefix():
     legacy = serving.Recipe(name="cpu", model="/m", device="none", ngl=0,
-                            cpu_list="0-95", threads=48)
+                            cpu_list="0-95", threads=48, temperature=0.6)
     old_row = legacy.to_dict()
     old_hash = legacy.recipe_hash
     assert "numa" not in old_row
     assert serving.Recipe.from_dict(old_row).to_dict() == old_row
     assert serving.Recipe.from_dict(old_row).recipe_hash == old_hash
-    gpu = serving.Recipe(name="gpu", model="/m")
+    gpu = serving.Recipe(name="gpu", model="/m", temperature=0.6)
     assert "numa" not in gpu.to_dict()
     assert gpu.recipe_hash == (
         "7f2f98b728201ab769d86f99906582260137e8cc38117c4dc5ee5dcfc0a672b5")
@@ -99,7 +99,7 @@ def test_numa_is_opt_in_identity_and_exact_cpu_launch_prefix():
 def test_numa_rejects_unvalidated_policy(bad):
     with pytest.raises(serving.RecipeError, match="numa"):
         serving.Recipe(name="cpu", model="/m", device="none", ngl=0,
-                       cpu_list="0-95", numa=bad)
+                       cpu_list="0-95", numa=bad, temperature=0.6)
 
 
 def test_numa_requires_cpu_recipe_and_affinity():
@@ -107,7 +107,7 @@ def test_numa_requires_cpu_recipe_and_affinity():
                     {"device": "none", "ngl": 1, "cpu_list": "0-95"},
                     {"device": "none", "ngl": 0, "cpu_list": None}):
         with pytest.raises(serving.RecipeError, match="CPU recipe"):
-            serving.Recipe(name="bad", model="/m", numa="--interleave=all", **options)
+            serving.Recipe(name="bad", model="/m", numa="--interleave=all", **options, temperature=0.6)
 
 
 @pytest.mark.parametrize("bad", ("--interleave=3-1", "--membind=2-0"))
@@ -176,7 +176,7 @@ def test_explicit_canonical_numa_policy_must_match_resolved_prefix():
 
 
 def test_gpu_zero_vram_still_refuses_and_forged_not_applicable_cannot_bypass():
-    recipe = serving.Recipe(name="gpu", model="/m", np=2)
+    recipe = serving.Recipe(name="gpu", model="/m", np=2, temperature=0.6)
     resolved = _resolve(recipe)
     with pytest.raises(serving.ServingNotResident):
         _launch(recipe, resolved, _proof(peak=0, median=0, kfd=0), [])
@@ -189,7 +189,7 @@ def test_gpu_zero_vram_still_refuses_and_forged_not_applicable_cannot_bypass():
 def test_frozen_argv_environment_and_effective_readback_reach_popen():
     check = ({"field": "THP_enabled", "env": "GGML_NOHUGEPAGE_PROCESS",
               "expect": {"1": "0", serving.UNSET: "1"}},)
-    recipe = serving.Recipe(name="gpu", model="/m", env_readback=check)
+    recipe = serving.Recipe(name="gpu", model="/m", env_readback=check, temperature=0.6)
     parent = {"GGML_NOHUGEPAGE_PROCESS": "1"}
     policy = _policy("GGML_NOHUGEPAGE_PROCESS",
                      inherit=("GGML_NOHUGEPAGE_PROCESS",), witness="recipe_readback")
@@ -203,7 +203,7 @@ def test_frozen_argv_environment_and_effective_readback_reach_popen():
 
 
 def test_rehashed_env_forgery_still_refuses_before_popen_against_template():
-    recipe = serving.Recipe(name="gpu", model="/m", env={"KNOB": "1"})
+    recipe = serving.Recipe(name="gpu", model="/m", env={"KNOB": "1"}, temperature=0.6)
     resolved = _resolve(recipe, policy=_policy("KNOB"))
     launch = dict(resolved.launch_env)
     launch["KNOB"] = "2"
@@ -217,7 +217,7 @@ def test_rehashed_env_forgery_still_refuses_before_popen_against_template():
 
 
 def test_loader_really_removes_inherited_hsa_override_without_changing_recipe_hash():
-    recipe = serving.Recipe(name="gpu", model="/m")
+    recipe = serving.Recipe(name="gpu", model="/m", temperature=0.6)
     legacy_hash = recipe.recipe_hash
     env = recipe.server_env(
         BUILD, base={"HSA_OVERRIDE_GFX_VERSION": "forbidden", "PATH": "/usr/bin"})
@@ -227,7 +227,7 @@ def test_loader_really_removes_inherited_hsa_override_without_changing_recipe_ha
 
 
 def test_unsupported_capability_and_forged_supported_record_refuse_before_popen():
-    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=9)
+    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=9, temperature=0.6)
     resolved = _resolve(recipe, backend="cpu")
     with mock.patch.object(serving.subprocess, "Popen") as popen, \
             mock.patch.object(serving.residency, "Sampler") as sampler:
@@ -236,7 +236,7 @@ def test_unsupported_capability_and_forged_supported_record_refuse_before_popen(
     popen.assert_not_called()
     sampler.assert_not_called()
 
-    gpu = serving.Recipe(name="gpu", model="/m")
+    gpu = serving.Recipe(name="gpu", model="/m", temperature=0.6)
     valid = _resolve(gpu)
     replace_capability = rr.CapabilityReport(
         supported=True, backend="cpu", speculation=valid.capability.speculation,
@@ -251,7 +251,7 @@ def test_unsupported_capability_and_forged_supported_record_refuse_before_popen(
 
 
 def test_write_floor_delegates_to_hardened_writer_and_propagates_fault():
-    recipe = serving.Recipe(name="gpu", model="/m")
+    recipe = serving.Recipe(name="gpu", model="/m", temperature=0.6)
     row = {"recipe_hash": recipe.recipe_hash, "floor_pct": 1.0, "n": 5}
     with mock.patch.object(serving.status, "write_json", side_effect=OSError("fsync fault")) as write:
         with pytest.raises(OSError, match="fsync fault"):

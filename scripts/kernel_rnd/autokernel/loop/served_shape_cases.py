@@ -203,6 +203,9 @@ class MoeProfile:
     shexp_ff: int            # shared-expert ffn length (ffn_{gate,up}_shexp ne[1])
     gate_up_types: tuple[str, ...]  # quant types of ffn_{gate,up}_exps
     down_types: tuple[str, ...]     # quant types of ffn_down_exps
+    #: REQUIRED (AK-TEMP-AXIS-3): the lane's served sampling temperature from the registry role
+    #: that binds it, or None where no registry role does (stated, never guessed).
+    served_temperature: float | None
     extra_types: tuple[str, ...] = ()   # operator-listed served types beyond the experts
 
     @property
@@ -217,12 +220,14 @@ LANE_PROFILES: dict[str, MoeProfile] = {
         "ds41", "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/"
         "DeepSeek-V4.1-Flash-1017-MXFP4-experts-00001-of-00009.gguf", expert_count=384,
         expert_used=6, hidden=5120, expert_ff=2304, shexp_ff=2304,
-        gate_up_types=("MXFP4",), down_types=("MXFP4",)),
+        gate_up_types=("MXFP4",), down_types=("MXFP4",),
+        served_temperature=None),  # no registry role binds DS41 (checked by test_temperature_axis_3)
     "q38fn": MoeProfile(
         "q38fn", "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/"
         "Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf", expert_count=512, expert_used=10,
         hidden=2560, expert_ff=640, shexp_ff=640,
         gate_up_types=("IQ3_S", "IQ4_XS"), down_types=("IQ4_NL", "Q8_0"),
+        served_temperature=0.1,  # registry role architect_general (generation_defaults.temperature)
         extra_types=("Q6_K",)),
 }
 
@@ -464,6 +469,7 @@ def moe_profile_from_gguf(paths, lane: str, *,
                       hidden=gate[0], expert_ff=gate[1], shexp_ff=shexp[1],
                       gate_up_types=_served_types(types, "gate_up"),
                       down_types=_served_types(types, "down"),
+                      served_temperature=known.served_temperature if known else None,
                       extra_types=known.extra_types if known else ())
 
 

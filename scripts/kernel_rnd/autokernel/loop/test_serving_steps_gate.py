@@ -10,8 +10,8 @@ from autokernel.loop import serving
 SPEC = serving.Recipe(
     name="t-spec", model="/m/target.gguf",
     spec_decode={"type": "draft-dflash", "drafter": "/m/draft.gguf", "ngld": 99, "draft_n_max": 8},
-    np=2, ctx=16384)
-PLAIN = serving.Recipe(name="t-plain", model="/m/target.gguf", np=2, ctx=16384)
+    np=2, ctx=16384, temperature=0.6)
+PLAIN = serving.Recipe(name="t-plain", model="/m/target.gguf", np=2, ctx=16384, temperature=0.6)
 
 
 def _launch(steps_per_s, accepted_per_step, *, tok_s=None, counters=True, ms=1000.0):

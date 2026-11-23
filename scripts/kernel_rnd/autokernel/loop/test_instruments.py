@@ -31,7 +31,7 @@ from autokernel.loop import (accumulate, fold2_gates, instruments,
 
 
 SHIPPED_RECIPE = instruments.DEFAULT_RECIPE
-RECIPE = serving.Recipe(name="t", model="/m/target.gguf", np=4, ctx=16384)
+RECIPE = serving.Recipe(name="t", model="/m/target.gguf", np=4, ctx=16384, temperature=0.6)
 
 
 def _floor_row(recipe: serving.Recipe, floor_pct: float = 3.536) -> dict:

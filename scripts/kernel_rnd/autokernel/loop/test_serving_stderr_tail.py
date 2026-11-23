@@ -19,7 +19,7 @@ def _died_popen(text: bytes):
 
 def _run_failing_launch(text: bytes):
     from .test_resolved_recipe import BUILD, _resolve
-    recipe = serving.Recipe(name="gpu", model="/m", np=1)
+    recipe = serving.Recipe(name="gpu", model="/m", np=1, temperature=0.6)
     with mock.patch.object(serving, "require_free_port"), \
             mock.patch.object(serving, "ServerPortOwner"), \
             mock.patch.object(serving.subprocess, "Popen", side_effect=_died_popen(text)), \
@@ -60,7 +60,7 @@ def test_launch_without_the_option_is_unchanged(monkeypatch):
             mock.patch.object(residency.Sampler, "_loop"):
         popen.return_value = mock.Mock(pid=1, returncode=1, **{"poll.return_value": 1})
         from .test_resolved_recipe import BUILD, _resolve
-        recipe = serving.Recipe(name="gpu", model="/m", np=1)
+        recipe = serving.Recipe(name="gpu", model="/m", np=1, temperature=0.6)
         with pytest.raises(serving.ServerDied) as caught:
             serving._measure_once(recipe, BUILD, 18311, evidence=[],
                                   resolved_recipe=_resolve(recipe))

@@ -22,7 +22,7 @@ V1_MANIFEST_DIGEST = "e7bb1bd5831b2e15cf3abf63f27bb652063a575d6b46bc2b92e192cddf
 
 
 def test_v1_serialization_and_hash_are_pinned_byte_for_byte():
-    recipe = serving.Recipe("old-gpu", "/m")
+    recipe = serving.Recipe("old-gpu", "/m", temperature=0.6)
     prompt = ps.FrozenPrompt.from_dict(_prompt("p1", "first exact prompt", recipe))
     assert prompt.body == V1_BODY and hashlib.sha256(prompt.body).hexdigest() == V1_BODY_SHA
     manifest = _prompts(recipe)

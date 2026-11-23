@@ -1009,10 +1009,10 @@ def test_canonical_grammar_projects_a_decoupled_tb_and_checks_it(tmp_path):
 
 
 def test_recipe_threads_batch_normalises_and_keeps_legacy_hashes():
-    base = serving.Recipe(name="r", model="/m.gguf", threads=48)
-    assert serving.Recipe(name="r", model="/m.gguf", threads=48, threads_batch=48) == base
+    base = serving.Recipe(name="r", model="/m.gguf", threads=48, temperature=0.6)
+    assert serving.Recipe(name="r", model="/m.gguf", threads=48, threads_batch=48, temperature=0.6) == base
     assert "threads_batch" not in base.to_dict()
-    split = serving.Recipe(name="r", model="/m.gguf", threads=48, threads_batch=96)
+    split = serving.Recipe(name="r", model="/m.gguf", threads=48, threads_batch=96, temperature=0.6)
     assert split.recipe_hash != base.recipe_hash
     again = serving.Recipe.from_dict(split.to_dict())
     assert (again.threads_batch, again.recipe_hash) == (96, split.recipe_hash)
@@ -1020,7 +1020,7 @@ def test_recipe_threads_batch_normalises_and_keeps_legacy_hashes():
     assert argv[argv.index("-t") + 1] == "48" and argv[argv.index("-tb") + 1] == "96"
     assert " tb=96" in split.describe()
     with pytest.raises(serving.RecipeError, match="threads_batch"):
-        serving.Recipe(name="r", model="/m.gguf", threads=48, threads_batch=0)
+        serving.Recipe(name="r", model="/m.gguf", threads=48, threads_batch=0, temperature=0.6)
 
 
 Q38FN_LAUNCH = Path("/mnt/raid0/llm/autokernel/campaigns/ak-q38fn-cpu-decode-20261003/inputs/"

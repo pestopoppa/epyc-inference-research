@@ -15,7 +15,7 @@ def _recipe(**kw):
     base = dict(name="t", model="/m.gguf", device="ROCm0", ngl=99, np=1, ctx=4096,
                 threads=8, batch=512, ubatch=512, ctk="f16", ctv="f16", fa="on")
     base.update(kw)
-    return serving.Recipe(**base)
+    return serving.Recipe(**base, temperature=0.6)
 
 
 class SelfDraftingRecipe(unittest.TestCase):

@@ -71,7 +71,7 @@ def canonical_recipe(*, backend="cpu", threads=4, policy_keys=(), launch_extra=N
                      instance_mode="full", model_path="/models/model.gguf",
                      model_sha256="a" * 64) -> CanonicalResolvedRecipe:
     root = Path("/build")
-    template = serving.Recipe(
+    template = serving.Recipe(temperature=0.6, 
         name=f"{backend}-recipe", model=model_path,
         device="none" if backend == "cpu" else "ROCm0",
         ngl=0 if backend == "cpu" else 99, cpu_list="0-3", threads=threads,

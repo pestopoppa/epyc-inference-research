@@ -462,7 +462,9 @@ def resolve_exported_recipes(value: Path | str | Mapping[str, Any], *,
             prefix = topology.get("argv_prefix")
             recipe = _with_declared_environment(canonical_recipe_projection(
                 name=f"production:{target['target_id']}", command_argv=command,
-                topology_prefix=prefix), target, environment_policy)
+                topology_prefix=prefix,
+                # The export declares no sampling; keep the pre-2026-11-23 identity.
+                temperature=serving.LEGACY_UNDECLARED_TEMPERATURE), target, environment_policy)
             artifacts = {"model": None, "drafter": None, "executable": None, "dsos": []}
             for item in _entry_artifacts(target):
                 role = item["use"]

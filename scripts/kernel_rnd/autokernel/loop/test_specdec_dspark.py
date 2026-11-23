@@ -62,7 +62,7 @@ def _recipe(**kw) -> serving.Recipe:
         n_predict=256, temperature=0.0, top_p=1.0, top_k=1,
         env={serving.SPEC_EXACT_ENV: EXACT})
     base.update(kw)
-    return serving.Recipe(**base)
+    return serving.Recipe(**base, temperature=0.6)
 
 
 def _resolve(recipe: serving.Recipe, *, backend="cpu", policy=None, artifacts=None,

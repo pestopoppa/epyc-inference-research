@@ -137,7 +137,7 @@ class Sampler:
 
 def cpu_recipe():
     return serving.Recipe(name="owned-port-control", model="/unused", np=1,
-                          n_predict=4, device="none", ngl=0, cpu_list="72-73")
+                          n_predict=4, device="none", ngl=0, cpu_list="72-73", temperature=0.6)
 
 
 @pytest.fixture(params=("cpu", "mocked-gpu"))

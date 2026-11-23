@@ -12,7 +12,7 @@ from . import serving
 
 def _recipe():
     return serving.Recipe(name="c8", model="/model", np=8, ctx=270000,
-                          device="ROCm0", ngl=99, n_predict=256)
+                          device="ROCm0", ngl=99, n_predict=256, temperature=0.6)
 
 
 def _texts():

@@ -145,7 +145,7 @@ def test_real_serving_export_retains_smt_overlap_without_new_gpu_veto(tmp_path):
     proc(target / "task", 4321, "0-95")
     proc(procfs, 20, "184-191", ticks=100)
     observer = residency.CpuLifecycleSampler(proc_root=procfs, sysfs_cpu_root=sysfs)
-    recipe = serving.Recipe(name="gpu", model="/m", np=1)
+    recipe = serving.Recipe(name="gpu", model="/m", np=1, temperature=0.6)
     process = mock.Mock(pid=4321)
     process.poll.return_value = None
     reads = 0

@@ -617,7 +617,7 @@ def _canonical_prefix(prefix: tuple[str, ...]) -> str | None:
 
 def canonical_recipe_projection(*, name: str, command_argv: Sequence[str],
                                 topology_prefix: Sequence[str], n_predict: int = 256,
-                                temperature: float = 0.6, top_p: float = 0.95,
+                                temperature: float | None = None, top_p: float = 0.95,
                                 top_k: int = 20, metric: str = "aggregate_tok_s",
                                 include_numa: bool = False
                                 ) -> serving.Recipe:
@@ -856,6 +856,9 @@ def _validate_workload(workload: WorkloadSpec) -> None:
         minimum = 1 if name == "n_predict" else 0
         if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
             raise ResolutionError(f"recipe.{name} must be a finite integer >= {minimum}")
+    if workload.temperature is None:
+        raise ResolutionError("recipe.temperature must be declared: there is no default sampling "
+                              "regime (served T is 0.1-0.3 per role, 1.0 on :8083)")
     for name in ("temperature", "top_p"):
         value = getattr(workload, name)
         if isinstance(value, bool) or not isinstance(value, (int, float)) \
@@ -871,7 +874,8 @@ def _is_greedy(template: serving.Recipe) -> bool:
     `top_k == 1` and `temperature == 0.0` both pin the argmax; either one puts the launch on
     the path `LLAMA_SPEC_EXACT` selects between.
     """
-    return float(template.temperature) == 0.0 or template.top_k == 1
+    return (template.temperature is not None and float(template.temperature) == 0.0) \
+        or template.top_k == 1
 
 
 def _validate_exactness(template: serving.Recipe, spec_type: str) -> None:

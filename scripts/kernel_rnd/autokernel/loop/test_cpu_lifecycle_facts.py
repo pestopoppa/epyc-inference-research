@@ -186,7 +186,7 @@ def test_actual_measure_path_invalidates_observed_outside_affinity_after_owned_t
     sampler = _fixture(tmp_path)
     # The owning serving method calls attach_target itself after its mocked Popen.
     sampler._target = None
-    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=1, cpu_list="0-95")
+    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=1, cpu_list="0-95", temperature=0.6)
     resolved = _resolve(recipe, backend="cpu")
     reads = []
 
@@ -232,20 +232,20 @@ def test_actual_measure_path_invalidates_observed_outside_affinity_after_owned_t
 
 
 def test_diagnostic_failure_does_not_change_success_or_teardown_and_gpu_unchanged():
-    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=1)
+    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=1, temperature=0.6)
     evidence = []
     with mock.patch.object(serving.residency, "CpuLifecycleSampler", side_effect=OSError("fixture")):
         value, seen, _ = _launch(recipe, _resolve(recipe, backend="cpu"), _proof(), evidence)
     assert value == 25.0 and seen["terminated"]
     assert evidence[0]["cpu_lifecycle_error"] == "OSError: fixture"
-    gpu = serving.Recipe(name="gpu", model="/m", np=1)
+    gpu = serving.Recipe(name="gpu", model="/m", np=1, temperature=0.6)
     with mock.patch.object(serving.residency, "CpuLifecycleSampler", side_effect=AssertionError("GPU")) as ctor:
         _launch(gpu, _resolve(gpu), _proof(), [])
     ctor.assert_not_called()
 
 
 def test_hook_and_snapshot_failures_cannot_replace_serving_result():
-    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=1)
+    recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=1, temperature=0.6)
     observer = mock.Mock()
     observer.start.side_effect = OSError("start diagnostic")
     observer.phase.side_effect = OSError("phase diagnostic")

@@ -317,7 +317,7 @@ def test_lane_flags_never_orphan_a_continuation(tmp_path):
 def test_draft_p_min_is_a_normalized_extension_flag(value, supported):
     from . import resolved_recipe, serving
     template = serving.Recipe(name="q38", model="/m.gguf", device="none", ngl=0,
-                              extra_flags=("--device-draft", "none", "--draft-p-min", value))
+                              extra_flags=("--device-draft", "none", "--draft-p-min", value), temperature=0.6)
     report = resolved_recipe._capability(template, "cpu", None, ())
     codes = {reason.code for reason in report.reasons}
     assert ("extra_flags_unsupported" not in codes) is supported

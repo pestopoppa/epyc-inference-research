@@ -64,6 +64,9 @@ if TYPE_CHECKING:
 #: Schema of the on-disk recipe file, and part of the recipe's identity: a schema bump
 #: changes what the fields MEAN, so it must change the hash too.
 RECIPE_SCHEMA = "epyc.autokernel.canonical_recipe.v1"
+#: The temperature every recipe serialised without one was measured at (the retired dataclass
+#: default). It is a historical fact kept for hash stability, NOT a served regime.
+LEGACY_UNDECLARED_TEMPERATURE = 0.6
 
 
 def _valid_numa_policy(value: object) -> bool:
@@ -395,7 +398,11 @@ class Recipe:
     cpu_list: str | None = None
     #: workload
     n_predict: int = 256
-    temperature: float = 0.6
+    #: The sampling temperature the workload runs at. NO default: 0.6 matched no served role
+    #: (registry defaults 0.1-0.3, :8083 direct traffic 1.0), so a recipe that does not say
+    #: which regime it measures is refused at resolution (`_validate_workload`), never
+    #: silently run at one. Legacy serialisations that omit it are read by `from_dict`.
+    temperature: float | None = None
     top_p: float = 0.95
     top_k: int = 20
     metric: str = "aggregate_tok_s"
@@ -506,6 +513,10 @@ class Recipe:
     def from_dict(cls, d: Mapping) -> "Recipe":
         d = dict(d)
         d.pop("schema", None)
+        # Recipes serialised before 2026-11-23 omit the key and were MEASURED at the then
+        # dataclass default; reading that back faithfully keeps every legacy recipe_hash
+        # (and so every floor calibrated under it) intact. New recipes must declare it.
+        d.setdefault("temperature", LEGACY_UNDECLARED_TEMPERATURE)
         d["extra_flags"] = tuple(d.get("extra_flags", ()))
         if d.get("env") is not None:
             d["env"] = dict(d["env"])
