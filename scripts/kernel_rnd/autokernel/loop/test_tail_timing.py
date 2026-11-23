@@ -183,3 +183,24 @@ def test_export_from_env_is_a_noop_without_env_and_never_raises(tmp_path, monkey
     store = _store_with(tmp_path, [("2026-11-21T01:00:00Z", _timed(2.0, 3.0, 1.0))])
     assert tt.export_from_env([str(store)], None)["iterations_timed"] == 1
     assert json.loads((tmp_path / "R.json").read_text())[tt.RESULT_KEY]["iterations_timed"] == 1
+
+
+def _keep_row(clean_s, guard_s, dup=False):
+    stages = [{"stage": "anchor_clean_build", "commit": "c1", "duration_s": clean_s},
+              {"stage": "anchor_guard_build", "commit": "c1" if dup else "c2",
+               "duration_s": guard_s},
+              {"stage": "headline", "duration_s": 7.0}]
+    return {"keep_path_timing": {"head": "h", "total_s": clean_s + guard_s + 7.0, "stages": stages}}
+
+
+def test_export_result_carries_keep_path_stage_split_via_keep_timing(tmp_path):
+    store = _store_with(tmp_path, [("2026-11-21T01:00:00Z", _timed(2.0, 3.0, 1.0)),
+                                   ("2026-11-21T02:00:00Z", _keep_row(30.0, 20.0, dup=True))])
+    result = tmp_path / "RESULT.json"
+    tt.export_result(store, result)
+    keep = json.loads(result.read_text())[tt.KEEP_RESULT_KEY]
+    assert keep["keeps_timed"] == 1 and keep["keeps_untimed"] == 0  # tail rows not counted
+    assert keep["stages"]["anchor_clean_build"]["total_s"] == 30.0
+    assert keep["stages"]["headline"]["n"] == 1
+    assert keep["duplicate_builds"][0]["commit"] == "c1"  # duplicate clean+guard build flagged
+    assert keep["since"] is None

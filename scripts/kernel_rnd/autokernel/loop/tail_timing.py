@@ -34,6 +34,8 @@ import sys
 import time
 from typing import Any, Iterable, Iterator, Mapping
 
+from . import keep_timing
+
 SCHEMA = "epyc.autokernel.tail_path_timing.v1"
 #: Payload key on every experiment row a pool draw produces.
 FIELD = "tail_path_timing"
@@ -59,9 +61,8 @@ def _iso() -> str:
 
 
 def classify_label(label: str) -> str | None:
-    text = str(label or "")
     for prefix, stage in _LABELS:
-        if text.startswith(prefix):
+        if str(label or "").startswith(prefix):
             return stage
     return None
 
@@ -340,6 +341,8 @@ def read_store(store_root: Path, since: str | None = None) -> list[Mapping[str, 
 RESULT_KEY = "tail_path_timing_summary"
 #: Env var naming the RESULT.json a campaign run should export into (run.py reads it).
 RESULT_ENV = "AK_RESULT_JSON"
+#: Key the keep-path per-stage summary (keep_timing.summarize) is merged under.
+KEEP_RESULT_KEY = "keep_path_timing_summary"
 
 
 def result_block(payloads: Iterable[Mapping[str, Any] | None]) -> dict[str, Any]:
@@ -363,18 +366,18 @@ def result_block(payloads: Iterable[Mapping[str, Any] | None]) -> dict[str, Any]
 def export_result(store_root: Path, result_path: Path, *, since: str | None = None) -> dict[str, Any]:
     """Merge `result_block` of the store (rows since `since`) into `result_path` under
     RESULT_KEY, atomically; an existing RESULT.json keeps every other key. Returns the block."""
-    block = result_block(read_store(Path(store_root), since=since))
+    block = result_block(payloads := read_store(Path(store_root), since=since))
     block["since"] = since
     path = Path(result_path)
-    doc: dict[str, Any] = {}
-    if path.exists():
-        try:
-            loaded = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                doc = loaded
-        except (OSError, ValueError):
-            doc = {}
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        doc = {}
+    doc = doc if isinstance(doc, dict) else {}
     doc[RESULT_KEY] = block
+    # AK-EFF-KEEP-PATH-TIMING: the keep-path split is keep_timing's; forwarded, not re-derived.
+    doc[KEEP_RESULT_KEY] = {**keep_timing.summarize([p for p in payloads if keep_timing.FIELD in (p or {})]),
+                            "since": since}
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp-tail-timing")
     tmp.write_text(json.dumps(doc, indent=1, sort_keys=True), encoding="utf-8")
