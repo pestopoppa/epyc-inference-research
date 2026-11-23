@@ -27,7 +27,7 @@ import subprocess
 
 from .. import schemas
 from ..evaluator import correctness
-from . import bench, census, residency, scratch
+from . import bench, census, residency, sampling_axis, scratch, spec_temperature_gate
 from .cpu_routes_table import (  # noqa: F401
     CPU_MULTI_FILE_ROUTES, CPU_SOURCE_ROUTE_PATHS, CPU_SOURCE_ROUTES, CpuMultiFileRoute,
     CpuSourceRoute, _DS41_GRAPH_OPS, _DS41_SYNC_OPS, _SOLO_ELIGIBLE_OPS)
@@ -2503,6 +2503,16 @@ PPL_CONTRACT_TOOL_TARGETS = ("llama-perplexity", "llama-completion")
 #: The FIXED reference for cumulative drift: the frozen production CPU kernel store
 #: (a symlink to `<store>/builds/cpu-<date>-<sha>/bin`; its parent is the "build").
 PRODUCTION_CPU_KERNEL = "/mnt/raid0/llm/kernels/production/cpu"
+
+
+def check_spec_temperature(sampling, pit_results=(), *, served=None) -> Verdict:
+    """AK-TEMP-AXIS-4: a spec-decode/acceptance lever needs a served-temperature arm and, at T>0,
+    a SPEC-PIT.1 distribution result (a hook until that instrument exists). Fails closed."""
+    served = served if served is not None else sampling_axis.served_or_none()
+    if served is None:
+        return Verdict(spec_temperature_gate.GATE_ID, False, "served temperatures unreadable (registry)")
+    d = spec_temperature_gate.decide(sampling, pit_results, served)
+    return Verdict(d["gate"], d["ok"], "" if d["ok"] else d["reason"])
 
 
 def production_cpu_reference_build() -> Path:

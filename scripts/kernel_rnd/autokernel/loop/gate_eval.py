@@ -49,6 +49,8 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from . import sampling_axis, spec_temperature_gate
+
 SCHEMA = "epyc.autokernel.gate_verdict.v1"
 POLICY_PATH = Path(__file__).with_name("graph_kld_policy.json")
 #: The 27B-anchored policy is in force for rows run on/after its ruling (operator 2026-11-18).
@@ -315,6 +317,16 @@ def evaluate(result: Mapping[str, Any] | None, *, ended: Mapping[str, str] | Non
         return no_claim(f"run did not finish: ended rc={rc} reason={reason}", native_s)
     if result.get("complete") is False and declared != "FAIL":
         return no_claim(f"RESULT complete=false; declared {native_s[:80] or '(none)'}; rc={rc}", native_s)
+    if declared in ("PASS", "FAIL") and spec_temperature_gate.applies(result):
+        # AK-TEMP-AXIS-4: a spec-decode/acceptance lever is neither KEEP nor DROP on evidence that
+        # misses the served-temperature arm or its distribution gate. Unreadable registry: no gate.
+        served = sampling_axis.served_or_none()
+        decision = spec_temperature_gate.decide(result.get("sampling"), result.get("spec_pit"), served) \
+            if served is not None else {"ok": True}
+        if not decision["ok"]:
+            return _verdict("FUTILITY", decision["gate"], "L2",
+                            f"spec-decode lever cannot be KEEP/DROP: {decision['reason']}; "
+                            f"declared {native_s[:60] or '(none)'}", decision["checks"], native_s)
     date = _row_date(row, result)
     in_force = date is None or date >= POLICY_IN_FORCE_FROM
     be = backend or backend_of(row, result)
