@@ -16,3 +16,5 @@ tokens in r4). Effect on healthy requests must be 0 (threshold never fires at ac
 **Falsifier:** replaying the r4 degenerate pair on the A3B with the knob on gives < 3 % wall-time reduction for those requests, OR
 any healthy request (acceptance >= 0.5) trips the threshold, OR greedy output changes (drafting must not change tokens). Effort S
 (server-context.cpp speculative loop: rolling counter per slot plus a default-off knob).
+
+served-T check 2026-11-23 (da6e2f5ae): threshold 0.2 safe at T 0.1-1.0 (lowest healthy 64-tok window 0.22-0.25); keep the 512-token window.
