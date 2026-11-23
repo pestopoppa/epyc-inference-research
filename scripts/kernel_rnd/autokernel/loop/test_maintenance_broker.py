@@ -307,8 +307,9 @@ def test_provider_calls_are_refused_and_detected_under_the_mutex(runtime):
 
 def test_default_controller_backend_and_factories_leave_execution_unavailable(runtime):
     controller, prepared, policy, job, old = runtime
-    # AKU-11 registers only the activation-gated lifecycle provider; no maintenance broker.
-    assert set(provider_factories.REGISTERED_FACTORIES) <= {"host_claim_v1"}
+    # AKU-11/10g2 register only activation-gated providers (inert without their record).
+    assert set(provider_factories.REGISTERED_FACTORIES) <= {"host_claim_v1",
+                                                            "maintenance_broker_v1"}
     with pytest.raises(ValueError, match="not registered"):
         provider_factories.construct("maintenance-broker")
     with pytest.raises(me.MaintenanceExecutionRefused, match="controller maintenance"):

@@ -5,6 +5,8 @@ and a top-level no-argument function. The supervisor starts a fresh
 interpreter before importing this file's target. `host_claim_v1` (AKU-11) is
 selected only by an explicit --provider-factory and installs nothing without
 its operator activation record (`host_claim_provider.ACTIVATION_ENV`).
+`maintenance_broker_v1` (AKU-10g2) returns a maintenance hold broker, not a
+registry, and is likewise inert without `maintenance_broker.ACTIVATION_ENV`.
 """
 from __future__ import annotations
 
@@ -18,6 +20,8 @@ REGISTERED_FACTORIES = {}
 REGISTERED_FACTORIES["host_claim_v1"] = (
     "host_claim_provider.py", "make_registry",
     "00cfd7fa439f202ab550d7ce72a80ac55aece0d1c0f8951848d8c3f0b7eb8f6d")
+REGISTERED_FACTORIES["maintenance_broker_v1"] = (
+    "maintenance_broker.py", "make_broker", "5c827750c0c4df23d58303e0f6be25b89430038f4f5194b03da634cbf736666a")
 
 
 def source(factory_id):
