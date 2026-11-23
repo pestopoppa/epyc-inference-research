@@ -96,7 +96,7 @@ ANCHOR_GUARD_AA_WINDOW_S = 6 * 3600.0
 
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates, new_epoch,
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
-               integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
+               integrity, heldout_serving, lineage_beliefs, lineage_capture, pipeline, pool, production, status, surface_fold,
                surface_validation)
 from . import exact_lane, hip_launch_proof, keep_timing, variance_keep
 from . import floor_selfcheck
@@ -2431,6 +2431,9 @@ def _main(argv: list[str] | None = None) -> int:
     # Proceed (loudly) on a hand-built anchor that carries no provenance.json;
     # anchor-gen-* dirs never need or honour this.
     parser.add_argument("--allow-unverified-anchor", action="store_true")
+    parser.add_argument("--lineage-capture", action="store_true",
+                        help="seal each kept diff's original patch + source via lineage_capture "
+                             "(default off; env AK_LINEAGE_CAPTURE=1 is equivalent; OD-3)")
     parser.add_argument("--model", type=Path,
                         help="required unless derived from an explicitly selected enrolled target")
     parser.add_argument("--resolved-campaign", type=Path,
@@ -4448,8 +4451,13 @@ def _main(argv: list[str] | None = None) -> int:
         lost-diffs defect returning by a different route.
         """
         name = getattr(hypothesis, "mechanism_id", None) or "unnamed"
-        return archive.retain_patch(args.store, worker.worktree, lane=worker.name,
+        kept = archive.retain_patch(args.store, worker.worktree, lane=worker.name,
                                     mechanism_id=name)
+        if kept is not None:  # OD-3: default-off AK_LINEAGE_CAPTURE=1, never raises
+            lineage_capture.capture_at_keep(args.store, worker.worktree, lane=worker.name,
+                                            mechanism_id=name,
+                                            enabled=True if getattr(args, "lineage_capture", False) else None)
+        return kept
 
     #: Round-5 resolution A: per-mechanism record of THIS process's gate run -- the
     #: numerics class of the admitting route and the sha256 of the passing verdicts.

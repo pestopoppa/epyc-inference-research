@@ -45,3 +45,51 @@ class LineageCaptureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CaptureAtKeepTests(unittest.TestCase):
+    def _repo(self, root):
+        import subprocess
+        run = lambda *a: subprocess.run(["git", "-C", str(root), *a], check=True, capture_output=True)
+        run("init", "-q"); run("config", "user.email", "t@t"); run("config", "user.name", "t")
+        (root / "ggml/src").mkdir(parents=True)
+        (root / "ggml/src/a.c").write_text("int a = 1;\n")
+        run("add", "."); run("commit", "-qm", "base")
+        (root / "ggml/src/a.c").write_text("int a = 2;\n")
+        return run
+
+    def test_off_never_invokes_producer(self):
+        from .lineage_capture import capture_at_keep
+        calls = []
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(capture_at_keep(Path(d), Path(d), lane="l", mechanism_id="m",
+                                              environ={}, _capture=lambda *a, **k: calls.append(k)))
+        self.assertEqual(calls, [])
+
+    def test_on_via_env_or_knob_invokes_with_right_record(self):
+        from .lineage_capture import capture_at_keep
+        for kw in ({"environ": {"AK_LINEAGE_CAPTURE": "1"}}, {"environ": {}, "enabled": True}):
+            calls = []
+            with tempfile.TemporaryDirectory() as d:
+                repo = Path(d) / "wt"; repo.mkdir(); self._repo(repo)
+                capture_at_keep(Path(d) / "store", repo, lane="l", mechanism_id="m",
+                                _capture=lambda store, **k: calls.append(k), **kw)
+            (k,) = calls
+            self.assertEqual(k["source_files"], {"ggml/src/a.c": b"int a = 2;\n"})
+            self.assertIn(b"int a = 2;", k["patch_bytes"])
+            self.assertRegex(k["base_commit"], r"[0-9a-f]{40}")
+            self.assertTrue(k["capture_id"].startswith("ak-"))
+
+    def test_real_capture_and_failure_does_not_raise(self):
+        from .lineage_capture import capture_at_keep
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d) / "wt"; repo.mkdir(); self._repo(repo)
+            receipt = capture_at_keep(Path(d) / "store", repo, lane="l", mechanism_id="m",
+                                      environ={"AK_LINEAGE_CAPTURE": "1"})
+            self.assertEqual(receipt["authority"], "offline_lineage_source_only")
+            def boom(*a, **k):
+                raise OSError("disk full")
+            self.assertIsNone(capture_at_keep(Path(d) / "s2", repo, lane="l", mechanism_id="m",
+                                              environ={"AK_LINEAGE_CAPTURE": "1"}, _capture=boom))
+            self.assertIsNone(capture_at_keep(Path(d) / "s3", Path(d) / "nonrepo", lane="l",
+                                              mechanism_id="m", enabled=True))

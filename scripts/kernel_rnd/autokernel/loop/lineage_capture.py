@@ -1,7 +1,8 @@
 """Default-off prospective source capture for offline lineage diagnostics.
 
-This module is deliberately not imported by the live loop. A future approved
-producer may call ``capture`` at the existing ``keep_the_diff`` boundary, after
+The live loop reaches this module only through ``capture_at_keep`` at the
+``keep_the_diff`` boundary, behind the DEFAULT-OFF env flag ``AK_LINEAGE_CAPTURE=1``
+(operator approval OD-3, intake-ak-1123, 2026-11-23). ``capture`` is called after
 the authored diff exists and before the lane is reset. The caller must supply
 its original attempt/journal identity; this module never guesses one from a
 mechanism name, lane, path, or current git state after the attempt.
@@ -105,4 +106,43 @@ def capture(store: Path, *, capture_id: str, parent_id: str | None,
     return receipt
 
 
-__all__ = ["SCHEMA", "capture"]
+ENV_FLAG = "AK_LINEAGE_CAPTURE"
+
+
+def capture_at_keep(store: Path, worktree: Path, *, lane: str, mechanism_id: str,
+                    environ: Mapping[str, str] | None = None, enabled: bool | None = None,
+                    _capture=None) -> dict | None:
+    """Flag-gated, never-raising producer hook for ``keep_the_diff``.
+
+    Off (``enabled`` falsy and env flag unset or not "1"; ``enabled`` is the loop's --lineage-capture CLI knob): returns None without touching anything. On: seals the
+    lane's original patch and the post-authoring content of every file it touches under
+    an identity derived from (head, patch bytes) -- the same digest that names the
+    retained patch -- so a repeat attempt of identical bytes is idempotent. Any failure
+    is swallowed (reported on stderr) so a capture problem cannot break the keep.
+    """
+    env = os.environ if environ is None else environ
+    if not (enabled or env.get(ENV_FLAG) == "1"):
+        return None
+    try:
+        from . import archive
+        captured = archive.capture_patch(worktree)
+        if captured is None:
+            return None
+        head, patch, additions = captured
+        names = [n for n in archive._git(worktree, "diff", "HEAD", "--name-only").splitlines() if n]
+        files = {}
+        for name in sorted(set(names) | set(additions)):
+            target = Path(worktree) / name
+            if target.is_file() and not target.is_symlink():
+                files[name] = target.read_bytes()
+        digest = _sha(head.encode() + b"\n" + patch)
+        return (_capture or capture)(
+            store, capture_id=f"ak-{digest}", parent_id=f"champion-{head[:12]}",
+            base_commit=head, patch_bytes=patch, source_files=files)
+    except Exception as exc:  # noqa: BLE001 - capture must never break the keep
+        import sys
+        print(f"lineage_capture: skipped ({lane}/{mechanism_id}): {exc}", file=sys.stderr)
+        return None
+
+
+__all__ = ["ENV_FLAG", "SCHEMA", "capture", "capture_at_keep"]
