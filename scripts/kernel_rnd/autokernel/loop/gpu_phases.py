@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 
-from . import claim, loop, scratch
+from . import build_slot, claim, loop, scratch
 
 CHILD_PHASE_DIR = "AK_GPU_LOCAL_PHASE_DIR"
 
@@ -53,8 +53,9 @@ class LocalPhases:
     CPU measurements, but never masquerades as physical CPU ownership or cost.
     """
 
-    def __init__(self, *, cpu_list, quiet, should_stop, on_wait):
+    def __init__(self, *, cpu_list, quiet, should_stop, on_wait, lane=None):
         self.cpu_list = cpu_list
+        self.lane = lane or f"cpu-{cpu_list}"
         self.quiet = quiet
         self.should_stop = should_stop
         self.on_wait = on_wait
@@ -137,8 +138,10 @@ class LocalPhases:
                     raise
 
     def build(self):
-        return self._hold("build", lambda entered: claim.hold_cpu(
-            self.cpu_list, role="build", on_acquired=entered))
+        # AKU-20: pinned (a cpu_list is required), per-lane capped, region role `build`.
+        build_slot.bound_jobs(1, self.cpu_list)
+        return self._hold("build", lambda entered: build_slot.build_slot(
+            self.cpu_list, 1, lane=self.lane, on_acquired=entered, timeout_s=1.0))
 
     @contextmanager
     def compile_env(self, env=None, *, paths=()):

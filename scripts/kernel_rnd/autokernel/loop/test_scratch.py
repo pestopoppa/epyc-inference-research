@@ -854,6 +854,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "model_identity.py:_persist_divergence:write_text": (1, "evidence: content-named full original anchor/candidate observation arrays behind an identity refusal; no grading projection"),
     "claim.py:hold:mkdir": (1, "state: device claim lock file"),
     "claim.py:hold:open-write": (1, "state: device claim lock file"),
+    "build_slot.py:lane_slot:mkdir": (1, "state: per-lane build-slot lock directory"),
+    "build_slot.py:lane_slot:open-write": (1, "state: per-lane build-slot flock target, never deleted"),
     "claim.py:WindowDeviceHold.acquire:mkdir": (
         1, "state: device claim lock file (G1 window-scoped hold in the serial parent)"),
     "claim.py:WindowDeviceHold.acquire:open-write": (

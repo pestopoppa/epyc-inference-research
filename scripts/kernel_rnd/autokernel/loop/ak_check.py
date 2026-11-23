@@ -143,14 +143,14 @@ LANE_WAIT_S = 60
 #: timeout is 7200 s. `AK_CHECK_PEER_WAIT_S` overrides; polled every PEER_POLL_S.
 DEFAULT_PEER_WAIT_S = 2700.0
 PEER_POLL_S = 15.0
-#: `claim.hold_cpu`'s region-lock role (`autokernel-cpu`, `claim.py`), shared by EVERY
+#: `claim.hold_cpu`'s region-lock role (`bench`, `claim.CPU_ARM_ROLE`; was `autokernel-cpu` before AKU-21), shared by EVERY
 #: AutoKernel loop. It is NOT excluded from the peer check (2026-10-04): with two loops
 #: running, a live `autokernel-cpu` flock seen during an ak-check is the OTHER loop's
 #: measurement -- the launching loop released its own claim for the actor phase
 #: (`cpu_window.py`). Kept as a named constant for callers and tests that pass it as
 #: `exclude_role` explicitly. Duplicated as a literal (not imported) so this stays
 #: correct even if ak-check runs standalone, outside the loop's package.
-LOOP_REGION_ROLE = "autokernel-cpu"
+LOOP_REGION_ROLE = "bench"
 MAX_HEADER_TUS_COMPILE = 3
 MAX_OP_TEST_TUS = 24
 MAX_DIAG_LINES, MAX_DIAG_CHARS = 60, 6000

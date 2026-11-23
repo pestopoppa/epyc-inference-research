@@ -26,6 +26,10 @@ DEVICE_LOCK = Path("/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock")
 DEVICE_ID = "mi210_0"
 
 
+#: AKU-21: the CPU arm's region-lock role (the orchestrator's `bench`); a build holds `build`.
+CPU_ARM_ROLE = "bench"
+
+
 class ClaimRefused(RuntimeError):
     """The device is held by someone else, or the claim did not survive the window."""
 
@@ -678,7 +682,7 @@ def _gpu_quiet_module():
 
 
 @contextmanager
-def hold_cpu(cpu_list: str, *, gpu_quiet: bool = False, role: str = "autokernel-cpu",
+def hold_cpu(cpu_list: str, *, gpu_quiet: bool = False, role: str = CPU_ARM_ROLE,
              capture_segments=False, on_acquired=None) -> Iterator[dict]:
     """Use the installed orchestrator's physical region owner, never a new flock.
 
@@ -865,7 +869,7 @@ def region_lock_busy(error: BaseException) -> bool:
     `CpuRegionLockTimeout`, and importing it here would make this module's import
     depend on the orchestrator checkout being resolvable.
     """
-    return type(error).__name__ == "CpuRegionLockTimeout"
+    return type(error).__name__ in ("CpuRegionLockTimeout", "BuildSlotBusy")
 
 
 class CpuClaimLease:

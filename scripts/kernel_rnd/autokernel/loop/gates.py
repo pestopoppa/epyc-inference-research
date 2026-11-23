@@ -223,6 +223,9 @@ def _compiles(source_root: Path, build_dir: Path, *, cmake_defines: tuple,
               jobs: int, cpu_list: str | None, targets: tuple = DEFAULT_TARGETS,
               cmake: str = "cmake", env: dict | None = None) -> Verdict:
     prefix = ("taskset", "-c", cpu_list) if cpu_list else ()
+    if cpu_list:  # AKU-20: a pinned build never runs more jobs than its CPUs
+        from .build_slot import bound_jobs
+        jobs = bound_jobs(jobs, cpu_list)
     _clear_stale_build_dir(source_root, build_dir)
     configure = [*prefix, cmake, "-S", str(source_root), "-B", str(build_dir),
                  "-DCMAKE_BUILD_TYPE=Release",
