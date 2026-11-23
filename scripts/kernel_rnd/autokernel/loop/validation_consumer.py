@@ -160,7 +160,8 @@ class ValidationConsumer:
                  semantic_authorities: Mapping[str, RegisteredSemanticAuthority] | None = None,
                  registered_estimators: Mapping[str, Callable[[ep.CalibrationReceipt], float]] | None = None,
                  calibration_rule_id: str | None = None,
-                 calibration_rule: Callable[[ep.CalibrationReceipt, ep.ExperimentPlan], bool | str] | None = None) -> None:
+                 calibration_rule: Callable[[ep.CalibrationReceipt, ep.ExperimentPlan], bool | str] | None = None,
+                 treatment_resolver: cm.TreatmentResolver | None = None) -> None:
         if not isinstance(transactions, ct.CandidateTransactions):
             raise ValidationConsumerError("transactions must be CandidateTransactions")
         if not isinstance(native_validator, nc.NativeCaptureValidator):
@@ -172,6 +173,9 @@ class ValidationConsumer:
         self.evidence_store = evidence_store
         self.semantic_authorities = dict(semantic_authorities or {})
         self.registered_estimators = dict(registered_estimators or {})
+        if treatment_resolver is not None and not callable(treatment_resolver):
+            raise ValidationConsumerError("treatment resolver must be callable")
+        self.treatment_resolver = treatment_resolver
         self.calibration_rule_id = calibration_rule_id
         self.calibration_rule = calibration_rule
         self.calibration_cache = ep.CalibrationCache()
@@ -207,7 +211,8 @@ class ValidationConsumer:
             tuple(item.row_id for item in row_set.rows if item.required),
             tuple(cm.ValidationRowState(item.row_id, "pending", None, None)
                   for item in row_set.rows)).validated()
-        loo_plans = {item.keep_id: cm.plan_loo(candidate, item.keep_id)
+        loo_plans = {item.keep_id: cm.plan_loo(candidate, item.keep_id,
+                                               treatment_resolver=self.treatment_resolver)
                      for item in candidate.keeps}
         debt = tuple(self._initial_debt(row, loo_plans) for row in row_set.rows)
         self.transactions.start_batch(request_id=request_id, batch=batch, row_set=row_set,

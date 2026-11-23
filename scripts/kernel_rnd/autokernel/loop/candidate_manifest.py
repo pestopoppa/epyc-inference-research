@@ -48,6 +48,10 @@ class TransitionError(RuntimeError):
     """A state transition violates identity, ordering, CAS, or trust requirements."""
 
 
+class LOOUnavailable(RuntimeError):
+    """An ablation could not be constructed; its reason remains validation debt."""
+
+
 class TrustedVerificationRequired(TransitionError):
     """Validated-pointer advancement lacks its trusted evidence adapter."""
 
@@ -463,6 +467,40 @@ class LOOPlan:
 TreatmentResolver = Callable[[CandidateManifest, KeepTreatment], CandidateManifest]
 
 
+def _runtime_loo_candidate(candidate: CandidateManifest, selected: KeepTreatment) -> CandidateManifest | None:
+    # A launch has two distinct identities. A prior execution digest alone
+    # cannot reconstruct its prior snapshot; require explicit changes for both.
+    changes = {change.field_id: change for change in selected.changes}
+    # Only the canonical whole-recipe fields have unambiguous meaning here;
+    # other field grammars need an owning resolver.
+    ambiguous = set(changes) != {"runtime:recipe", "runtime:snapshot"}
+    raw = candidate.to_dict()
+    used = False
+    if not ambiguous:
+        execution_change = changes["runtime:recipe"]
+        snapshot_change = changes["runtime:snapshot"]
+        for target in raw["targets"]:
+            if not ({target["target_id"], target["backend"], "all"}
+                    & set(selected.affected_scopes)):
+                continue
+            execution = target["resolved_recipe_execution_digest"]
+            snapshot = target["resolved_recipe_snapshot_digest"]
+            matches_execution = execution == execution_change.current_digest
+            matches_snapshot = snapshot == snapshot_change.current_digest
+            if matches_execution != matches_snapshot:
+                ambiguous = True
+                break
+            if matches_execution:
+                target["resolved_recipe_execution_digest"] = execution_change.previous_digest
+                target["resolved_recipe_snapshot_digest"] = snapshot_change.previous_digest
+                used = True
+    if not ambiguous and used:
+        raw["manifest_id"] = f"{candidate.manifest_id}:loo:{selected.keep_id}"
+        raw["keeps"] = [item.to_dict() for item in candidate.keeps if item.keep_id != selected.keep_id]
+        return CandidateManifest.from_dict(raw)
+    return None
+
+
 def plan_loo(candidate: CandidateManifest, keep_id: str, *,
              treatment_resolver: TreatmentResolver | None = None) -> LOOPlan:
     candidate = candidate.validated()
@@ -485,32 +523,74 @@ def plan_loo(candidate: CandidateManifest, keep_id: str, *,
         if treatment_resolver is None:
             return LOOPlan(candidate.manifest_digest, keep_id, "nonidentifiable", reason,
                            candidate.build_set_digest, ())
-    if selected.kind != "runtime" and treatment_resolver is None:
-        return LOOPlan(candidate.manifest_digest, keep_id, "unsupported",
-                       "source/build LOO requires a registered treatment resolver",
-                       candidate.build_set_digest, ())
     derived_digest = None
-    if treatment_resolver is None:
-        raw = candidate.to_dict()
-        raw["manifest_id"] = f"{candidate.manifest_id}:loo:{keep_id}"
-        raw["keeps"] = [item.to_dict() for item in candidate.keeps if item.keep_id != keep_id]
-        substitutions = {item.current_digest: item.previous_digest for item in selected.changes}
-        for target in raw["targets"]:
-            current = target["resolved_recipe_execution_digest"]
-            if current in substitutions:
-                target["resolved_recipe_execution_digest"] = substitutions[current]
-        derived_digest = CandidateManifest.from_dict(raw).manifest_digest
+    if treatment_resolver is None and selected.kind == "runtime":
+        derived = _runtime_loo_candidate(candidate, selected)
+        if derived is not None:
+            derived_digest = derived.manifest_digest
+    if treatment_resolver is None and derived_digest is None:
+        return LOOPlan(candidate.manifest_digest, keep_id, "unsupported",
+                       "LOO requires a registered resolver or both prior recipe identities",
+                       candidate.build_set_digest, ())
     if treatment_resolver is not None:
-        derived = treatment_resolver(candidate, selected).validated()
+        try:
+            derived = treatment_resolver(candidate, selected).validated()
+        except LOOUnavailable as exc:
+            reason = str(exc).strip()
+            if not reason:
+                raise CandidateError("LOO unavailability requires a reason") from exc
+            return LOOPlan(candidate.manifest_digest, keep_id, "unsupported", reason,
+                           candidate.build_set_digest, ())
         if any(keep.keep_id == keep_id for keep in derived.keeps):
             raise CandidateError("treatment resolver did not remove the selected keep")
+        if derived.keeps != tuple(keep for keep in candidate.keeps if keep.keep_id != keep_id):
+            raise CandidateError("treatment resolver changed other keeps")
+        if derived.production_ref_digest != candidate.production_ref_digest:
+            raise CandidateError("treatment resolver changed the frozen production reference")
         if selected.kind == "runtime" and {
                 item.execution_digest for item in derived.builds} != {
                 item.execution_digest for item in candidate.builds}:
             raise CandidateError("runtime-only LOO changed the candidate binary")
+        if selected.kind == "runtime":
+            if derived.sources != candidate.sources:
+                raise CandidateError("runtime-only LOO changed source identity")
+            if derived.dependency_digest != candidate.dependency_digest:
+                raise CandidateError("runtime-only LOO changed dependency identity")
+            old_targets = {item.target_id: item for item in candidate.targets}
+            new_targets = {item.target_id: item for item in derived.targets}
+            if old_targets.keys() != new_targets.keys():
+                raise CandidateError("runtime-only LOO changed target membership")
+            changed = False
+            for target_id, old_target in old_targets.items():
+                before, after = old_target.to_dict(), new_targets[target_id].to_dict()
+                old_recipe = (before.pop("resolved_recipe_execution_digest"),
+                              before.pop("resolved_recipe_snapshot_digest"))
+                new_recipe = (after.pop("resolved_recipe_execution_digest"),
+                              after.pop("resolved_recipe_snapshot_digest"))
+                if before != after:
+                    raise CandidateError("runtime-only LOO changed target identity")
+                if old_recipe != new_recipe:
+                    if not ({target_id, old_target.backend, "all"} & set(selected.affected_scopes)):
+                        raise CandidateError("runtime-only LOO changed an out-of-scope target")
+                    changed = True
+            if not changed:
+                raise CandidateError("runtime-only LOO did not change a recipe")
         derived_digest = derived.manifest_digest
     return LOOPlan(candidate.manifest_digest, keep_id, "planned", None,
                    candidate.build_set_digest, selected.changes, derived_digest)
+
+
+def materialize_runtime_loo(candidate: CandidateManifest, keep_id: str) -> CandidateManifest:
+    """Reconstruct the exact eligible runtime ablation named by its plan."""
+    candidate = candidate.validated()
+    plan = plan_loo(candidate, keep_id)
+    if plan.status != "planned":
+        raise TransitionError(f"runtime LOO is {plan.status}: {plan.reason}")
+    selected = next(item for item in candidate.keeps if item.keep_id == keep_id)
+    derived = _runtime_loo_candidate(candidate, selected)
+    if derived is None or derived.manifest_digest != plan.derived_manifest_digest:
+        raise TransitionError("runtime LOO reconstruction differs from its plan")
+    return derived
 
 
 @dataclass(frozen=True)
@@ -1307,8 +1387,8 @@ __all__ = ["BATCH_SCHEMA", "BUILD_SCHEMA", "CANDIDATE_SCHEMA", "CHANGE_SCHEMA",
            "ROW_SCHEMA", "ROW_SET_SCHEMA", "ROW_STATE_SCHEMA", "SOURCE_SCHEMA",
            "STATE_SCHEMA", "TARGET_SCHEMA", "BuildIdentity", "CandidateError",
            "CandidateManifest", "CandidateState", "CandidateTarget", "FieldChange",
-           "KeepTreatment", "LOOPlan", "LOOResult", "RequiredRowSet", "RowReceipt",
-           "SourceIdentity", "TransitionError", "TrustedVerificationRequired",
+           "KeepTreatment", "LOOPlan", "LOOResult", "LOOUnavailable", "RequiredRowSet", "RowReceipt",
+           "SourceIdentity", "TransitionError", "TreatmentResolver", "TrustedVerificationRequired",
            "ValidationBatch", "ValidationRow", "ValidationRowState", "advance_validated",
-           "complete_batch", "equivalence_permits", "integrate_candidate", "plan_loo",
+           "complete_batch", "equivalence_permits", "integrate_candidate", "materialize_runtime_loo", "plan_loo",
            "record_row", "refuse_gate_start", "source_set_digest", "start_batch"]

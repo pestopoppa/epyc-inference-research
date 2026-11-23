@@ -116,8 +116,14 @@ def _receipt(batch, row_id) -> cm.RowReceipt:
 
 def _loo_kwargs(candidate, row_set):
     plans, results = {}, {}
+    base = _base()
+    if candidate.targets[0].backend != base.targets[0].backend:
+        raw = base.to_dict()
+        raw["targets"][0]["backend"] = candidate.targets[0].backend
+        base = cm.CandidateManifest.from_dict(raw)
     for keep in candidate.keeps:
-        plan = cm.plan_loo(candidate, keep.keep_id)
+        plan = cm.plan_loo(candidate, keep.keep_id,
+                           treatment_resolver=lambda _candidate, _keep: base)
         plans[keep.keep_id] = plan
         results[keep.keep_id] = cm.LOOResult.from_dict({
             "schema": cm.LOO_RESULT_SCHEMA, "plan_digest": plan.plan_digest,
@@ -224,7 +230,8 @@ def test_source_change_cannot_claim_a_build_from_different_source_identity():
 def test_runtime_loo_reuses_binary_while_overlap_dependency_and_source_are_not_faked():
     base = _base()
     first = _next(base, 0)
-    plan = cm.plan_loo(first, "k0")
+    assert cm.plan_loo(first, "k0").status == "unsupported"
+    plan = cm.plan_loo(first, "k0", treatment_resolver=lambda *_: base)
     assert plan.status == "planned"
     assert plan.binary_execution_digest == first.build_set_digest
     overlapping = _next(first, 1)
@@ -509,14 +516,13 @@ def test_loaded_completed_batch_cannot_omit_production_backend_obligation():
     calls = []
     with pytest.raises(cm.TransitionError, match="omits"):
         cm.advance_validated(state, completed, rows, candidate, comparator,
-                             verifier=lambda *_: calls.append(True) or True,
-                             **_loo_kwargs(candidate, rows))
+                             verifier=lambda *_: calls.append(True) or True)
     assert calls == []
 
 
 def test_loo_debt_needs_bound_eligible_result_and_trusted_verifier():
     comparator, candidate = _base(), _next(_base(), 0)
-    plan = cm.plan_loo(candidate, "k0")
+    plan = cm.plan_loo(candidate, "k0", treatment_resolver=lambda *_: comparator)
     assert plan.derived_manifest_digest is not None
     row = _row("gpu", candidate, comparator)
     rows = _row_set([row])
@@ -592,3 +598,70 @@ def test_frozen_old_batch_can_advance_its_candidate_after_integration_moves():
     assert advanced.keeps_since_gate == 1
     assert advanced.validated_candidate == candidate.manifest_digest
     assert advanced.stale_summary_refs == ("summary-old",)
+
+
+def test_runtime_loo_requires_prior_snapshot_and_preserves_other_keeps():
+    base = _base()
+    candidate = _next(base, 0)
+    plan = cm.plan_loo(candidate, "k0")
+    assert plan.status == "unsupported" and plan.derived_manifest_digest is None
+    with pytest.raises(cm.TransitionError, match="unsupported"):
+        cm.materialize_runtime_loo(candidate, "k0")
+    exact = cm.plan_loo(candidate, "k0", treatment_resolver=lambda *_: base)
+    assert exact.status == "planned" and exact.derived_manifest_digest == base.manifest_digest
+    wrong = replace(base, production_ref_digest=_h("0"))
+    with pytest.raises(cm.CandidateError, match="production reference"):
+        cm.plan_loo(candidate, "k0", treatment_resolver=lambda *_: wrong)
+    with pytest.raises(cm.CandidateError, match="dependency identity"):
+        cm.plan_loo(candidate, "k0", treatment_resolver=lambda *_: replace(base, dependency_digest=_h("0")))
+    wrong_target = replace(base.targets[0], model_digest=_h("1"))
+    with pytest.raises(cm.CandidateError, match="target identity"):
+        cm.plan_loo(candidate, "k0", treatment_resolver=lambda *_: replace(base, targets=(wrong_target,)))
+
+
+def test_runtime_loo_derives_both_declared_recipe_identities():
+    base = _base()
+    candidate = _next(base, 0)
+    raw = candidate.to_dict()
+    raw["targets"][0]["resolved_recipe_snapshot_digest"] = _h("1")
+    raw["keeps"][0]["changes"].append(_change("runtime:snapshot", "9", "1"))
+    candidate = cm.CandidateManifest.from_dict(raw)
+    plan = cm.plan_loo(candidate, "k0")
+    assert plan.status == "planned" and plan.derived_manifest_digest is not None
+    assert plan.binary_execution_digest == candidate.build_set_digest
+    derived = cm.materialize_runtime_loo(candidate, "k0")
+    assert derived.manifest_digest == plan.derived_manifest_digest
+    assert derived.targets[0].resolved_recipe_execution_digest == _h("7")
+    assert derived.targets[0].resolved_recipe_snapshot_digest == _h("9")
+    assert derived.build_set_digest == candidate.build_set_digest
+
+
+def test_runtime_loo_does_not_rewrite_an_out_of_scope_target():
+    candidate = _next(_base(), 0)
+    raw = candidate.to_dict()
+    raw["targets"][0]["resolved_recipe_snapshot_digest"] = _h("1")
+    raw["keeps"][0]["changes"].append(_change("runtime:snapshot", "9", "1"))
+    other = dict(raw["targets"][0], target_id="cpu-other", backend="cpu",
+                 target_revision_digest=_h("2"))
+    raw["targets"].append(other)
+    candidate = cm.CandidateManifest.from_dict(raw)
+    expected = candidate.to_dict()
+    expected["manifest_id"] = f"{candidate.manifest_id}:loo:k0"
+    expected["keeps"] = []
+    for target in expected["targets"]:
+        if target["backend"] == "gpu":
+            target["resolved_recipe_execution_digest"] = _h("7")
+            target["resolved_recipe_snapshot_digest"] = _h("9")
+    assert cm.plan_loo(candidate, "k0").derived_manifest_digest == \
+        cm.CandidateManifest.from_dict(expected).manifest_digest
+
+
+def test_failed_loo_build_is_explicit_debt_not_a_neutral_result():
+    candidate = _next(_base(), 0)
+
+    def build_failed(*_):
+        raise cm.LOOUnavailable("build_failed: isolated ablation did not compile")
+
+    plan = cm.plan_loo(candidate, "k0", treatment_resolver=build_failed)
+    assert plan.status == "unsupported" and plan.derived_manifest_digest is None
+    assert plan.reason.startswith("build_failed:")
