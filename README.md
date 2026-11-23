@@ -12,10 +12,10 @@ The "why" behind every benchmark, model swap, and methodology decision lives in 
 
 | Index | What's there |
 |---|---|
-| **[wiki/INDEX.md (epyc-root)](https://github.com/pestopoppa/epyc-root/blob/main/wiki/INDEX.md)** | 29 compiled topic articles — benchmark methodology, speculative decoding, KV cache, MoE, NUMA, quantization, SSM-hybrid, … |
+| **[wiki/INDEX.md (epyc-root)](https://github.com/pestopoppa/epyc-root/blob/main/wiki/INDEX.md)** | Compiled topic articles (count lives in the index) — benchmark methodology, speculative decoding, KV cache, MoE, NUMA, quantization, SSM-hybrid, … |
 | **[wiki/benchmark-methodology.md](https://github.com/pestopoppa/epyc-root/blob/main/wiki/benchmark-methodology.md)** | Compiled methodology synthesis across all benchmark-related sources |
-| **[research/deep-dives/ (epyc-root)](https://github.com/pestopoppa/epyc-root/tree/main/research/deep-dives)** | 137 long-form analyses of individual papers / techniques |
-| **[research/intake_index.yaml (epyc-root)](https://github.com/pestopoppa/epyc-root/blob/main/research/intake_index.yaml)** | 936 triaged papers/repos with credibility scores + verdicts |
+| **[research/deep-dives/ (epyc-root)](https://github.com/pestopoppa/epyc-root/tree/main/research/deep-dives)** | Long-form analyses of individual papers / techniques (listing in the directory) |
+| **[research/intake_index.yaml (epyc-root)](https://github.com/pestopoppa/epyc-root/blob/main/research/intake_index.yaml)** | Triaged papers/repos (thousands of entries; `intake-NNNN` ids) with credibility scores + verdicts |
 | **[MEASUREMENT.md (epyc-root)](https://github.com/pestopoppa/epyc-root/blob/main/MEASUREMENT.md)** | Instrument constitution — what makes a number decision-grade vs. an observation |
 | **In-repo docs** | [`docs/chapters/`](docs/chapters/) (10 inference-optimization chapters), [`docs/guides/`](docs/guides/) (benchmarking, KV compaction, model sizing), [`docs/reference/benchmarks/RESULTS.md`](docs/reference/benchmarks/RESULTS.md) (master results table) |
 
