@@ -13,6 +13,7 @@ from autokernel.loop.loop import Hypothesis
 
 NEGATIVES = json.loads((seed.SEEDS / "negatives.json").read_text(encoding="utf-8"))["records"]
 C10 = "akm-c10-dflash2-hybrid-tree-verify-port"
+C9_DSPINE = "akm-c9-dspine-b16-drafter"
 GREEDY_PROVEN = {"akm-dtree-t12-27b", "akm-c10-dflash2-hybrid-tree-verify-port"}
 SPEC_RECORDS = GREEDY_PROVEN | {"akm-hist-graph-shape-key", "akm-c9-dspine-b16-drafter",
                                 "akm-df2-drafter-precision-arms"}
@@ -67,6 +68,10 @@ class ShippedNegatives(unittest.TestCase):
                 continue
             if r["mechanism_id"] == C10:
                 self.assertEqual(S.temperatures(r["sampling"]), {0.0, 0.1, 0.3, 1.0})
+                self.assertTrue(all(a["basis"] for a in S.arms(r["sampling"])))
+            elif r["mechanism_id"] == C9_DSPINE:
+                # served-T re-test 2026-11-23 (row ak-dspine-vs-df2-servedT-gpu-20261123): DROP at T 0.3/1.0
+                self.assertEqual(S.temperatures(r["sampling"]), {0.0, 0.3, 1.0})
                 self.assertTrue(all(a["basis"] for a in S.arms(r["sampling"])))
             elif r["mechanism_id"] in GREEDY_PROVEN:
                 self.assertEqual(S.temperatures(r["sampling"]), {0.0})
@@ -227,7 +232,7 @@ class ThroughTheStore(RegistryEnv):
             plain = handle.recall(epoch=epoch, limit=100)
         self.assertTrue(all("sampling" not in r for r in plain), "default recall must not grow a key")
         self.assertEqual(S.temperatures(by_id["akm-dtree-t12-27b"]["sampling"]), {0.0})
-        self.assertEqual(by_id["akm-c9-dspine-b16-drafter"]["sampling"], "unknown")
+        self.assertEqual(S.temperatures(by_id[C9_DSPINE]["sampling"]), {0.0, 0.3, 1.0})
         self.assertIsNone(by_id["akm-hist-q8-prefetch"]["sampling"])
         text = actors.render_context({"prior_experiments": list(by_id.values())})
         self.assertIn("do_not_repeat_scope: greedy", text)

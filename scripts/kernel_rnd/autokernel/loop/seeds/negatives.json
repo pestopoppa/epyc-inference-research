@@ -144,8 +144,30 @@
    "target_surface": "src/models/dflash.cpp + common/speculative.cpp (draft-dspine spec type)",
    "target_symbol": "draft-dspine (branch llama.cpp-experimental-c9-dspine-20261108, tuned 01ca8760d)",
    "effect_fraction": -0.093,
-   "reason": "MEASURED NOT_OUTPERFORMS (stopped on futility), 27B Q8_0, q8_0 KV, np1, Q8_0 drafter. n7 0.907x M1 / 0.970x LongHealth; n15 0.815x / 1.045x, 0 garbage. The n15 LongHealth +4.5% is one first-pass number with no noise estimate. Tune row: best arm Q8_0 n7 0.915x DFlash2 n7. Q8_0 beat BF16 1.33/1.25/1.21x at n7/n11/n15, so no BF16 rerun. Dynamic verification and ReplaySSM were not ported. Source: evidence /mnt/raid0/llm/tmp/dspine-b16-vs-dflash2-20261108/out/RESULT.json.",
-   "sampling": "unknown"
+   "reason": "MEASURED NOT_OUTPERFORMS (stopped on futility), 27B Q8_0, q8_0 KV, np1, Q8_0 drafter. n7 0.907x M1 / 0.970x LongHealth; n15 0.815x / 1.045x, 0 garbage. The n15 LongHealth +4.5% is one first-pass number with no noise estimate. Tune row: best arm Q8_0 n7 0.915x DFlash2 n7. Q8_0 beat BF16 1.33/1.25/1.21x at n7/n11/n15, so no BF16 rerun. Dynamic verification and ReplaySSM were not ported. Source: evidence /mnt/raid0/llm/tmp/dspine-b16-vs-dflash2-20261108/out/RESULT.json. Served-T re-test 2026-11-23 (root bcd7810d0, row ak-dspine-vs-df2-servedT-gpu-20261123, rc0, pre-registered futility stop after blocks 1-2): DSpine does not beat DFlash2 n7 at T 0.3 or 1.0 (top_k 40, top_p 0.95, min_p 0.05). Decode ratio vs DF2 n7: DSP7 0.926 (T0.3) / 0.762 (T1.0), DSP15 0.787 / 0.694; acceptance DF2 0.634/0.621, DSP7 0.570/0.429, DSP15 0.327/0.269. Stays closed at every served T.",
+   "sampling": [
+    {
+     "temperature": 0.0,
+     "top_p": null,
+     "top_k": 1,
+     "exact_path": null,
+     "basis": "dspine-b16-vs-dflash2-20261108 and dspine-c9-gpu-tune-20261108: greedy (temp 0, top_k 1)"
+    },
+    {
+     "temperature": 0.3,
+     "top_p": 0.95,
+     "top_k": 40,
+     "exact_path": null,
+     "basis": "root bcd7810d0 handoffs/active/speculative-decoding.md DSPINE-SERVEDT; row ak-dspine-vs-df2-servedT-gpu-20261123 out/RESULT.json: DSpine-b16 DROP, decode ratio vs DFlash2 n7 DSP7 0.926, DSP15 0.787 (27B Q8_0 q8_0 KV np1 512tok ignore_eos, top_k 40 top_p 0.95 min_p 0.05); status unchanged"
+    },
+    {
+     "temperature": 1.0,
+     "top_p": 0.95,
+     "top_k": 40,
+     "exact_path": null,
+     "basis": "root bcd7810d0 handoffs/active/speculative-decoding.md DSPINE-SERVEDT; row ak-dspine-vs-df2-servedT-gpu-20261123 out/RESULT.json: DSpine-b16 DROP, decode ratio vs DFlash2 n7 DSP7 0.762, DSP15 0.694 (27B Q8_0 q8_0 KV np1 512tok ignore_eos, top_k 40 top_p 0.95 min_p 0.05); status unchanged"
+    }
+   ]
   },
   {
    "status": "measured_null",
