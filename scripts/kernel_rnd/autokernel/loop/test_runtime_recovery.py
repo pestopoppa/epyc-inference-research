@@ -104,7 +104,16 @@ def _child(argv):
                 assert len(owner.state["attempts"]) == 1
                 completed_count = len(counter)
                 assert owner.reopen_admission(result["runtime_admission"])[0] == pair
-                assert len(counter) == completed_count
+                assert result["decisive"] is True
+                assert owner.retain(result, pair.anchor) == pair.candidate
+                selection_ref = owner.selection_reference(pair.candidate,
+                    current_source_commit=commit)
+                assert ra.restore_selection(store=store, held_claim=holder,
+                    reference=selection_ref, worktree=worktree, source_commit=commit,
+                    build=pair.anchor.build_dir, prompts=prompts) == pair.candidate
+                assert len(counter) == completed_count  # No measurement on resume.
+                assert subprocess.check_output(["git", "-C", str(worktree), "rev-parse", "HEAD"],
+                                               text=True).strip() == commit  # No source promotion.
             windows = [window for window, _ops, _source in owner._windows.values()
                        if window.candidate_id.startswith("akc-runtime-") and window.stratum == "selection"]
             if windows:
