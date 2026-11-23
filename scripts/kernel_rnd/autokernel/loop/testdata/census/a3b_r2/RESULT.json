@@ -1,0 +1,251 @@
+{
+ "id": "a3b-cpu-gap-census-20261122-r2",
+ "updated_utc": "2026-11-22T22:20:40Z",
+ "configs": {
+  "plain-greedy": {
+   "mean_verify_rows": 1.0,
+   "ranked_families": [
+    {
+     "family": "MUL_MAT:gdn_proj",
+     "share_pct": 26.925,
+     "ms_per_timing_step": 10.6957
+    },
+    {
+     "family": "MUL_MAT_ID:exps_gate_up",
+     "share_pct": 17.704,
+     "ms_per_timing_step": 7.0329
+    },
+    {
+     "family": "MUL_MAT:lm_head",
+     "share_pct": 12.496,
+     "ms_per_timing_step": 4.9639
+    },
+    {
+     "family": "MUL_MAT_ID:exps_down",
+     "share_pct": 9.045,
+     "ms_per_timing_step": 3.5931
+    },
+    {
+     "family": "MUL_MAT:fullattn_proj",
+     "share_pct": 7.404,
+     "ms_per_timing_step": 2.9412
+    },
+    {
+     "family": "MUL_MAT:shared_expert",
+     "share_pct": 3.878,
+     "ms_per_timing_step": 1.5406
+    },
+    {
+     "family": "GDN_SSM",
+     "share_pct": 3.805,
+     "ms_per_timing_step": 1.5117
+    },
+    {
+     "family": "FLASH_ATTN",
+     "share_pct": 3.769,
+     "ms_per_timing_step": 1.4971
+    },
+    {
+     "family": "GET_ROWS",
+     "share_pct": 2.638,
+     "ms_per_timing_step": 1.0479
+    },
+    {
+     "family": "MUL_MAT:moe_router",
+     "share_pct": 2.29,
+     "ms_per_timing_step": 0.9097
+    },
+    {
+     "family": "UNATTRIBUTED",
+     "share_pct": 1.335,
+     "ms_per_timing_step": 0.5305
+    },
+    {
+     "family": "CPY",
+     "share_pct": 1.299,
+     "ms_per_timing_step": 0.5158
+    },
+    {
+     "family": "MOE_ROUTING",
+     "share_pct": 1.262,
+     "ms_per_timing_step": 0.5012
+    },
+    {
+     "family": "ELEMENTWISE",
+     "share_pct": 0.817,
+     "ms_per_timing_step": 0.3244
+    },
+    {
+     "family": "NORM",
+     "share_pct": 0.797,
+     "ms_per_timing_step": 0.3165
+    },
+    {
+     "family": "MOE_ELEMWISE",
+     "share_pct": 0.592,
+     "ms_per_timing_step": 0.2351
+    },
+    {
+     "family": "OTHER:CONCAT",
+     "share_pct": 0.527,
+     "ms_per_timing_step": 0.2093
+    },
+    {
+     "family": "REDUCE",
+     "share_pct": 0.429,
+     "ms_per_timing_step": 0.1703
+    },
+    {
+     "family": "MUL_MAT:nonweight",
+     "share_pct": 0.163,
+     "ms_per_timing_step": 0.0646
+    },
+    {
+     "family": "ROPE",
+     "share_pct": 0.114,
+     "ms_per_timing_step": 0.0452
+    },
+    {
+     "family": "SET_ROWS",
+     "share_pct": 0.056,
+     "ms_per_timing_step": 0.0224
+    },
+    {
+     "family": "GET_ROWS:embed",
+     "share_pct": 0.002,
+     "ms_per_timing_step": 0.0009
+    }
+   ]
+  },
+  "mtp-greedy": {
+   "mean_verify_rows": 4.896,
+   "ranked_families": [
+    {
+     "family": "MUL_MAT_ID:exps_gate_up",
+     "share_pct": 23.641,
+     "ms_per_timing_step": 26.314
+    },
+    {
+     "family": "MUL_MAT:lm_head",
+     "share_pct": 21.613,
+     "ms_per_timing_step": 24.0563
+    },
+    {
+     "family": "MUL_MAT_ID:exps_down",
+     "share_pct": 11.589,
+     "ms_per_timing_step": 12.8992
+    },
+    {
+     "family": "MUL_MAT:gdn_proj",
+     "share_pct": 11.262,
+     "ms_per_timing_step": 12.5352
+    },
+    {
+     "family": "FLASH_ATTN",
+     "share_pct": 5.1,
+     "ms_per_timing_step": 5.6768
+    },
+    {
+     "family": "CPY",
+     "share_pct": 5.065,
+     "ms_per_timing_step": 5.638
+    },
+    {
+     "family": "GDN_SSM",
+     "share_pct": 4.477,
+     "ms_per_timing_step": 4.983
+    },
+    {
+     "family": "MUL_MAT:fullattn_proj",
+     "share_pct": 3.759,
+     "ms_per_timing_step": 4.1842
+    },
+    {
+     "family": "MUL_MAT:shared_expert",
+     "share_pct": 2.002,
+     "ms_per_timing_step": 2.2288
+    },
+    {
+     "family": "OTHER:PAD",
+     "share_pct": 1.483,
+     "ms_per_timing_step": 1.6507
+    },
+    {
+     "family": "REDUCE",
+     "share_pct": 1.337,
+     "ms_per_timing_step": 1.488
+    },
+    {
+     "family": "ELEMENTWISE",
+     "share_pct": 1.286,
+     "ms_per_timing_step": 1.431
+    },
+    {
+     "family": "MUL_MAT:moe_router",
+     "share_pct": 1.206,
+     "ms_per_timing_step": 1.3418
+    },
+    {
+     "family": "GET_ROWS",
+     "share_pct": 0.938,
+     "ms_per_timing_step": 1.0438
+    },
+    {
+     "family": "MOE_ELEMWISE",
+     "share_pct": 0.75,
+     "ms_per_timing_step": 0.8345
+    },
+    {
+     "family": "NORM",
+     "share_pct": 0.575,
+     "ms_per_timing_step": 0.6398
+    },
+    {
+     "family": "TOPK_SORT",
+     "share_pct": 0.548,
+     "ms_per_timing_step": 0.61
+    },
+    {
+     "family": "MOE_ROUTING",
+     "share_pct": 0.509,
+     "ms_per_timing_step": 0.567
+    },
+    {
+     "family": "OTHER:CONCAT",
+     "share_pct": 0.334,
+     "ms_per_timing_step": 0.3715
+    },
+    {
+     "family": "MUL_MAT:mtp_misc",
+     "share_pct": 0.285,
+     "ms_per_timing_step": 0.3169
+    },
+    {
+     "family": "UNATTRIBUTED",
+     "share_pct": 0.136,
+     "ms_per_timing_step": 0.1511
+    },
+    {
+     "family": "MUL_MAT:nonweight",
+     "share_pct": 0.11,
+     "ms_per_timing_step": 0.1226
+    },
+    {
+     "family": "ROPE",
+     "share_pct": 0.091,
+     "ms_per_timing_step": 0.1018
+    },
+    {
+     "family": "SET_ROWS",
+     "share_pct": 0.033,
+     "ms_per_timing_step": 0.0369
+    },
+    {
+     "family": "GET_ROWS:embed",
+     "share_pct": 0.006,
+     "ms_per_timing_step": 0.0062
+    }
+   ]
+  }
+ }
+}

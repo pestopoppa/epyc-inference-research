@@ -217,3 +217,77 @@ class CpuCeiling(unittest.TestCase):
         self.assertTrue(q)
         self.assertTrue(all(r["ceiling_gbps"] == 112.9 for r in q))
         self.assertTrue(all(r["status"] == ("open_surface" if r["gbps"] < 0.75 * 112.9 else "ok") for r in q))
+
+
+class RealResultFixtures(Base):
+    """Trimmed copies of real RESULT.json files from /mnt/raid0/llm/tmp (families/summary kept, bulk dropped)."""
+
+    def test_q38fn_extract_cpu_reads_model_key_bytes_and_depth(self):
+        p = os.path.join(FX, "q38fn", "RESULT.json")
+        obs = cu.extract_cpu(json.load(open(p)), p)
+        self.assertTrue(obs)
+        self.assertEqual({o["model"] for o in obs}, {"q38fn-ud-iq4xs-cpu"})
+        self.assertEqual({o["shape"] for o in obs}, {"quarter-24t-d1k", "quarter-24t-d32k"})  # plain configs only
+        g = [o for o in obs if o["kernel_class"] == "MUL_MAT:gdn_proj" and o["shape"].endswith("d1k")][0]
+        self.assertEqual(g["bytes_per_call"], 2247229440)       # the row's own bytes_per_step, not the A3B table
+        self.assertAlmostEqual(g["us_per_call"], 26899.2, places=1)
+        self.assertEqual(rid_of(g), "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:gdn_proj|quarter-24t-d1k|n1")
+
+    def test_q38fn_folds_and_ranks_against_measured_ceiling(self):
+        p = os.path.join(FX, "q38fn", "RESULT.json")
+        self.run_(p)
+        r = json.load(open(self.census))["records"]["cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:gdn_proj|quarter-24t-d1k|n1"]
+        self.assertEqual(r["ceiling_gbps"], 112.9)
+        self.assertEqual(r["frac_of_ceiling"], round(83.5 / 112.9, 3))
+        self.assertEqual(r["status"], "open_surface")   # 83.5 GB/s < 0.75 x 112.9 = 84.7
+
+    def test_a3b_r2_still_folds_with_static_bytes(self):
+        p = os.path.join(FX, "a3b_r2", "RESULT.json")
+        obs = cu.extract_cpu(json.load(open(p)), p)
+        self.assertEqual({o["model"] for o in obs}, {"a3b-q8_0-cpu"})
+        gu = [o for o in obs if o["kernel_class"] == "MUL_MAT_ID:exps_gate_up"][0]
+        self.assertEqual(gu["bytes_per_call"], 713_000_000)
+        self.assertEqual(gu["shape"], "quarter-24t")
+
+    def test_unknown_model_id_yields_no_cpu_records(self):
+        p = os.path.join(FX, "a3b_r2", "RESULT.json")
+        res = json.load(open(p))
+        res["id"] = "something-else-20261122"
+        self.assertEqual(cu.extract_cpu(res, p), [])
+        res["model_key"] = "q38fn-iq4xs-cpu"  # explicit model_key resolves it
+        self.assertEqual(cu.extract_cpu(res, p), [])  # q38fn model but A3B families carry no bytes_per_step: no guess
+
+    def test_trace_27b_tbo_result_is_extracted(self):
+        res = json.load(open(os.path.join(FX, "trace_27b.RESULT.json")))
+        obs = cu.extract(res)
+        self.assertTrue(obs)
+        kv = {o["n"]: o for o in obs if o["kernel_class"] == "attn_kv_v5i"}
+        self.assertEqual(kv[1]["bytes_per_call"], 5570560)
+        self.assertEqual(kv[1]["calls_per_round"], 32)
+        self.assertAlmostEqual(cu.gbps(kv[1]["bytes_per_call"], kv[1]["us_per_call"]), 780.7, delta=0.2)
+        lm = [o for o in obs if o["kernel_class"] == "lm_head_v5i" and o["n"] == 16][0]
+        self.assertEqual(lm["bytes_per_call"], 1350860800)
+        self.assertEqual({o["n"] for o in obs} - cu.SERVED_N, set())   # served n only
+
+    def test_trace_a3b_dense_aggregate_is_extracted(self):
+        res = json.load(open(os.path.join(FX, "trace_a3b.RESULT.json")))
+        obs = {o["kernel_class"]: o for o in cu.extract(res)}
+        self.assertEqual(set(obs), {"dense_verify_aggregate", "dense_verify_aggregate_v5i"})
+        self.assertAlmostEqual(cu.gbps(obs["dense_verify_aggregate"]["bytes_per_call"],
+                                       obs["dense_verify_aggregate"]["us_per_call"]), 404.9, delta=0.1)
+        self.assertEqual(obs["dense_verify_aggregate_v5i"]["n"], 4)
+
+    def test_trace_result_folds_idempotently(self):
+        p = os.path.join(FX, "trace_27b.RESULT.json")
+        r1 = self.run_(p)
+        self.assertGreater(r1["observations"], 0)
+        before = open(self.census).read()
+        self.run_(p)
+        self.assertEqual(open(self.census).read(), before)
+
+    def test_op_result_is_not_double_counted_by_trace_path(self):
+        self.assertEqual(cu.extract_trace(q8_result(70.0)), [])
+
+
+def rid_of(o):
+    return cu.rid(o)

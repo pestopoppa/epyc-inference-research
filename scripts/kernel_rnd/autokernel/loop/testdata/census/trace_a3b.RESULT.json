@@ -1,0 +1,17 @@
+{
+ "row": "ak-c18-a3b-mtp-trace-gpu-20261122",
+ "at": "2026-11-22T23:10:47Z",
+ "verdict": "CENSUS_COMPLETE",
+ "summary": {
+  "dense_OFF": {
+   "apparent_gbps_mean": 404.9322193462706,
+   "n": 2,
+   "verdict": "STEP2_CANDIDATE"
+  },
+  "dense_ON": {
+   "apparent_gbps_mean": 423.49124192867333,
+   "n": 2,
+   "verdict": "STEP2_CANDIDATE"
+  }
+ }
+}

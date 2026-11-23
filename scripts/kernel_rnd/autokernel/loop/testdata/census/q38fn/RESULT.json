@@ -1,0 +1,185 @@
+{
+ "id": "ak-q38fn-cpu-gap-census-20261122",
+ "model_key": "q38fn-iq4xs-cpu",
+ "config_shape": "quarter-24t",
+ "updated_utc": "2026-11-22T22:12:12Z",
+ "configs": {
+  "plain-greedy-d1k": {
+   "mean_verify_rows": 1.0,
+   "ranked_families": [
+    {
+     "family": "MUL_MAT:gdn_proj",
+     "share_pct": 29.703,
+     "ms_per_timing_step": 26.8992,
+     "bytes_per_step": 2247229440,
+     "gbps": 83.54,
+     "pct_of_ceiling": 64.31,
+     "status": "open_surface"
+    },
+    {
+     "family": "MUL_MAT:other_weight",
+     "share_pct": 10.641,
+     "ms_per_timing_step": 9.6362,
+     "bytes_per_step": 719175680,
+     "gbps": 74.63,
+     "pct_of_ceiling": 57.45,
+     "status": "open_surface"
+    },
+    {
+     "family": "MUL_MAT_ID:exps_gate_up",
+     "share_pct": 10.178,
+     "ms_per_timing_step": 9.2173,
+     "bytes_per_step": 679168000,
+     "gbps": 73.68,
+     "pct_of_ceiling": 56.72,
+     "status": "open_surface"
+    },
+    {
+     "family": "MUL_MAT:fullattn_proj",
+     "share_pct": 8.012,
+     "ms_per_timing_step": 7.2561,
+     "bytes_per_step": 635043840,
+     "gbps": 87.52,
+     "pct_of_ceiling": 67.37,
+     "status": "open_surface"
+    }
+   ]
+  },
+  "plain-greedy-d32k": {
+   "mean_verify_rows": 1.0,
+   "ranked_families": [
+    {
+     "family": "MUL_MAT:gdn_proj",
+     "share_pct": 26.438,
+     "ms_per_timing_step": 61.1738,
+     "bytes_per_step": 2247229440,
+     "gbps": 36.74,
+     "pct_of_ceiling": 28.28,
+     "status": "open_surface"
+    },
+    {
+     "family": "MUL_MAT:other_weight",
+     "share_pct": 9.061,
+     "ms_per_timing_step": 20.9655,
+     "bytes_per_step": 719175680,
+     "gbps": 34.3,
+     "pct_of_ceiling": 26.4,
+     "status": "open_surface"
+    },
+    {
+     "family": "MUL_MAT_ID:exps_gate_up",
+     "share_pct": 8.818,
+     "ms_per_timing_step": 20.4047,
+     "bytes_per_step": 679168000,
+     "gbps": 33.28,
+     "pct_of_ceiling": 25.62,
+     "status": "open_surface"
+    },
+    {
+     "family": "MUL_MAT:fullattn_proj",
+     "share_pct": 7.197,
+     "ms_per_timing_step": 16.6528,
+     "bytes_per_step": 635043840,
+     "gbps": 38.13,
+     "pct_of_ceiling": 29.35,
+     "status": "open_surface"
+    }
+   ]
+  },
+  "mtp-greedy-d1k": {
+   "mean_verify_rows": 4.165,
+   "ranked_families": [
+    {
+     "family": "MUL_MAT:gdn_proj",
+     "share_pct": 19.383,
+     "ms_per_timing_step": 63.5376,
+     "bytes_per_step": 2247229440,
+     "gbps": 35.37,
+     "pct_of_ceiling": 27.23,
+     "status": "open_surface",
+     "bytes_basis": "n=1 lower bound + draft-model bytes x draft evals/step"
+    },
+    {
+     "family": "MUL_MAT:lm_head",
+     "share_pct": 16.498,
+     "ms_per_timing_step": 54.0819,
+     "bytes_per_step": 528435200,
+     "gbps": 9.77,
+     "pct_of_ceiling": 7.52,
+     "status": "open_surface",
+     "bytes_basis": "n=1 lower bound + draft-model bytes x draft evals/step"
+    },
+    {
+     "family": "MUL_MAT_ID:exps_gate_up",
+     "share_pct": 16.0,
+     "ms_per_timing_step": 52.4467,
+     "bytes_per_step": 834883516,
+     "gbps": 15.92,
+     "pct_of_ceiling": 12.26,
+     "status": "open_surface",
+     "bytes_basis": "n=1 lower bound + draft-model bytes x draft evals/step"
+    },
+    {
+     "family": "MUL_MAT_ID:exps_down",
+     "share_pct": 10.892,
+     "ms_per_timing_step": 35.7033,
+     "bytes_per_step": 561185758,
+     "gbps": 15.72,
+     "pct_of_ceiling": 12.1,
+     "status": "open_surface",
+     "bytes_basis": "n=1 lower bound + draft-model bytes x draft evals/step"
+    }
+   ]
+  },
+  "mtp-greedy-d32k": {
+   "mean_verify_rows": 2.897,
+   "ranked_families": [
+    {
+     "family": "MUL_MAT:gdn_proj",
+     "share_pct": 16.219,
+     "ms_per_timing_step": 48.3478,
+     "bytes_per_step": 2247229440,
+     "gbps": 46.48,
+     "pct_of_ceiling": 35.78,
+     "status": "open_surface",
+     "bytes_basis": "n=1 lower bound + draft-model bytes x draft evals/step"
+    },
+    {
+     "family": "FLASH_ATTN",
+     "share_pct": 13.474,
+     "ms_per_timing_step": 40.1646,
+     "bytes_per_step": null,
+     "gbps": null,
+     "pct_of_ceiling": null,
+     "status": "no_bytes",
+     "kv_bytes_per_step": 790364160,
+     "kv_depth_tokens": 32160,
+     "kv_gbps": 19.68,
+     "kv_pct_of_ceiling": 15.15,
+     "kv_status": "open_surface",
+     "kv_basis": "f16 K+V, all full-attention layers, dense upper bound (indexer top_k 2048 / compress ratio 4 may cut reads)"
+    },
+    {
+     "family": "MUL_MAT:lm_head",
+     "share_pct": 11.813,
+     "ms_per_timing_step": 35.2128,
+     "bytes_per_step": 528435200,
+     "gbps": 15.01,
+     "pct_of_ceiling": 11.56,
+     "status": "open_surface",
+     "bytes_basis": "n=1 lower bound + draft-model bytes x draft evals/step"
+    },
+    {
+     "family": "MUL_MAT_ID:exps_gate_up",
+     "share_pct": 10.893,
+     "ms_per_timing_step": 32.4727,
+     "bytes_per_step": 803545158,
+     "gbps": 24.75,
+     "pct_of_ceiling": 19.05,
+     "status": "open_surface",
+     "bytes_basis": "n=1 lower bound + draft-model bytes x draft evals/step"
+    }
+   ]
+  }
+ }
+}
