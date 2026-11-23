@@ -2525,6 +2525,22 @@ def _runtime_pair(treatment, context, mechanism_id):
         raise ProviderTransient("runtime treatment must name one kind and candidate value")
     anchor = resolved_recipe_from_dict(context["runtime_anchor"])
     kind, candidate = treatment["kind"], treatment["candidate"]
+    if kind == "combination":
+        if (not isinstance(candidate, list) or not 2 <= len(candidate) <= 16
+                or any(not isinstance(item, dict) or item.get("kind") == "combination"
+                       for item in candidate)):
+            raise ProviderTransient("runtime combination requires 2–16 non-nested options")
+        members = [_runtime_pair(item, context, f"{mechanism_id}:{index}").dimension
+                   for index, item in enumerate(candidate)]
+        try:
+            dimension = RuntimeDimension(
+                mechanism_id, kind,
+                [{"kind": d.kind, "value": d.to_dict()["anchor"]} for d in members],
+                [{"kind": d.kind, "value": d.to_dict()["candidate"]} for d in members],
+                "original-hypothesis:" + mechanism_id)
+            return enumerate_runtime_dimensions(anchor, (dimension,))[0]
+        except ValueError as exc:
+            raise ProviderTransient(f"runtime combination refused: {exc}") from exc
     if kind == "threads":
         value = anchor.template.threads
     elif kind == "threads_batch":
@@ -3053,10 +3069,13 @@ class AgentPlanner:
                        "threads_batch|cpu_list|numa_policy|load_threads|env, candidate: <exact value>}. "
                        "threads_batch is -tb (prompt processing / batched verify) apart from -t. For env, candidate is "
                        "{key: <one listed runtime_env_keys key>, value: <string or null>}. "
+                       "To combine established options use kind: combination and candidate: "
+                       "[{kind: <option>, candidate: <value>}, ...] with distinct fields; "
+                       "do not combine threads with threads_batch. "
                        "Keep the same model, request bytes, context, sampling and speculation. "
                        "Describe the mechanism and falsifier; target_surface/target_symbol name "
                        "the runtime field. The host derives the original anchor value and validates "
-                       "the sole difference; do not author a patch for a runtime treatment.")
+                       "the declared differences; do not author a patch for a runtime treatment.")
             prompt += "\nInstalled runtime_env_keys: " + json.dumps(context.get("runtime_env_keys", []))
             if context.get("runtime_observation_only"):
                 prompt += ("\nRuntime treatments here are observation-only diagnostics. "

@@ -41,7 +41,7 @@ OBSERVATION_STATES = frozenset({
     "invalid_instrument", "bounded_null", "positive",
 })
 DIMENSIONS = frozenset({"threads", "cpu_list", "numa_policy", "env", "batch", "ubatch",
-                        "load_threads", "threads_batch"})
+                        "load_threads", "threads_batch", "combination"})
 
 
 class PlanningRefused(ValueError):
@@ -168,6 +168,30 @@ class RuntimeDimension:
                 for value in (self.anchor, self.candidate):
                     if not (value.startswith("--interleave=") or value.startswith("--membind=")):
                         raise PlanningRefused("NUMA policy is outside the canonical grammar")
+        elif self.kind == "combination":
+            if (not isinstance(self.anchor, (list, tuple))
+                    or not isinstance(self.candidate, (list, tuple))
+                    or not 2 <= len(self.anchor) <= 16
+                    or len(self.anchor) != len(self.candidate)):
+                raise PlanningRefused("combination requires 2–16 dimensions")
+            keys = []
+            for left, right in zip(self.anchor, self.candidate):
+                left = _exact(left, {"kind", "value"}, "combination anchor")
+                right = _exact(right, {"kind", "value"}, "combination candidate")
+                kind = _text(left["kind"], "combination kind")
+                if kind != right["kind"] or kind not in {
+                        "threads", "threads_batch", "cpu_list", "numa_policy",
+                        "load_threads", "env"}:
+                    raise PlanningRefused("combination contains unsupported dimension")
+                member = RuntimeDimension(self.dimension_id, kind, left["value"],
+                                          right["value"], self.authority_ref)
+                key = (kind, member.candidate["key"] if kind == "env" else "")
+                if key in keys:
+                    raise PlanningRefused("combination repeats a dimension")
+                keys.append(key)
+            if "threads" in {kind for kind, _ in keys} and "threads_batch" in {
+                    kind for kind, _ in keys}:
+                raise PlanningRefused("combined thread and batch-thread changes are ambiguous")
         elif self.kind == "env":
             for label, value in (("anchor", self.anchor), ("candidate", self.candidate)):
                 row = _exact(value, {"key", "value"}, f"env.{label}")
@@ -244,6 +268,13 @@ def _mutate_template(template: serving.Recipe, dimension: RuntimeDimension,
 def _resolve_variant(anchor: ResolvedRecipe | CanonicalResolvedRecipe,
                      dimension: RuntimeDimension, value: Any
                      ) -> ResolvedRecipe | CanonicalResolvedRecipe:
+    if dimension.kind == "combination":
+        current = anchor
+        for left, right, selected in zip(dimension.anchor, dimension.candidate, value):
+            member = RuntimeDimension(dimension.dimension_id, left["kind"], _thaw(left["value"]),
+                                      _thaw(right["value"]), dimension.authority_ref)
+            current = _resolve_variant(current, member, selected["value"])
+        return current
     template = _mutate_template(anchor.template, dimension, value) if isinstance(
         anchor, CanonicalResolvedRecipe) else _mutate_template_from_v1(anchor, dimension, value)
     if isinstance(anchor, CanonicalResolvedRecipe):

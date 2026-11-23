@@ -385,6 +385,9 @@ def _normalized_plan(value: ep.ExperimentPlan) -> ep.ExperimentPlan:
 def _frame(plan: ep.ExperimentPlan, pair: unified_planner.RuntimeArmPair,
            context: RuntimeFrameContext) -> dict[str, Any]:
     pair = unified_planner.RuntimeArmPair.from_dict(pair.to_dict())
+    if pair.dimension.kind == "combination":
+        raise DiscoveryScreenRefused(
+            "multi-option combinations are not a single-factor A2 screen")
     plan = _normalized_plan(plan)
     anchor_identity = planned_serving.arm_identity(pair.anchor.template, pair.anchor)
     candidate_identity = planned_serving.arm_identity(pair.candidate.template, pair.candidate)

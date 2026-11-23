@@ -1705,13 +1705,11 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         # the exact current anchor/options must also be in this owner's context,
         # and the tail gate still rechecks ownership and correctness before launch.
         pair = hypothesis.runtime_pair
+        from .runtime_combinations import established
         prevalidated_runtime = (
             pair is not None and pair.anchor.backend in {"cpu", "gpu"}
             and pair.anchor.to_dict() == working.get("runtime_anchor")
-            and pair.dimension.kind in {"threads", "cpu_list", "numa_policy", "load_threads", "env",
-                                        "threads_batch"}
-            and (pair.dimension.kind != "env" or pair.dimension.candidate["key"]
-                 in working.get("runtime_env_keys", ())))
+            and established(pair.dimension, working.get("runtime_env_keys", ())))
         if resumed is not None and resumed.stage != "critic1":
             pass    # admitted by the carried verdict above
         elif prevalidated_runtime:
