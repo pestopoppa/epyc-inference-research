@@ -35,9 +35,7 @@ LOCAL_KINDS = frozenset({"opencode", "orchestrator"})
 #: author takes `DEFAULT_AUTHOR_OUTPUT_LIMIT`. This table held a stale 16,384 for the
 #: author and critic after DS41-C70 raised the real caps, so a reader of it was told
 #: roles were capped at the value OAB-34 reported as failing.
-DEFAULT_OUTPUT_TOKENS = {"planner": _cfg.DEFAULT_PLANNER_OUTPUT_LIMIT,
-                         "author": _cfg.DEFAULT_AUTHOR_OUTPUT_LIMIT,
-                         "critic": _cfg.DEFAULT_PLANNER_OUTPUT_LIMIT}
+DEFAULT_OUTPUT_TOKENS = dict(planner=_cfg.DEFAULT_PLANNER_OUTPUT_LIMIT, author=_cfg.DEFAULT_AUTHOR_OUTPUT_LIMIT, critic=_cfg.DEFAULT_PLANNER_OUTPUT_LIMIT)
 
 
 class UnboundedBackendRefused(ValueError):
@@ -45,8 +43,7 @@ class UnboundedBackendRefused(ValueError):
 
 
 def enabled(env: dict[str, str] | None = None) -> bool:
-    return (env if env is not None else os.environ).get(DISABLE_ENV, "").strip().lower() \
-        not in ("off", "0", "false", "no")
+    return (env if env is not None else os.environ).get(DISABLE_ENV, "").strip().lower() not in ("off", "0", "false", "no")
 
 
 def default_wall_s(timeout_s: float) -> float:

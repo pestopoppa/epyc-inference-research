@@ -30,8 +30,7 @@ import threading
 from contextlib import ExitStack, contextmanager
 from typing import Callable, Optional
 
-from . import stage_admission as sa
-from . import stage_footprint as sf
+from . import stage_admission as sa, stage_footprint as sf
 
 ENV_FD = "AUTOKERNEL_STAGE_FD"
 
