@@ -3120,7 +3120,7 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12,
                      "promote it to a gain, and CPU allowed lists do not prove placement "
                      "or absence of contention. Prior experiment history above is independent.")
         lines.append("```json")
-        lines.append(json.dumps(feedback, sort_keys=True, indent=2))
+        lines.append(json.dumps(_dedupe_subtrees(feedback), sort_keys=True, indent=2))
         lines.append("```")
 
     for label, key in (("Your hypothesis was rejected", "prior_hypothesis_rejections"),
