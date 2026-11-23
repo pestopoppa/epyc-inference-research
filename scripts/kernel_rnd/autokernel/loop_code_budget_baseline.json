@@ -69,6 +69,7 @@
     "cpu_fa_mask_capture.py": 74,
     "cpu_fa_reference.py": 480,
     "cpu_fa_verifier_record.py": 172,
+    "cpu_fold_record.py": 69,
     "cpu_fusion_reference.py": 189,
     "cpu_keep_bundle.py": 113,
     "cpu_norm_reference.py": 243,

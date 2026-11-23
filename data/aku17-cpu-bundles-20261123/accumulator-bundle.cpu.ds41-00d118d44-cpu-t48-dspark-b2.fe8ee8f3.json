@@ -1,0 +1,38 @@
+{
+  "champion_of_record": "053c3bd82d00c1be41cc2b7d502a715b8b820410",
+  "compounded_bench_pct": 13.519635589969026,
+  "keeps": [
+    {
+      "contention_label": "unproven",
+      "effect_pct": 0.8008555865508082,
+      "floor_pct": 1.876,
+      "floor_unit": "process",
+      "keep_id": "akm-ds41-dense-q8-offset-vnni@0cebe6c2c6b2",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 0.3948393632757563,
+      "floor_pct": 1.876,
+      "floor_unit": "process",
+      "keep_id": "akm-ds41-gemm4xn-4x-unroll@c4303a50cdd9",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 12.174819861668684,
+      "floor_pct": 1.876,
+      "floor_unit": "process",
+      "keep_id": "akm-ds41-dense-q8-tinyblas-zmm-widen@e49b8d0a7635",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    }
+  ],
+  "recipe": "ds41-00d118d44-cpu-t48-dspark-b2.fe8ee8f3",
+  "recipe_hash": "fe8ee8f377dbee464891bbf23a35f091dfd1402136ef4062d96a171e24b0612b",
+  "schema": "epyc.autokernel.cpu_accumulator_bundle.v1",
+  "surface": "cpu",
+  "tip": "dd3d9721ca37321ad9159520bbd9616e3d0d6228"
+}

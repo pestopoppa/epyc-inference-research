@@ -1,0 +1,47 @@
+{
+  "champion_of_record": "053c3bd82d00c1be41cc2b7d502a715b8b820410",
+  "compounded_bench_pct": 15.503868173016656,
+  "keeps": [
+    {
+      "contention_label": "unproven",
+      "effect_pct": 5.683411790206061,
+      "floor_pct": 5.525,
+      "floor_unit": "process",
+      "keep_id": "akm-ds41-q4k-x4t-weight-prefetch@5e51a565a994",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 3.440292909674736,
+      "floor_pct": 5.525,
+      "floor_unit": "process",
+      "keep_id": "akm-ds41-dense-q8-tb-prefetch@86a2875125f5",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 1.073787008157523,
+      "floor_pct": 5.525,
+      "floor_unit": "process",
+      "keep_id": "akm-ds41-q4k-x4t-weight-prefetch@96273becf6ad",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 4.534927864089644,
+      "floor_pct": 5.525,
+      "floor_unit": "process",
+      "keep_id": "akm-ds41-gemm4xn-2x-unroll@e4ab8a122c40",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    }
+  ],
+  "recipe": "ds41-00d118d44-cpu-t48-dspark-b2.f29a817a",
+  "recipe_hash": "f29a817a878300af3b497153950b469cecbd37b9b9dbc674de41e237c1e4f8dd",
+  "schema": "epyc.autokernel.cpu_accumulator_bundle.v1",
+  "surface": "cpu",
+  "tip": "dd3d9721ca37321ad9159520bbd9616e3d0d6228"
+}

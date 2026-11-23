@@ -8,6 +8,8 @@ every keep carries the facts that qualify its magnitude:
 * ``contention_label`` -- every INF-70 arm before 2026-09-07 carries a WRONG label (the
   sampler read 184-191 as disjoint); those are ``pre-hook`` and their magnitude is
   ``provisional``.
+* ``contention_label`` ``unproven`` -- the serving residency record could not prove the host
+  quiet (every DS41 serving A/B); like ``pre-hook`` it can never back a settled magnitude.
 * ``statistic`` -- which test produced the magnitude. A sign test over pairings
   double-counts the shared treatment arm and is inflated; only an arm-level permutation
   test may back a ``settled`` magnitude.
@@ -29,7 +31,7 @@ SCHEMA = "epyc.autokernel.cpu_accumulator_bundle.v1"
 SURFACE = "cpu"
 FILENAME_PREFIX = "accumulator-bundle.cpu."
 MAGNITUDES = ("provisional", "settled")
-CONTENTION_LABELS = ("pre-hook", "quiet", "co-tenant")
+CONTENTION_LABELS = ("pre-hook", "unproven", "quiet", "co-tenant")
 SETTLED_STATISTICS = frozenset({"arm_level_permutation"})
 _SHA = re.compile(r"^[0-9a-f]{40,64}$")
 _KEY_SAFE = re.compile(r"[^A-Za-z0-9._-]")
@@ -86,8 +88,8 @@ def validate_keep(keep: Any) -> dict:
         if keep.get("floor_unit") not in ("arm", "session", "process"):
             raise CpuBundleError(f"{kid}: a floor must state its unit")
     if keep["magnitude"] == "settled":
-        if keep["contention_label"] == "pre-hook":
-            raise CpuBundleError(f"{kid}: a pre-hook contention label cannot back a settled magnitude")
+        if keep["contention_label"] in ("pre-hook", "unproven"):
+            raise CpuBundleError(f"{kid}: {keep['contention_label']} contention cannot back a settled magnitude")
         if stat not in SETTLED_STATISTICS:
             raise CpuBundleError(f"{kid}: statistic {stat!r} cannot back a settled magnitude "
                                  f"(only {sorted(SETTLED_STATISTICS)})")
