@@ -20,15 +20,6 @@ inconclusive gate resets the four-keep cadence, while a pre-run prerequisite ref
 Gain-trigger debt uses monotonic trigger and covered generations, so an older in-flight batch cannot
 erase a newer trigger when it completes.
 
-The offline summary command accepts `--manifest`, optional `--row-set`, `--batch`, `--state`, and
-`--out`. It always emits `execution_authorized: false`, `production_promotion_authorized: false`,
-and `validated_pointer_eligible: false`:
-
-```bash
-PYTHONPATH=scripts/kernel_rnd python3 -m autokernel.loop.candidate_cli \
-  --manifest candidate.json --row-set rows.json --batch batch.json --out summary.json
-```
-
 All example digests used in tests are synthetic. Actual Journal integration, registered protocol
 and evidence adapters, cross-repository intent recovery, resource grants, execution, and any
 production transition remain later integration work. This slice alone does not complete AKU-05.

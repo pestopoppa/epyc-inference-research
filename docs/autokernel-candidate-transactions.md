@@ -37,27 +37,9 @@ and `qwentts.cpp` checkouts, and checkouts on `production-consolidated-*` or `pr
 branches are refused. A distinct experimental linked worktree may share the repository object database
 while retaining its own non-production checkout identity.
 
-The existing command remains a non-mutating offline summary:
-
-```text
-PYTHONPATH=scripts/kernel_rnd python3 -m autokernel.loop.candidate_cli \
-  --manifest candidate.json --row-set rows.json --batch batch.json --state state.json
-```
-
-Writes require an explicit subcommand, resolved campaign, owned store, request ID, and every exact source
-repository. For example, initialization is:
-
-```text
-PYTHONPATH=scripts/kernel_rnd python3 -m autokernel.loop.candidate_cli init \
-  --resolved-campaign resolved.json --store /private/campaign-store \
-  --request-id initialize-v1 --repo research=/exact/repository/root \
-  --manifest candidate.json --state candidate-state-initial.json
-```
-
-`integrate`, `start-batch`, `record-row`, and `complete` expose the corresponding pure transitions.
 Initialization accepts only a new empty, unvalidated state and a manifest with no accumulated keeps; it
 is not a legacy-state import or a way to mint a validated baseline.
-There is intentionally no CLI command that advances `validated_candidate`: that API requires a
+There is intentionally no command that advances `validated_candidate`: that API requires a
 process-registered trusted row verifier and, when applicable, a trusted LOO verifier. JSON carrying a
 `passed` label never supplies that authority. Required CPU/GPU rows and complete LOO obligations remain
 those of the frozen batch; optional missing seed rows do not become production vetoes.

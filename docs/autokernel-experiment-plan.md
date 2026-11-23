@@ -9,60 +9,8 @@ JSON encoder.
 It does not launch work, estimate an interval, select a floor, grade a claim,
 classify power or bounded-null evidence, or authorize execution. It is not the
 shared `ClaimTuple` grader and has no live measurement consumer. A protocol
-string and an actor-supplied `grade` are not authority. The CLI therefore always
+string and an actor-supplied `grade` are not authority. Validation therefore always
 emits `"execution_authorized": false`.
-
-## Small offline example
-
-This one-pair fixture is also exercised by `test_experiment_cli.py`. Save it as
-`plan.json`:
-
-```json
-{
-  "schema": "epyc.autokernel.experiment_plan.v1",
-  "plan_id": "doc-small-plan",
-  "campaign_id": "campaign-1",
-  "target_revision": "rev-1",
-  "epoch": "epoch-1",
-  "instrument_class": "bench",
-  "category": "CANDIDATE",
-  "phase": "confirmation",
-  "protocol_ref": "P-test",
-  "protocol_status": "unratified",
-  "record_class": "strict_search",
-  "intended_use": "rank",
-  "comparison_kind": "mechanism",
-  "estimand": "level",
-  "metric": "tokens_per_second",
-  "metric_direction": "higher",
-  "estimator_id": "median.v1",
-  "unit": "session",
-  "changed_factors": ["one-flag"],
-  "anchor_identity": {"build": "anchor"},
-  "candidate_identity": {"build": "candidate"},
-  "expected_units": [
-    {"unit_id": "a0", "arm": "anchor", "process_id": "pa", "expected_prompt_ids": ["prompt-1"], "order_index": 0, "pair_id": 0},
-    {"unit_id": "c0", "arm": "candidate", "process_id": "pc", "expected_prompt_ids": ["prompt-1"], "order_index": 1, "pair_id": 0}
-  ],
-  "stopping": {"kind": "fixed_n", "n_per_arm": 1, "paired": true},
-  "required_witnesses": ["identity"],
-  "calibration_ref": null,
-  "policy_snapshot": {"reference": "MEASUREMENT.md", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
-  "continuation_allowed": false
-}
-```
-
-Validate it without running anything:
-
-```console
-PYTHONPATH=scripts/kernel_rnd python3 -m autokernel.loop.experiment_cli --plan plan.json --out validation.json
-```
-
-With no `--units` file the result is valid but incomplete: both predeclared units
-are listed as missing, the use disposition refuses ranking, and execution remains
-unauthorized. `--units` accepts a JSON array of exact
-`epyc.autokernel.raw_unit.v1` objects. `--out` uses the existing durable atomic JSON
-publisher; standard output contains the same document.
 
 ## Evidence behavior
 

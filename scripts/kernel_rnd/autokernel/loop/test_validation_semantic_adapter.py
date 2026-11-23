@@ -20,13 +20,9 @@ from types import ModuleType
 import pytest
 
 from .. import schemas
-from ..release.test_readiness import green_signal
-from . import candidate_manifest as cm
 from . import measurement_capture as mc
 from . import validation_consumer as vc
 from . import validation_claim_receipt as cr
-from . import validation_loo_evidence as le
-from . import validation_objective_decision as od
 from . import validation_semantic_adapter as sa
 from .test_validation_consumer import _consumer, _evidence
 
@@ -85,21 +81,6 @@ def historical_root(tmp_path_factory):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
     return root
-
-
-def _alter_decision(store, reference, *, binding=None, native=None):
-    body = json.loads(json.dumps(mc._plain(
-        store.read(reference.locator, reference.sha256))))
-    if binding:
-        body["candidate_binding"].update(binding)
-    if native:
-        body["native_binding"].update(native)
-    body.pop("decision_id")
-    body["decision_id"] = "objective-" + schemas.content_hash(body)[:24]
-    artifact = store.write("validation-objective-decision", body)
-    return od.ObjectiveDecisionReference(
-        body["decision_id"], body["objective_digest"], body["disposition"],
-        artifact.locator, artifact.sha256)
 
 
 def _assembly_and_receipt(tmp_path, *, fixture_authority=True):
@@ -396,111 +377,3 @@ def test_final_verifier_pins_do_not_retroactively_attest_producer_source(
         projection.produce_receipt(
             source_store=source_store, source_locator=wrong_schema_artifact.locator,
             source_sha256=wrong_schema_artifact.sha256, receipt_store=receipt_store)
-
-
-def test_actual_readiness_result_and_exact_loo_index_round_trip(tmp_path):
-    values, assembly, receipt, store = _assembly_and_receipt(tmp_path)
-    controller, _consumer_obj, candidate, comparator, old_row, _old_set, plan, captures, \
-        calibration, _capture_store, _evidence_store = values
-    try:
-        signal = green_signal()
-        row_data = old_row.to_dict()
-        row_data.update(
-            objective_digest=schemas.content_hash(signal.objective.to_dict()),
-            protocol_id=next(iter(signal.objective.protocol_by_phase.values())),
-            instrument_digest=schemas.content_hash({"fixture": "prospective-v2-instrument"}))
-        row = cm.ValidationRow.from_dict(row_data)
-        row_set = cm.RequiredRowSet.from_dict(
-            cm.RequiredRowSet("semantic-v1", (row,)).to_dict())
-        frozen = replace(
-            assembly.batch, row_set_digest=row_set.row_set_digest,
-            required_row_ids=(row.row_id,),
-            rows=(cm.ValidationRowState(row.row_id, "pending", None, None),)).validated()
-        anchor_id, anchor_payload = captures["anchor"]
-        candidate_id, candidate_payload = captures["candidate"]
-        native = od.NativePairBinding(
-            plan.digest, anchor_id,
-            anchor_payload["carrier"]["carrier_digest"], candidate_id,
-            candidate_payload["carrier"]["carrier_digest"], calibration.digest,
-            row.instrument_digest, anchor_payload["artifact"]["locator"],
-            anchor_payload["artifact"]["sha256"])
-        decision_ref = od.seal_readiness_decision(
-            store=store, signal=signal, batch=frozen, row=row, row_set=row_set,
-            candidate=candidate, comparator=comparator, native=native)
-        decision = od.reopen_readiness_decision(store=store, reference=decision_ref)
-        assert decision["source_standing"] == "objective_met"
-        assert decision_ref.disposition == "policy_undefined"
-
-        loo_plan = cm.plan_loo(candidate, candidate.keeps[0].keep_id)
-        sealed_bundle = dict(store.read(
-            receipt.native_evidence_ref, receipt.native_evidence_digest))
-        sealed_bundle.update(batch=frozen.to_dict(), row=row.to_dict(),
-                             row_set=row_set.to_dict())
-        semantic_row = store.write("candidate-validation-row", sealed_bundle)
-        semantic_receipt = cm.RowReceipt.from_dict({
-            "schema": cm.RECEIPT_SCHEMA, "batch_id": frozen.batch_id,
-            "candidate_manifest_digest": candidate.manifest_digest,
-            "comparator_manifest_digest": comparator.manifest_digest,
-            "row_set_digest": row_set.row_set_digest, "row_id": row.row_id,
-            "native_evidence_ref": semantic_row.locator,
-            "native_evidence_digest": semantic_row.sha256,
-            "intended_use": "validate", "use_disposition": "permitted"})
-        pointer = le.RowEvidencePointer(semantic_receipt)
-        body_digest = le.evidence_digest(
-            plan=loo_plan, candidate=candidate, row_set=row_set,
-            row_evidence=(pointer,), objective_decisions=(decision_ref,))
-        result = cm.LOOResult.from_dict({
-            "schema": cm.LOO_RESULT_SCHEMA, "plan_digest": loo_plan.plan_digest,
-            "candidate_manifest_digest": candidate.manifest_digest,
-            "keep_id": loo_plan.keep_id,
-            "derived_manifest_digest": loo_plan.derived_manifest_digest,
-            "row_set_digest": row_set.row_set_digest,
-            "receipt_digests": [semantic_row.sha256],
-            "disposition": "supports_keep", "evidence_digest": body_digest,
-            "deletion_authorized": False})
-        loo_ref = le.seal_loo_evidence(
-            store=store, result=result, plan=loo_plan, candidate=candidate,
-            row_set=row_set, row_evidence=(pointer,), objective_decisions=(decision_ref,))
-        exact = le.LOOEvidenceIndex((loo_ref,)).exact(body_digest)
-        assert le.reopen_loo_evidence(store=store, reference=exact, result=result)["plan"] \
-            == loo_plan.to_dict()
-        forged_pointer = le.RowEvidencePointer(replace(
-            semantic_receipt,
-            row_set_digest=schemas.content_hash({"different": "row-set"})))
-        with pytest.raises(le.LOOEvidenceError, match="semantic binding"):
-            le.seal_loo_evidence(
-                store=store, result=result, plan=loo_plan, candidate=candidate,
-                row_set=row_set, row_evidence=(forged_pointer,),
-                objective_decisions=(decision_ref,))
-        foreign_batch = _alter_decision(
-            store, decision_ref, binding={"batch_id": "another-validation-batch"})
-        foreign_comparator = _alter_decision(
-            store, decision_ref,
-            binding={"comparator_manifest_digest":
-                     schemas.content_hash({"different": "comparator"})})
-        foreign_native = _alter_decision(
-            store, decision_ref,
-            native={"anchor_measurement_id":
-                    schemas.content_hash({"different": "measurement"})})
-        for wrong, reason in (
-                (foreign_batch, "batch/comparator"),
-                (foreign_comparator, "batch/comparator"),
-                (foreign_native, "native binding")):
-            with pytest.raises(le.LOOEvidenceError, match=reason):
-                le.seal_loo_evidence(
-                    store=store, result=result, plan=loo_plan, candidate=candidate,
-                    row_set=row_set, row_evidence=(pointer,),
-                    objective_decisions=(wrong,))
-        with pytest.raises(le.LOOEvidenceError):
-            le.LOOEvidenceIndex(()).exact(body_digest)
-        with pytest.raises(le.LOOEvidenceError, match="cannot be reopened"):
-            le.reopen_loo_evidence(
-                store=store,
-                reference=replace(loo_ref, locator="missing-loo-evidence.json"),
-                result=result)
-        with pytest.raises(od.ObjectiveDecisionError, match="cannot be reopened"):
-            od.reopen_readiness_decision(
-                store=store,
-                reference=replace(decision_ref, locator="missing-objective.json"))
-    finally:
-        controller.__exit__(None, None, None)

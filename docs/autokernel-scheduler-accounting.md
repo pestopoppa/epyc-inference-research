@@ -51,31 +51,9 @@ engine from a complete immutable state. Seed identity/ID lookups, updates, and F
 startup-built indices and per-backend heaps; operational transitions do not scan historical seed
 accounts.
 
-Example offline inspection:
-
-```bash
-PYTHONPATH=scripts/kernel_rnd python3 -m autokernel.loop.scheduling_cli \
-  --resolved-campaign resolved-campaign.json \
-  --config scheduler-config.json \
-  --proposals eligible-proposals.json \
-  --state scheduler-state.json \
-  --receipts held-claim-receipts.json \
-  --outages scheduler-outages.json \
-  --now 1788926400 --out scheduler-inspection.json
-```
-
 The real consumer must supply trusted eligibility, actual ownership/allocation generations, physical
 claim IDs, complete intervals, and authority/resource outage events. It must durably journal round and
-accounting transitions before treating them as current. CLI scheduler identity binds the campaign ID to
-the digest of the complete normalized `ResolvedCampaign`, so a changed resolved snapshot cannot reuse
-old state under the same label. Input target revisions use `target_id@revision`; the CLI resolves every
-alias through the grouped `TargetRevision`, requires `alias_identity` to equal its
-`workload_signature`, and replaces both target and production-frontier identity with one canonical
-group digest. Backend and production/seed enrollment must match the resolved group. A non-ready target
-cannot become serving work through `eligible:true`; only separately typed non-frontier `prerequisite`
-or `build` work is inspectable until it is ready. Optional receipts use the closed
-`epyc.autokernel.scheduler_receipt_input.v1` wrapper containing exactly `schema`, `receipt`, and
-`outcome`, and may account only the transition's selected declared proposal.
+accounting transitions before treating them as current.
 
 The current campaign service, controller Journal producer/replayer, provider, region locks, broker,
 overlap/coexistence verifier, evidence grader, and measurement pipeline are not wired to this module.

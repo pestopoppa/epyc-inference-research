@@ -113,17 +113,10 @@ accepts them. A+B and A+C do not establish A+B+C, and B-tolerates-A says nothing
 about A-tolerates-B. Missing margins, uncertainty, evidence, or verifier returns
 `serialized_owned`; no p-value is interpreted as equivalence.
 
-## Offline CLI and integration limits
+## Integration limits
 
-```console
-PYTHONPATH=scripts/kernel_rnd python3 -m autokernel.loop.evidence_cli \
-  --findings findings.json --invalidations invalidations.json \
-  --query query.json --out inspection.json
-```
-
-The CLI validates through the real projection API and uses the existing durable
-`status.write_json` publisher when `--out` is present. It deliberately connects no
-trusted certificate adapters and always emits `execution_authorized: false`.
+The projection deliberately connects no trusted certificate adapters and always emits
+`execution_authorized: false`.
 
 The prospective current-loop measurement source is already registered in the root
 Vidya adapter documentation and VB-AK-UNIFIED. Still missing are the actual native
