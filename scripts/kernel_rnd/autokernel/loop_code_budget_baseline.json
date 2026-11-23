@@ -11,6 +11,7 @@
     "a2_unit_transport.py": 52,
     "ab_server_pair.py": 159,
     "accumulate.py": 472,
+    "actor_budgets.py": 33,
     "actor_context.py": 497,
     "actor_lifecycle.py": 286,
     "actor_metrics.py": 381,
@@ -20,6 +21,7 @@
     "actor_preparation.py": 493,
     "actor_preparation_state.py": 209,
     "actor_serving.py": 271,
+    "actor_settlement_policy.py": 20,
     "actor_tools_mcp.py": 781,
     "actor_wire_gate.py": 115,
     "actor_wire_test.py": 690,
@@ -30,6 +32,7 @@
     "apply_registry_serving_floors.py": 148,
     "archive.py": 469,
     "att_mfma_efficiency.py": 96,
+    "authoring_chain.py": 173,
     "belief_context.py": 580,
     "bench.py": 385,
     "bestof.py": 1056,
@@ -38,23 +41,30 @@
     "calibrate_served_shapes.py": 619,
     "call_budget.py": 31,
     "campaign.py": 714,
+    "campaign_build_identity.py": 89,
     "campaign_cli.py": 226,
     "campaign_command_v2.py": 101,
+    "campaign_command_validation.py": 45,
     "campaign_control.py": 4473,
     "campaign_service.py": 703,
+    "campaign_snapshot_validation.py": 406,
     "campaign_status.py": 112,
     "candidate_cli.py": 235,
     "candidate_manifest.py": 1152,
+    "candidate_startup_replay.py": 10,
     "candidate_transactions.py": 905,
     "capacity_probe.py": 100,
     "census.py": 150,
     "census_live.py": 38,
     "census_store.py": 94,
+    "census_update.py": 294,
     "champion.py": 136,
     "champion_reanchor.py": 465,
     "claim.py": 571,
     "claims.py": 58,
+    "comparison_receipt_journal.py": 129,
     "composed_census.py": 91,
+    "contained_authoring.py": 171,
     "cpu_aa_calibration.py": 88,
     "cpu_fa_mask_capture.py": 74,
     "cpu_fa_reference.py": 480,
@@ -68,7 +78,9 @@
     "cpu_route_gdb_probe.py": 32,
     "cpu_route_witness.py": 277,
     "cpu_screen.py": 477,
+    "cpu_stage_elapsed.py": 43,
     "cpu_window.py": 591,
+    "critic_provenance.py": 93,
     "cross_lane_gate.py": 142,
     "cross_target.py": 417,
     "deadline_reserve.py": 50,
@@ -77,7 +89,10 @@
     "discovery_execution.py": 125,
     "discovery_screen.py": 714,
     "dispatch_guard.py": 202,
+    "driver_config.py": 115,
     "driver_execution.py": 959,
+    "driver_execution_receipt.py": 180,
+    "elf_retention.py": 102,
     "epoch_aliases.py": 232,
     "evidence_cli.py": 77,
     "evidence_feed.py": 1363,
@@ -93,6 +108,10 @@
     "fold2_gates.py": 242,
     "forward_admission.py": 128,
     "fresh_correctness.py": 163,
+    "gate_eval.py": 281,
+    "gate_eval_replay.py": 173,
+    "gate_graph_kld_policy.py": 43,
+    "gate_identity_checks.py": 41,
     "gates.py": 2988,
     "gcn_gym.py": 133,
     "gcn_replay.py": 208,
@@ -113,18 +132,24 @@
     "hip_routes.py": 111,
     "historical_trajectory.py": 165,
     "history_fields.py": 122,
+    "host_blocked.py": 31,
+    "host_claim_provider.py": 385,
     "hotspots.py": 139,
+    "installed_receipt_feed.py": 80,
     "instruments.py": 67,
     "integrity.py": 338,
+    "integrity_pack.py": 140,
     "iqk_gdb_probe.py": 51,
     "iqk_witness.py": 282,
     "isa_claims.py": 235,
     "journal_feed_owner.py": 249,
     "keep_frontier.py": 47,
+    "keep_lesson.py": 59,
     "keep_screen.py": 378,
     "keep_timing.py": 152,
     "kernel_coverage.py": 556,
     "kernel_mutation_guard.py": 22,
+    "kfd_topology.py": 55,
     "lane_actors.py": 67,
     "lane_targets.py": 267,
     "lane_watchdog.py": 450,
@@ -136,6 +161,7 @@
     "lineage_beliefs.py": 110,
     "lineage_capture.py": 74,
     "lineage_edit_diagnostics.py": 110,
+    "lineage_taxonomy_wire.py": 72,
     "loadgen_selfcheck.py": 88,
     "longctx.py": 729,
     "longctx_c8.py": 97,
@@ -143,6 +169,7 @@
     "longctx_tools.py": 143,
     "loo_touched.py": 76,
     "loop.py": 1394,
+    "maintenance_caller.py": 21,
     "maintenance_execution.py": 630,
     "measurement_capture.py": 701,
     "metrics_map.py": 45,
@@ -161,6 +188,7 @@
     "native_server_response.py": 280,
     "native_server_t0_witness.py": 657,
     "native_server_token_evidence.py": 110,
+    "native_witness_source_pins.py": 24,
     "new_epoch.py": 68,
     "node_profile.py": 398,
     "noise_relative_tolerance.py": 124,
@@ -170,13 +198,16 @@
     "numerics_native.py": 149,
     "observation_binding.py": 784,
     "operation_accounting.py": 216,
+    "operation_child_proof.py": 51,
     "paired_loadgen.py": 157,
     "pareto_retain.py": 88,
     "perf_cache.py": 148,
     "pipeline.py": 325,
+    "pipeline_budget.py": 20,
     "planned_serving.py": 752,
     "planned_unit_selection.py": 201,
     "pool.py": 441,
+    "pool_commit_message.py": 19,
     "prebuild_rules.py": 79,
     "process_metrics.py": 173,
     "procguard.py": 614,
@@ -184,10 +215,12 @@
     "production_enrollment.py": 430,
     "production_surfaces.py": 50,
     "profile_preparation.py": 577,
+    "profile_preparation_receipt.py": 102,
     "profile_refresh.py": 56,
     "promotion_evidence.py": 47,
     "provider_breaker.py": 67,
     "provider_factories.py": 34,
+    "qualified_serving_producer.py": 72,
     "quant_codespace.py": 888,
     "ram_admit.py": 98,
     "readiness/u3_express.py": 150,
@@ -195,12 +228,16 @@
     "reflexion.py": 106,
     "residency.py": 477,
     "resolved_recipe.py": 1364,
+    "restart_native_citations.py": 23,
     "resume.py": 2873,
     "retention.py": 485,
     "retention_consumer.py": 373,
+    "retention_owner_journal.py": 40,
     "roofline_coverage.py": 213,
     "route_defaults.py": 102,
     "run.py": 6127,
+    "run_actor_config.py": 78,
+    "run_author_plan.py": 65,
     "run_paired_serving_ab.py": 126,
     "runtime_admission.py": 784,
     "runtime_aggregates.py": 173,
@@ -213,6 +250,7 @@
     "same_state_stop.py": 221,
     "scheduling.py": 1927,
     "scheduling_cli.py": 143,
+    "scientific_adapter_selection.py": 34,
     "scoped_evidence.py": 1753,
     "scratch.py": 840,
     "search_window.py": 672,
@@ -222,6 +260,7 @@
     "serial_control.py": 165,
     "serial_roster.py": 209,
     "serial_run.py": 2340,
+    "serial_run_resume_option.py": 21,
     "serial_scheduling.py": 598,
     "served_shape_cases.py": 818,
     "serving.py": 1566,
@@ -231,24 +270,34 @@
     "serving_preparation_startup.py": 140,
     "serving_server_owner.py": 59,
     "serving_shares.py": 147,
+    "settlement_test_support.py": 11,
     "source_build_entrypoint.py": 3,
     "source_build_execution.py": 429,
+    "source_build_log.py": 58,
     "source_build_preparation.py": 349,
     "source_build_worker.py": 121,
     "source_loo.py": 197,
+    "stage_admission.py": 119,
+    "stage_bodies.py": 376,
+    "stage_coordination.py": 214,
+    "stage_footprint.py": 146,
     "stage_receipts.py": 187,
     "standalone_cli.py": 374,
+    "standalone_dispatch.py": 43,
     "standalone_inputs.py": 770,
+    "standalone_installed_adapters.py": 37,
     "standalone_runtime.py": 673,
     "startup_factory.py": 432,
     "status.py": 262,
     "surface_fold.py": 225,
     "surface_validation.py": 388,
     "tail_timing.py": 273,
+    "tailsplit.py": 156,
     "target_profile_execution.py": 267,
     "tool_output.py": 8,
     "trial_lifecycle.py": 116,
     "two_instance_floor.py": 149,
+    "typed_planner.py": 116,
     "unified_driver.py": 1231,
     "unified_planner.py": 1229,
     "unified_worker.py": 2247,
@@ -264,7 +313,9 @@
     "width_dimension.py": 161,
     "width_invariance.py": 396,
     "worker_bootstrap.py": 238,
-    "worker_lifecycle.py": 2259
+    "worker_lifecycle.py": 2259,
+    "worker_planned_result.py": 152,
+    "worker_recovery_inspection.py": 78
   },
   "exceptions": {
     "accumulate.py": {
@@ -272,8 +323,8 @@
       "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: a25f5ff79, 2f047a7b1 per-surface bundles and shared-COR fencing. OPEN design question, not settled by this ceiling: split _load_bundle_locked (+190 lines as one function) by surface and legacy path?"
     },
     "actor_context.py": {
-      "ceiling": 511,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +14 lines over 497, 2 commit(s) since cdf6faa44, latest 460cfc464 autokernel: narrow AK-TOOL-CHAMPION-CONTEXT to launch-time refusal against CANON); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 517,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +14 lines over 497, 2 commit(s) since cdf6faa44, latest 460cfc464 autokernel: narrow AK-TOOL-CHAMPION-CONTEXT to launch-time refusal against CANON); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 517 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261122 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "actor_metrics.py": {
       "ceiling": 491,
@@ -316,8 +367,8 @@
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +19 lines over 714, 2 commit(s) since cdf6faa44, latest e33cf3cd1 autokernel: identical-state planner abstention stop + log-only retry_budget_shad); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "campaign_service.py": {
-      "ceiling": 714,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +11 lines over 703, 1 commit(s) since cdf6faa44, latest daed7b39f Supervise AutoKernel lane entry points); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 718,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +11 lines over 703, 1 commit(s) since cdf6faa44, latest daed7b39f Supervise AutoKernel lane entry points); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 718 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261122 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "champion.py": {
       "ceiling": 218,
@@ -352,8 +403,8 @@
       "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +1 lines over 232, 1 commit(s) since cdf6faa44, latest 86319c468 autokernel: LOOP-SAFETY-C C2a/C2b + D-A3 (refuse missing store/inbox, ranked pat); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
     },
     "experiment_plan.py": {
-      "ceiling": 922,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +75 lines over 847, 1 commit(s) since cdf6faa44, latest 0a9bc7b9f autokernel: switch bisect plan + campaign_status run-end/heartbeat (handback)); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 933,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +75 lines over 847, 1 commit(s) since cdf6faa44, latest 0a9bc7b9f autokernel: switch bisect plan + campaign_status run-end/heartbeat (handback)); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 933 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261122 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "fold2_gates.py": {
       "ceiling": 247,
@@ -376,8 +427,8 @@
       "approval": "operator ratification RATIFY-AK-C9-2-20261109 (epyc-root artifacts/operator/ratify_ak_c9_2_20261109.json), item C: 625b5000a AK-PROF-TWO-DENOM denominators and rendering"
     },
     "integrity.py": {
-      "ceiling": 368,
-      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +30 lines over 338, 2 commit(s) since cdf6faa44, latest 9b436c770 autokernel: refuse symlink, submodule and actor-commit escapes at candidate vali); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json)"
+      "ceiling": 369,
+      "approval": "AutoKernel review 2026-11-09 (operator-requested regrowth review; +30 lines over 338, 2 commit(s) since cdf6faa44, latest 9b436c770 autokernel: refuse symlink, submodule and actor-commit escapes at candidate vali); operator countersign RATIFY-AK-C9-20261109 (epyc-root artifacts/operator/ratify_ak_c9_20261109.json) | ratchet 369 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package) | RATCHETED TWICE: trim-or-split obligation AK-TRIM-OR-SPLIT-SMALL-20261122 (epyc-root handoffs/active/autokernel-loop.md); no further ratchet of this file until that box closes"
     },
     "iqk_witness.py": {
       "ceiling": 283,
@@ -586,6 +637,106 @@
     "worker_lifecycle.py": {
       "ceiling": 2479,
       "approval": "ratchet 2479 (trimmed): RATIFY-AK-LOOP-CODE-BUDGET-RATCHET-20261119 (OP-AK-CODEBUDGET-43); frozen baseline 2259. A second ratchet carries a trim-or-split obligation."
+    },
+    "a2_unit_transport.py": {
+      "ceiling": 126,
+      "approval": "ratchet 126 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 52. A second ratchet carries a trim-or-split obligation."
+    },
+    "direct_historical_control.py": {
+      "ceiling": 587,
+      "approval": "ratchet 587 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 582. A second ratchet carries a trim-or-split obligation."
+    },
+    "feed_runtime.py": {
+      "ceiling": 506,
+      "approval": "ratchet 506 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 439. A second ratchet carries a trim-or-split obligation."
+    },
+    "gcn_gym.py": {
+      "ceiling": 135,
+      "approval": "ratchet 135 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 133. A second ratchet carries a trim-or-split obligation."
+    },
+    "guard_bands.py": {
+      "ceiling": 131,
+      "approval": "ratchet 131 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 117. A second ratchet carries a trim-or-split obligation."
+    },
+    "lifecycle_observation.py": {
+      "ceiling": 1707,
+      "approval": "ratchet 1707 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 1651. A second ratchet carries a trim-or-split obligation."
+    },
+    "loo_touched.py": {
+      "ceiling": 91,
+      "approval": "ratchet 91 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 76. A second ratchet carries a trim-or-split obligation."
+    },
+    "maintenance_execution.py": {
+      "ceiling": 839,
+      "approval": "ratchet 839 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 630. A second ratchet carries a trim-or-split obligation."
+    },
+    "measurement_capture.py": {
+      "ceiling": 721,
+      "approval": "ratchet 721 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 701. A second ratchet carries a trim-or-split obligation."
+    },
+    "native_observation_witnesses.py": {
+      "ceiling": 187,
+      "approval": "ratchet 187 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 135. A second ratchet carries a trim-or-split obligation."
+    },
+    "native_retention_catalog.py": {
+      "ceiling": 775,
+      "approval": "ratchet 775 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 613. A second ratchet carries a trim-or-split obligation."
+    },
+    "operation_accounting.py": {
+      "ceiling": 386,
+      "approval": "ratchet 386 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 216. A second ratchet carries a trim-or-split obligation."
+    },
+    "promotion_evidence.py": {
+      "ceiling": 57,
+      "approval": "ratchet 57 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 47. A second ratchet carries a trim-or-split obligation."
+    },
+    "provider_factories.py": {
+      "ceiling": 37,
+      "approval": "ratchet 37 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 34. A second ratchet carries a trim-or-split obligation."
+    },
+    "runtime_admission.py": {
+      "ceiling": 799,
+      "approval": "ratchet 799 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 784. A second ratchet carries a trim-or-split obligation."
+    },
+    "runtime_aggregates.py": {
+      "ceiling": 302,
+      "approval": "ratchet 302 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 173. A second ratchet carries a trim-or-split obligation."
+    },
+    "serial_scheduling.py": {
+      "ceiling": 599,
+      "approval": "ratchet 599 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 598. A second ratchet carries a trim-or-split obligation."
+    },
+    "source_loo.py": {
+      "ceiling": 205,
+      "approval": "ratchet 205 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 197. A second ratchet carries a trim-or-split obligation."
+    },
+    "standalone_runtime.py": {
+      "ceiling": 742,
+      "approval": "ratchet 742 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 673. A second ratchet carries a trim-or-split obligation."
+    },
+    "startup_factory.py": {
+      "ceiling": 535,
+      "approval": "ratchet 535 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 432. A second ratchet carries a trim-or-split obligation."
+    },
+    "tail_timing.py": {
+      "ceiling": 328,
+      "approval": "ratchet 328 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 273. A second ratchet carries a trim-or-split obligation."
+    },
+    "trial_lifecycle.py": {
+      "ceiling": 117,
+      "approval": "ratchet 117 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 116. A second ratchet carries a trim-or-split obligation."
+    },
+    "validation_consumer.py": {
+      "ceiling": 621,
+      "approval": "ratchet 621 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 568. A second ratchet carries a trim-or-split obligation."
+    },
+    "validation_projection_source.py": {
+      "ceiling": 247,
+      "approval": "ratchet 247 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 225. A second ratchet carries a trim-or-split obligation."
+    },
+    "validation_semantic_adapter.py": {
+      "ceiling": 607,
+      "approval": "ratchet 607 (ratchet): RATIFY-AK-LOOP-CODE-BUDGET-CONSOLIDATED-20261122 (OP-AK-CODEBUDGET-43 procedure, 2026-11-22 consolidated package); frozen baseline 487. A second ratchet carries a trim-or-split obligation."
     }
   }
 }
