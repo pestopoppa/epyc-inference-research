@@ -367,8 +367,8 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           reserve_candidate=None, record_abandoned=None,
           next_resume=None, begin_author_custody=None, finish_author_custody=None,
           author_sandbox: bool = False,
-          cpu_window=None, tail_priority=None, tail_demote=None, on_tail_ready=None,
-          make_exact_judge=None, make_isa_check=None,
+          cpu_window=None, tail_priority=None, on_tail_ready=None,
+          gate_wrappers=None,
           make_emitting_tail=None) -> PoolResult:
     """Run `iterations` iterations across `workers` lanes and report the accounting.
 
@@ -402,7 +402,8 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
     # AKX-ALL-29.2a: `tail_priority(hypothesis)` orders which waiting candidate is timed
     # next (launch-weighted kernel estimate); None keeps the plain lock.
     tail = pipeline.SerializedTail(lambda: champion_head(champion_tree, branch), fence=fence,
-                                   priority=tail_priority, demote=tail_demote)
+                                   priority=tail_priority,
+                                   demote=gate_wrappers.tail_demote if gate_wrappers else None)
     if on_tail_ready is not None:
         on_tail_ready(tail)
 
@@ -436,10 +437,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
                if begin_author_custody is not None else {}),
             **({"finish_author_custody": finish_author_custody}
                if finish_author_custody is not None else {}),
-            **({"make_exact_judge": make_exact_judge}
-               if make_exact_judge is not None else {}),
-            **({"make_isa_check": make_isa_check}
-               if make_isa_check is not None else {}),
+            **({"gate_wrappers": gate_wrappers} if gate_wrappers is not None else {}),
             # AKPL-P3: lanes hand candidates to their row chain (None: legacy tail).
             **({"make_emitting_tail": make_emitting_tail}
                if make_emitting_tail is not None else {}))

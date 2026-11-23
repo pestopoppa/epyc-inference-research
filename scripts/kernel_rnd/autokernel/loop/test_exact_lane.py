@@ -173,9 +173,8 @@ def test_exact_without_valid_verdict_rejects(judge):
 
 def test_iterate_wires_lane_gate():
     import inspect
-    src = inspect.getsource(_loop.iterate)
-    assert "exact_lane.lane_gate(gate, exact_judge" in src
-    assert inspect.signature(_loop.iterate).parameters["exact_judge"].default is None
+    assert inspect.signature(_loop.iterate).parameters["extra_gates"].default is None
+    assert "extra_gates" in inspect.getsource(_loop.iterate)
 
 
 # ---- driver wiring: run_pool constructs and passes the exact judge ---------------
@@ -183,6 +182,7 @@ def test_iterate_wires_lane_gate():
 from pathlib import Path as _Path  # noqa: E402
 
 from . import pipeline as _pipeline  # noqa: E402
+from .gate_wrappers import GateWrappers as _GateWrappers  # noqa: E402
 
 
 _CFG = {"incumbent_store": "/stores/inc", "model": "/m/t.gguf", "draft": "/m/d.gguf",
@@ -250,13 +250,13 @@ def test_run_pool_passes_exact_judge(tmp_path, monkeypatch):
             make_measure=lambda w: (lambda h, p: None), commit=lambda *a: "c",
             champion_head=lambda: "h", reset_to_champion=lambda w: "h",
             record=lambda o: None, record_abandoned=lambda w, c: None, iterations=1,
-            make_exact_judge=make)
+            gate_wrappers=_GateWrappers(make_exact_judge=make))
     except Exception:
         pass
     assert seen, "run_pool never reached loop.iterate"
-    kw = seen[0]
-    assert kw["exact_on_mismatch"] == "reject"
-    judge = kw["exact_judge"]
+    (lane_layer,) = seen[0]["extra_gates"]
+    assert lane_layer.keywords["on_mismatch"] == "reject"
+    judge = lane_layer.keywords["exact_judge"]
     assert callable(judge) and judge(_hyp(lane="exact"), ()).passed
     assert cap.calls and {c[0] for c in cap.calls} == {"/stores/inc", str(worker.build_dir)}
     # inert for a candidate without a lane: the lane gate never calls the judge
@@ -284,7 +284,7 @@ def test_run_pool_without_config_passes_no_judge(tmp_path, monkeypatch):
             record=lambda o: None, record_abandoned=lambda w, c: None, iterations=1)
     except Exception:
         pass
-    assert seen and seen[0]["exact_judge"] is None
+    assert seen and "extra_gates" not in seen[0]
 
 
 # ---- live CPU campaign wiring (serial launcher + in-repo config) -----------------

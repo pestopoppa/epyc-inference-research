@@ -106,7 +106,7 @@ from . import belief_context, planner_only
 from . import amdahl
 from . import actor_passthrough
 from . import cross_target, kernel_coverage, blast_radius
-from . import gpu_counter_signals, isa_claims
+from . import gate_wrappers, gpu_counter_signals, isa_claims
 from . import longctx
 from . import floor_registry
 from . import epoch_aliases
@@ -7875,15 +7875,8 @@ def _main(argv: list[str] | None = None) -> int:
             **({"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(
                     gpu_profile_observation, getattr(hypothesis, "target_symbol", None))}
                if direct_launch and not cpu_launch else {}),
-            # AK-AMDAHL-PRUNE: every candidate's e2e ceiling is logged at tail admission
-            # (<store>/amdahl-ceilings.jsonl); `demote` mode times below-bar ones last.
-            **({"tail_demote": lambda hypothesis: _amdahl_tail_demote(args, hypothesis)}
-               if not cpu_launch and getattr(args, "amdahl_prune", "off") != "off" else {}),
             **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}),
-            **({"make_exact_judge": _exact_judge_factory(args)}
-               if getattr(args, "exact_lane_config", None) else {}),
-            **({"make_isa_check": _isa_check_factory(args)}
-               if getattr(args, "isa_claims_gate", "off") != "off" else {}),
+            gate_wrappers=_gate_wrappers(args, cpu_launch),
             # AKPL-P3 (AK-TAIL-SPLIT via rowflow): lanes emit candidate records unless
             # --legacy-tail or --workers 1 keeps the in-process serialized tail.
             **({"make_emitting_tail": _emitting_tail_factory(args)}
@@ -8971,6 +8964,17 @@ def _main(argv: list[str] | None = None) -> int:
     if args.out:
         print(f"\nwrote {args.out / 'loop-run.json'}")
     return 0
+
+
+def _gate_wrappers(args, cpu_launch):
+    """The one gate-feature list every lane shares (gate_wrappers.GateWrappers)."""
+    # AK-AMDAHL-PRUNE: every candidate's e2e ceiling is logged at tail admission
+    # (<store>/amdahl-ceilings.jsonl); `demote` mode times below-bar ones last.
+    demote = not cpu_launch and getattr(args, "amdahl_prune", "off") != "off"
+    return gate_wrappers.GateWrappers(
+        _exact_judge_factory(args) if getattr(args, "exact_lane_config", None) else None,
+        _isa_check_factory(args) if getattr(args, "isa_claims_gate", "off") != "off" else None,
+        (lambda hypothesis: _amdahl_tail_demote(args, hypothesis)) if demote else None)
 
 
 def _exact_judge_factory(args):

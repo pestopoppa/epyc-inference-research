@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from . import belief_context, bench, gates, history_fields, integrity, reflexion, runtime_identity
-from . import exact_lane, same_state_stop
+from . import gate_wrappers, same_state_stop
 # re-exported: moved verbatim to critic_provenance.py
 from .critic_provenance import (  # noqa: F401
     Critic, Hypothesis, Review, _critic_provenance,
@@ -1022,8 +1022,7 @@ def iterate(*, planner: Planner, critic: Critic,
             author_lane: tuple[Path, str] | None = None,
             iteration_scope=None,
             author_panel=None, begin_author_custody=None, finish_author_custody=None,
-            exact_judge=None, exact_on_mismatch: str = "reject",
-            isa_check=None
+            extra_gates=None
             ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
@@ -1167,14 +1166,9 @@ def iterate(*, planner: Planner, critic: Critic,
         _mark_belief(outcome, progress)
         return outcome
 
-    # INF06-EXACT-LANE: lane-aware dispatch. A hypothesis without a lane (or "tolerance")
-    # reaches the injected `gate` unchanged; only lane "exact" is re-routed.
-    gate = exact_lane.lane_gate(gate, exact_judge, on_mismatch=exact_on_mismatch)
-    # C5-ISA-1: archive the candidate's ISA and check its claimed mechanisms after the gate
-    # passed. `isa_check=None` (default) leaves `gate` untouched.
-    if isa_check is not None:
-        from . import isa_claims  # noqa: PLC0415
-        gate = isa_claims.wrap_gate(gate, isa_check)
+    # Gate features (exact lane first, then the C5-ISA-1 claims check) come from one list.
+    for wrap in gate_wrappers.GateWrappers().layers() if extra_gates is None else extra_gates:
+        gate = wrap(gate)
     try:
         return observed(_iterate(planner=planner, critic=critic, working=working,
                         hypothesis_reasons=hypothesis_reasons, measure=measure,

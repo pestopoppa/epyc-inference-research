@@ -51,6 +51,7 @@ import time
 from typing import Any, Callable, Sequence
 
 from . import loop as loop_mod
+from .gate_wrappers import GateWrappers
 from . import scratch
 from . import tail_timing
 # re-exported: moved verbatim to pipeline_budget.py
@@ -301,8 +302,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None,
              next_resume: Callable[[Worker, str], Any] | None = None,
              begin_author_custody=None, finish_author_custody=None,
-             make_exact_judge: Callable[[Worker], Any] | None = None,
-             make_isa_check: Callable[[Worker], Any] | None = None,
+             gate_wrappers: GateWrappers | None = None,
              make_emitting_tail: Callable[[Worker, str], Any] | None = None
              ) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
@@ -531,14 +531,9 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                         finish_author_custody(worker, ticket, h, failure)}
                        if finish_author_custody is not None else {}),
                     iteration_scope=iteration_scope,
-                    # INF06-EXACT-LANE: inert for candidates without lane "exact"
-                    # (`exact_lane.lane_gate` passes them to `gate` untouched).
-                    exact_judge=(make_exact_judge(worker)
-                                 if make_exact_judge is not None else None),
-                    exact_on_mismatch="reject",
-                    # C5-ISA-1: inert unless a factory is supplied (`--isa-claims-gate`).
-                    **({"isa_check": make_isa_check(worker)}
-                       if make_isa_check is not None else {}))
+                    # Gate features (exact lane, ISA claims): one list, see gate_wrappers.
+                    **({"extra_gates": gate_wrappers.layers(worker)}
+                       if gate_wrappers is not None else {}))
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.
