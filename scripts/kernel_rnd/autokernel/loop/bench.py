@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from contextlib import nullcontext
 import json
+import math
 from pathlib import Path
 import random
 import secrets
@@ -428,7 +429,8 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
             f"llama-bench rc={done.returncode}{killed}: {done.stderr[-400:]}")
     row = hardened_row(done.stdout, pp=pp, tg=tg, reps=reps)
     idle, counters = (idle_pre, host_idle.observe("post", CPU_LIST)), path_counters.of(done)
-    return float(row.avg_ts), {**sampler.proof, "host_idle": idle, "path_counters": counters}
+    value = _positive_samples([row.avg_ts])[0]
+    return value, {**sampler.proof, "host_idle": idle, "path_counters": counters}
 
 
 def _utilisation(wall: float, source) -> dict:
@@ -650,6 +652,14 @@ GROSS_DRIFT_MULTIPLE = 2.0
 DRIFT_EXPLAINS_FRACTION = 1 / 3
 
 
+def _positive_samples(samples: Sequence[float]) -> list[float]:
+    values = list(samples)
+    for value in values:
+        if not math.isfinite(value) or value <= 0:
+            raise BenchFailed(f"timing sample must be finite and > 0: {value!r}")
+    return values
+
+
 def trend_rho(samples: Sequence[float]) -> float:
     """Spearman rank correlation of value against POSITION in the run.
 
@@ -662,7 +672,7 @@ def trend_rho(samples: Sequence[float]) -> float:
     Rank correlation against position uses every sample and all of the ordering
     information, and its null depends only on n.
     """
-    values = [value for value in samples if value > 0]
+    values = _positive_samples(samples)
     n = len(values)
     if n < 3:
         return 0.0
@@ -684,7 +694,7 @@ def is_trending(samples: Sequence[float], *, floor_pct: float | None = None) -> 
     detectable: the 2026-08-28 force-MMQ probe climbed +4.324% across five pairs and no
     rank test at that n could call it, which is what `warmup_pairs` is really for.
     """
-    values = [value for value in samples if value > 0]
+    values = _positive_samples(samples)
     n = len(values)
     if n >= MIN_TREND_SAMPLES:
         critical = SPEARMAN_CRIT_05.get(n, 0.447)
@@ -703,7 +713,7 @@ def drift_pct(samples: Sequence[float]) -> float:
     bar. The per-pair effect marched -4.491% -> -0.037%, so a headline of -1.469%
     described first-use cost, not throughput.
     """
-    values = [value for value in samples if value > 0]
+    values = _positive_samples(samples)
     if len(values) < 4:
         return 0.0
     half = len(values) // 2
@@ -714,7 +724,7 @@ def drift_pct(samples: Sequence[float]) -> float:
 
 def spread_is_suspect(samples: Sequence[float], ratio: float = 1.3) -> bool:
     """Bimodality check. A median hides the failure that produced a bogus +46.9%."""
-    values = [value for value in samples if value > 0]
+    values = _positive_samples(samples)
     return bool(values) and (max(values) / min(values)) > ratio
 
 

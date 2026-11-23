@@ -96,3 +96,14 @@ class ReaderTests(unittest.TestCase):
         during=json.loads(self.during.read_text());during['pre']=new_pre;self.during.write_text(json.dumps(during))
         seal['pre']=new_pre;seal['during']=c.receipt(self.during);self.seal.write_text(json.dumps(seal))
         with self.assertRaises(c.Refusal):r.read(c.receipt(self.seal))
+
+    def test_invalid_measurements_refused(self):
+        for value in ('0', '-1', 'nan', 'inf'):
+            for index in (10, 11, 13):
+                cells=list(self.node_cells);cells[index]=value
+                raw=('\t'.join(r.NODE_COLUMNS)+'\n'+'\t'.join(cells)+'\n').encode()
+                with self.subTest(value=value, index=index), self.assertRaisesRegex(c.Refusal, 'finite and > 0'):
+                    r.parse_nodes(raw,'unavailable')
+            cells=list(self.path_cells);cells[2]=value
+            raw=('[cpu_prof] PATHTABLE\t'+'\t'.join(r.PATH_COLUMNS)+'\n[cpu_prof] PATHROW\t'+'\t'.join(cells)+'\n').encode()
+            with self.assertRaisesRegex(c.Refusal, 'finite and > 0'):r.parse_paths(raw)

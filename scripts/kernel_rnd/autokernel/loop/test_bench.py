@@ -636,3 +636,17 @@ class KvTypePin(unittest.TestCase):
         builtin = "/m/" + bench.MEASURED_FLOOR_MODEL_STEM + ".gguf"
         self.assertIsNotNone(bench.floor_rows("tg128", builtin))
         self.assertIsNone(bench.floor_rows("tg128", builtin, kv_type="q8_0"))
+
+
+class InvalidTimingTests(unittest.TestCase):
+    def test_run_once_refuses_invalid_throughput(self):
+        for value in (0, -1, float('nan'), float('inf')):
+            with self.subTest(value=value), mock.patch.object(bench, '_launch', return_value=mock.Mock(returncode=0, stdout='[]', stderr='')), mock.patch.object(bench.residency, 'Sampler'), mock.patch.object(bench.residency, 'loader_env', return_value={}), mock.patch.object(bench, 'hardened_row', return_value=mock.Mock(avg_ts=value)):
+                with self.assertRaisesRegex(bench.BenchFailed, 'finite and > 0'):
+                    bench.run_once(Path('/b'), Path('/m'), pp=0, tg=128)
+
+    def test_statistics_refuse_invalid_samples(self):
+        for value in (0, -1, float('nan'), float('inf')):
+            for fn in (bench.trend_rho, bench.is_trending, bench.drift_pct, bench.spread_is_suspect):
+                with self.subTest(value=value, fn=fn.__name__), self.assertRaisesRegex(bench.BenchFailed, 'finite and > 0'):
+                    fn([1, value, 2])

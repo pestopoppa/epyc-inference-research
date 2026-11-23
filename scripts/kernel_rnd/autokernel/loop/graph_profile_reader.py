@@ -39,10 +39,10 @@ def uint(token):
     c.require(type(token) is str and re.fullmatch(r'0|[1-9][0-9]*',token) is not None,"invalid native integer")
     return int(token)
 
-def number(token):
+def number(token, *, unavailable=False):
     try:value=float(token)
     except (ValueError,TypeError) as exc:raise c.Refusal("invalid native number") from exc
-    c.require(math.isfinite(value) and value>=0,"negative/nonfinite native number")
+    c.require(math.isfinite(value) and (value>0 or unavailable and value==0),"native number must be finite and > 0")
     return value
 
 def parse_nodes(raw,threads):
@@ -52,7 +52,7 @@ def parse_nodes(raw,threads):
         cells=line.split('\t');c.require(len(cells)==19,"wrong node width")
         row=dict(zip(NODE_COLUMNS,cells))
         for field in ('idx','src0_ne0','src0_ne1','src0_ne2','dst_ne0','dst_ne1','dst_ne2','evals','wall_max_ev','spikes'):row[field]=uint(row[field])
-        for field in ('compute_us','wall_us','wall_max_us','thr_max_us','thr_mean_us','thr_min_us'):row[field]=number(row[field])
+        for field in ('compute_us','wall_us','wall_max_us','thr_max_us','thr_mean_us','thr_min_us'):row[field]=number(row[field], unavailable=threads=='unavailable' and field.startswith('thr_'))
         c.require(row['idx'] not in identities and row['op'] and row['src0_type'],"ambiguous node identity")
         identities.add(row['idx']);c.require(row['evals']>0 and row['spikes']<=row['evals'],"invalid eval/spike count")
         c.require(row['thr_min_us']<=row['thr_mean_us']<=row['thr_max_us'],"invalid aggregate thread ordering")
