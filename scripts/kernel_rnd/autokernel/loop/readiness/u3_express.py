@@ -9,7 +9,7 @@ from scripts.kernel_rnd.autokernel.loop import serving, resolved_recipe as rr, r
 
 BUILD = Path("/build")
 def recipe(**kw):
-    return serving.Recipe(name="u3", model="/models/main.gguf", **kw)
+    return serving.Recipe(name="u3", model="/models/main.gguf", **{"temperature": 0.6, **kw})
 def artifact(role, path, digit):
     return {"schema": rr.ARTIFACT_SCHEMA, "role": role, "path": path, "sha256": digit * 64}
 def resolve(r, additional_artifacts=None):
