@@ -991,7 +991,7 @@ Champion candidate C19 = `a6a32c135` (gates prepared as C19-FOLD-GATES vs C18 `7
 - **MI210 measured HBM peak 1.4982 TB/s** (best of 36 stream.hip lines, `lesson_cap.py` / `peak_bw_measured.json`).
   Use it, not 1.6 TB/s paper peak, as the speedup cap denominator (AK-PM-12-S4: cap 3.356x).
 - **CPU quarter-24t read ceiling 112.9 GB/s MEASURED** (bench_readbw 9e379493, q2, CV 3.2%); replaces the derived
-  129.9. half-48t stays 259.8. Census flag threshold 0.75 x 112.9 = 84.7 GB/s.
+  129.9. half-48t stays 259.8. Census flag threshold 0.75 x 112.9 = 84.7 GB/s (quarter-24t).
 - **27B C18 DF2 trace:** lm_head AT_FLOOR 1070 GB/s; attn K/V 1024x5120 OPEN 266 GB/s at n>=5 (780 at n1,
   `q8sk_mul_mat` grid too small); ~460 tiny activation-quantize launches/verify at the 4.5 us launch floor
   (~2.1 ms, ~5% of a 40 ms verify).
@@ -1002,7 +1002,7 @@ Champion candidate C19 = `a6a32c135` (gates prepared as C19-FOLD-GATES vs C18 `7
   2-row tiles (`c08cd5df7`); 12t beats 24t at N>=2. GGML_MM_SMALLN (barrier) is NOT the cause (+3..8% sub-CI).
   Open lever: GGML_Q0_RM4 (4-row tiles at N=2/3), see seed 23.
 - **The census d32k Q38FN GEMV slowdown was a CONTENTION artefact**; quiet re-measure d32k 78-92 GB/s
-  (69-81% of 112.9). Never act on a CPU census cell without a quiet-host guard.
+  (69-81% of the 112.9 GB/s quarter-24t ceiling). Never act on a CPU census cell without a quiet-host guard.
 
 **Methodology (each one cost a re-run)**
 - **Gate small served effects with a paired t-CI, not the max-deviation band.** The max-deviation A/A band grows
