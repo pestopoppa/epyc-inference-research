@@ -1033,6 +1033,18 @@ Champion candidate C19 = `a6a32c135` (gates prepared as C19-FOLD-GATES vs C18 `7
   DTREE-GDN-BATCH to win.
 - I8GEMM per-channel prefill port: 0.821x (68.5 vs 83.3 TFLOP/s).
 
+## Learnings 2026-11-23 evening (C19 gates, C20 candidates, spec-decode replay, identity noise) — distilled, not a log
+
+Each: lesson · evidence · how to apply. Evidence in epyc-root `progress/2026-11/2026-11-23-autokernel.md` (evening section),
+`kernel-champion-and-promotion.md` (C19-FOLD-GATES, C20 candidates) and `speculative-decoding.md` (SPEC-DTREE-ACCEPT-GAP, SPEC-ID-NOISE-1, Q4X R9).
+
+- **Never trust an offline replay's baseline until it reproduces measured served acceptance.** The DICE replay projected +7-11 % for sampled trees, but the v1 served run (`25f846c35`) drafted no siblings at T>0, and on 27B `spec_dists.clear()` quietly downgraded the rejection accept. · Before you reason from any replay delta, gate the replay's V0 against served acceptance (within 2 %). v2 (`8bbc8a26e`) is held until the 27B replay passes that check.
+- **GPU speculative decoding is not reproducible across launches.** A single request on the same server is deterministic, but batched and DFlash2 cross-launch runs diverge on near-ties, and batch SIZE breaks invariance (position does not, on CPU). · Identity gates bucket by logit margin (margin classes). A single divergence inside cross-server noise (Q4X R9) is not a correctness verdict.
+- **Quiet rows contaminate each other.** CAFE-1-SERVED-T r1 ran co-quiet with Q4X r9 and was invalid. · Quiet rows are mutually exclusive: at most one per socket (rowflow QUIET-SERIAL), and waiting quiet rows hold back new heavy rows (QUIET-RESERVE).
+- **A one-quarter CPU tok/s figure is not a served number.** CAFE-1 p-min 0.5 is +22/+28 % at one CPU quarter. · Quote relative effects with their placement, and never as served throughput.
+- **A STOP ending is terminal.** · Use `rowflow resume` for a row that supports it instead of republishing.
+- **C20 candidates:** GGML_Q0_RM4 on A3B shexp is +9.5/+10.4 % at N=2/3 (default-on candidate); GDNPROJ_FUSE is +0.87 % (default off); SPEC-DISTS-TRUNC served A/B is pending. **C19 is not promotable:** the 27B phase-0 heap corruption in test-dtree-device-accept (ROCm, 2/8) is waiting on its ASan diagnostic.
+
 ## gfx90a low-level tier — ISA-schedule operator catalogue
 
 Sub-tier (a), source-only: a text diff to HIP source (builtins / pragmas / attributes). Its
