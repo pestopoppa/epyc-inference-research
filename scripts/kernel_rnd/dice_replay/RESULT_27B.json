@@ -1,5 +1,5 @@
 {
- "predeclaration": "PREDECLARATION_27B.md (sealed in 04c2bc7d0 before replay)",
+ "predeclaration": "PREDECLARATION_27B.md (sealed in 67bb21f22 before replay; pre-rebase local hash 04c2bc7d0)",
  "capture_sha256": "82d46a61a6d8f8b8088faece7935c5b8c10fd71c43bf3afa6db7941820d3a845",
  "results_jsonl": "/mnt/raid0/llm/tmp/ak-dice-replay-27b-20261123/results_27b.jsonl",
  "results_sha256": "98c7f5daf54ae27cb54cd1ee984cca6150aa74edeca643b455786967641fd637",
