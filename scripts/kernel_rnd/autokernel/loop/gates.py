@@ -2071,8 +2071,9 @@ def noise_relative_chain_checks(record_path) -> "list[Callable[[], Verdict]]":
     try:
         record = json.loads(path.read_text())
     except (OSError, ValueError) as exc:
+        err = str(exc)  # `exc` is unbound once the except block ends, so bind it for the lambda
         return [lambda: Verdict("oracle_unavailable", False,
-                                f"missing_inputs: candidate record {path} unreadable: {exc}")]
+                                f"missing_inputs: candidate record {path} unreadable: {err}")]
     if not noise_relative_applies(record):
         return []
     return [lambda: noise_relative_tolerance_gate(record)]

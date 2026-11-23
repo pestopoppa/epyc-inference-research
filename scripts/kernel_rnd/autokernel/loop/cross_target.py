@@ -576,6 +576,15 @@ def eligible(bound, *, repo: Path, retained: Iterable[str] | None = None) -> lis
     return out
 
 
+def retained_patch_ids(bound) -> set[str]:
+    """Patch ids on the Pareto front of `<binding dir>/pareto-retain.jsonl` (AK-PARETO-RETAIN-WIRE).
+    Only non-dominated rows count; a missing or empty store is the empty set."""
+    from . import pareto_retain
+    rows = pareto_retain.load(ledger_path(bound).parent / pareto_retain.STORE_NAME)
+    return {r["patch_id"] for wid_rows in pareto_retain.front(rows, campaigns=2).values()
+            for r in wid_rows if r.get("patch_id")} if rows else set()
+
+
 def check_one(bound, *, repo: Path,
               measure: Callable[[Mapping[str, Any]], Mapping[str, Any]],
               fold_check: Callable[..., Mapping[str, Any]] | None = None,
@@ -587,7 +596,7 @@ def check_one(bound, *, repo: Path,
     It returns {"row": serving.compare row, "passed": bool, "reason": str, "coverage":
     peer_coverage of this target} or {"error": text}. It never moves this lane's branch:
     the series reaches every lane through the champion."""
-    queue = eligible(bound, repo=repo)
+    queue = eligible(bound, repo=repo, retained=retained_patch_ids(bound))
     if not queue:
         return None
     series = queue[0]
@@ -635,5 +644,5 @@ __all__ = ["FOLD", "GATE_COMMIT", "GATE_REFUSED", "LEDGER", "LEDGER_SCHEMA",
            "MAX_GATE_ATTEMPTS", "PENDING_GATE", "append", "apply_in_worktree", "check_one",
            "checkouts", "cherry_pick_ref", "decide", "eligible", "enqueue_gate",
            "fold_onto_champion", "gate_declarations", "gate_mechanism", "held",
-           "ledger_path", "patch_id", "read", "record_keep", "refresh_gates",
+           "ledger_path", "patch_id", "read", "record_keep", "refresh_gates", "retained_patch_ids",
            "sync_from_champion"]

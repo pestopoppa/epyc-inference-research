@@ -221,3 +221,13 @@ def test_bit_exact_or_single_row_skips_the_gate(over, tmp_path):
     rp.write_text(json.dumps(rec))
     assert gates.noise_relative_chain_checks(rp) == []
     assert gates.noise_relative_chain_checks(tmp_path / "absent.json") == []
+
+
+def test_unreadable_record_check_is_callable_and_fails_closed(tmp_path):
+    rp = tmp_path / "rec.json"
+    rp.write_text("{not json")
+    checks = gates.noise_relative_chain_checks(rp)
+    assert len(checks) == 1
+    verdict = checks[0]()          # used to raise NameError: `exc` unbound after the except block
+    assert not verdict.passed and verdict.gate == "oracle_unavailable"
+    assert verdict.reason.startswith("missing_inputs") and "unreadable" in verdict.reason

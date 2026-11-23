@@ -484,3 +484,48 @@ def test_binding_refuses_a_second_lineage(tmp_path, world):
         lane_targets.resolve(path, "lane0", target_id="ds41-t", workers=1, lock=False,
                              working_branch=CHAMPION, canonical_champion=CHAMPION)
     assert lane_targets.load_binding(path)[1] == CHAMPION
+
+
+# ------------------------------------------------------------------ AK-PARETO-RETAIN-WIRE
+
+def _retained_row(pid, cid, q, s, wid="w1", seq=1):
+    from . import pareto_retain as pr
+    return {"schema": pr.SCHEMA, "workload_id": wid, "candidate_id": cid, "patch_id": pid,
+            "campaign_id": "c", "campaign_seq": seq, "quality_delta": q, "speed": s}
+
+
+def test_retained_patch_ids_is_the_front_only_and_empty_without_a_store(world):
+    from . import pareto_retain as pr
+    q38 = world["q38"]
+    assert ct.retained_patch_ids(q38) == set()
+    pr.save(ct.ledger_path(q38).parent / pr.STORE_NAME, [
+        _retained_row("pFront", "c1", 0.0, 1.5), _retained_row("pDominated", "c2", -0.1, 1.2)])
+    assert ct.retained_patch_ids(q38) == {"pFront"}
+
+
+def test_check_one_feeds_the_pareto_front_into_eligible_and_screens_out_dominated(world, monkeypatch):
+    from . import pareto_retain as pr
+    repo, q38 = world["repo"], world["q38"]
+    keep, held_row = _hold(world)
+    gate, gate_row = _gate(world, held_row["patch_id"])
+    pid_keep = held_row["patch_id"]
+    store = ct.ledger_path(q38).parent / pr.STORE_NAME
+    # On the front: the series is marked retained.
+    pr.save(store, [_retained_row(pid_keep, "front", 0.0, 1.6)])
+    assert ct.eligible(q38, repo=repo, retained=ct.retained_patch_ids(q38))[0]["pareto_retained"] is True
+    # Dominated by another candidate on its workload: off the front, not marked.
+    pr.save(store, [_retained_row(pid_keep, "dominated", -0.2, 1.1),
+                    _retained_row("pBetter", "better", 0.0, 1.6)])
+    assert ct.retained_patch_ids(q38) == {"pBetter"}
+    assert ct.eligible(q38, repo=repo, retained=ct.retained_patch_ids(q38))[0]["pareto_retained"] is False
+    # The live path (check_one) passes that same front into eligible.
+    seen = []
+    real = ct.eligible
+
+    def spy(bound, *, repo, retained=None):
+        seen.append(retained)
+        return real(bound, repo=repo, retained=retained)
+
+    monkeypatch.setattr(ct, "eligible", spy)
+    ct.check_one(q38, repo=repo, measure=lambda series: {"error": "stop"})
+    assert seen == [{"pBetter"}]
