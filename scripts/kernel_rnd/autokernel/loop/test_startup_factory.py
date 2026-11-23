@@ -413,6 +413,32 @@ def test_missing_provider_is_typed_debt_and_not_launchable(tmp_path, monkeypatch
     assert again["launchable"] is False
 
 
+def test_host_claim_v1_named_is_gated_unavailable_never_fabricated(tmp_path, monkeypatch):
+    """AKU-11b offline proof (fixture export): no activation record -> gated, not launchable."""
+    from . import host_claim_provider
+    monkeypatch.delenv(host_claim_provider.ACTIVATION_ENV, raising=False)
+    monkeypatch.setattr(host_claim_provider, "make_registry",
+                        lambda: pytest.fail("provider constructed"))
+    inputs = export_inputs(tmp_path)
+    record = factory.build_from_export(
+        production_export=inputs["production_export"], resolved_export=inputs["resolved_export"],
+        startup_config=inputs["startup_config"], output_dir=tmp_path / "bundle",
+        provider_factory_id="host_claim_v1")
+    assert {row["status"] for row in record["provider_debt"]} == {"gated_unavailable"}
+    assert {row["gate_reason"] for row in record["provider_debt"]} == {"activation_absent"}
+    assert {row["provider_factory_id"] for row in record["provider_debt"]} == {"host_claim_v1"}
+    assert record["launchable"] is False and record["execution_authorized"] is False
+    monkeypatch.undo()
+    command = record["dry_run_command"]
+    completed = subprocess.run(command["argv"] + ["--provider-factory", "host_claim_v1"],
+        cwd=tmp_path, env={k: v for k, v in os.environ.items()
+                           if k != host_claim_provider.ACTIVATION_ENV}
+        | {"PYTHONPATH": command["PYTHONPATH"], "PYTHONDONTWRITEBYTECODE": "1"},
+        text=True, capture_output=True, timeout=60, check=False)
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout)["execution_authorized"] is False
+
+
 @pytest.mark.parametrize("change", ["unsealed_edit", "seal_field", "expected_pin", "config_pins"])
 def test_tampered_export_or_config_refuses_without_output(tmp_path, change, capsys):
     inputs = export_inputs(tmp_path)

@@ -472,13 +472,17 @@ def provider_debt(manifest: Any, preflight: Mapping[str, Any],
                   factory_id: str | None = None) -> list[dict[str, Any]]:
     """Typed debt for every provider/verifier the manifest names; nothing is constructed."""
     from . import provider_factories
-    status = "absent"
+    status, gate_reason = "absent", None
     if factory_id is not None and factory_id in provider_factories.REGISTERED_FACTORIES:
         try:
-            provider_factories.source(factory_id)  # identity check only; never imported here
+            provider_factories.source(factory_id)  # identity check only; never constructed here
             status = "registered_unactivated"
         except ValueError:
             status = "registered_source_differs"
+        if status == "registered_unactivated" and factory_id == "host_claim_v1":
+            from . import host_claim_provider  # activation() only reads the operator record
+            record, gate_reason = host_claim_provider.activation()
+            status = "registered_activated" if record is not None else "gated_unavailable"
     feed = manifest.evidence_feed
     rows = [("lifecycle_provider", manifest.lifecycle_provider_id, None),
             ("readiness_provider", manifest.readiness_provider_id, None),
@@ -489,7 +493,7 @@ def provider_debt(manifest: Any, preflight: Mapping[str, Any],
              for target in preflight["pending_profile_targets"]]
     return [{"schema": PROVIDER_DEBT_SCHEMA, "kind": kind, "identifier": identifier,
              "target_revision_digest": target, "status": status,
-             "provider_factory_id": factory_id,
+             "provider_factory_id": factory_id, "gate_reason": gate_reason,
              "preflight_key": (f"{kind}:{identifier}:unavailable" if target is None
                                else f"target:{target}:{kind}:{identifier}:unavailable")}
             for kind, identifier, target in rows]
@@ -543,7 +547,7 @@ def build_from_export(*, production_export: Path, resolved_export: Path, startup
               "installed_parser_roundtrip": "verified", "dry_run_command": receipt["command"],
               "provider_debt": debt, "prerequisite_debt": other,
               "launchable": not other and all(
-                  row["status"] == "registered_unactivated" for row in debt),
+                  row["status"] in {"registered_unactivated", "registered_activated"} for row in debt),
               "execution_authorized": False}
     _write_new(output_dir, "startup-record.json", record)
     return record
