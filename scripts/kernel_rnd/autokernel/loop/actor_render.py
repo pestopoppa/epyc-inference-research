@@ -5,6 +5,7 @@ import json
 from typing import Any, Mapping, Sequence
 
 from . import gpu_counter_signals
+from . import sampling_axis
 
 def _cpu_target(context: Mapping[str, Any]) -> bool:
     target = context.get("target")
@@ -628,7 +629,7 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12,
             mechanism_claim = claim_contract.mechanism_status(row)
             lines.append(f"- `{row.get('mechanism_id')}` → {row.get('status')} "
                          f"{measured}{stale} [mechanism claim: {mechanism_claim}]"
-                         + _supersession_note(row, supersessions)
+                         + _supersession_note(row, supersessions) + sampling_axis.scope_note(row)
                          + (f"\n    refused: {row['refusal_reason']}"
                             if row.get("refusal_reason") else ""))
 
@@ -692,7 +693,7 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12,
                 reason = (row.get("refusal_reason") or row.get("statement") or "")[:160]
                 lines.append(f"- {row.get('status')} `{row.get('mechanism_id')}` "
                              f"({target}) {measured}" + (f" — {reason}" if reason else "")
-                             + _supersession_note(row, supersessions))
+                             + _supersession_note(row, supersessions) + sampling_axis.scope_note(row))
             if omitted:
                 lines.append(f"- … {omitted} more omitted")
     else:

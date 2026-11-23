@@ -163,6 +163,30 @@
      "top_k": null,
      "exact_path": null,
      "basis": "handoffs/active/autokernel-loop.md DTREE-STOCH-VERIFY note: all dtree work is greedy-only with an oracle gate"
+    },
+    {
+     "temperature": 0.1,
+     "top_p": null,
+     "top_k": null,
+     "exact_path": null,
+     "basis": "served-T offline re-test, research da6e2f5ae scripts/kernel_rnd/dice_replay/greedy_retest/VERDICTS.json item2_akm_c10: DICE projection at the served T, required tau_ratio 1.279 (W12) / 1.508 (W16) vs 1.10-1.12, FAILS at every (T,W); status unchanged",
+     "kind": "projection"
+    },
+    {
+     "temperature": 0.3,
+     "top_p": null,
+     "top_k": null,
+     "exact_path": null,
+     "basis": "served-T offline re-test, research da6e2f5ae scripts/kernel_rnd/dice_replay/greedy_retest/VERDICTS.json item2_akm_c10: DICE projection at the served T, required tau_ratio 1.279 (W12) / 1.508 (W16) vs 1.10-1.12, FAILS at every (T,W); status unchanged",
+     "kind": "projection"
+    },
+    {
+     "temperature": 1.0,
+     "top_p": null,
+     "top_k": null,
+     "exact_path": null,
+     "basis": "served-T offline re-test, research da6e2f5ae scripts/kernel_rnd/dice_replay/greedy_retest/VERDICTS.json item2_akm_c10: DICE projection at the served T, required tau_ratio 1.279 (W12) / 1.508 (W16) vs 1.10-1.12, FAILS at every (T,W); status unchanged",
+     "kind": "projection"
     }
    ]
   },

@@ -13,6 +13,7 @@ registry means "cannot say", never a default.
 """
 from __future__ import annotations
 
+import functools
 import math
 import os
 import re
@@ -21,6 +22,8 @@ from typing import Any, Iterable, Mapping
 
 UNKNOWN = "unknown"
 KEYS = ("temperature", "top_p", "top_k", "exact_path")
+#: An arm is `measured` (a run at that sampling) unless it says `projection` (an offline re-score).
+KINDS = ("measured", "projection")
 #: :8083 direct agent traffic (30 of 32 /slots snapshots, intake-ak-1123 rev1 research).
 DIRECT_8083_TEMPERATURE = 1.0
 REGISTRY_ENV = "EPYC_ORCH_REGISTRY"
@@ -49,11 +52,15 @@ def normalize(value: Any) -> Any:
         raise ValueError(f"sampling must be 'unknown', an arm or a non-empty list of arms, got {value!r}")
     out = []
     for item in items:
-        if not isinstance(item, Mapping) or set(item) - set(KEYS) - {"basis"} or "temperature" not in item:
+        if not isinstance(item, Mapping) or set(item) - set(KEYS) - {"basis", "kind"} or "temperature" not in item:
             raise ValueError(f"sampling arm needs temperature and only {KEYS}: {item!r}")
         a = arm(*(item.get(k) for k in KEYS))
         if item.get("basis"):
             a["basis"] = str(item["basis"])
+        if item.get("kind") is not None:
+            if item["kind"] not in KINDS:
+                raise ValueError(f"sampling arm kind must be one of {KINDS}: {item['kind']!r}")
+            a["kind"] = item["kind"]
         out.append(a)
     return out
 
@@ -100,11 +107,14 @@ def _registry(registry: Any) -> Mapping[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def role_temperatures(registry: Any = None) -> dict[str, float]:
-    """role -> generation_defaults.temperature, numeric entries only (no fallback value)."""
+def role_temperatures(registry: Any = None, *, model_name: str | None = None) -> dict[str, float]:
+    """role -> generation_defaults.temperature, numeric entries only (no fallback value);
+    `model_name` keeps only roles whose registry model.name matches."""
     roles = _registry(registry).get("roles") or {}
     out = {}
     for name, body in roles.items():
+        if model_name is not None and ((body or {}).get("model") or {}).get("name") != model_name:
+            continue
         t = ((body or {}).get("generation_defaults") or {}).get("temperature")
         if isinstance(t, (int, float)) and not isinstance(t, bool):
             out[name] = float(t)
@@ -116,19 +126,51 @@ def served_temperatures(registry: Any = None) -> tuple[float, ...]:
     return tuple(sorted({*role_temperatures(registry).values(), DIRECT_8083_TEMPERATURE}))
 
 
-def required_regimes(served: Iterable[float]) -> frozenset[str]:
-    """Sampled regimes evidence must cover. T == 0 is the reproducibility arm: neither required
-    nor sufficient, which is exactly what makes a greedy-only record re-openable."""
-    return frozenset(regime(t) for t in served) - {"greedy"}
+def required_bands(served: Iterable[float]) -> dict[str, tuple[float, float]]:
+    """The sampled served bands evidence must land in: regime -> (min, max) served T. T == 0 is
+    the reproducibility arm: neither required nor sufficient, which is exactly what makes a
+    greedy-only record re-openable. An arm at 0.6 lies in no band: it matches no served role."""
+    bands: dict[str, tuple[float, float]] = {}
+    for t in served:
+        if t > 0:
+            lo, hi = bands.get(regime(t), (t, t))
+            bands[regime(t)] = (min(lo, t), max(hi, t))
+    return bands
 
 
 def covers_served(sampling: Any, served: Iterable[float]) -> bool:
-    return required_regimes(served) <= {regime(t) for t in temperatures(sampling)}
+    temps = temperatures(sampling)
+    return all(any(lo - 1e-9 <= t <= hi + 1e-9 for t in temps)
+               for lo, hi in required_bands(served).values())
 
 
 def reopen_scope(row: Mapping[str, Any], served: Iterable[float]) -> str | None:
     """'greedy' when a spec-decode/acceptance negative is only as wide as its sampling set and
-    that set misses a served regime (do_not_repeat_scope: greedy); None otherwise."""
-    if not is_spec_decode(row):
+    that set misses a served regime (do_not_repeat_scope: greedy); None otherwise.
+    Keeps are not negatives and are never re-opened here."""
+    if not is_spec_decode(row) or row.get("status") in ("kept", "keep_candidate"):
         return None
     return None if covers_served(row.get("sampling"), served) else "greedy"
+
+
+@functools.lru_cache(maxsize=4)
+def _served_cached(path: str, mtime_ns: int) -> tuple[float, ...]:
+    return served_temperatures(Path(path))
+
+
+def served_or_none() -> tuple[float, ...] | None:
+    """Served temperatures, or None when the registry cannot be read: callers then keep their
+    legacy behaviour rather than guessing a regime."""
+    path = Path(os.environ.get(REGISTRY_ENV) or REGISTRY_DEFAULT)
+    try:
+        return _served_cached(str(path), path.stat().st_mtime_ns)
+    except Exception:  # noqa: BLE001 -- unreadable registry means "cannot say"
+        return None
+
+
+def scope_note(row: Mapping[str, Any]) -> str:
+    """Planner-context suffix for a re-openable negative ('' when it is not)."""
+    served = served_or_none()
+    if served is None or reopen_scope(row, served) is None:
+        return ""
+    return " [do_not_repeat_scope: greedy; sampled served-T regimes untested, re-openable]"

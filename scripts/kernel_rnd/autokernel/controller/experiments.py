@@ -644,8 +644,12 @@ class ExperimentStore:
                           ")) END "
                           "END AS research_scope")
         elif include_claims:
+            # AK-TEMP-AXIS-2: the planner-facing view also carries the sampling regime the row
+            # was measured under (NULL = not recorded). Every other projection is unchanged.
             projection = ("*, CASE WHEN length(payload)<=2097152 AND json_valid(payload) "
-                          "THEN json_extract(payload,'$.claims') END AS claims_projection")
+                          "THEN json_extract(payload,'$.claims') END AS claims_projection, "
+                          "CASE WHEN length(payload)<=2097152 AND json_valid(payload) "
+                          "THEN json_extract(payload,'$.sampling') END AS sampling")
         if measurement_epoch is not None and not include_source_scope:
             projection += (", CASE WHEN length(payload)<=2097152 AND json_valid(payload) "
                            "THEN json_extract(payload,'$.research_scope') END "
@@ -709,6 +713,13 @@ class ExperimentStore:
                 "ranking_authorized": bool(ranking_authorized),
             })
             if include_claims:
+                raw_sampling = row["sampling"]
+                try:
+                    recalled[-1]["sampling"] = (json.loads(raw_sampling)
+                                                if isinstance(raw_sampling, str)
+                                                and raw_sampling[:1] in "[{" else raw_sampling)
+                except json.JSONDecodeError:
+                    recalled[-1]["sampling"] = None
                 raw_claims = row["claims_projection"]
                 try:
                     claim_record = (json.loads(raw_claims)

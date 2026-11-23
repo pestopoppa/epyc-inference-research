@@ -11,6 +11,7 @@ from typing import Any, Mapping, Sequence
 
 from ..controller import do_not_repeat
 from . import retired_mechanisms
+from . import sampling_axis
 from . import trial_lifecycle
 
 ANSWER_STATUSES = frozenset({"kept", "keep_candidate", "confirm_vetoed", "measured_null",
@@ -208,12 +209,16 @@ def characterised_reason(hypothesis, context: Mapping[str, Any]) -> str | None:
         "mechanism": hypothesis.mechanism_id, "symbol": hypothesis.target_symbol,
         "file": hypothesis.target_surface})
     matches = []
+    served = sampling_axis.served_or_none()
     for row in context.get("prior_experiments") or ():
         target, _ = do_not_repeat.structural_target({
             "mechanism": row.get("mechanism_id"), "symbol": row.get("target_symbol"),
             "file": row.get("target_surface")})
         agrees, _why = target.agreement(query)
-        if (agrees and same_epoch(row) and same_regime(row)
+        # AK-TEMP-AXIS-2: a spec-decode/acceptance answer whose sampling set misses a served
+        # regime (do_not_repeat_scope: greedy) is re-openable, not a characterised answer.
+        reopenable = served is not None and sampling_axis.reopen_scope(row, served) is not None
+        if (agrees and same_epoch(row) and same_regime(row) and not reopenable
                 and row.get("comparable_measurement", True)
                 and row.get("status") in ANSWER_STATUSES):
             matches.append(row)
