@@ -119,3 +119,14 @@ def test_summary_reports_cap_hit_rate_per_role():
     assert out["output_capped_empty"] == 1 and out["output_capped_empty_rate"] == 0.25
     assert out["output_capped_steps_total"] == 2
     assert am._summary([])["output_capped_empty_rate"] is None
+
+
+def test_default_output_tokens_follow_the_applied_caps_oab34():
+    """OAB-34: no role's documented default cap is the 16,384 that ended `output_capped_empty`;
+    the table mirrors the limits run.py applies and the critic shares the planner's."""
+    from autokernel.loop import actor_opencode_config as cfg
+    table = call_budget.DEFAULT_OUTPUT_TOKENS
+    assert table["planner"] == table["critic"] == cfg.DEFAULT_PLANNER_OUTPUT_LIMIT
+    assert table["author"] == cfg.DEFAULT_AUTHOR_OUTPUT_LIMIT
+    assert all(v > 16_384 for v in table.values())
+    assert set(table) == set(call_budget.ROLES)

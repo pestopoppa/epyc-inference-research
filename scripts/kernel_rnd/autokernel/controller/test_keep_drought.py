@@ -85,3 +85,62 @@ def test_plan_validation():
     bad = dict(ok, diagnosis={"vibes": 1}, do_not_try=[{}], gate=True)
     defects = kd.validate_plan(bad)
     assert len(defects) == 3
+
+
+# ---- ADVISORY ONLY (AutoKernel ruling): never a gate, never a blocking verdict ----
+
+import copy
+import dataclasses
+
+
+def _drought_rows():
+    return [row("kept", 0.2)] + [row("measured_null", 0.0)] * 30
+
+
+def test_advisory_only_flag_and_fired_is_always_advisory():
+    assert kd.ADVISORY_ONLY is True
+    hit = kd.first_firing(_drought_rows(), k=5)
+    assert hit is not None and hit.advisory is True
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        hit.advisory = False
+
+
+def test_no_result_carries_a_blocking_verdict_key():
+    rows = _drought_rows()
+    hit = kd.first_firing(rows, k=5)
+    keys = set(dataclasses.asdict(hit)) | set(kd.retrodict(rows, k=5))
+    assert not (keys & kd.FORBIDDEN_VERDICT_KEYS)
+    assert set(dataclasses.asdict(hit)) == {"index", "non_keeps", "reason", "advisory"}
+
+
+def test_detection_never_alters_rows_or_a_gate_decision():
+    rows = _drought_rows()
+    before = copy.deepcopy(rows)
+    gate_decision = {"admit": True, "reason": "floor cleared"}
+    gate_before = copy.deepcopy(gate_decision)
+    kd.detect(rows, k=3); kd.detect_window_best(rows, k=3)
+    kd.first_firing(rows, k=3); kd.retrodict(rows, k=3)
+    assert rows == before and gate_decision == gate_before
+
+
+def test_firing_does_not_change_the_firing_of_later_rows():
+    """Rows after a firing are measured exactly as before: no state carries a block."""
+    rows = _drought_rows()
+    assert kd.first_firing(rows, k=5) is not None
+    more = rows + [row("kept", 0.3)]
+    assert kd.first_firing(more, k=5) == kd.first_firing(rows, k=5)
+    assert kd.first_firing([row("kept", 0.3)] * 3, k=5) is None
+
+
+def test_module_has_no_gate_surface():
+    public = {n for n in dir(kd) if not n.startswith("_")}
+    assert not {n for n in public if n.lower() in {"gate", "block", "admit", "refuse"}}
+    assert not any(n.lower().startswith(("gate", "block", "enforce")) for n in public
+                   if callable(getattr(kd, n)))
+
+
+def test_plan_that_tries_to_gate_is_refused():
+    plan = {"schema": kd.SCHEMA, "trigger": {}, "diagnosis": {"repetition": "x"},
+            "ranked_actions": [], "do_not_try": [], "gate": {"block": True}}
+    assert any("advisory" in d for d in kd.validate_plan(plan))
+    assert kd.validate_plan(dict(plan, gate=None)) == []

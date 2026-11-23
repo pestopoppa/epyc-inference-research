@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import os
 
+from . import actor_opencode_config as _cfg
+
 #: Fraction of the hard per-call timeout a call may spend before it is cut as
 #: `budget_exhausted` (the remainder is the grace for the stop path and salvage).
 DEFAULT_WALL_FRACTION = 0.9
@@ -27,9 +29,15 @@ KINDS = ("codex", "claude", "opencode", "orchestrator")
 #: Backends the loop serves from this host: an unbounded call here holds a local
 #: server slot and a region claim, so it must never run without a wall bound.
 LOCAL_KINDS = frozenset({"opencode", "orchestrator"})
-#: Default decoded-token cap per role (opencode `limit.output`; see
-#: `actor_opencode_config.DEFAULT_PLANNER_OUTPUT_LIMIT` / OAB-34).
-DEFAULT_OUTPUT_TOKENS = {"planner": 32_000, "author": 16_384, "critic": 16_384}
+#: Default decoded-token cap per role (opencode `limit.output`), DERIVED from the
+#: `actor_opencode_config` constants run.py really applies (OAB-34): planner and critic
+#: share `DEFAULT_PLANNER_OUTPUT_LIMIT` (the critic takes the planner's limit), the
+#: author takes `DEFAULT_AUTHOR_OUTPUT_LIMIT`. This table held a stale 16,384 for the
+#: author and critic after DS41-C70 raised the real caps, so a reader of it was told
+#: roles were capped at the value OAB-34 reported as failing.
+DEFAULT_OUTPUT_TOKENS = {"planner": _cfg.DEFAULT_PLANNER_OUTPUT_LIMIT,
+                         "author": _cfg.DEFAULT_AUTHOR_OUTPUT_LIMIT,
+                         "critic": _cfg.DEFAULT_PLANNER_OUTPUT_LIMIT}
 
 
 class UnboundedBackendRefused(ValueError):

@@ -24,6 +24,15 @@ from typing import Any, Iterable, Mapping, Sequence
 
 SCHEMA = "epyc.autokernel.keep_drought.v1"
 
+#: ADVISORY ONLY (AutoKernel ruling, R24-7). Nothing here may return a blocking verdict,
+#: refuse or reorder a candidate, or alter a gate decision. A firing is a hint that a
+#: diagnostician call may be worth making; the rows passed in are never mutated and the
+#: result carries no verdict field a gate could read. `ADVISORY_ONLY` is asserted by tests.
+ADVISORY_ONLY = True
+#: Result keys a gate would read; none of these may ever appear on a Fired/retrodict result.
+FORBIDDEN_VERDICT_KEYS = frozenset({"block", "blocked", "blocking", "verdict", "gate",
+                                    "admit", "refuse", "reject", "deny", "halt", "stop"})
+
 #: Pre-registered K. Chosen below the 20-non-keep retrodiction bound with margin.
 DEFAULT_K = 10
 RETRODICTION_BOUND = 20
