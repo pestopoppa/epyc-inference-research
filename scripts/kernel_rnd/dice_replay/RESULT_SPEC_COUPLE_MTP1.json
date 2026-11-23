@@ -1,0 +1,103 @@
+{
+ "box_build_gap_ge_2pct_any_T": false,
+ "box_stop_gap_lt_1pct_all_T": false,
+ "futility_ci_upper_lt_1.02_all_T": true,
+ "temps": {
+  "0.1": {
+   "calibration": {
+    "argmax_mismatch": 0,
+    "ci95": [
+     1.0003,
+     1.0037
+    ],
+    "gap_all_pos": 0.0015,
+    "gap_pos0": 0.0014,
+    "prompts": 32,
+    "ratio_R_V0": 1.002,
+    "round_share_of_all_T": 0.1675,
+    "rounds": 1696,
+    "tok_per_pass_R": 2.6269,
+    "tok_per_pass_V0": 2.6218
+   },
+   "holdout": {
+    "argmax_mismatch": 0,
+    "ci95": [
+     0.9974,
+     1.0019
+    ],
+    "gap_all_pos": -0.0009,
+    "gap_pos0": -0.001,
+    "prompts": 32,
+    "ratio_R_V0": 0.9997,
+    "round_share_of_all_T": 0.1576,
+    "rounds": 1595,
+    "tok_per_pass_R": 2.6353,
+    "tok_per_pass_V0": 2.6361
+   }
+  },
+  "0.3": {
+   "calibration": {
+    "argmax_mismatch": 0,
+    "ci95": [
+     1.001,
+     1.0066
+    ],
+    "gap_all_pos": 0.0041,
+    "gap_pos0": 0.0039,
+    "prompts": 32,
+    "ratio_R_V0": 1.0038,
+    "round_share_of_all_T": 0.1706,
+    "rounds": 1727,
+    "tok_per_pass_R": 2.6163,
+    "tok_per_pass_V0": 2.6065
+   },
+   "holdout": {
+    "argmax_mismatch": 0,
+    "ci95": [
+     0.9997,
+     1.0059
+    ],
+    "gap_all_pos": 0.0018,
+    "gap_pos0": 0.004,
+    "prompts": 32,
+    "ratio_R_V0": 1.0027,
+    "round_share_of_all_T": 0.1587,
+    "rounds": 1607,
+    "tok_per_pass_R": 2.6099,
+    "tok_per_pass_V0": 2.603
+   }
+  },
+  "1.0": {
+   "calibration": {
+    "argmax_mismatch": 0,
+    "ci95": [
+     1.0044,
+     1.0204
+    ],
+    "gap_all_pos": 0.0066,
+    "gap_pos0": 0.0226,
+    "prompts": 32,
+    "ratio_R_V0": 1.0124,
+    "round_share_of_all_T": 0.1772,
+    "rounds": 1794,
+    "tok_per_pass_R": 2.5515,
+    "tok_per_pass_V0": 2.5204
+   },
+   "holdout": {
+    "argmax_mismatch": 0,
+    "ci95": [
+     1.0051,
+     1.0192
+    ],
+    "gap_all_pos": 0.0116,
+    "gap_pos0": 0.0192,
+    "prompts": 32,
+    "ratio_R_V0": 1.0119,
+    "round_share_of_all_T": 0.1683,
+    "rounds": 1704,
+    "tok_per_pass_R": 2.5959,
+    "tok_per_pass_V0": 2.5653
+   }
+  }
+ }
+}
