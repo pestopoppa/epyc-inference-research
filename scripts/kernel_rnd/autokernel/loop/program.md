@@ -949,6 +949,90 @@ and `progress/2026-11/2026-11-2{0,1}-autokernel.md` (wrap-ups 5-10).
 - **A STOP on a job that drives a server must never be judged.** ea-pool r2 wrote a false FUTILITY_INPUT
   after its server was killed mid-unit.
 
+## Learnings 2026-11-23 (C10/H15 settled, GDN fused + width dispatch, DTREE device accept, CPU census) — distilled, not a log
+
+Each: lesson · evidence · how to apply. Evidence in epyc-root `handoffs/active/autokernel-loop.md` (GDN-*),
+`speculative-decoding.md` (DTREE-*, DF2-11-*), `autokernel-akx-program.md` (AK-CPU-*, Q38FN-*, Q4X-*),
+`kernel-champion-and-promotion.md` (C19 fold ledger) and `progress/2026-11/2026-11-23-autokernel.md`.
+Champion candidate C19 = `a6a32c135` (gates prepared as C19-FOLD-GATES vs C18 `74c18e2d8`).
+
+**KEEPs (C19 fold candidates)**
+- **Fused GDN (`GGML_HIP_GDN_FUSED`, fork `e2b1f54f3`, r3) KEEP:** T12 K=12 F32 1.55x, 8-row min 1.43x, K=T F32
+  830-915 GB/s. K=1 routes to the rows kernel, K=T to the fused kernel. **GDN column-width dispatch KEEP**
+  (size/dtype dispatch: np1 F32 S_v128 1.16x, worst cell 0.97 at an unchanged width-1 shape). **Served gate
+  KEEP** on 27B DF2 (fork `70935a234`): np1 paired t-CI [1.011,1.023] (+1.7%, GDN 2.09 -> 1.23 ms/fwd), np2
+  [1.039,1.052] (+4.6% CI-mid, +3.9% tok/s). Identity + KLD pass.
+- **GPU device tree accept KEEP** (fork `a33427896`): per-row GPU argmax over T tree rows, copy back T ids. Post
+  phase T12 0.43 ms, T16 0.43 ms (from 2.69 / 3.57); T16 saves 3.0 ms/round -> T16 at parity with linear.
+- **BF16 drafter: MMVF cap 8** (`GGML_HIP_MMVF_CDNA_MAX_NE11=8`) 1.125x on the BF16 drafter (was hipBLAS/Tensile
+  256x256 tiles at N=8, 144 GB/s, 4.30 ms/token). Still 0.824x the Q8_0 REF drafter. Values other than 1..8
+  silently fall back to 3 (`mmvf.cu:791-798`, `MMVF_MAX_BATCH_SIZE`=8): a no-op knob, verify the route log.
+- **Q8IP no-pack GET_ROWS** (`GGML_HIP_Q8IP_NOPACK_GETROWS`, fork `e1a591c4a`, default-off): root cause was
+  MF_INPLACE=1 packing the DFlash2 `selector_successor` (GET_ROWS-only) weight, so every draft graph unpacked a
+  transient copy. Speed NEUTRAL (8-pair 1.020 [0.994,1.046]); mechanism fix, not a speed win.
+
+**Root causes and bugs**
+- **C10 / AK-H15 settled.** The C12 Q38FN GPU greedy loops are AK-H15 (bisect CULPRIT_H15). C12 lacks
+  `fb1cd406f` (H15 reject 14: no output-over-input aliasing). C17/C18 carry it and are CLEAN: on Q38FN reject 14
+  fires on every layer, so H15 never runs there. H15-when-firing is only testable on 27B/A3B
+  (C19-AK-H15-GATE-27B-A3B). Do not re-open "C17/C18 carry the C10 defect".
+- **CPU `ggml_vec_argmax_f32` returns the LAST maximum on ties** (825/930 forced ties mismatched host greedy).
+  With device accept default-on since C17, CPU speculative decoding can break greedy identity on exact ties.
+  Fix = first maximum (`a33427896`, C19-CPU-ARGMAX-TIE-FIX). Any device/host argmax must match tie order.
+- **C18 CPU lacks the IQ3_XXS QDEC fix** (`17d092de0`): akx31-qdec-cpu-c18 DEFECT(IQ3_XXS,Q6_K). Fold into C19; the
+  C19 QDEC gate needs IQ3_XXS mul_mat:CPU 0 mismatches.
+- **Q4X (qwen4exp) RS-replay re-allow FAILED identity under np4** (r6/r7 FAIL_CORRECTNESS: phase C ON 31 vs OFF2
+  23 over 4 triples; single-slot phase S symmetric). The defect is on the concurrent path only; held out of C19.
+  Open lever: C18-REPLAY-Q4X-CONC-BISECT.
+- **Q38FN GDN-proj fuse r1 never fused on 2 of 4 ON lifetimes:** root cause was the graph marker, not the
+  matcher (fork `148f56bbb`). Prove a fusion fired in every ON lifetime before reading its timing.
+
+**Measured facts (use as bars)**
+- **MI210 measured HBM peak 1.4982 TB/s** (best of 36 stream.hip lines, `lesson_cap.py` / `peak_bw_measured.json`).
+  Use it, not 1.6 TB/s paper peak, as the speedup cap denominator (AK-PM-12-S4: cap 3.356x).
+- **CPU quarter-24t read ceiling 112.9 GB/s MEASURED** (bench_readbw 9e379493, q2, CV 3.2%); replaces the derived
+  129.9. half-48t stays 259.8. Census flag threshold 0.75 x 112.9 = 84.7 GB/s.
+- **27B C18 DF2 trace:** lm_head AT_FLOOR 1070 GB/s; attn K/V 1024x5120 OPEN 266 GB/s at n>=5 (780 at n1,
+  `q8sk_mul_mat` grid too small); ~460 tiny activation-quantize launches/verify at the 4.5 us launch floor
+  (~2.1 ms, ~5% of a 40 ms verify).
+- **DTREE row cost:** GDN is the largest per-extra-row class (T8->12 +0.254 ms/row, T8->16 +0.311). Host gap
+  is the post phase (T x vocab logits copy), fixed by device tree accept.
+- **G3 KV trace:** q8_0 KV runs native in `gv_fattn` (GQA_NATIVE at verify); q4_0 at n7 fully dequantises.
+- **A3B shared expert (CPU):** the loss is localised to `ffn_down_shexp` at N=2/3, where tinyBLAS_Q0 switches to
+  2-row tiles (`c08cd5df7`); 12t beats 24t at N>=2. GGML_MM_SMALLN (barrier) is NOT the cause (+3..8% sub-CI).
+  Open lever: GGML_Q0_RM4 (4-row tiles at N=2/3), see seed 23.
+- **The census d32k Q38FN GEMV slowdown was a CONTENTION artefact**; quiet re-measure d32k 78-92 GB/s
+  (69-81% of 112.9). Never act on a CPU census cell without a quiet-host guard.
+
+**Methodology (each one cost a re-run)**
+- **Gate small served effects with a paired t-CI, not the max-deviation band.** The max-deviation A/A band grows
+  with the number of rounds, so it cannot pass a real +1-2% effect (GDN served r1/r2 INCONCLUSIVE at 11/12
+  rounds positive). Rule: KEEP iff the 95% t-CI lower bound of the mean per-round ON/OFF ratio > 1 + the A/A CI
+  half-width; DROP iff CI upper < 1.0. Pre-register it before the first unit.
+- **CPU rows need a quiet-host guard on every arm** (REF read >= 0.70 x ceil-pre, SMT-sibling p50 <= 1%) AND on
+  the mid-run ceiling probe (ceil-mid >= 0.70 x ceil-pre; r4 accepted a 51 GB/s ceil-mid). Rows without it file
+  FUTILITY_CONTENTION and are not evidence.
+- **Identity gates key to the OFF arm's modal hash**: compare ON against the modal OFF output over >=N reps, so one
+  non-deterministic OFF rep (float atomics) cannot trip the gate (Q8IP r3 tripped on an OFF rep while ON was
+  bit-stable).
+- **HIP graph replay masks runtime env knobs in tests.** A knob read at graph-capture time does not change a
+  replayed graph; prove the route per arm (route log / WARN witness) or disable graphs in the A/B.
+- **Seal exclusions:** a sealed row's spec.json is immutable; never re-seal or hand-edit it to change a
+  rule. Clone the row, regenerate SOURCE.sha256, republish with `supersedes`.
+- **Servers in rows must die on every exit path** (`trap ... EXIT`): an orphaned llama-server from a stopped row
+  blocked E5. Never use pgrep/pkill; kill only captured PIDs.
+
+**Ruled out (also in seeds/negatives.json — do not re-propose without new evidence)**
+- MMID gate+up fusion on Q38FN IQ3_S experts (CPU): ON slower in every quiet pair (-5.3%, exps_gate_up 78.7 ->
+  70.9 GB/s); IQ3_S dequant makes the fused pass compute-bound, and served output diverged (op test passed).
+- 128-thread GDN K=T blocks: LDS-occupancy-bound, halves occupancy, regressed to knob-off speed (r2).
+- Wide (4-column) GDN on small grids / BF16: 0.44x at np1 BF16 C4; only the size/dtype dispatch ships.
+- DF2 drafter precision arms (FFN-Q4_K 0.787x, fc-Q8/rest-Q4_K_M 0.951x, Q2_K 0.890x; BF16 before the MMVF fix ~0.73x, derived 0.824/1.125): all slower
+  than the Q8_0 REF drafter on MI210.
+- Tree drafting at T12 on the 27B: ruled out even with device accept; only T16 reaches linear parity, and needs
+  DTREE-GDN-BATCH to win.
+- I8GEMM per-channel prefill port: 0.821x (68.5 vs 83.3 TFLOP/s).
+
 ## gfx90a low-level tier — ISA-schedule operator catalogue
 
 Sub-tier (a), source-only: a text diff to HIP source (builtins / pragmas / attributes). Its

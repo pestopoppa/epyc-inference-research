@@ -214,6 +214,96 @@
    "target_symbol": "GGML_HIP_MMVQ_Q8_B4_ROWS",
    "effect_fraction": -0.012,
    "reason": "MEASURED FUTILITY: ratio 0.988 at n=4 (not the cause). The step is the F32/BF16 router leaving MMVF at ne11>3 on CDNA; fixed by GGML_HIP_MMVF_CDNA_MAX_NE11 (79650eeab, KEEP). Source: root handoffs/active/rocm-kernel-authoring.md RKA-A3B-N4-STEP (row rka-a3b-n4-step-gpu-20261118)."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c10-h15-premise-c17c18",
+   "statement": "C17/C18 carry the C10 Q38FN GPU greedy-loop defect via AK-H15 and need an H15 fix before promotion.",
+   "falsifier": "H15 forced on in a C18-based store loops on Q38FN.",
+   "target_surface": "ggml/src/ggml-cuda/ak-fused.cu",
+   "target_symbol": "AK-H15",
+   "effect_fraction": 0.0,
+   "reason": "SETTLED 2026-11-23: C12 457d5fc52 lacks fb1cd406f (H15 reject 14). On C17/C18 reject 14 fires on every Q38FN layer, both arms CLEAN (0.60/0.55, 0 loops), so H15 never runs on Q38FN. Rows ak-c10-fusion-bisect-20261122, ak-c19-h15-gate-20261123-r2. H15-when-firing is only open on 27B/A3B (C19-AK-H15-GATE-27B-A3B). Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-q38fn-cpu-mmid-gateup-fuse-iq3s",
+   "statement": "One fused gate+up MUL_MAT_ID with shared q8 activation speeds up Q38FN IQ3_S expert FFN on CPU (m=1).",
+   "falsifier": "ON tok/s not above OFF over quiet ABBA pairs.",
+   "target_surface": "ggml/src/ggml-cpu (MUL_MAT_ID gate+up fusion)",
+   "target_symbol": "GGML_MMID_GATEUP_FUSE",
+   "effect_fraction": -0.053,
+   "reason": "MEASURED: slower in every quiet pair, tok/s 11.90->11.26 (CI95 [-15.7,+5.0]%), exps_gate_up 78.7->70.9 GB/s; IQ3_S dequant makes the fused pass compute-bound; served greedy output diverged although the op test passed. Owner withdrew. Row ak-q38fn-cpu-mmid-gateup-fuse-20261123, fork 132960d4e. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-gdn-fused-128thread-kt",
+   "statement": "128-thread blocks for the fused GDN K=T kernel raise waves in flight for snapshot stores.",
+   "falsifier": "K=T speed not above the 64-thread fused kernel.",
+   "target_surface": "ggml/src/ggml-cuda (gated_delta_net fused)",
+   "target_symbol": "GGML_HIP_GDN_FUSED",
+   "effect_fraction": -0.3,
+   "reason": "MEASURED r2 ak-gdn-fused-gpu-20261123-r2: LDS-occupancy-bound, halves occupancy, K=T regressed to knob-off speed. r3 (64-thread) KEEP. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-gdn-wide-cols-small-grids",
+   "statement": "Processing 4 GDN columns per block (wide) helps at every size and dtype.",
+   "falsifier": "Any cell < 0.98x vs width 1.",
+   "target_surface": "ggml/src/ggml-cuda (gated_delta_net colwidth)",
+   "target_symbol": "GGML_HIP_GDN_COLS",
+   "effect_fraction": -0.56,
+   "reason": "MEASURED ak-gdn-colwidth-gpu-20261123: wins on large F32 (np4 S_v128 C4 2.03x) but loses on small grids and most BF16 (np1 BF16 C4 0.44x). Only the size/dtype dispatch ships (ak-gdn-dispatch-gpu-20261123 KEEP). Do not propose fixed wide columns. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-gate-maxdev-band-small-effects",
+   "statement": "The max-deviation A/A band is a usable KEEP gate for +1-2% served effects.",
+   "falsifier": "A real effect passes the band.",
+   "target_surface": "measurement protocol (served ABBA gate)",
+   "target_symbol": "max-deviation band",
+   "effect_fraction": 0.0,
+   "reason": "METHOD NULL: the band grows with round count; GDN served r1/r2 INCONCLUSIVE at 11/12 rounds positive. Use the paired t-CI rule (CI-lo of mean per-round ratio > 1 + A/A CI half-width); r3 KEEP [1.011,1.023]. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-df2-drafter-precision-arms",
+   "statement": "A lower-precision DFlash2 drafter (Q4_K FFN, mixed, Q2_K, BF16) beats the Q8_0 drafter on MI210.",
+   "falsifier": "Throughput ratio vs Q8_0 REF <= 1.",
+   "target_surface": "drafter GGUF quant (DF2-11)",
+   "target_symbol": "DF2-11",
+   "effect_fraction": -0.05,
+   "reason": "MEASURED DF2-11-SWEEP-B: FFNQ4 0.787, FCQ8 0.951, Q2KC 0.890 (95% t-CI all < 1); BF16 0.824x REF even after the MMVF cap-8 fix. Q8_0 drafter stays. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-dtree-t12-27b",
+   "statement": "Tree drafting at T12 beats linear on the 27B DF2 MI210 path.",
+   "falsifier": "T12/L round time ratio < 1 with all host levers.",
+   "target_surface": "tools/server tree verify",
+   "target_symbol": "DTREE T12",
+   "effect_fraction": -0.076,
+   "reason": "MEASURED: T12/L 0.924 (tree-on-V5I r4); ruled out even with device tree accept (rowcost projection). Only T16 reaches parity, and needs DTREE-GDN-BATCH to win. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-i8gemm-perchannel-prefill",
+   "statement": "The asm i8gemm per-channel port speeds up 27B prefill GEMM.",
+   "falsifier": "op TFLOP/s <= stock route.",
+   "target_surface": "asm_retarget i8gemm",
+   "target_symbol": "GGML_HIP_Q8_PC",
+   "effect_fraction": -0.179,
+   "reason": "MEASURED FUTILITY_OP: 0.821x, 68.5 vs 83.3 TFLOP/s at m5120 n2048 k6144 (compute-bound; judge TFLOP/s). Row ak-asm-i8gemm-perchannel-gpu-20261122. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-a3b-shexp-smalln-barrier",
+   "statement": "GGML_MM_SMALLN (barrier change) fixes the A3B down_shexp small-N loss on CPU.",
+   "falsifier": "Gain not above the CI.",
+   "target_surface": "ggml/src/ggml-cpu (tinyBLAS small N)",
+   "target_symbol": "GGML_MM_SMALLN",
+   "effect_fraction": 0.05,
+   "reason": "MEASURED NO_KEEP: +3..8% sub-CI; the loss is the 2-row tile dispatch at N=2/3, not the barrier (open lever GGML_Q0_RM4). Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
   }
  ]
 }
