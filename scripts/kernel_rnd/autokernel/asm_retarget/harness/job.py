@@ -18,7 +18,9 @@ One UNIT = one kernel family = one fresh container (cpuset 184-191, /dev/kfd + /
   HANG  runner hang watchdog fired (no output for idle_s after a gfx90a LoadKernel, no JIT build running) or the hard timeout hit
         after a gfx90a LoadKernel -> HANG.json written, the packet STOPS (rc 3); remaining units are not started.
   ERROR infra (import, JIT build failure, timeout during build, missing kernel / no heuristic, invalid device function) or
-        not-exercised (no gfx90a LoadKernel, or no family check: vacuous).
+        no-check (kernel loaded, clean exit, no family check).
+  CRASH a gfx90a kernel loaded and the run faulted (HSA memory fault, signal rc, non-zero rc with no runner result). Does not stop the packet.
+  VACUOUS no gfx90a kernel ran for the family (never a fault: a fault after a load is CRASH).
 Stop rule: single pass, no repeats; STOP file / deadline -> rc 75 resumable (finished units are not re-run).
 Smoke (FILLER_SMOKE / FILLER_DRYRUN = 1): smoke_hold.py only: one process, >= 50 s GPU residency, retargeted topksoftmax vs torch."""
 import json, os, re, subprocess, sys, time
@@ -94,6 +96,22 @@ INFRA_RE = re.compile(r'ModuleNotFoundError|ImportError|OutOfMemoryError|out of 
                       r'failed jit build|FileNotFoundError|No kernel|not found in|NotImplementedError', re.I)
 
 
+# AK-HARNESS-CRASH-VS-VACUOUS: a CRASH is a kernel that RAN and faulted (fault text, signal rc, or non-zero rc with no runner
+# result after a gfx90a load); VACUOUS is only "no gfx90a kernel ran". Statuses map onto the akloop failclass taxonomy
+# (scripts/coordination/akloop/failclass.py RESULT_TOKENS: CRASH -> candidate/correctness_gate, VACUOUS -> harness/result_contract).
+CRASH_RE = re.compile(r'HSA_STATUS_ERROR_(?:MEMORY_FAULT|EXCEPTION|INVALID_ISA)|Memory access fault|GPU (?:page )?fault|'
+                      r'illegal memory access|hipErrorIllegalAddress|Segmentation fault|core dumped|Aborted', re.I)
+
+
+def is_crash(rc, text, fam_loaded, runner):
+    """Return a reason string when the run crashed, else None. rc is the process rc (negative = killed by signal)."""
+    m = CRASH_RE.search(text)
+    if m and fam_loaded: return f'fault signature {m.group(0)!r}, rc={rc}'
+    if fam_loaded and rc is not None and (rc < 0 or rc >= 128): return f'killed by signal (rc={rc}) after a gfx90a load'
+    if fam_loaded and rc not in (None, 0) and runner is None: return f'rc={rc} with no runner result after a gfx90a load'
+    return None
+
+
 def now(): return time.strftime('%FT%TZ', time.gmtime())
 
 
@@ -161,11 +179,13 @@ def judge(unit, txt, runner, rc, err):
     if (runner and runner.get('timed_out')) or err == 'op_timeout':
         if fam_loads: return 'hang', f"hard timeout {unit['timeout']} s after gfx90a LoadKernel", info
         return 'error', f"timeout {unit['timeout']} s before any gfx90a kernel ran (JIT build?)", info
+    cr = is_crash(rc, t, bool(fam_loads), runner)
+    if cr: return 'crash', 'crash: ' + cr + (f' ({infra[0]})' if infra else ''), info
     if runner is None or runner.get('runner_error'): return 'error', (runner or {}).get('runner_error', 'no RUNNER_RESULT in log'), info
     if bad or over:
         return 'fail', f"{len(bad)}/{len(fam)} family checks failed" + (f", {len(over)} mha max-diff > {unit['tol']}" if over else '') + f"; max_abs={mx}", info
-    if not fam_loads: return 'error', 'not exercised: no LoadKernel from hsa/gfx90a for this family' + (f' ({infra[0]})' if infra else ''), info
-    if not fam and not diffs: return 'error', 'vacuous: gfx90a kernel loaded but no family check in log' + (f' ({infra[0]})' if infra else ''), info
+    if not fam_loads: return 'vacuous', 'vacuous: no LoadKernel from hsa/gfx90a for this family, no kernel ran' + (f' ({infra[0]})' if infra else ''), info
+    if not fam and not diffs: return 'error', 'no-check: gfx90a kernel loaded and exited cleanly but no family check in log' + (f' ({infra[0]})' if infra else ''), info
     if rc != 0 and infra: return 'error', f'rc={rc} after {len(fam)} passing checks: {infra[0]}', info
     return 'pass', f"{len(fam)} family checks passed" + (f", {len(diffs)} mha diffs <= {unit['tol']}" if diffs else '') + f"; max_abs={mx}", info
 
@@ -225,14 +245,16 @@ def write_result():
     out = []
     for f, rs in fams.items():
         st = [r['status'] for r in rs]
-        top = 'hang' if 'hang' in st else 'fail' if 'fail' in st else 'error' if 'error' in st else 'pass' if rs and all(s == 'pass' for s in st) else 'pending'
+        top = ('hang' if 'hang' in st else 'crash' if 'crash' in st else 'fail' if 'fail' in st else 'error' if 'error' in st
+               else 'vacuous' if 'vacuous' in st else 'pass' if rs and all(s == 'pass' for s in st) else 'pending')
         mx = max([r['max_abs_err'] for r in rs if r.get('max_abs_err') is not None], default=None)
         out.append({'family': f, 'status': top, 'max_abs_err': mx,
                     'units': [{k: r.get(k) for k in ('unit', 'status', 'reason', 'n_gfx90a_loads', 'n_family_checks', 'max_abs_err', 'wall_s')} for r in rs]})
     hang = os.path.exists(HANGF)
     json.dump({'at': now(), 'aiter_src': SRC, 'image': IMG, 'gpu_arch': 'gfx90a', 'families': out,
                'passed': [x['family'] for x in out if x['status'] == 'pass'], 'failed': [x['family'] for x in out if x['status'] == 'fail'],
-               'errored': [x['family'] for x in out if x['status'] == 'error'], 'hung': [x['family'] for x in out if x['status'] == 'hang'],
+               'errored': [x['family'] for x in out if x['status'] == 'error'],
+               'crashed': [x['family'] for x in out if x['status'] == 'crash'], 'vacuous': [x['family'] for x in out if x['status'] == 'vacuous'], 'hung': [x['family'] for x in out if x['status'] == 'hang'],
                'stopped_on_hang': hang, 'complete': hang or all(u['unit'] in last for u in UNITS)}, open(RESULT, 'w'), indent=1)
 
 
