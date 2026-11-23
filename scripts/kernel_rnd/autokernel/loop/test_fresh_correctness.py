@@ -198,6 +198,11 @@ def test_gpu_compare_opt_in_runs_fresh_suite_after_each_ranked_arm(tmp_path):
     assert all(receipt["status"] == "reference_valid"
                for receipt in row.fresh_correctness)
     assert all("raw_stdout" not in receipt for receipt in row.fresh_correctness)
+    # AK-integrity: the recheck is attached, report-only, and fails closed on the
+    # fake runner's constant output across distinct seeds.
+    assert row.fresh_input_recheck["authority"] == "report_only"
+    assert row.fresh_input_recheck["status"] == "fail"
+    assert row.to_dict()["fresh_input_recheck"]["runs"] == 4
     assert abs(row.effect - 0.1) < 1e-12
     assert row.decisive is None
 

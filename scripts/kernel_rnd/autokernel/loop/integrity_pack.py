@@ -11,7 +11,7 @@ Pure functions, no I/O, no compute, no subprocess. Three parts:
    cached or constant result).
 2. ``static_blocklist`` -- the C6 pre-build refusal set as ONE ordered list: the RVP-C6-9
    detectors (``reward_hack_scan``) plus the SOL/wave64 detectors (``reward_hack_scan_solx``).
-   ``integrity.py`` is not edited; the caller (the C6 verify path) chooses to refuse on it.
+   ``integrity.screen_candidate`` refuses on it (pre-build); parity is test-enforced.
 3. ``DIVERGENCE_SEARCH_SCOPE`` -- the scoped (not implemented) AIChilles-style evaluator-derived
    shape grammar + divergence-guided regression search against the SEALED anchor for the
    section 9.5 cheap suites, with the section V-D tradeoff recorded as a pre-registered cost.
@@ -118,12 +118,17 @@ STATIC_BLOCKLIST_FIELDS = (
 )
 
 
-def static_blocklist(diff_text: str) -> dict[str, tuple[str, ...]]:
-    """Every blocklist class -> findings (empty classes omitted) for a unified diff."""
+def static_blocklist(diff_text: str, *, environment_probe=None) -> dict[str, tuple[str, ...]]:
+    """Every blocklist class -> findings (empty classes omitted) for a unified diff.
+
+    ``environment_probe`` lets the caller substitute its own pre-filtered environment-probe
+    findings (integrity.py drops reads of variables the anchor already reads)."""
     base = reward_hack_scan.scan_unified_diff(diff_text)
     out: dict[str, tuple[str, ...]] = {}
     for name in STATIC_BLOCKLIST_FIELDS:
         rows = getattr(base, name)
+        if name == "environment_probe_findings" and environment_probe is not None:
+            rows = tuple(environment_probe)
         if name == "phase_detection_findings":
             # counter-derived phase state can be legitimate hot-path state (integrity.py keeps
             # those for held-out confirmation); only explicit phase probes are blocklisted
@@ -136,12 +141,10 @@ def static_blocklist(diff_text: str) -> dict[str, tuple[str, ...]]:
     return out
 
 
-def static_blocklist_refusal(diff_text: str) -> str | None:
+def static_blocklist_refusal(diff_text: str, **kw) -> str | None:
     """One refusal string (like ``IntegrityRefused('reward_hack_scan', ...)``) or ``None``."""
-    hits = static_blocklist(diff_text)
-    if not hits:
-        return None
-    return "; ".join(f for rows in hits.values() for f in rows)
+    hits = static_blocklist(diff_text, **kw)
+    return "; ".join(f for rows in hits.values() for f in rows) or None
 
 
 @dataclass(frozen=True)

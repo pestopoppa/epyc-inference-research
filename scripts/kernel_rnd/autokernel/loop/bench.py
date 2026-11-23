@@ -32,7 +32,7 @@ from typing import Callable, Sequence
 from ..controller import host_idle
 from .. import path_counters
 from ..execution import microbench
-from . import residency
+from . import integrity, residency
 from .floor_units import FLOOR_UNITS, UNIT_PROCESS
 
 #: The unit EVERY number in this module is measured in, floors and effects alike: a
@@ -163,6 +163,8 @@ class Comparison:
     # Opt-in, report-only summaries. Full op-suite stdout belongs in the
     # caller's bounded sidecar, not in the ranked comparison/status payload.
     fresh_correctness: tuple[dict, ...] = ()
+    #: AK-integrity: report-only fresh-input recheck over the receipts above.
+    fresh_input_recheck: dict | None = None
     #: Observe-only pre/post idle reading of every measured process.
     host_idle: tuple[dict, ...] = ()
 
@@ -255,6 +257,8 @@ class Comparison:
             row["host_idle"] = list(self.host_idle)
         if self.fresh_correctness:
             row["fresh_correctness"] = list(self.fresh_correctness)
+        if self.fresh_input_recheck:
+            row["fresh_input_recheck"] = self.fresh_input_recheck
         return row
 
 
@@ -472,16 +476,11 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
                 try:
                     from .fresh_correctness import SCHEMA as FRESH_SCHEMA
                     receipt = fresh_check(arm, pair_index + 1, hardening_seed)
-                    if (not isinstance(receipt, dict)
-                            or receipt.get("schema") != FRESH_SCHEMA
-                            or receipt.get("authority") != "report_only"
-                            or receipt.get("ranked_sample") is not False
-                            or receipt.get("status") not in (
-                                "reference_valid", "property_only", "oracle_unavailable")
-                            or receipt.get("verdict") not in (
-                                "passed", "failed", "unavailable")
-                            or not isinstance(receipt.get("arm_id"), str)
-                            or not isinstance(receipt.get("recipe_hash"), str)
+                    if (not isinstance(receipt, dict) or receipt.get("schema") != FRESH_SCHEMA
+                            or receipt.get("authority") != "report_only" or receipt.get("ranked_sample") is not False
+                            or receipt.get("status") not in ("reference_valid", "property_only", "oracle_unavailable")
+                            or receipt.get("verdict") not in ("passed", "failed", "unavailable")
+                            or not all(isinstance(receipt.get(k), str) for k in ("arm_id", "recipe_hash"))
                             or not isinstance(receipt.get("suite_seed"), int)):
                         raise ValueError("fresh check returned no report-only receipt")
                     summary = {key: (value[:512] if isinstance(value, str)
@@ -538,6 +537,8 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
         anchor_drift_pct=drift_pct(anchor_samples),
         candidate_drift_pct=drift_pct(candidate_samples),
         fresh_correctness=tuple(fresh_summaries),
+        fresh_input_recheck=(integrity.fresh_input_recheck_of(fresh_summaries, hardening_seed)
+                             if fresh_summaries else None),
         kv_type=kv_type or KV_DEFAULT, recipe_kv_type=recipe_kv_type,
         host_idle=tuple(row for proof in proofs for row in proof.get("host_idle", ())),
     )

@@ -97,3 +97,43 @@ def test_v_d_tradeoff_is_pre_registered_and_scope_names_sealed_anchor():
     assert "pre-registered cost" in c.statement and c.observed_in_source["TXN-Sched"] == "49% -> 3.9%"
     assert "SEALED anchor" in ip.DIVERGENCE_SEARCH_SCOPE["applies_to"]
     assert ip.DIVERGENCE_SEARCH_SCOPE["status"] == "scoped_not_implemented"
+
+
+def _summary(arm, pair, seed, out="o"):
+    return {"arm": arm, "pair": pair, "suite_seed": seed, "raw_output_sha256": out}
+
+
+def test_bench_receipt_recheck_passes_with_fresh_seeds_and_distinct_outputs():
+    from .integrity import fresh_input_recheck_of
+    rows = [_summary("anchor", 1, 11, "a"), _summary("candidate", 1, 12, "b")]
+    v = fresh_input_recheck_of(rows, reserved_seed=99)
+    assert v["status"] == ip.PASS and v["authority"] == "report_only" and v["runs"] == 2
+
+
+def test_bench_receipt_recheck_fails_on_reserved_seed_shared_seed_and_constant_output():
+    from .integrity import fresh_input_recheck_of
+    assert fresh_input_recheck_of([_summary("a", 1, 99, "x"), _summary("c", 1, 5, "y")], 99)["status"] == ip.FAIL
+    assert fresh_input_recheck_of([_summary("a", 1, 5, "x"), _summary("c", 1, 5, "y")], 99)["status"] == ip.FAIL
+    const = fresh_input_recheck_of([_summary("a", 1, 5, "x"), _summary("c", 1, 6, "x")], 99)
+    assert const["status"] == ip.FAIL and "cached or constant" in const["findings"][0]
+
+
+def test_bench_receipt_recheck_missing_output_digest_is_indeterminate_not_pass():
+    from .integrity import fresh_input_recheck_of
+    rows = [_summary("a", 1, 5, "x"), {"arm": "c", "pair": 1, "suite_seed": 6}]
+    assert fresh_input_recheck_of(rows, 99)["status"] == ip.INDETERMINATE
+
+
+def test_integrity_refusal_uses_the_pack_blocklist_including_every_class():
+    import inspect
+    from . import integrity
+    src = inspect.getsource(integrity.screen_candidate) if hasattr(integrity, "screen_candidate") \
+        else inspect.getsource(integrity)
+    assert "integrity_pack.static_blocklist_refusal" in src
+    assert "reward_hack_scan_solx" not in inspect.getsource(integrity)
+
+
+def test_blocklist_environment_probe_override_replaces_only_that_class():
+    d = _diff("const char* e = getenv(\"X\");")
+    assert "environment_probe" not in ip.static_blocklist(d, environment_probe=())
+    assert "environment_probe" in ip.static_blocklist(d)

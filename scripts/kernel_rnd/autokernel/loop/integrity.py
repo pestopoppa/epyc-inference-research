@@ -16,8 +16,8 @@ import subprocess
 import tempfile
 from typing import Iterable, Sequence
 
-from ..execution import reward_hack_scan, reward_hack_scan_solx
-from . import prebuild_rules
+from ..execution import reward_hack_scan
+from . import integrity_pack, prebuild_rules
 
 
 class IntegrityRefused(RuntimeError):
@@ -476,30 +476,29 @@ def validate_candidate(worktree: Path, declared_paths: Sequence[str], *,
     blank = prebuild_rules.blank_only_hunk_refusal(diff)   # AK-FAILRULE-1 rule 2
     if blank is not None:
         raise IntegrityRefused(prebuild_rules.BLANK_HUNK_CLASS, blank)
+    # RVP-C6-9 + SOLX detectors as ONE blocklist (integrity_pack); explicit phase probes only,
+    # counter-derived state gets the held-out confirmation instead of a blanket refusal.
     scan = reward_hack_scan.scan_unified_diff(diff)
-    findings = tuple(finding for value in (
-        _without_preexisting_env_reads(worktree, diff, scan.environment_probe_findings),
-        scan.timing_dependent_branch_findings,
-        scan.stream_creation_findings,
-        scan.async_escape_findings,
-        scan.instrument_frame_findings,
-        scan.pointer_memoization_findings,
-        # Explicit benchmark/capture-phase probes are forbidden. Counter-derived
-        # findings can also describe legitimate hot-path state (e.g. ``calls``);
-        # those already receive the held-out confirmation below, not a blanket
-        # pre-build refusal.
-        tuple(row for row in scan.phase_detection_findings
-              if ":phase_detection:" in row),
-        scan.capture_replay_findings,
-        scan.content_specialization_findings,
-        # AK-HACKSCAN-SOLX: the 11 SOL-ExecBench / wave64 detectors (0a739b23e).
-        *reward_hack_scan_solx.scan_unified_diff(diff).findings.values(),
-    ) for finding in value)
-    if findings:
-        raise IntegrityRefused("reward_hack_scan", "; ".join(findings))
+    refusal = integrity_pack.static_blocklist_refusal(diff, environment_probe=_without_preexisting_env_reads(
+        worktree, diff, scan.environment_probe_findings))
+    if refusal:
+        raise IntegrityRefused("reward_hack_scan", refusal)
     return CandidateIntegrity(dirty, candidate_tree(worktree),
                               screen_special_cases(worktree, oracle_shape=oracle_shape,
                                                    bench_shape=bench_shape))
+
+
+def fresh_input_recheck_of(summaries: Sequence[dict], reserved_seed: int) -> dict:
+    """Report-only fresh-input recheck over bench's per-timed-run fresh receipts (AK-integrity).
+
+    The seed fully determines the op-suite inputs, so it stands in for the input digest;
+    a missing output digest or seed is indeterminate, never a pass."""
+    runs = [{"run_id": f"{r.get('arm')}/{r.get('pair')}", "input_seed": r.get("suite_seed"),
+             "input_digest": hashlib.sha256(f"seed:{r.get('suite_seed')}".encode()).hexdigest(),
+             "output_digest": r.get("raw_output_sha256")} for r in summaries]
+    verdict = integrity_pack.fresh_input_recheck(runs, suite_seed=reserved_seed)
+    return {"schema": verdict.schema, "authority": verdict.authority, "status": verdict.status,
+            "runs": verdict.runs, "findings": list(verdict.findings)}
 
 
 def evidence_key(*, lane: str, attempt_id: str, base_commit: str,
