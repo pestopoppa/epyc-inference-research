@@ -189,7 +189,8 @@ class RunFlag(unittest.TestCase):
         self.assertEqual(run._actor_reasoning_history(argparse.Namespace(
             actor_planner_reasoning_history="drop")), {"planner_reasoning_history": "drop"})
         source = Path(run.__file__).read_text(encoding="utf-8")
-        block = source[source.index('"--actor-planner-reasoning-history"'):][:300]
+        parser_source = Path(run.__file__).with_name("run_args.py").read_text(encoding="utf-8")
+        block = parser_source[parser_source.index('"--actor-planner-reasoning-history"'):][:300]
         self.assertIn("DEFAULT_PLANNER_REASONING_HISTORY", block)
         self.assertIn("REASONING_HISTORY_CHOICES", block)
         # The proposal planner's seat takes it; the critic and panel members do not.

@@ -109,7 +109,8 @@ class TheOptIn(unittest.TestCase):
         would drop `prior_experiments` from the names its code object references, and
         with it the flag.
         """
-        referenced = _referenced(run._main.__code__)
+        self.assertIn("_build_context", _referenced(run._main.__code__))
+        referenced = _referenced(run._build_context.__code__)
         self.assertIn("prior_experiments", referenced)
         # Non-vacuity, both directions: the walk must find real references and must not
         # find things that are merely mentioned.

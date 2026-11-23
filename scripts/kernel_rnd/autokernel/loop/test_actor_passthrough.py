@@ -225,7 +225,7 @@ class RunFlags(unittest.TestCase):
                 ns, [actors.backend_for("other-local/m", "high")], env)
 
     def test_cli_defaults_off(self):
-        self.assertIn("--actor-local-via-orchestrator", open(run_mod.__file__).read())
+        self.assertIn("--actor-local-via-orchestrator", Path(run_mod.__file__).with_name("run_args.py").read_text())
 
 
 # -------------------------------------------------------------------------------------

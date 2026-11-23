@@ -514,8 +514,8 @@ def test_run_py_records_a_candidate_profile_after_timing_and_orders_the_tail():
     body = body[:body.index("return _tripwire(compared)")]
     assert body.index("cpu_compare(") < body.index("record_candidate_serving_profile(")
     assert "if not cpu_launch:" in body
-    helper = source[source.index("    def record_candidate_serving_profile("):]
-    helper = helper[:helper.index("    def ensure_source_floor(")]
+    helper = source[source.index("def _record_candidate_serving_profile("):]
+    helper = helper[:helper.index("\ndef ")]
     assert 'serving_beliefs.annotate(row, {"candidate_serving_profile": profile})' in helper
     assert "raise" not in helper.replace("raise loop", "")   # never refuses the comparison
     assert '"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(' in source

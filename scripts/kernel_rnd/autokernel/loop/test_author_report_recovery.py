@@ -402,7 +402,7 @@ class PerRoleOutputLimits(unittest.TestCase):
 
     def test_the_parser_defaults(self):
         from autokernel.loop import run
-        source = Path(run.__file__).read_text(encoding="utf-8")
+        source = Path(run.__file__).with_name("run_args.py").read_text(encoding="utf-8")
         for flag, default in (("--actor-planner-output-limit", "DEFAULT_PLANNER_OUTPUT_LIMIT"),
                               ("--actor-author-output-limit", "DEFAULT_AUTHOR_OUTPUT_LIMIT"),
                               ("--actor-output-limit", "DEFAULT_OUTPUT_LIMIT"),

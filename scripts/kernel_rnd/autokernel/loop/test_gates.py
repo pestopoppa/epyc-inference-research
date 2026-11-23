@@ -168,7 +168,7 @@ class HardenedCandidateGates(unittest.TestCase):
         self.assertIsInstance(measurement, ast.With)
         self.assertEqual(ast.unparse(measurement.items[0].context_expr), "cpu_measurement_window()")
         self.assertEqual(ast.unparse(measurement.body[0]), "passed, verdicts = gates.run_all(*checks)")
-        compile_wrapper = _function_node(source, "local_compiles")
+        compile_wrapper = _function_node(source, "_local_compiles_impl")
         build_phase = next(node for node in compile_wrapper.body if isinstance(node, ast.With))
         self.assertTrue(_calls(build_phase.items[0].context_expr, "build"))
         self.assertTrue(_calls(build_phase, "compiles"))
@@ -207,7 +207,7 @@ class ARefusedPatchMustSurviveTheReset(unittest.TestCase):
         """An actor that changed nothing must not leave an empty patch file that
         later reads as a real attempt."""
         source = (Path(__file__).resolve().parent / "run.py").read_text()
-        self.assertIn("archive.retain_patch", _function(source, "keep_the_diff"))
+        self.assertIn("archive.retain_patch", _function(source, "_keep_the_diff_impl"))
         body = inspect.getsource(archive.retain_patch)
         self.assertIn("if not patch:", body)
         self.assertIn("return None", body)
@@ -1636,7 +1636,7 @@ class TwoTierChampionWiring(unittest.TestCase):
         self.assertIn(
             "accumulate_valid_positive=experimental", drive)
     def test_fire_multiple_arg_defaults_to_operator_range(self):
-        src = self._source()
+        src = Path(__file__).with_name("run_args.py").read_text()
         arg = src.split('"--fire-multiple"', 1)[1][:120]
         self.assertIn("default=2.5", arg)
 

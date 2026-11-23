@@ -432,7 +432,8 @@ def test_direct_launch_anchor_build_keeps_widened_targets():
     launch, silently DROPPING the ppl_contract tools `promote_anchor` asked for (while
     provenance.json recorded them). It must take the union instead."""
     source = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
-    body = source[source.index("    def build_champion("):source.index("    def build_baseline(")]
+    body = source[source.index("def _build_champion("):]
+    body = body[:body.index("\ndef ")]
     assert "targets=gates.PROMOTION_TARGETS if direct_launch else targets" not in body
     assert "dict.fromkeys((*gates.PROMOTION_TARGETS," in body
     fold = source[source.index("    def ppl_contract_fold_check("):]

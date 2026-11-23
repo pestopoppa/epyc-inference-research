@@ -1,7 +1,7 @@
 """AKU-23: arm-seconds budgets and utilisation. Pure arithmetic, no compute."""
 import pytest
 
-from . import arm_accounting as A
+from . import arm_accounting as A, run as run_mod
 
 
 def test_held_vs_idle_while_claimed():
@@ -79,7 +79,7 @@ def _gpu_reading(cpu_launch, counter):
     snap = SimpleNamespace(sample=lambda *_: None, snapshot=lambda: counter)
     scope = {"time": time, "math": math, "claim_started": 100.0, "cpu_launch": cpu_launch,
              "direct_launch": False, "gfx_counter": [snap if counter is not None else None],
-             "arm_accounting": A}
+             "arm_accounting": A, "_gpu_reading": run_mod._gpu_reading}
     exec(compile(ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[])), "run.py", "exec"), scope)
     with mock.patch.object(time, "monotonic", return_value=200.0):
         return scope["gpu_reading"]()

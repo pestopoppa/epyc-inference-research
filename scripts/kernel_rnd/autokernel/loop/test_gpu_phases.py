@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from . import claim, gpu_phases as gp
+from . import claim, gpu_phases as gp, run as run_mod
 from .test_cpu_quiet_region_backoff import native
 
 
@@ -553,7 +553,8 @@ def test_all_compile_routes_sweep_redirected_descendant_before_native_release(
                 main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_main")
                 forwarder = next(n for n in main.body if isinstance(n, ast.FunctionDef) and n.name == "local_compiles")
                 from contextlib import nullcontext
-                namespace = {"gates": gates, "gpu_local": local, "nullcontext": nullcontext}
+                namespace = {"gates": gates, "gpu_local": local, "nullcontext": nullcontext,
+                             "_local_compiles_impl": run_mod._local_compiles_impl}
                 exec(compile(ast.Module(body=[forwarder], type_ignores=[]), "actual-local-compile", "exec"), namespace)
                 def invoke():
                     return namespace["local_compiles"](source, build, cmake_defines=(), jobs=1,

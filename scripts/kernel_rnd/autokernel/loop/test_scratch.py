@@ -17,7 +17,7 @@ import pytest
 from pathlib import Path
 from unittest import mock
 
-from autokernel.loop import scratch
+from autokernel.loop import scratch, run as run_mod
 from autokernel.loop.scratch import ScratchRefused, ScratchRegistry
 from .test_cpu_quiet_region_backoff import native
 
@@ -1217,7 +1217,7 @@ class NewWriterScratchBoundaries(Base):
         from types import SimpleNamespace
         ns = {"gates": gates, "gpu_local": SimpleNamespace(build=build,
               compile_env=lambda original, **kwargs: nullcontext(original)),
-              "nullcontext": nullcontext}
+              "nullcontext": nullcontext, "_local_compiles_impl": run_mod._local_compiles_impl}
         exec(compile(ast.Module(body=[forwarder], type_ignores=[]),
                      "real-compile-forwarder", "exec"), ns)
         env = {"TMPDIR": "/owned/synthetic-scratch", "AK_PROC_SCOPE": "original-cookie"}
@@ -1256,6 +1256,7 @@ class NewWriterScratchBoundaries(Base):
               "anchor_build_jobs": lambda _recipe, _jobs: 1,
               "build_jobs": 1, "build_cpu_list": "0", "anchor_build": [slot],
               "gpu_local": None, "nullcontext": nullcontext,
+              "_local_compiles_impl": run_mod._local_compiles_impl,
               "current_anchor_commit": [head], "cor_build": [slot], "cor_commit": [head]}
         exec(compile(ast.Module(body=functions, type_ignores=[]), "real-run-ppl-helpers", "exec"), ns)
         calls = []
@@ -1442,6 +1443,7 @@ def test_original_cpu_owner_outlives_ppl_cookie_cleanup(native, tmp_path, monkey
         "recipe": SimpleNamespace(cmake_defines=lambda: ()), "anchor_build_jobs": lambda *_: 1,
         "build_jobs": 1, "build_cpu_list": "0", "anchor_build": [slot],
         "gpu_local": local, "nullcontext": nullcontext,
+        "_local_compiles_impl": run_mod._local_compiles_impl,
         "current_anchor_commit": [head], "cor_build": [slot], "cor_commit": [head]}
     exec(compile(ast.Module(body=functions, type_ignores=[]), "original-ppl-owner-helper", "exec"), namespace)
     guard = procguard.Guard(store=store)

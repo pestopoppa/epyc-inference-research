@@ -129,12 +129,13 @@ class Knobs(unittest.TestCase):
     def test_run_parser_defaults_and_member_seats_never_retry_a_timeout(self):
         from autokernel.loop import run
         source = Path(run.__file__).read_text(encoding="utf-8")
+        parser_source = Path(run.__file__).with_name("run_args.py").read_text(encoding="utf-8")
         self.assertIn('"--actor-authors-panel-wall", default=str(bestof.DEFAULT_PANEL_WALL_S)',
-                      source)
+                      parser_source)
         self.assertIn('"--actor-authors-cancel-factor",\n'
                       '                        default=str(bestof.DEFAULT_CANCEL_FACTOR)',
-                      source)
-        self.assertIn('parser.add_argument("--actor-authors-wall", default=""', source)
+                      parser_source)
+        self.assertIn('parser.add_argument("--actor-authors-wall", default=""', parser_source)
         # Only the panel member's seat turns the timeout retry off; the single path
         # (make_planner) never names it.
         self.assertEqual(source.count("retry_timeouts=False"), 1)

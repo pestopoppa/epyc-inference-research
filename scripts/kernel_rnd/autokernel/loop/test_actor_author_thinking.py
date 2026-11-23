@@ -177,7 +177,8 @@ class AuthorThinkingConfig(unittest.TestCase):
         self.assertEqual(run._actor_thinking(argparse.Namespace(actor_author_thinking="off")),
                          {"author_thinking": "off", "author_action_rule": False})
         source = Path(run.__file__).read_text(encoding="utf-8")
-        block = source[source.index('"--actor-author-thinking"'):][:300]
+        parser_source = Path(run.__file__).with_name("run_args.py").read_text(encoding="utf-8")
+        block = parser_source[parser_source.index('"--actor-author-thinking"'):][:300]
         self.assertIn("DEFAULT_AUTHOR_THINKING", block)
         self.assertIn("THINKING_CHOICES", block)
         # The planner/author seat takes it; the critic's seat construction does not.

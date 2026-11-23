@@ -557,7 +557,7 @@ class CliFlag(unittest.TestCase):
 
     def test_flag_default_mapping_and_validation(self):
         from autokernel.loop import run
-        source = Path(run.__file__).read_text(encoding="utf-8")
+        source = Path(run.__file__).with_name("run_args.py").read_text(encoding="utf-8")
         block = source[source.index('"--actor-planner-salvage-s"'):][:200]
         self.assertIn("default=900", block)
         self.assertEqual(run._actor_salvage(argparse.Namespace(actor_planner_salvage_s=900)),

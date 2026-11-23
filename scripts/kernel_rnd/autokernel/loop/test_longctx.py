@@ -541,7 +541,7 @@ def test_run_wiring_is_guarded_by_the_opt_in_flag():
     body = "\n".join(source)
     assert re.search(r"def longctx_reprofile\(\) -> None:\n(?:.*\n){1,4}?\s+if longctx_surface "
                      r"is None:\n\s+return", body)
-    assert 'parser.add_argument("--longctx-surface", type=Path,' in body
+    assert 'parser.add_argument("--longctx-surface", type=Path,' in (Path(__file__).parent / "run_args.py").read_text()
 
 
 def test_production_histogram_buckets_decode_wall_by_context(tmp_path):
@@ -730,7 +730,9 @@ def test_run_registers_the_long_surface_into_the_keep_dimensions_and_long_identi
     assert 'keep_dimension_measures["long_decode"] = _longctx_dimension_row' in block
     assert 'keep_dimension_measures["prefill_at_depth"] = _longctx_prefill_row' in block
     assert "long_identity_targets[0] = _long_identity_targets" in block
-    assert "with cpu_measurement_window():" in block
+    identity = body[body.index("def _long_identity_targets_impl("):]
+    identity = identity[:identity.index("\ndef ")]
+    assert "with cpu_measurement_window():" in identity
     assert re.search(r"if hypothesis\.runtime_pair is not None:\n(?:.*\n){1,2}?\s+if longctx_surface "
                      r"is not None:\n(?:.*\n){1,5}?\s+long_gate = longctx_runtime_gate\(", body)
     assert re.search(r'long_dims & set\(keep_dims\) and longctx_surface is None:\n\s+parser\.error',

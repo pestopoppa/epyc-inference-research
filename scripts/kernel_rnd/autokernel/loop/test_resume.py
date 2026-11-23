@@ -861,7 +861,8 @@ class ResumeFlag(unittest.TestCase):
     def test_run_py_scans_only_with_resume_on_and_threads_the_queue(self):
         source = Path(__file__).with_name("run.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
-        flags = [call for call in ast.walk(tree) if isinstance(call, ast.Call)
+        parser_tree = ast.parse(Path(__file__).with_name("run_args.py").read_text(encoding="utf-8"))
+        flags = [call for call in ast.walk(parser_tree) if isinstance(call, ast.Call)
                  and getattr(call.func, "attr", None) == "add_argument"
                  and call.args and getattr(call.args[0], "value", None) == "--resume"]
         self.assertEqual(len(flags), 1)

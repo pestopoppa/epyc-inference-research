@@ -9,7 +9,7 @@ from unittest import mock
 from pathlib import Path
 import unittest
 
-from autokernel.loop import gpu_counter
+from autokernel.loop import gpu_counter, run as run_mod
 
 
 class Reader:
@@ -129,7 +129,7 @@ class ClaimLifecycle(unittest.TestCase):
 
     def test_native_oracle_and_warmup_paths_are_bracketed(self):
         tree = ast.parse((Path(__file__).parent / "run.py").read_text())
-        wanted = ("counter_phase", "local_op_correctness", "measured_bench_compare")
+        wanted = ("local_op_correctness", "measured_bench_compare")
         nodes = [next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
                       and n.name == name) for name in wanted]
         events = []
@@ -143,6 +143,8 @@ class ClaimLifecycle(unittest.TestCase):
                  "gates": SimpleNamespace(op_correctness=lambda: events.append("oracle body")),
                  "bench": SimpleNamespace(
                      compare=lambda **_kw: events.append("bench warmup and compare"))}
+        scope["counter_phase"] = lambda label: run_mod._counter_phase(
+            label, scope["gfx_counter"], scope["budget_debit"])
         exec(compile(ast.fix_missing_locations(ast.Module(body=nodes, type_ignores=[])),
                      "run.py", "exec"), scope)
         scope["local_op_correctness"]()
@@ -159,7 +161,7 @@ class ClaimLifecycle(unittest.TestCase):
         main = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_main")
         source = ast.unparse(main)
         self.assertIn("gpu_counter.attach(ownership, receipt", source)
-        self.assertIn("gfx_counter[0].sample(", source)
+        self.assertIn("gfx_counter[0].sample(", ast.unparse(tree))
         self.assertIn("gfx_counter[0].snapshot()", source)
 
 

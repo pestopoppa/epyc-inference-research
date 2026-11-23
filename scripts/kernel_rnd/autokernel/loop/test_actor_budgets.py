@@ -582,7 +582,7 @@ class CliKnobs(unittest.TestCase):
 
     def test_the_parser_defaults_are_on(self):
         from autokernel.loop import run
-        source = Path(run.__file__).read_text(encoding="utf-8")
+        source = Path(run.__file__).with_name("run_args.py").read_text(encoding="utf-8")
         for flag, default in (("--actor-concise", 'default="on"'),
                               ("--actor-planner-budget-s", "default=4500"),
                               ("--actor-author-budget-s", "default=0"),

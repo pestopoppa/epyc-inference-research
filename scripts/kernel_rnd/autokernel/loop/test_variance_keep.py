@@ -114,9 +114,9 @@ def test_default_off_identity_in_run():
     """No --variance-input: the flag defaults to None and every run.py wiring site is gated on
     it, so the keep path executes no new statement and the attempt row gains no key."""
     src = Path(run.__file__).read_text()
-    assert '"--variance-input", type=Path, default=None' in src
+    assert '"--variance-input", type=Path, default=None' in Path(run.__file__).with_name("run_args.py").read_text()
     assert src.count("variance_keep.keep_record_fields(") == 1
-    assert 'if getattr(args, "variance_input", None) is not None:\n                variance_keep_by_head[head]' in src
+    assert 'if args.variance_input is not None:\n                variance_keep_by_head[head]' in src
     # attempt only gains keys for heads that were recorded; an empty dict is a no-op
     assert 'champion_head in variance_keep_by_head:\n                attempt.update(' in src
     attempt = {"status": "kept"}

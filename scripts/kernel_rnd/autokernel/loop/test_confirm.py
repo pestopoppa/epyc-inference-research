@@ -159,8 +159,9 @@ class UnconfiguredMeansSingleRungExactlyAsToday(unittest.TestCase):
         """Wiring seams, in the style of test_gates: the defaults keep the running
         run's semantics untouched until the boundary enables the confirm rung."""
         source = (Path(__file__).resolve().parent / "run.py").read_text()
+        parser_source = Path(__file__).with_name("run_args.py").read_text()
         self.assertIn('parser.add_argument("--confirm-model", type=Path, '
-                      'default=None', source)
+                      'default=None', parser_source)
         block = ast.unparse(next(node for node in ast.walk(ast.parse(source))
                                  if isinstance(node, ast.FunctionDef)
                                  and node.name == "commit_pooled"))

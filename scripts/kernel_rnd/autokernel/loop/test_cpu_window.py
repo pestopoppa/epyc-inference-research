@@ -522,7 +522,7 @@ def test_pool_drive_without_a_window_is_unchanged_and_with_one_is_wired(tmp_path
 def test_run_parser_defaults_on_and_serial_common_args_admit_the_knobs(tmp_path):
     from . import run, serial_roster, serial_run as sr
     from .test_serial_roster import _inputs
-    source = Path(run.__file__).read_text(encoding="utf-8")
+    source = Path(run.__file__).with_name("run_args.py").read_text(encoding="utf-8")
     assert '"--cpu-window-yield", choices=("on", "off"), default="on"' in source
     _resolved, _owners, argv = _inputs(tmp_path, backends=("cpu",))
     common = tmp_path / "common.json"

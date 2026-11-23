@@ -547,7 +547,8 @@ class TheRunWiringSeams(unittest.TestCase):
         """A `build_context` quietly reverted to an inline `read_text` loop drops
         the `read_inbox` attribute reference; `inbox` alone would survive a rename,
         so both are pinned. Non-vacuity both directions, as in test_ranking."""
-        referenced = self._referenced(run_mod._main.__code__)
+        self.assertIn("_build_context", self._referenced(run_mod._main.__code__))
+        referenced = self._referenced(run_mod._build_context.__code__)
         self.assertIn("inbox", referenced)
         self.assertIn("read_inbox", referenced)
         self.assertNotIn("no_such_global_anywhere", referenced)

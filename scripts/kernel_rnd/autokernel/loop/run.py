@@ -18,7 +18,7 @@ import argparse
 from collections.abc import Mapping
 from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, replace
-from functools import wraps
+from functools import partial, wraps
 import hashlib
 import json
 import math
@@ -128,7 +128,7 @@ from . import residency
 from . import resume as resume_mod
 from . import bestof
 from . import gpu_serving_profile as gpu_serving_profile_mod
-from . import gpu_counter, arm_accounting
+from . import gpu_counter, arm_accounting, run_args
 # re-exported: moved verbatim to run_author_plan.py
 from .run_author_plan import (  # noqa: F401
     AuthorPlan, DEFAULT_ACTOR_AUTHORS, SINGLE_AUTHOR, _author_plan, _shared_pool_lanes,
@@ -2218,8 +2218,7 @@ def _with_pinned_history(rows: list[dict], store, *, epoch: str,
     """
     seen = {row.get("attempt_id") for row in rows if row.get("attempt_id")}
     extra = store.recall(epoch=epoch, limit=_PINNED_HISTORY_POOL,
-                         statuses=_PINNED_HISTORY_STATUSES, include_claims=True,
-                         measurement_epoch=measurement_epoch,
+                         statuses=_PINNED_HISTORY_STATUSES, include_claims=True, measurement_epoch=measurement_epoch,
                          **({"ranking_authorized": True} if ranking_authorized else {}))
     pinned = [row for row in extra
              if row.get("same_epoch") and row.get("attempt_id") not in seen]
@@ -2376,774 +2375,3901 @@ def _native_stale_rebaseline(store: Path, worktree: Path, bundle, harness: str,
             raise
 
 
+def _ask_stop(stopping, signum, _frame) -> None:
+    # Finish the current measurement before draining the remaining work.
+    stopping["asked"] = True
+    print(f"\nstopping  signal {signum} received — forming lanes abandon at "
+          f"their next stage boundary; a lane holding the tail finishes its "
+          f"measurement and publishes first")
+
+
+def _stop_asked(stopping, store) -> bool:
+    return stopping["asked"] or pool.stop_requested(store)
+
+
+def _should_stop(stop_asked, breaker, same_state, deadline_guard, budget) -> bool:
+    return (stop_asked() or breaker.tripped or same_state.tripped or deadline_guard.tripped
+            or budget.tripped)
+
+
+def _run_terminal(stop_asked, breaker, same_state, deadline_guard, budget) -> str:
+    return provider_breaker.terminal(stop_asked=stop_asked(), breaker=breaker,
+                                     same_state=same_state, deadline=deadline_guard,
+                                     budget=budget)
+
+
+def _recorded_gate(keep_numerics, gate):
+    def wrapped(hypothesis, paths):
+        keep_numerics.pop(hypothesis.mechanism_id, None)
+        passed, verdicts = gate(hypothesis, paths)
+        entry = keep_numerics.setdefault(hypothesis.mechanism_id, {"class": "reference"})
+        entry["passed"] = bool(passed)
+        entry["verdict_digests"] = [hashlib.sha256(json.dumps(
+            v.to_dict(), sort_keys=True).encode()).hexdigest() for v in verdicts]
+        return passed, verdicts
+    return wrapped
+
+
+def _keep_stage(keep_timer, name: str, **identity):
+    timer = keep_timer[0]
+    return nullcontext({}) if timer is None else timer.stage(name, **identity)
+
+
+@contextmanager
+def _graceful_calibration_stop(calibration_stopped, on_stop):
+    try:
+        yield
+    except loop.ActorStopped:
+        if not calibration_stopped[0]:
+            raise
+        # The inner ExitStack has already released claims and reaped children.
+        on_stop()
+
+
+def _anchor_gate(anchor_build, anchor_gate_cache, local_op_correctness, op):
+    key = (str(anchor_build[0]), op)
+    if key not in anchor_gate_cache:
+        anchor_gate_cache[key] = local_op_correctness(anchor_build[0], op=op,
+                                                      require_reference=True)
+        print(f"gate      anchor {Path(anchor_build[0]).name} seeded {op}: "
+              f"{anchor_gate_cache[key].gate} passed={anchor_gate_cache[key].passed}")
+    return anchor_gate_cache[key]
+
+
+def _settle_resume(args, resume_queue, current_anchor_commit, outcome) -> None:
+    # Lineage for the claim; a ledger fault never costs the durable row.
+    if outcome.resumed_from is None or resume_queue[0] is None:
+        return
+    try:
+        with resume_mod.ClaimLedger(args.store) as ledger:
+            # A validity outcome consumes the claim; an infrastructure
+            # lane_error releases it for a bounded retry (resume.py).
+            disposition = ledger.settle_outcome(
+                outcome.resumed_from, current_anchor_commit[0],
+                result_status=outcome.status,
+                detail=(outcome.reasons[0][:2000] if outcome.reasons else None))
+        if disposition in {"released", "exhausted"}:
+            print(f"resume    {outcome.resumed_from}: {outcome.status} is an "
+                  f"infrastructure fault -> claim {disposition}"
+                  + (" (the next launch retries it)" if disposition == "released"
+                     else " (infrastructure retry budget spent; consumed)"),
+                  flush=True)
+    except Exception as exc:      # noqa: BLE001
+        print(f"warning: resume claim settle failed: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
+
+
+def _retain_critic2(args, lanes_by_name, outcome, attempt) -> None:
+    """A critic2 checkpoint points at the patch its lane holds NOW (resume.py).
+
+    Recording happens before the lane's next reset, so the authored diff that
+    critic pass 2 never judged is still there: retain it (the same immutable
+    store as every gate-refused patch) or drop the checkpoint when the lane
+    holds no diff. DS41 runs 10d/10e lost such patches three times."""
+    checkpoints = attempt.get("resume_checkpoints")
+    if not checkpoints:
+        return
+    worker = lanes_by_name.get(str(outcome.branch_id or "").partition(":")[2])
+    resume_mod.retain_checkpoint_patches(
+        checkpoints, lambda mechanism: None if worker is None else
+        archive.retain_patch(args.store, worker.worktree, lane=worker.name,
+                             mechanism_id=mechanism))
+    if not checkpoints:
+        attempt.pop("resume_checkpoints", None)
+
+
+def _reset_retained(args, worker):
+    # STOP before the gate, or a hard interruption during authoring, leaves
+    # a dirty reused lane with no gate archive. Preserve it BEFORE the
+    # original owned reset. An archive failure must prevent that reset.
+    archive.retain_patch(args.store, worker.worktree, lane=worker.name)
+    return pool.reset_to_champion(worker, champion_tree=args.worktree,
+                                  branch=args.champion_branch)
+
+
+def _step_pooled(gfx_counter, publish, latest, hotspot_rows, worker_name: str, label: str) -> None:
+    if gfx_counter[0] is not None:
+        gfx_counter[0].sample(f"{worker_name}: {label}")
+    # The step line names the lane: an unattributed "building and gating" on a
+    # pooled run says nothing about which of N lanes is where.
+    if label.startswith("resuming "):
+        print(f"resume    [{worker_name}] {label}", flush=True)
+    publish("running", latest, hotspot_rows=hotspot_rows,
+            step=f"[{worker_name}] {label}")
+
+
+def _sandbox_for(sandbox_scratch, worker):
+    return (ak_check.scratch_provider(sandbox_scratch, worker.name)
+            if sandbox_scratch is not None else None)
+
+
+def _lane_backend(lane_actors, lane_actor_models, planner_backend, lane_backends, worker):
+    """The lane's planner/author backend: the global one unless overridden."""
+    lane = lane_actors.for_worker(lane_actor_models, worker)
+    return planner_backend if lane is None else lane_backends[lane.lane]
+
+
+def _lane_seat(lane_actors, lane_actor_models, worker, seat):
+    return lane_actors.seat_for(lane_actors.for_worker(lane_actor_models, worker), seat)
+
+
+def _actor_health(outcomes) -> dict:
+    """What the dashboard needs to say 'the critic is failing' instead of 'running'."""
+    rows = [o.to_attempt() for o in list(outcomes)[-60:]]
+    failing = {"planner_transient", loop.AUTHORING_HARNESS_FAILURE}
+    fails = [r for r in rows if r.get("status") in failing]
+    last = next((r for r in reversed(rows) if r.get("status") in failing), None)
+    reason = str((last or {}).get("refusal_reason") or "")[:200]
+    return {"recent_attempts": len(rows), "planner_transient": len(fails),
+            "failing": len(rows) >= 5 and len(fails) * 2 > len(rows),
+            "last_failure": reason or None}
+
+
+def _publish_lineage(args, epoch, anchor_commit, observed, run_artifact=None):
+    # The write side is retrospective to this run only. It is never an input
+    # to the planner, evaluator, promotion gate, or resource scheduler.
+    try:
+        source_root = Path(__file__).resolve().parents[4]
+        source_revision = subprocess.run(
+            ["git", "-C", str(source_root), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True, timeout=5).stdout.strip()
+        lineage_beliefs.publish(
+            args.store, observed, epoch=epoch, anchor_commit=anchor_commit,
+            producer_commit=source_revision,
+            producer_file_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            run_artifact=run_artifact)
+    except Exception as exc:
+        print(f"warning: lineage belief export unavailable: {type(exc).__name__}: "
+              f"{exc}", file=sys.stderr)
+        return
+    publish_lineage_taxonomy(args.store, source_revision)
+
+
+def _record_resume_rejected(args, census, cpu_launch, recipe, screen_state, epoch, attempt) -> None:
+    """A checkpoint that failed re-validation before reaching a lane."""
+    attempt["research_scope"] = archive.original_research_scope(
+        attempt, model=args.model, quant=census.quant_label,
+        backend="cpu" if cpu_launch() else "gpu", build_recipe=recipe.to_dict(),
+        surface=args.surface)
+    if screen_state is not None:
+        attempt["cpu_screen"] = dict(screen_state)
+        attempt["research_scope"]["cpu_screen"] = dict(screen_state)
+    archive.record(args.store, attempt, epoch=epoch, recorded_at=loop._now(),
+                   campaign_id="ak-loop")
+    print(f"resume    rejected {attempt.get('mechanism_id') or '-'} "
+          f"({attempt.get('resumed_from')}): {attempt.get('reason')}", flush=True)
+
+
+def _longctx_keep_gate(cpu_compare, anchor_build, longctx_compare, worker, hypothesis, comparison, *, measured_row=None) -> dict:
+    """Every keep of an opted-in target must not regress either surface: a long-primary
+    (attention-route) keep is checked on the short surface and on its own prefill at
+    depth; any other keep is A/B'd at depth (decode and prefill). Fails closed.
+    `measured_row`: this keep's long-context A/B already taken by the G5 dimension
+    pass, reused instead of measured twice."""
+    if longctx.attention_route(hypothesis):
+        try:
+            short = cpu_compare(anchor_build[0], worker.build_dir, rebind_feedback=False)
+        except loop.MeasurementInvalid:
+            raise
+        except (loop.MeasurementFailed, RuntimeError, ValueError, OSError) as exc:
+            return {"primary": "longctx", "passed": False,
+                    "reason": f"short-surface gate failed: {type(exc).__name__}: {exc}"}
+        long_verdict = comparison.row.get("longctx") or {}
+        regressed = short.decisive is True and short.effect < 0
+        undecided = short.decisive is None or bool(getattr(short, "drifting", False))
+        passed = long_verdict.get("passed") is True and not regressed and not undecided
+        return {"primary": "longctx", "passed": passed, "longctx": long_verdict,
+                "short": {"effect": short.effect, "decisive": short.decisive,
+                          "floor_pct": short.noise_floor_pct,
+                          "drifting": bool(getattr(short, "drifting", False))},
+                "reason": (long_verdict.get("reason", "no long-context verdict")
+                           + (f"; short surface regressed {short.effect * 100:+.3f}%"
+                              if regressed else "")
+                           + ("; short surface uncalibrated or drifting (no verdict)"
+                              if undecided else ""))}
+    row = (measured_row if isinstance(measured_row, Mapping)
+           and isinstance(measured_row.get("longctx"), Mapping) else None)
+    try:
+        if row is None:
+            row = longctx_compare(worker.build_dir).row
+    except loop.MeasurementInvalid:
+        raise
+    except (loop.MeasurementFailed, RuntimeError, ValueError, OSError) as exc:
+        return {"primary": "short", "passed": False,
+                "reason": f"long-context gate failed: {type(exc).__name__}: {exc}"}
+    return {"primary": "short", **row["longctx"],
+            "comparison": {key: row.get(key) for key in (
+                "recipe", "recipe_hash", "anchor_tok_s", "candidate_tok_s", "effect",
+                "decisive", "noise_floor_pct", "pairs", "anchor_samples",
+                "candidate_samples", "floor_sha256")}}
+
+
+def _confirm_measure(args, anchor_build, measured_bench_compare, worker):
+    """The confirm rung's A/B for one keep-candidate (§5.3): same arms, the
+    production-shaped model, the confirm surface's own keyed floor."""
+    def measure(surface, floor_pct):
+        cpp, ctg, cub = bench.SURFACES[surface]
+        return measured_bench_compare(
+            bench.Arm("anchor", anchor_build[0] / "bin" / "llama-bench"),
+            bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
+            args.confirm_model, pp=cpp, tg=ctg, pairs=args.confirm_pairs,
+            noise_floor_pct=floor_pct, surface=surface, ubatch=cub,
+            calibrated=floor_pct is not None)
+    return measure
+
+
+def _ppl_contract_judge_bundle(args, direct_launch, cor_build, build_cpu_list, build: Path) -> "gates.Verdict":
+    """Layers (a)-(d) of champion-of-record -> `build`, as the fold judges them."""
+    from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
+    arm = _cpu_arm(direct_launch(), build)
+    reference = gates.pinned_production_reference(args.store, env=dict(arm.launch_env),
+                                                  candidate_build=build)
+    cor_has_tools = all((Path(cor_build[0]) / "bin" / tool).is_file()
+                        for tool in gates.PPL_CONTRACT_TOOL_TARGETS)
+    return gates.ppl_contract_bundle_gate(
+        cor_build[0] if cor_has_tools else reference, build, resolved_recipe=arm,
+        model=args.model, threads=len(_parse_cpu_list(build_cpu_list)),
+        cpu_list=build_cpu_list, env=dict(arm.launch_env), reference_build=reference,
+        cache_dir=Path(args.store) / "ppl_contract" / "cache",
+        log_dir=Path(args.store) / "ppl_contract" / "bundle",
+        served_shape_manifest=Path(args.store) / "served_shape" / "manifest.json")
+
+
+def _longctx_runtime_gate(longctx_surface, anchor_build, args, cpu_measurement_window, pair) -> dict:
+    """A runtime-recipe keep (threads, batch, KV type...) is judged at depth like any
+    other keep: the pair's two recipes on the same anchor build, slot restored. A
+    recipe whose slot cannot restore (a KV-layout change) is refused, not assumed."""
+    try:
+        row = _serving_comparison(lambda: longctx_surface.compare(
+            _cpu_arm(longctx_surface.launch_for(pair.anchor), anchor_build[0]),
+            _cpu_arm(longctx_surface.launch_for(pair.candidate), anchor_build[0]),
+            pairs=args.serving_pairs),
+            "runtime_recipe_pair_at_depth",
+            measurement_window=cpu_measurement_window).row
+    except loop.MeasurementInvalid:
+        raise
+    except (loop.MeasurementFailed, RuntimeError, ValueError, OSError) as exc:
+        return {"primary": "runtime", "passed": False,
+                "reason": f"long-context gate failed: {type(exc).__name__}: {exc}"}
+    return {"primary": "runtime", **row["longctx"]}
+
+
+def _longctx_compare(c_build, *,
+        longctx_surface, direct_launch, anchor_build, experimental, cpu_measurement_window, args,
+        retain_measured_source_comparison):
+    """The current anchor vs `c_build` on the opt-in long-context surface (longctx.py):
+    slot restored, decode at depth as the scalar, prefill at depth in `row['longctx']`."""
+    long_launch = longctx_surface().launch_for(direct_launch())
+    anchor_arm = _cpu_arm(long_launch, anchor_build()[0])
+    result = _serving_comparison(lambda: longctx_surface().compare(
+        anchor_arm, _cpu_arm(long_launch, c_build),
+        pairs=args().serving_pairs),
+        "experimental_candidate_not_champion" if experimental()
+        else "canonical_candidate_vs_current_anchor",
+        measurement_window=cpu_measurement_window(),
+        on_complete=lambda completed: retain_measured_source_comparison()(
+            completed, anchor_build()[0], anchor_arm.execution_digest, anchor_arm.template.model))
+    return result
+
+
+def _cpu_anchor_guard_compare(direct_launch, serving_recipe, cpu_measurement_window,
+                              source_instrument, args, frozen_requests, a_build, c_build):
+    """Measure the promoted-anchor integrity A/A without consuming a source floor.
+
+    The keep was admitted against the previous anchor's floor.  The promoted
+    executable needs its own prospective floor, but calibration is candidate
+    work: it must not sit between moving the champion and completing this guard.
+    The guard therefore measures an explicitly uncalibrated matched A/A and lets
+    ``anchor.verify`` apply the already-admitted numeric tolerance itself.
+    """
+    anchor_recipe = _cpu_arm(direct_launch(), a_build)
+    candidate_recipe = _cpu_arm(direct_launch(), c_build)
+    return _serving_comparison(lambda: serving.compare(
+        serving_recipe(), a_build, c_build, pairs=args.serving_pairs,
+        floor_pct=None, port=direct_launch().port,
+        anchor_resolved_recipe=anchor_recipe, candidate_resolved_recipe=candidate_recipe, frozen_requests=frozen_requests,
+        **({"instrument": args.serving_instrument} if source_instrument else {})),
+        "promoted_anchor_integrity_not_source_candidate",
+        measurement_window=cpu_measurement_window)
+
+
+def _end_proc_guard(guard):
+    try:
+        guard.sweep_stale("run_end")
+    finally:
+        procguard.uninstall(guard)
+
+
+def _restore_child_phase_environment(key, prior):
+    if prior is None:
+        os.environ.pop(key, None)
+    else:
+        os.environ[key] = prior
+
+
+def _report_runtime_progress(runtime_status, runtime_preparation, feedback_anchor,
+                             runtime_recipe_reference, publish, latest, hotspot_rows, row=None):
+    # Snapshot on the execution thread. The heartbeat only reuses this
+    # detached compact view; it never reads runtime artifacts or refreshes
+    # the owning progress timestamp.
+    try:
+        previous = runtime_status[0] or {}
+        progress = dict(row) if row is not None else previous.get("progress")
+        runtime_status[0] = {
+            "status": runtime_preparation.get("status", "preparing"),
+            "reason": str(runtime_preparation.get("reason") or "")[:256],
+            "calibration_launches": runtime_preparation.get("calibration_launches"),
+            "progress": progress,
+            "selected_execution_digest": feedback_anchor[0].execution_digest,
+            "selected_recipe": (
+                f"threads={feedback_anchor[0].template.threads} "
+                f"topology={' '.join(feedback_anchor[0].topology_prefix) or 'inherited'} · "
+                + feedback_anchor[0].template.describe())[:512],
+            "selected_recipe_reference": (None if runtime_recipe_reference[0] is None
+                                          else dict(runtime_recipe_reference[0]))}
+        if row is not None:
+            label = "CPU runtime: " + row["operation"]
+            if "completed_launches" in row:
+                bound = "up to " if row["limit_is_upper_bound"] else ""
+                label += (f" / {row['phase']} — {row['completed_launches']}/"
+                          f"{bound}{row['launch_limit']} valid launches")
+            publish("running", latest, hotspot_rows=hotspot_rows, step=label)
+    except Exception as exc:
+        print(f"runtime progress unavailable: {type(exc).__name__}: {exc}", file=sys.stderr)
+
+
+def _measure_rebaseline(cpu_compare, cor_build, anchor_build, direct_launch,
+                        measured_bench_compare, args, pp, tg, bench_floor, bench_surface, ubatch):
+    return (cpu_compare(cor_build[0], anchor_build[0], rebind_feedback=False)
+            if direct_launch else measured_bench_compare(
+                bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
+                bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
+                args.model, pp=pp, tg=tg, pairs=args.pairs,
+                noise_floor_pct=bench_floor, surface=bench_surface, ubatch=ubatch,
+                calibrated=bench_floor is not None))
+
+def _validate_pooled(census, pp, tg, ubatch, current_anchor_commit, recipe, direct_launch,
+                     args, candidate_integrity, integrity_evidence, worker, hypothesis, paths):
+    # A byte-bounded or otherwise partial census legitimately has no
+    # dominant quant.  Candidate integrity must still inspect the full
+    # patch and bench-shape literals; an absent optional type constraint
+    # is not a malformed candidate (and must never become a lane error).
+    quant_tokens = _candidate_quant_tokens(census.dominant_quant)
+    oracle_shape = {"op_ids": ["MUL_MAT", "GGML_OP_MUL_MAT"],
+                    "types": quant_tokens}
+    bench_shape = {"dims": [value for value in (pp, tg, ubatch) if value],
+                   "types": quant_tokens}
+    checked = integrity.validate_candidate(
+        worker.worktree, paths, oracle_shape=oracle_shape,
+        bench_shape=bench_shape, expected_head=getattr(worker, "reset_base", None))
+    base = _git(worker.worktree, "rev-parse", "HEAD")
+    attempt = dispatch_guard.attempt_identity(
+        diff=_git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--"),
+        champion=current_anchor_commit[0], cmake_defines=recipe.cmake_defines(),
+        bench_recipe={"pairs": args.serving_pairs if direct_launch() else args.pairs,
+                      "pp": pp, "tg": tg, "ubatch": ubatch},
+        model=str(args.model), surface=args.surface)
+    key = integrity.evidence_key(lane=worker.name, attempt_id=attempt,
+                                 base_commit=base, paths=paths)
+    evidence = checked.to_dict()
+    evidence["evidence_key"] = key
+    evidence["attempt_identity"] = attempt
+    candidate_integrity[worker.name] = (checked, key)
+    integrity_evidence[key] = evidence
+    # loop.py retains this exact mutable mapping on the Outcome. Confirm
+    # evidence added later is therefore visible to status and the journal.
+    return evidence
+
+
+def _reserve_pooled(current_anchor_commit, recipe, direct_launch, args, pp, tg, ubatch,
+                    worker, _hypothesis, _paths, resume_point=None):
+    diff = _git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--")
+    diff_sha256 = hashlib.sha256(
+        dispatch_guard.normalized_diff(diff).encode()).hexdigest()
+    identity = dispatch_guard.attempt_identity(
+        diff=diff, champion=current_anchor_commit[0],
+        cmake_defines=recipe.cmake_defines(),
+        bench_recipe={"pairs": args.serving_pairs if direct_launch() else args.pairs,
+                      "pp": pp, "tg": tg, "ubatch": ubatch},
+        model=str(args.model), surface=args.surface)
+    registry = dispatch_guard.Registry(args.store)
+    try:
+        # A resumed BUILD re-dispatches a claimed checkpoint's exact bytes;
+        # its claim, not the one-retry bound, governs (dispatch_guard.reserve).
+        reservation = registry.reserve(identity, resumed=resume_point is not None)
+        return dispatch_guard.Reservation(
+            reservation.identity, reservation.dispatch_count, diff_sha256)
+    finally:
+        registry.close()
+
+
+def _native_cpu_acquired(acquired, out, scheduler_selection, selected_identity):
+    acquired[0] = True
+    _publish_cpu_native_acquired(out, scheduler_selection, selected_identity)
+
+
+def _build_baseline(local_compiles, recipe, build_jobs, build_cpu_list, dest: Path, commit: str):
+    """The frozen production kernel, built at most once PER FREEZE. Never in the
+    production tree itself.
+
+    `commit` is the LIVE-resolved freeze (`production.resolve_frozen`), not a
+    pinned constant: after a promotion the headline must follow the newly frozen
+    kernel, never stale v9. The build-source copy is checked against it before a
+    single compiler is invoked -- a copy that has not followed the promotion would
+    produce a binary published under the new freeze's name, which is the one way
+    this headline can be quietly wrong. A refusal here is a `Verdict`, not an
+    exception -- `production.refresh` turns it into a skipped refresh (the panel
+    reads SUPERSEDED, naming why), and the run carries on.
+    """
+    head = _git(production.BASELINE_TREE, "rev-parse", "HEAD")
+    if head != commit:
+        return gates.Verdict("baseline-tree", False,
+                             f"{production.BASELINE_TREE} is at {head[:12]}, not "
+                             f"the frozen production kernel {commit[:12]}; "
+                             f"refresh the copy to follow the promotion")
+    return local_compiles(production.BASELINE_TREE, dest,
+                          cmake_defines=recipe.cmake_defines(),
+                          jobs=build_jobs, cpu_list=build_cpu_list)
+
+
+def _hold_cpu_claim(cpu_win, ownership, gpu_quiet_kw, cpu_list):
+    if cpu_win is None:
+        return ownership.enter_context(claim.hold_cpu(cpu_list, **gpu_quiet_kw))
+    return cpu_win.acquire_initial(
+        lambda: ownership.enter_context(claim.hold_cpu(cpu_list, **gpu_quiet_kw)))
+
+
+def _build_champion(local_compiles, args, recipe, build_jobs, build_cpu_list, direct_launch,
+                    dest: Path, targets: tuple = gates.DEFAULT_TARGETS):
+    """The loop's recipe, compiled AT the path used. Shared by promotion and guard —
+    at DIFFERENT widths (R22-7). `pool.promote_anchor` calls this with
+    `gates.PROMOTION_TARGETS` (llama-server included: a champion that is not
+    production-complete is not promotable — operator ruling, 2026-09-01), while
+    the anchor guard's throwaway fresh build and its heal retry take the narrow
+    default: the guard answers "is the anchor slot the champion", its digest
+    hashes `bin/libggml-hip.so` alone, and paying server link time per keep for
+    a binary nobody runs would buy nothing. Candidate lane builds (`gate_for`)
+    stay narrow for the same reason at hundreds of iterations per run."""
+    # R23-40 (2026-09-03): HIP recipes build at jobs=1, NOT 64. This recipe feeds
+    # BOTH the promoted anchor and the guard's fresh comparison build, and `-j64`
+    # HIP builds of one commit are NON-reproducible on this host -- three
+    # same-recipe builds of 445e93a8 differed in every code section
+    # (.text/.hip_fatbin/.rodata), so the digest guard aborted the run (Run-18
+    # fault class). Serial build makes the promoted anchor and the fresh guard
+    # build bit-identical; R23-41 (hipcc determinism at -j64) is still open.
+    # C46 (2026-09-27): CPU/gcc recipes ARE reproducible at -j64, so they take the
+    # run's normal `build_jobs`. `anchor_build_jobs` owns the split.
+    return local_compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
+                          jobs=anchor_build_jobs(recipe, build_jobs),
+                          cpu_list=build_cpu_list,
+                          # Review 2026-10-06: a direct launch always carries
+                          # PROMOTION_TARGETS, but must not DROP targets the caller
+                          # widened (ppl_contract tools) -- the old override silently
+                          # discarded them while provenance.json recorded them.
+                          targets=(tuple(dict.fromkeys((*gates.PROMOTION_TARGETS,
+                                                        *targets)))
+                                   if direct_launch() else targets))
+
+
+def _record_candidate_serving_profile(current_anchor_commit, cpu_measurement_window, direct_launch,
+                                      frozen_requests, args, gpu_long_context_hook,
+                                      gpu_profile_observation, compared, worker, hypothesis) -> None:
+    """AKX-ALL-29.2 cheapest recording rule: the FIRST time a GPU candidate reaches
+    timing, re-run the AKX-ALL-16 serving profile on ITS build over the same windows
+    and store the record beside its experiment row (`comparison.candidate_serving_profile`).
+
+    Cached by the candidate diff, so a re-timed identical candidate reuses its profile.
+    Runs AFTER the A/B so it cannot perturb it; a failure is recorded and never
+    refuses or changes the comparison (the keep gate is unchanged)."""
+    row = getattr(compared, "row", None)
+    if not isinstance(row, dict):
+        return
+    def retain_profile(profile):
+        row.update(serving_beliefs.annotate(row, {"candidate_serving_profile": profile}))
+    from . import gpu_serving_profile as gsp
+    try:
+        diff = archive._git(worker.worktree, "diff", "HEAD")
+        identity = ("candidate:" + str(current_anchor_commit[0]) + ":"
+                    + hashlib.sha256(diff.encode()).hexdigest())
+        with cpu_measurement_window():
+            view, _rows = hotspots.serving_profile(
+                _cpu_arm(direct_launch(), worker.build_dir), frozen_requests,
+                store=args.store, anchor_commit=identity,
+                long_context=gpu_long_context_hook[0])
+    except loop.MeasurementInvalid as exc:
+        retain_profile({"status": "measurement_invalid", "reason": str(exc)[:512]})
+        return
+    except (hotspots.ProfileFailed, OSError, ValueError, RuntimeError, ImportError,
+            subprocess.SubprocessError) as exc:
+        retain_profile({"status": "unavailable", "reason": f"{type(exc).__name__}: {exc}"[:512]})
+        return
+    table = view.get("launch_weighted") or {}
+    retain_profile({
+        "status": "observed", "record": view.get("record"), "key": view.get("key"),
+        "cached": view.get("cached"), "candidate_identity": identity,
+        "launch_weighted_status": table.get("status"),
+        "target_weight_ns_per_token": gsp.kernel_weight(view, hypothesis.target_symbol),
+        "anchor_target_weight_ns_per_token": gsp.kernel_weight(
+            gpu_profile_observation, hypothesis.target_symbol),
+        "top_kernels": [{"kernel": k["kernel"],
+                         "weighted_ns_per_token": k["weighted_ns_per_token"]}
+                        for k in (table.get("kernels") or [])[:8]]})
+
+
+def _record_runtime_adoption(serving_recipe, bundle, args, selected_target, resolved_campaign,
+                             runtime_recipe_reference, epoch, measurement_epoch, current_anchor_commit, runtime_statistical, runtime_arm_declaration, runtime_keep_grade,
+                             runtime_adoptions, runtime_preparation, previous_recipe, selected,
+                             comparison, runtime_pair, previous_floor) -> None:
+    """The durable, auditable receipt of a loop-adopted runtime recipe.
+
+    Written after `RuntimeAdmission.retain` re-derived the admission from its
+    original records and before any further measurement. It names both recipes,
+    the admitted dimension, the admission/selection references, the epoch the
+    comparison was measured under and the epoch input the next launch folds in,
+    the floor it invalidated, and the accumulator it re-based. A receipt failure
+    is loud but never un-does the retained selection (the admission record is
+    the authority; this is its audit view)."""
+    from . import runtime_arms
+    rebased = None
+    try:
+        if serving_recipe is not None and bundle[0].champion_of_record != bundle[0].tip:
+            # COR vs tip was compounded under the previous recipe: that magnitude is
+            # cross-epoch now. It may no longer fire the threshold trigger; the next
+            # keep re-measures tip vs COR under the adopted recipe (both arms), and
+            # the serving gate spends only on that fresh reading.
+            rebased = {"champion_of_record": bundle[0].champion_of_record,
+                       "tip": bundle[0].tip, "keeps": list(bundle[0].keeps),
+                       "compounded_bench_pct_previous_recipe":
+                           bundle[0].compounded_bench_pct,
+                       "measurement_validity_before": bundle[0].measurement_validity,
+                       "measurement_validity_after":
+                           accumulate.MEASUREMENT_STALE_RUNTIME_RECIPE}
+            bundle[0].measurement_validity = accumulate.MEASUREMENT_STALE_RUNTIME_RECIPE
+            bundle[0].save(args.store)
+        body = runtime_arms.adoption_receipt(
+            campaign_id=(resolved_campaign.campaign_id if selected_target is not None
+                         else "ak-loop"),
+            previous=previous_recipe, adopted=selected,
+            admission=comparison.row.get("runtime_admission"),
+            selection_reference=runtime_recipe_reference[0],
+            runtime_pair=runtime_pair.to_dict(), comparison=comparison.row,
+            epoch=epoch, measurement_epoch=measurement_epoch,
+            anchor_commit=current_anchor_commit[0],
+            statistics_sha256=(None if runtime_statistical is None else
+                               hashlib.sha256(json.dumps(runtime_statistical.to_dict(),
+                                   sort_keys=True, separators=(",", ":")).encode()).hexdigest()),
+            declaration=runtime_arm_declaration, invalidated_floor=previous_floor, accumulator=rebased,
+            evidence="keep_grade" if runtime_keep_grade else "strict")
+        path = runtime_arms.write_adoption_receipt(args.store, body)
+        runtime_adoptions.append({"receipt": str(path),
+                                  "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                                  "adopted_surface_digest":
+                                      body["adopted_recipe"]["runtime_surface_digest"]})
+        runtime_preparation["adoptions"] = list(runtime_adoptions)
+        print(f"runtime   ADOPTED runtime recipe "
+              f"{body['adopted_recipe']['runtime_surface_digest'][:12]} "
+              f"(was {body['previous_recipe']['runtime_surface_digest'][:12]}): "
+              f"{json.dumps(body['surface_change'], sort_keys=True)[:300]}; receipt {path}; "
+              f"the next launch opens a new measurement epoch")
+    except Exception as exc:     # noqa: BLE001 -- loud, never un-select
+        print(f"runtime   WARNING adoption receipt failed: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
+        runtime_preparation["adoption_receipt_error"] = f"{type(exc).__name__}: {exc}"[:512]
+
+
+def _gpu_reading(claim_started, cpu_launch, direct_launch, gfx_counter, outcomes=()) -> dict:
+    """Report claim hold and comparison wall time; device utilization is unknown.
+
+    Comparison.device_seconds includes spawn, model loading and CPU gaps. It is
+    retained as wall time only and cannot support a physical idle fraction.
+    """
+    if claim_started() is None:
+        return {}
+    held = time.monotonic() - claim_started()
+    if cpu_launch():  # AKU-23: the CPU arm row carries utilisation, observed or None + reason
+        return {"claim_held_s": round(held, 1), "arm_accounting": arm_accounting.from_cpu_work(held)}
+    walls = ([] if direct_launch() else
+             [(o.comparison.to_dict() or {}).get("device_seconds")
+              for o in outcomes if o.comparison is not None])
+    try:
+        if not walls or any(not isinstance(v, (int, float)) or isinstance(v, bool)
+                            for v in walls):
+            wall_total = None
+        else:
+            values = [float(v) for v in walls]
+            total = sum(values)
+            wall_total = (round(total, 1) if all(math.isfinite(v) and v >= 0
+                                                   for v in values)
+                          and math.isfinite(total) else None)
+    except OverflowError:
+        wall_total = None
+    if gfx_counter[0] is not None:
+        gfx_counter[0].sample("live_status")
+    counter = gfx_counter[0].snapshot() if gfx_counter[0] is not None else None
+    counter_view = ({key: value for key, value in counter.items() if key != "samples"}
+                    if counter is not None else None)
+    acct = arm_accounting.from_gfx_trace(held, counter)  # observed counter only, never wall time
+    return {"claim_held_s": round(held, 1),
+            "gfx_counter": counter_view,
+            "comparison_wall_seconds": wall_total,
+            "device_seconds_under_load": None,
+            "arm_accounting": acct,
+            "gpu_seconds_idle_while_claimed": acct["arm_seconds_idle_while_claimed"],
+            "idle_fraction_while_claimed": acct["idle_fraction_while_claimed"]}
+
+
+def _counter_phase(label, gfx_counter, budget_debit):
+    """Observe phase boundaries without changing the wrapped outcome."""
+    def decorate(function):
+        @wraps(function)
+        def observed(*args, **kwargs):
+            def sample(boundary):
+                try:
+                    if gfx_counter[0] is not None:
+                        gfx_counter[0].sample(f"{label}:{boundary}")
+                except Exception as exc:
+                    print(f"GPU counter observation unavailable: {type(exc).__name__}: {exc}",
+                          file=sys.stderr)
+            sample("start")
+            began = time.monotonic()
+            try:
+                return function(*args, **kwargs)
+            finally:
+                sample("end")
+                if budget_debit[0] is not None:
+                    budget_debit[0](label, time.monotonic() - began)
+        return observed
+    return decorate
+
+def _long_identity_targets_impl(longctx_surface, direct_launch, cpu_measurement_window,
+                                a_build, c_build):
+    long_launch = longctx_surface.launch_for(direct_launch)
+    with cpu_measurement_window():
+        return longctx_surface.identity_targets(_cpu_arm(long_launch, a_build),
+                                                _cpu_arm(long_launch, c_build))
+
+
+def _longctx_dimension_row_impl(longctx_compare, worker):
+    return longctx_compare(worker.build_dir).row
+
+
+def _longctx_prefill_row_impl(longctx_dimension_row, worker):
+    return longctx.prefill_dimension_row(longctx_dimension_row(worker))
+
+
+def _run_is_ancestor(args, a: str, b: str) -> bool:
+    return subprocess.run(["git", "-C", str(args.worktree), "merge-base", "--is-ancestor", a, b],
+                          capture_output=True).returncode == 0
+
+
+def _keep_the_diff_impl(args, worker, hypothesis) -> Path | None:
+    """Preserve every candidate patch, kept or not.
+
+    `pool.reset_to_champion` returns a lane to the champion before each iteration, so
+    a refused patch exists nowhere afterwards. Run 9 lost all ten: seven died on
+    `MUL_MAT failed on ROCm0` and not one of them can now be reproduced, re-read or
+    diagnosed. A negative written up without its diff is not evidence anyone can
+    act on -- and the whole point of durable memory is that the next iteration does
+    not re-derive what this one paid for.
+
+    The filename carries the LANE. Mechanism ids repeat -- one bit-deposit rewrite
+    of `vec_dot_q5_0_q8_1_impl` was proposed 38 times -- so with concurrent lanes a
+    bare `<mechanism>.patch` is two lanes overwriting one file, which is run 9's
+    lost-diffs defect returning by a different route.
+    """
+    name = getattr(hypothesis, "mechanism_id", None) or "unnamed"
+    kept = archive.retain_patch(args.store, worker.worktree, lane=worker.name,
+                                mechanism_id=name)
+    if kept is not None:
+        lineage_capture.capture_at_keep(args.store, worker.worktree, lane=worker.name,
+                                        mechanism_id=name,
+                                        enabled=True if getattr(args, "lineage_capture", False) else None)
+    return kept
+
+
+
+def _local_compiles_impl(gpu_local, *positional, **keyword):
+    if gpu_local is None:
+        return gates.compiles(*positional, **keyword)
+    with gpu_local.build() if gpu_local is not None else nullcontext():
+        paths = (*positional[:2], *(keyword[name] for name in ("source_root", "build_dir")
+                                    if name in keyword))
+        with gpu_local.compile_env(keyword.get("env"), paths=paths) as child_env:
+            keyword["env"] = child_env
+            return gates.compiles(*positional, **keyword)
+
+
+
+def _cpu_measurement_window_impl(gpu_local, cpu_launch, should_stop, args, publish, latest,
+                                 stopping, quiet_depth, cpu_window_ref):
+    """The measurement window of THIS run, CPU or GPU (quiet-window ruling above).
+
+    A CPU run's half of the quiet window is the SHARED gpu-quiet hold that rides
+    with its region claim (`hold_cpu_claim`), so its window is the CPU step alone.
+    """
+    if gpu_local is not None:
+        return gpu_local.compute()
+    quiet = _gpu_quiet_measurement_window(
+        not cpu_launch(), should_stop=should_stop, policy=args.cpu_measurement_gpu_quiet,
+        on_wait=lambda: publish()("running", latest(),
+            step="GPU measurement waiting for gpu-quiet (a CPU measurement holds it shared)"))
+    if not cpu_launch():
+        # G1 GPU measurement boundary: the window check comes first -- a preempted
+        # window never waits on a lock.
+        # Round-2 item 5: the window is checked again AFTER the gpu-quiet wait (a
+        # long wait can outlive the window); the outer boundary also watches
+        # expected_end for the whole measurement (F6).
+        window_required = args.gpu_window == GPU_WINDOW_REQUIRED
+        quiet = _stacked(_gpu_window_boundary(
+            window_required, args.gpu_window_path,
+            on_preempt=lambda: stopping.__setitem__("asked", True)),
+            _stacked(quiet, _gpu_window_boundary(
+                window_required, args.gpu_window_path, watch=False,
+                on_preempt=lambda: stopping.__setitem__("asked", True))))
+    quiet = _reentrant(quiet_depth, quiet)
+    if cpu_window_ref[0] is None:
+        return quiet
+    # A CPU measurement never runs on a yielded claim, wherever it is called from.
+    return _stacked(cpu_window_ref[0].cpu_step("measurement"), quiet)
+
+
+def _build_context(
+    pending_view, args, epoch, current_anchor_commit, resume_carry, resume_bind, history_view, measurement_epoch, cpu_launch, screen_state, screen_hint, direct_launch,
+    experimental, latest, planner_backend, critic_backend, source_instrument, full_cpu_target, hotspot_rows, cpu_profile_observation,
+    node_profile_observation, gpu_profile_observation, longctx_surface, longctx_observation, census, recipe, operator_unblocks, shared_history,
+    feedback, runtime_enabled, runtime_probe_enabled, feedback_anchor, runtime_env_keys, frozen_requests, runtime_preparation, selected_identity, anchor_build, serving_recipe,
+) -> dict:
+    # Accepted hypotheses still pending authoring: the planner must not re-propose
+    # them (the next draws re-author them first). Only present when non-empty.
+    pending_view[0] = pending_hypotheses_view(args, epoch, current_anchor_commit[0],
+                                              carry=resume_carry, **resume_bind)
+    # The status surface's comparability counts move as rows are recorded.
+    history_view[0] = (history_comparability(args.store, epoch=epoch,
+                                             measurement_epoch=measurement_epoch)
+                       or history_view[0])
+    program = loop.program_text()
+    if cpu_launch():
+        program = (
+            "CPU EXPERIMENTAL TARGET — overrides inapplicable GPU instructions below.\n"
+            "Use the selected CPU launch, frozen requests and build recipe in target. "
+            "Do not follow ROCm/rocprofv3, GPU residency, -ngl 99 or GPU-specific "
+            "kernel-probe instructions for this target. Read cpu_profile for original "
+            "request-scoped sampled user-cycle attribution (or its unavailable reason); "
+            "fractions are not wall-time shares or optimization gains. Read node_profile "
+            "for the same anchor's per-op wall SHARES (MUL_MAT dense vs MUL_MAT_ID "
+            "experts vs FLASH_ATTN vs RMS_NORM vs the engram row gather), host phases "
+            "and engram fault mix, measured on an INSTRUMENTED SIBLING build: shares "
+            "transfer to the measured binary, absolutes do not, and it is never a "
+            "baseline nor comparable to any measured number. An absent section is a "
+            "missing instrument, never a zero. Do not invent "
+            "hotspots or reuse GPU timing evidence as CPU evidence. "
+            "Bit-exact FLASH_ATTN_EXT scheduling is an admitted source route "
+            "(cpu_fa_schedule in program.md): the frozen requests run at a KV depth of "
+            "~300 tokens, so the measured attention share understates production, "
+            "where most Q38FN decode wall is above 32k context. "
+            "Author/review source only for source hypotheses; runtime treatments "
+            "have no source edit and are observation-only unless separately admitted. "
+            "The existing loop owns compilation, the CPU "
+            "oracle, resource locking and paired serving measurements. Preserve the "
+            "selected request, cache/seed/speculation and placement conditions. "
+            "Keeps remain on the explicitly selected experimental candidate branch; "
+            "they do not promote the canonical champion or production.\n\n"
+            + program)
+        if screen_state is not None:
+            program = (
+                "CPU COMMON-SCOPE SOURCE WORK: " + screen_state["scope"] + ". "
+                "Both A/B arms share the listed threads and affinity; this is NOT an "
+                "effect from changing those settings. Author source only, not a runtime "
+                "treatment. Reduced positive is provisional until the SAME source/build "
+                "clears the original full target; reduced null cannot globally retire a "
+                "scaling-sensitive mechanism. No NUMA-local or full-scale transfer assumed.\n\n"
+                + program)
+            if screen_hint is not None:
+                program = ("Original common-scope selection hint: " + json.dumps(screen_hint,
+                    sort_keys=True) + ". Propose a source mechanism matching this stated family; "
+                    "the hint is advice, not evidence of full-target transfer.\n\n" + program)
+    elif direct_launch():
+        program = (
+            "EXPLICIT GPU SERVING TARGET — measure the selected server launch and frozen "
+            "requests, not the legacy bench screen. Preserve its GPU/environment, "
+            "cache/seed/speculation and placement settings. Author/review source only; "
+            "the existing loop owns builds, GPU oracle, claim and paired measurements. "
+            "Serving profiling is unavailable; do not invent hotspots or treat the "
+            "legacy bench screen as a profile of these requests. "
+            + ("Keeps remain on the explicit experimental branch, not the canonical champion. "
+               if experimental else "Canonical COR advancement retains the existing bundle gate. ")
+            + "\n\n" + program)
+    # The next actual planner call sees the pool's native, observe-only alarm
+    # projection. `latest` is appended by record_pooled before a lane draws again.
+    # No alarm changes the iteration budget, measurement, or keep rules.
+    loop_health = status.pool_health_signal(
+        [outcome.to_attempt() for outcome in list(latest)],
+        no_measurement_n=args.no_measurement_alarm_n,
+        keep_window=args.keep_rate_alarm_window)
+    return {
+        "program": program,
+        "loop_health_alarm": loop_health,
+        "actor_provenance": {
+            "planner": planner_backend.describe(),
+            "critic": critic_backend.describe(),
+        },
+        # The store the context's paths point into (experiments.md, runtime floors,
+        # cpu/node profiles) and the campaign root holding it (inputs/, state-*/,
+        # sibling stores): the read-only critic's seat allows reads there and denies
+        # every other external path (actors._read_roots). DS41 run 10i: the critic
+        # grepped the campaign root to verify a hypothesis.
+        "actor_read_roots": list(dict.fromkeys(
+            str(p) for p in (Path(args.store).resolve(), Path(args.store).resolve().parent)
+            if str(p) != "/")),
+        **({"serving_instrument": dict(source_instrument)} if source_instrument else {}),
+        **({"cpu_screen": {**screen_state,
+                           "full_target": full_cpu_target.to_dict()}} if screen_state else {}),
+        "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
+        **({"cpu_profile": dict(cpu_profile_observation)} if cpu_launch() else {}),
+        **({"node_profile": dict(node_profile_observation)} if cpu_launch() else {}),
+        **({"gpu_serving_profile": dict(gpu_profile_observation)}
+           if direct_launch() and not cpu_launch() else {}),
+        # AK-AMDAHL-PRUNE: per-kernel e2e ceilings from the AKX-ALL-16 shares file.
+        **({"amdahl_ceilings": _amdahl_assessor(args).planner_view()}
+           if not cpu_launch() and args.amdahl_prune != "off" else {}),
+        **({"gpu_counters": gpu_counter_signals.load_observation(args.gpu_counters)}
+           if args.gpu_counters and not cpu_launch() else {}),
+        **({"long_context": longctx.planner_context(
+            longctx_surface.spec, histogram=longctx_observation["histogram"],
+            cpu_profile=longctx_observation["cpu_profile"],
+            node_profile=longctx_observation["node_profile"])}
+           if longctx_surface is not None else {}),
+        "prior_experiments": prior_experiments(args, epoch, measurement_epoch),
+        **({"accumulator_keeps": keeps} if (keeps := accumulator_keeps(args.store))
+           else {}),
+        **({"pending_accepted_hypotheses": list(pending_view[0])}
+           if pending_view[0] else {}),
+        "current_regime": {
+            "model": {"path": str(args.model)}, "quant": census.quant_label,
+            "backend": "cpu" if cpu_launch() else "gpu",
+            "recipe": {"build_recipe": recipe.to_dict()},
+            "measurement_surface": args.surface},
+        **({"operator_unblock_artifacts": operator_unblocks}
+           if operator_unblocks else {}),
+        **({"shared_prior_experiments": shared_history.recall(scope={
+            "model": str(args.model), "quant": census.quant_label,
+            "backend": "cpu" if cpu_launch() else "gpu", "measurement_surface": args.surface})}
+           if args.shared_history_root else {}),
+        "serving_observations": feedback.context(lambda: serving_beliefs.feedback_scope(
+            epoch=epoch, recipe=serving_recipe(), resolved=feedback_anchor[0],
+            frozen_requests=frozen_requests, anchor_build=anchor_build[0])),
+        # Re-read EVERY iteration, never cached at startup, and hardened so one
+        # unreadable file cannot kill the run through the breaker (R22-6): the
+        # rationale for both lives on `controller.inbox.read_inbox`'s docstring.
+        "inbox": inbox.read_inbox(args.store / "inbox"),
+        **({"runtime_anchor": feedback_anchor[0].to_dict(),
+            "runtime_env_keys": sorted(runtime_env_keys),
+            "runtime_observation_only": not runtime_enabled(),
+            **runtime_treatment_context(args.store, feedback_anchor[0], frozen_requests)}
+           if direct_launch() and screen_state is None
+           and (runtime_enabled() or runtime_probe_enabled) else {}),
+        **({"runtime_preparation": dict(runtime_preparation)}
+           if direct_launch() and screen_state is None else {}),
+        **({"target": {"scope": "experimental candidate, NOT canonical champion",
+                        "recipe": feedback_anchor[0].to_dict(),
+                        "requests": str(args.frozen_prompts),
+                        "build_recipe": recipe.to_dict(),
+                        "hotspot_status": cpu_profile_observation["status"],
+                        **({"long_context": longctx.target_card(longctx_surface.spec)}
+                           if longctx_surface is not None else {}),
+                        **({"common_cpu_scope": {**screen_state,
+                            "original_selection_hint": screen_hint,
+                            "full_transfer_target": full_cpu_target.to_dict()}}
+                           if screen_state is not None else {}),
+                        **({"enrollment": selected_identity} if selected_identity else {})}}
+           if cpu_launch() else {"target": {"scope": "selected GPU serving workload",
+                                         "recipe": feedback_anchor[0].to_dict(),
+                                         "requests": str(args.frozen_prompts),
+                                         "build_recipe": recipe.to_dict(),
+                                         "hotspot_status": gpu_profile_observation["status"],
+                                         "enrollment": selected_identity}}
+           if direct_launch() else {"target": {"scope": "legacy GPU screen, NOT enrolled serving recipe",
+                                         "enrollment": selected_identity}}
+           if selected_identity else {}),
+    }
+
+
+def _accumulator_state(serving_recipe,
+    serving_floor_pct, accum_policy, bundle, args, cor_commit, serving_floor_provenance, serving_floor_carry, serving_floor_unit,
+    last_gate) -> dict | None:
+    """Project the two-tier bundle without upgrading a stale measurement.
+
+    Membership and cadence remain live operational state. Numeric gain/progress
+    are current only when measured for this exact tip; a retained older magnitude
+    is separately labelled historical. None means there is no serving tier.
+    """
+    if serving_recipe() is None:
+        return None
+    thr = (accum_policy.fire_threshold_pct(serving_floor_pct())
+           if serving_floor_pct() is not None else None)
+    validity = accumulate.effective_measurement_validity(bundle[0], args.store)
+    measurement_current = validity == accumulate.MEASUREMENT_CURRENT
+    historical_comp = (None if measurement_current
+                       else round(bundle[0].compounded_bench_pct, 3))
+    comp = (round(bundle[0].compounded_bench_pct, 3)
+            if measurement_current else None)
+    # R23-54: the cadence half of the trigger, so the card can say "2/8 keeps to the
+    # mandatory gate" and name the reason the last gate fired instead of leaving a
+    # reader to infer it from the compounded number that 2026-09-08 proved unreliable.
+    trig = accumulate.gate_trigger(bundle[0], serving_floor_pct(), accum_policy, store=args.store)
+    return {
+        "champion_of_record": cor_commit[0],
+        "accumulator_tip": bundle[0].tip,
+        "keeps": list(bundle[0].keeps),
+        "n_keeps": len(bundle[0].keeps),
+        "measurement_validity": validity,
+        "compounded_bench_pct": comp,
+        "historical_compounded_bench_pct": historical_comp,
+        "serving_floor_pct": serving_floor_pct(),
+        # R23-49's lesson on the surface: a floor nobody could prove belonged to this
+        # recipe looked exactly like one that did. R23-55's, beside it: a floor whose
+        # UNIT nobody recorded looked exactly like one measured in the effect's unit.
+        "serving_floor_provenance": serving_floor_provenance(),
+        # DS41-C69: which sealed parent floor was carried and which A/A admitted it.
+        "serving_floor_carry": serving_floor_carry(), **_floor_registry_receipt(),
+        "serving_floor_unit": serving_floor_unit(),
+        "fire_multiple": accum_policy.fire_multiple,
+        "fire_threshold_pct": round(thr, 3) if thr is not None else None,
+        "progress_fraction": (round(min(comp / thr, 1.0), 4)
+                              if comp is not None and thr and thr > 0 else None),
+        "keeps_since_serving_gate": bundle[0].keeps_since_serving_gate,
+        "gate_every_keeps": accum_policy.every_keeps,
+        "next_trigger": trig,
+        "fires_next": trig is not None,
+        "last_serving_gate": last_gate[0],
+    }
+
+
+def _node_reprofile(profile_arm,
+    *,
+    node_profile_observation, args, screen_state, current_anchor_commit, manifest, anchor_build, publish,
+    latest, local_compiles, build_jobs, build_cpu_list, cpu_measurement_window, selected_identity, resolved_campaign, uncovered_gap_state,
+    direct_launch) -> None:
+    """The SECOND, out-of-band capture of the same anchor and the same requests.
+
+    The perf capture above samples the measured binary and names symbols. The three
+    in-tree instrumented profilers name OPS, host phases and engram faults -- and
+    they exist only in a build configured with `-DGGML_CPU_PROF=ON`, which the
+    measured binary must never be. So this builds a sibling of the current anchor,
+    launches it only here, and reads the shares. It is observation-only: a failure
+    anywhere in it leaves the perf capture standing and never fails the stage.
+    """
+    from . import node_profile
+    node_profile_observation.clear()
+    node_profile_observation["status"] = "not_collected"
+    # Checked even when the sibling is off, and it RAISES: an anchor arm carrying
+    # the instrument's environment is a contaminated measurement, not a profile
+    # that failed to collect.
+    node_profile.refuse_instrumented_measurement(profile_arm)
+    if not args.node_profile:
+        node_profile_observation["reason"] = "instrumented sibling profiling disabled"
+        return
+    scope = (screen_state or {}).get("scope", "full")
+    key = {"anchor_commit": current_anchor_commit[0],
+           "execution_digest": profile_arm.execution_digest,
+           "prompt_manifest_digest": manifest().digest, "scope": scope,
+           "level": args.node_profile_level}
+    retained = node_profile.cached_observation(store_root=args.store, **key)
+    if retained is not None:
+        node_profile_observation.update(retained)
+        node_profile_observation["anchor_commit"] = current_anchor_commit[0]
+        print("profile   reused original instrumented node/host/engram observation")
+        return
+    node_profile_observation.update(node_profile.absent("sibling build not completed"))
+    build_dir = node_profile.profiling_build_dir(anchor_build[0])
+    publish("running", latest, step="instrumented sibling node/host/engram profiling")
+    try:
+        verdict = local_compiles(
+            args.worktree, build_dir,
+            cmake_defines=build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.cmake_defines(),
+            # Only the server: this sibling is never benched and never validated,
+            # so llama-bench/test-backend-ops would be paid for and never read.
+            jobs=build_jobs, cpu_list=build_cpu_list, targets=("llama-server",))
+        if not verdict.passed:
+            node_profile_observation.update(node_profile.absent(
+                f"instrumented sibling build refused at {verdict.gate}: {verdict.reason}"))
+            print(f"profile   NODE UNAVAILABLE ({verdict.gate}: {verdict.reason})")
+            return
+        build = {"dir": str(build_dir),
+                 "recipe": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.name,
+                 "recipe_sha256": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.sha256(),
+                 "anchor_commit": current_anchor_commit[0],
+                 "measured_build_dir": str(anchor_build[0])}
+        from . import roofline_coverage
+        with cpu_measurement_window():
+            observed = node_profile.profile_loop(
+                lambda env: _cpu_arm(direct_launch(), build_dir, extra_env=env),
+                manifest(), store_root=args.store, build=build,
+                level=args.node_profile_level,
+                timeout_s=min(1800, resolved_campaign.resources.stage_timeout_s)
+                if selected_identity else 1800,
+                host_ceiling_gb_s=roofline_coverage.DEFAULT_HOST_CEILING_GB_S)
+    except (node_profile.NodeProfileRefused, serving.ServerDied, loop.MeasurementInvalid,
+            OSError, ValueError, subprocess.SubprocessError) as exc:
+        node_profile_observation.update(node_profile.absent(
+            f"{type(exc).__name__}: {exc}"))
+        print(f"profile   NODE UNAVAILABLE ({exc})")
+        return
+    node_profile_observation.update(observed)
+    node_profile_observation["anchor_commit"] = current_anchor_commit[0]
+    node_profile.retain_observation(observed, store_root=args.store, **key)
+    print(f"profile   node/host/engram {observed['status']}; "
+          f"{len(observed.get('mechanism_shares', []))} grouped op mechanisms")
+    # 2026-10-06 autonomy self-check: refresh the live uncovered-gap reading.
+    # Observe-only -- a failure here must never cost this stage its own result.
+    try:
+        uncovered_gap_state[0] = (
+            (observed.get("roofline_gaps") or {}).get("uncovered_gap"))
+        if uncovered_gap_state[0] and uncovered_gap_state[0].get("triggered"):
+            print("profile   ROOFLINE GAP (where headroom is): "
+                  f"{uncovered_gap_state[0]['uncovered_fraction'] * 100:.1f}% of "
+                  "top-K gap share sits in nodes with NO admitted route")
+    except Exception as exc:  # pragma: no cover - defensive, observe-only
+        print(f"profile   roofline-gap coverage check skipped "
+              f"({type(exc).__name__}: {exc})")
+
+
+def _longctx_reprofile(*,
+    longctx_surface, longctx_observation, direct_launch, anchor_build, publish, latest, cpu_measurement_window, args, current_anchor_commit, local_compiles, build_jobs,
+    build_cpu_list) -> None:
+    """The perf capture and the node profile repeated on the long-context manifest with
+    the anchor's slot restored, and the production context histogram regenerated from
+    the spec's server logs. Observation-only: a failure is recorded, never raised."""
+    if longctx_surface is None:
+        return
+    from . import cpu_profile, node_profile
+    spec = longctx_surface.spec
+    try:
+        longctx_observation["histogram"] = (
+            longctx.parse_server_logs(spec.body["production_logs"])
+            if spec.body["production_logs"] else None)
+    except OSError as exc:
+        longctx_observation["histogram"] = {"status": "unavailable", "reason": str(exc)}
+    long_launch = longctx_surface.launch_for(direct_launch())
+    arm = _cpu_arm(long_launch, anchor_build[0])
+    unavailable = (cpu_profile.CpuProfileRefused, node_profile.NodeProfileRefused,
+                   loop.MeasurementFailed, loop.MeasurementInvalid, OSError, ValueError,
+                   subprocess.SubprocessError)
+    publish("running", latest, step="long-context perf capture at depth (slot restored)")
+    try:
+        with cpu_measurement_window():
+            surface_launch = longctx_surface.ensure_slot(arm)
+            longctx_observation["cpu_profile"] = cpu_profile.profile_loop(
+                arm, longctx_surface.manifest, store_root=args.store,
+                perf_path=args.cpu_profiler, timeout_s=1800,
+                longctx=surface_launch.with_mode("profile"))
+    except cpu_profile.CpuProfileCleanupUncertain:
+        raise  # An unproven terminal child must not overlap the next A/B.
+    except unavailable as exc:
+        longctx_observation["cpu_profile"] = {
+            "status": "unavailable", "reason": f"{type(exc).__name__}: {exc}"[:1024]}
+        longctx_observation["node_profile"] = {"status": "not_collected",
+                                               "reason": "slot or perf capture failed"}
+        print(f"longctx   profile at depth UNAVAILABLE ({exc})")
+        return
+    if not args.node_profile:
+        longctx_observation["node_profile"] = node_profile.absent(
+            "instrumented sibling profiling disabled")
+        return
+    key = {"anchor_commit": current_anchor_commit[0], "execution_digest": arm.execution_digest,
+           "prompt_manifest_digest": longctx_surface.manifest.digest, "scope": "longctx",
+           "level": args.node_profile_level}
+    retained = node_profile.cached_observation(store_root=args.store, **key)
+    if retained is not None:
+        longctx_observation["node_profile"] = retained
+        return
+    build_dir = node_profile.profiling_build_dir(anchor_build[0])
+    publish("running", latest, step="long-context node profile at depth (slot restored)")
+    try:
+        verdict = local_compiles(
+            args.worktree, build_dir,
+            cmake_defines=build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.cmake_defines(),
+            jobs=build_jobs, cpu_list=build_cpu_list, targets=("llama-server",))
+        if not verdict.passed:
+            raise ValueError(f"instrumented sibling build refused at {verdict.gate}: "
+                             f"{verdict.reason}")
+        build = {"dir": str(build_dir),
+                 "recipe": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.name,
+                 "recipe_sha256": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.sha256(),
+                 "anchor_commit": current_anchor_commit[0],
+                 "measured_build_dir": str(anchor_build[0]), "longctx_spec": spec.digest}
+        with cpu_measurement_window():
+            observed = node_profile.profile_loop(
+                lambda env: _cpu_arm(long_launch, build_dir, extra_env=env),
+                longctx_surface.manifest, store_root=args.store, build=build,
+                level=args.node_profile_level, timeout_s=1800,
+                launch=lambda *a, **k: serving._measure_once(*a, longctx=surface_launch, **k))
+    except unavailable as exc:
+        longctx_observation["node_profile"] = node_profile.absent(f"{type(exc).__name__}: {exc}")
+        print(f"longctx   node profile at depth UNAVAILABLE ({exc})")
+        return
+    longctx_observation["node_profile"] = observed
+    node_profile.retain_observation(observed, store_root=args.store, **key)
+
+
+def _accumulate_after_keep_guard(mechanism_id: str, phase_owner, *, serving_recipe, _accumulate_after_keep, args) -> None:
+    """R23-44 compound-then-gate. The accumulator just advanced on a bench keep; batch it
+    and, only when the bundle's compounded bench gain over the champion of record clears
+    `fire_multiple` x the serving floor, spend the serving gate ONCE on the whole bundle.
+
+    No serving_recipe -> no serving tier: the loop reverts to a pure bench-keep loop.
+
+    On a serving win the champion of record advances to the accumulator tip and the
+    headline follows it; on a divergence (bundle cleared bench, serving did not confirm)
+    the champion of record HOLDS, the bundle is KEPT, and the divergence is journaled as
+    planner evidence naming the bundled keeps (operator 2026-09-04)."""
+    if serving_recipe is None:
+        return
+    try:
+        _accumulate_after_keep(mechanism_id, phase_owner)
+    except loop.InteractionRegression:
+        # This is a scientific disposition after a completed rollback, not a
+        # bookkeeping failure. Let iterate record it instead of returning the
+        # now-orphaned candidate commit as a keep.
+        raise
+    except Exception as exc:  # the keep is already committed AND promoted: a
+        # bookkeeping failure here must be LOUD, never a silent un-record (the
+        # 2026-09-06 gen-018 keep vanished from dispositions with no trace).
+        print(f"accum     FAILED — keep {mechanism_id} stands but its bundle entry is "
+              f"lost: {type(exc).__name__}: {exc}")
+        status.write_json(args.store / "serving", f"accum-error-{mechanism_id}.json",
+                          {"mechanism_id": mechanism_id, "error": str(exc)},
+                          prefix=".sv-")
+        raise loop.RunAborted(
+            "committed keep has unresolved accumulator bookkeeping") from exc
+
+
+def _publish_headline(
+        *, experimental,
+        args, current_anchor_commit, anchor_build, build_baseline, anchor_guard_seen, headline_model,
+        bench_surface, epoch, feedback, measured_bench_compare, tg, measured_bench_measure, publish, latest, pp, headline_floor, ubatch,
+        hotspot_rows) -> None:
+    """Refresh the dashboard headline for the current verified anchor.
+
+    The champion arm is `anchor_build[0]`: verified at startup, then rebuilt
+    and guarded by the promotion path after each advance. This reuses that
+    build; `production.refresh` contains baseline/measurement failures.
+    """
+    if experimental:
+        print("headline  experimental serving results only; production comparison not applicable")
+        return
+    outcome = production.refresh(
+        store=args.store, champion_commit=current_anchor_commit[0],
+        champion_build=anchor_build[0], build_baseline=build_baseline,
+        # An excursion-flagged promotion still publishes (the anchor is
+        # hash-proven), but the bundle must carry the session-health note.
+        note=next((g["detail"] for g in anchor_guard_seen[-1:]
+                   if g.get("excursion")), None),
+        compare=lambda base, champ: measured_bench_compare(
+            bench.Arm("production_v9", base / "bin" / "llama-bench"),
+            bench.Arm("champion", champ / "bin" / "llama-bench"),
+            headline_model, pp=pp, tg=tg, pairs=args.pairs,
+            noise_floor_pct=headline_floor, surface=bench_surface, ubatch=ubatch,
+            calibrated=headline_floor is not None),
+        # Carry-over (2026-10-04): with a matching recorded production baseline
+        # the champion is measured ALONE, under exactly this protocol -- the same
+        # model, surface and llama-bench argv `bench.compare` would run.
+        measure=lambda champ: measured_bench_measure(
+            bench.Arm("champion", champ / "bin" / "llama-bench"),
+            headline_model, pp=pp, tg=tg, launches=args.pairs,
+            surface=bench_surface, ubatch=ubatch),
+        protocol=production.protocol(model=headline_model, surface=bench_surface),
+        on_step=lambda label: publish("running", latest,
+                                      hotspot_rows=hotspot_rows, step=label))
+    archive.record(args.store, outcome.to_attempt(), epoch=epoch,
+                   recorded_at=loop._now(), campaign_id="ak-loop",
+                   on_serving_export=feedback.exported)
+    print(f"headline  {outcome.reason}")
+    if outcome.carryover:
+        print(f"headline  carry-over: {outcome.carryover}")
+
+
+def _ppl_contract_tools_build(slot: Path, commit: str, *, args, gpu_local, local_compiles, recipe, build_jobs, build_cpu_list) -> Path:
+    """`slot` when it carries PPL_CONTRACT_TOOL_TARGETS; otherwise a tools build of
+    the SAME commit and recipe (re-review 2026-10-06: an anchor promoted before the
+    ppl_contract obligation lacked the tools, so the first candidate could never
+    pass the gate that would widen the next anchor). Built from the champion tree
+    only when it is clean at `commit`, into the store (the slot is never touched),
+    and admitted only when its library OBJECT digest equals the slot's -- the
+    anchor guard's own identity rule, so its numerics are the slot's. Raises on
+    anything else; callers fail closed."""
+    slot = Path(slot)
+    if all((slot / "bin" / tool).is_file() for tool in gates.PPL_CONTRACT_TOOL_TARGETS):
+        return slot
+    slot_digest = anchor_integrity.object_digest(slot)
+    if slot_digest is None:
+        raise ValueError(f"{slot} has no library objects to prove a tools build against")
+    owner = scratch.current("run") or scratch.active_scope(args.store / "scratch")
+    dest = Path(args.store) / "ppl_contract" / f"tools-{commit[:12]}-{owner.registry.instance}-{owner.id}"
+    marker = dest / "ak_ppl_tools_build.json"
+    def artifact_digest(build: Path) -> str:
+        return hashlib.sha256("\n".join(
+            gates._build_identity(build, tool)
+            for tool in gates.PPL_CONTRACT_TOOL_TARGETS).encode()).hexdigest()
+
+    if marker.is_file():
+        if not any(Path(r["path"]) == dest.absolute() for r in owner.resources):
+            raise ValueError(f"{dest} is not owned by this run; refusing a foreign tools build")
+        # Round-3 review: the marker is never trusted alone -- the directory's
+        # objects AND its linked tools/DSOs are re-hashed on every reuse.
+        body = json.loads(marker.read_text(encoding="utf-8"))
+        if (body.get("commit") != commit or body.get("object_digest") != slot_digest
+                or anchor_integrity.object_digest(dest) != slot_digest
+                or body.get("artifact_digest") != artifact_digest(dest)):
+            raise ValueError(f"{dest} no longer matches its marker / {slot} at "
+                             f"{commit[:12]}; refusing the stale tools build")
+        return dest
+    head = _git(args.worktree, "rev-parse", "HEAD")
+    dirty = _git(args.worktree, "status", "--porcelain", "--untracked-files=no")
+    if head != commit or dirty:
+        raise ValueError(f"champion tree is not clean at {commit[:12]} (HEAD {head[:12]}"
+                         f"{', dirty' if dirty else ''}); cannot build its tools")
+    dest = owner.dir("ppl-tools-build", commit[:12], at=dest)
+    with owner.scope("call", name=f"ppl-tools-compile-{commit[:12]}") as command_scope:
+        # The original CPU owner outlives the cookie-owned compiler sweep.
+        # local_compiles reuses this same-kind owner instead of acquiring again.
+        with (gpu_local.build() if gpu_local is not None else nullcontext()), \
+                scratch.owned_child_env(command_scope, protect=((owner, (dest,)),)) as child_env:
+            verdict = local_compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
+                                     jobs=anchor_build_jobs(recipe, build_jobs),
+                                     cpu_list=build_cpu_list, env=child_env,
+                                     targets=gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS)
+    if not verdict.passed:
+        raise ValueError(f"tools build of {commit[:12]} failed: {verdict.reason}")
+    if _git(args.worktree, "rev-parse", "HEAD") != commit:
+        raise ValueError("champion tree moved during the tools build")
+    built_digest = anchor_integrity.object_digest(dest)
+    if built_digest != slot_digest:
+        raise ValueError(f"tools build of {commit[:12]} is not object-identical to {slot}")
+    marker.write_text(json.dumps({"commit": commit, "object_digest": slot_digest,
+                                  "artifact_digest": artifact_digest(dest),
+                                  "slot": str(slot)}), encoding="utf-8")
+    return dest
+
+
+def _ppl_contract_bisect_build(commit: str, *, current_anchor_commit, ppl_contract_anchor_for_gate, cor_commit, cor_build, args, gpu_local, local_compiles, recipe, build_jobs, build_cpu_list) -> Path:
+    """A tools-carrying build of `commit` for the bundle bisect: the tip reuses the
+    anchor (tools build); any other commit is built from a detached scratch worktree
+    under the store (never the champion tree, which stays at the tip)."""
+    if commit == current_anchor_commit[0]:
+        return ppl_contract_anchor_for_gate()
+    if commit == cor_commit[0] and all((Path(cor_build[0]) / "bin" / tool).is_file()
+                                       for tool in gates.PPL_CONTRACT_TOOL_TARGETS):
+        return Path(cor_build[0])
+    owner = scratch.current("run") or scratch.active_scope(args.store / "scratch")
+    base = Path(args.store) / "ppl_contract" / "bisect" / owner.registry.instance / owner.id
+    src, dest = base / f"src-{commit[:12]}", base / f"build-{commit[:12]}"
+    marker = dest / "ak_bisect_build.json"
+    if marker.is_file() and json.loads(marker.read_text(encoding="utf-8")).get(
+            "commit") == commit:
+        if not any(Path(r["path"]) == dest.absolute() for r in owner.resources):
+            raise ValueError(f"{dest} is not owned by this run; refusing a foreign bisect build")
+        return dest
+    src = owner.worktree(args.worktree, commit, f"ppl-bisect-{commit[:12]}", at=src,
+                         force_remove=False)
+    dest = owner.dir("ppl-bisect-build", commit[:12], at=dest)
+    if _git(src, "rev-parse", "HEAD") != commit or \
+            _git(src, "status", "--porcelain", "--untracked-files=no"):
+        raise ValueError(f"bisect source {src} is not clean at {commit[:12]}")
+    with owner.scope("call", name=f"ppl-bisect-compile-{commit[:12]}") as command_scope:
+        with (gpu_local.build() if gpu_local is not None else nullcontext()), \
+                scratch.owned_child_env(command_scope, protect=((owner, (src, dest)),)) as child_env:
+            verdict = local_compiles(src, dest, cmake_defines=recipe.cmake_defines(),
+                                     jobs=anchor_build_jobs(recipe, build_jobs),
+                                     cpu_list=build_cpu_list, env=child_env,
+                                     targets=gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS)
+    if not verdict.passed:
+        raise ValueError(f"bisect build of {commit[:12]} failed: {verdict.reason}")
+    marker.write_text(json.dumps({"commit": commit}), encoding="utf-8")
+    return dest
+
+
+def _ppl_contract_fold_check(tip_commit: str, *, args, cor_commit, bundle, cpu_launch, ppl_contract_anchor_for_gate, direct_launch, cor_build, build_cpu_list) -> "gates.Verdict | None":
+    """None when the bundle carries no ppl_contract change; else the whole-bundle
+    quality verdict (cor build vs tip build, fixed production reference). Any error
+    while deciding is a refusal, never a pass."""
+    try:
+        changed = _git(args.worktree, "diff", "--name-only", cor_commit[0],
+                       tip_commit).splitlines()
+        ledger = gates.ppl_contract_ledger_read(args.store)
+        # Round-3 review: provenance from HISTORY -- a trailer, or any change to a
+        # ppl_contract path not positively classified non-ppl -- requires the gate.
+        trailer = gates.ppl_contract_range_requires_gate(args.worktree, cor_commit[0],
+                                                         tip_commit, store=args.store)
+        if not gates.ppl_contract_fold_required(bundle[0].keeps, changed, ledger,
+                                                trailer=trailer):
+            return None
+        if cpu_launch() is None:
+            return gates.Verdict("ppl_contract_bundle", False,
+                                 "ppl_contract bundle on a non-CPU target")
+        from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
+        tip_tools = ppl_contract_anchor_for_gate()
+        # Round-9 resolution D: the bundle's "candidate" is the tip's tools build, so
+        # its resolved recipe (and LD_LIBRARY_PATH) is rebound to THAT build.
+        arm = _cpu_arm(direct_launch(), tip_tools)
+        reference = gates.pinned_production_reference(args.store,
+                                                      env=dict(arm.launch_env),
+                                                      candidate_build=tip_tools)
+        # The champion of record's build predates the tools when it was promoted
+        # before the obligation; it cannot be rebuilt here (the champion tree is at
+        # the tip). Judge the bundle against the PINNED reference alone then -- the
+        # strict bar (allowed drift = the bar itself), never a skipped comparison.
+        cor_has_tools = all((Path(cor_build[0]) / "bin" / tool).is_file()
+                            for tool in gates.PPL_CONTRACT_TOOL_TARGETS)
+        return gates.ppl_contract_bundle_gate(
+            cor_build[0] if cor_has_tools else reference, tip_tools,
+            resolved_recipe=arm, model=args.model,
+            threads=len(_parse_cpu_list(build_cpu_list)), cpu_list=build_cpu_list,
+            env=dict(arm.launch_env),
+            reference_build=reference,
+            cache_dir=Path(args.store) / "ppl_contract" / "cache",
+            log_dir=Path(args.store) / "ppl_contract" / "bundle",
+            # The fold judges the WHOLE bundle with the same layer (a) the keep did,
+            # served-shape case set included (review 2026-10-06).
+            served_shape_manifest=Path(args.store) / "served_shape" / "manifest.json")
+    except Exception as exc:  # noqa: BLE001 -- fail CLOSED
+        return gates.Verdict("ppl_contract_bundle", False,
+                             f"bundle quality check errored: {type(exc).__name__}: {exc}")
+
+
+def _ppl_contract_evict_culprit(tip_commit: str, quality=None, *, current_anchor_commit, args, cor_commit, _EvidenceUnavailable, bundle, promote_anchor, ppl_contract_judge_bundle, ppl_contract_bisect_build) -> dict:
+    """Bisect the bundle's ppl-relevant (non-merge) commits for the FIRST whose state
+    NUMERICALLY fails the bundle gate, revert it on the accumulator, rebuild the
+    anchor and drop its mechanism from the bundle. Round-12: unavailable evidence
+    (reference load, tool, parse failure) anywhere -- in the fold verdict, the base
+    or any bisect step -- HOLDS without evicting; and the champion-of-record base
+    state must itself pass before any keep is blamed. Returns evidence; never raises."""
+    try:
+        if quality is not None and gates.ppl_contract_failure_class(quality) != "numerical":
+            return {"result": "held_unavailable",
+                    "reason": "the fold verdict is unavailable evidence, not a "
+                              "numerical failure; nothing evicted"}
+        if tip_commit != current_anchor_commit[0] or \
+                _git(args.worktree, "rev-parse", "HEAD") != tip_commit or \
+                _git(args.worktree, "status", "--porcelain", "--untracked-files=no"):
+            return {"result": "skipped", "reason": "champion tree is not clean at the tip"}
+        shas = _git(args.worktree, "rev-list", "--reverse", "--no-merges",
+                    f"{cor_commit[0]}..{tip_commit}").split()
+        suspects = [sha for sha in shas if gates.ppl_contract_range_requires_gate(
+            args.worktree, f"{sha}^", sha)]
+        if not suspects:
+            return {"result": "no_suspect"}
+        judged = {}
+
+        def fails(sha):
+            if sha not in judged:
+                verdict = ppl_contract_judge_bundle(ppl_contract_bisect_build(sha))
+                if not verdict.passed and \
+                        gates.ppl_contract_failure_class(verdict) != "numerical":
+                    raise _EvidenceUnavailable(f"{sha[:12]}: {verdict.reason}")
+                judged[sha] = not verdict.passed
+            return judged[sha]
+        try:
+            # The base (champion of record) must pass before any keep is blamed.
+            if fails(cor_commit[0]):
+                return {"result": "held_base_fails", "judged": judged,
+                        "reason": "the champion-of-record state itself fails the "
+                                  "bundle gate; no keep is attributable"}
+            last_fails = fails(suspects[-1])
+        except _EvidenceUnavailable as exc:
+            return {"result": "held_unavailable", "judged": judged, "reason": str(exc)}
+        if not last_fails:
+            return {"result": "not_isolated", "judged": judged,
+                    "reason": "the last ppl-relevant keep's state passes; the failure "
+                              "is not attributable to one keep"}
+        lo, hi = 0, len(suspects) - 1
+        try:
+            while lo < hi:
+                mid = (lo + hi) // 2
+                if fails(suspects[mid]):
+                    hi = mid
+                else:
+                    lo = mid + 1
+        except _EvidenceUnavailable as exc:
+            return {"result": "held_unavailable", "judged": judged, "reason": str(exc)}
+        culprit = suspects[lo]
+        subject = _git(args.worktree, "log", "-1", "--format=%s", culprit)
+        done = subprocess.run(["git", "-C", str(args.worktree), "revert", "--no-edit",
+                               culprit], capture_output=True, text=True)
+        if done.returncode != 0:
+            subprocess.run(["git", "-C", str(args.worktree), "revert", "--abort"],
+                           capture_output=True, text=True)
+            return {"result": "revert_conflict", "culprit": culprit, "judged": judged}
+        new_tip = _git(args.worktree, "rev-parse", "HEAD")
+        mechanism = subject.split(":", 1)[0].strip()
+        if mechanism in bundle[0].keeps:
+            bundle[0].keeps.remove(mechanism)
+        bundle[0].tip = new_tip
+        bundle[0].measurement_validity = accumulate.MEASUREMENT_DEFERRED_BENCH
+        bundle[0].save(args.store)
+        promote_anchor()
+        return {"result": "evicted", "culprit": culprit, "mechanism_id": mechanism,
+                "new_tip": new_tip, "judged": judged}
+    except Exception as exc:  # noqa: BLE001 -- a failed bisect leaves the plain hold
+        return {"result": "error", "reason": f"{type(exc).__name__}: {exc}"}
+
+
+def _reprofile(*,
+        cpu_launch, cpu_profile_observation, direct_launch, anchor_build, resumed, args,
+        current_anchor_commit, manifest, screen_state, node_reprofile, longctx_reprofile, publish, latest,
+        cpu_measurement_window, selected_identity, resolved_campaign, gpu_profile_observation, frozen_requests, gpu_long_context_hook, hotspot_rows, pp,
+        tg) -> None:
+    """Re-derive the hotspots from the CURRENT champion.
+
+    A profile names where the time goes in one binary. Once a patch is kept that
+    binary no longer exists, and the accepted change moved the very distribution
+    the next hypothesis should aim at. A continuous run that profiled once would
+    spend hours aiming at a distribution it had already altered.
+    """
+    if cpu_launch():
+        from . import cpu_profile
+        cpu_profile_observation.clear()
+        cpu_profile_observation["status"] = "unavailable"
+        profile_arm = _cpu_arm(direct_launch(), anchor_build[0])
+        retained = resumed.get("cpu_profile_reference") if resumed is not None else None
+        if retained is not None:
+            try:
+                observed = cpu_profile.cached_loop_observation(retained,
+                    store_root=args.store, anchor_commit=current_anchor_commit[0],
+                    execution_digest=profile_arm.execution_digest,
+                    prompt_manifest_digest=manifest().digest,
+                    scope=(screen_state or {}).get("scope", "full"))
+            except (cpu_profile.CpuProfileRefused, OSError, ValueError) as exc:
+                print(f"profile   retained CPU observation unavailable ({exc}); reprofile")
+            else:
+                if observed is not None:
+                    cpu_profile_observation.update(observed)
+                    cpu_profile_observation["anchor_commit"] = current_anchor_commit[0]
+                    print(f"profile   reused original CPU observation; record {observed['record']}")
+                    node_reprofile(profile_arm)
+                    longctx_reprofile()
+                    return
+        publish("running", latest, step="CPU original-request observational profiling")
+        try:
+            with cpu_measurement_window():
+                observed = cpu_profile.profile_loop(
+                    profile_arm, manifest(),
+                    store_root=args.store, perf_path=args.cpu_profiler,
+                    timeout_s=min(1800, resolved_campaign.resources.stage_timeout_s)
+                    if selected_identity else 1800)
+        except cpu_profile.CpuProfileCleanupUncertain:
+            raise  # An unproven terminal child must not overlap the next A/B.
+        except (cpu_profile.CpuProfileRefused, serving.ServerDied, OSError) as exc:
+            cpu_profile_observation["reason"] = f"{type(exc).__name__}: {exc}"[:1024]
+            print(f"profile   CPU UNAVAILABLE ({exc})")
+        else:
+            cpu_profile_observation.update(observed)
+            cpu_profile_observation["anchor_commit"] = current_anchor_commit[0]
+            print(f"profile   CPU {len(observed['hotspots'])} sampled symbols; "
+                  f"record {observed['record']}")
+        node_reprofile(profile_arm)
+        longctx_reprofile()
+        return
+    if direct_launch():
+        # G2: the target's OWN server under rocprofv3 (whole life, windows cut by
+        # timestamp marks), one anchor launch per anchor change, cached by anchor +
+        # execution digest + request digest. mi210_0 is held for this run's life;
+        # gpu-quiet EXCLUSIVE is taken around the launch (quiet window).
+        gpu_profile_observation.clear()
+        gpu_profile_observation["status"] = "unavailable"
+        publish("running", latest, step="GPU serving profile (rocprofv3, one anchor launch)")
+        try:
+            with cpu_measurement_window():
+                view, rows = hotspots.serving_profile(
+                    _cpu_arm(direct_launch(), anchor_build[0]), frozen_requests,
+                    store=args.store, anchor_commit=current_anchor_commit[0],
+                    long_context=gpu_long_context_hook[0])
+        except loop.MeasurementInvalid:
+            raise
+        except (hotspots.ProfileFailed, OSError, ValueError, RuntimeError, ImportError,
+                subprocess.SubprocessError) as exc:
+            gpu_profile_observation["reason"] = f"{type(exc).__name__}: {exc}"[:1024]
+            print(f"profile   GPU SERVING UNAVAILABLE ({exc}); the planner is told so; "
+                  f"legacy bench profile not substituted")
+            return
+        gpu_profile_observation.update(view)
+        hotspot_rows[:] = rows
+        print(f"profile   GPU serving {'reused' if view.get('cached') else 'captured'}; "
+              f"primary {view['primary_window']}; {len(rows)} kernels; record {view['record']}")
+        return
+    try:
+        with cpu_measurement_window():
+            rows = hotspots.profile(anchor_build[0] / "bin" / "llama-bench",
+                                    args.model, pp=pp, tg=tg)
+    except hotspots.ProfileFailed as exc:
+        print(f"profile   UNAVAILABLE ({exc}); the planner is told so rather than "
+              f"left to guess")
+        return
+    hotspot_rows[:] = rows
+    print(f"profile   {len(rows)} hotspots; top: "
+          f"{rows[0].signature[:60] if rows else '(none)'}")
+
+
+def _publish(state: str, outcomes=(), gpu=None, hotspot_rows=(),
+             step: str | None = None, *,
+             uncovered_gap_state, scope_gap_publisher, scope_gap_error, accumulator_state, args,
+             resolved_campaign, epoch, current_anchor_commit, direct_launch, floor, selected_identity,
+             experimental, runtime_status, anchor_guard_seen, pending_view, gpu_reading, live_tail, actor_health, history_view,
+             scratch_registry) -> None:
+    """A loop that only reports when it succeeds looks identical to a stuck one."""
+    # 2026-10-06 autonomy self-check: on confirmed stagnation (flat best-effect
+    # slope, or a long run of measured nulls) WITH an uncovered roofline gap
+    # already triggered, write the durable scope_gap.json naming the uncovered
+    # files/symbols for a human to act on. Entirely observe-only: never widens a
+    # route, never blocks the publish this function exists to make.
+    scope_gap_payload = None
+    try:
+        gap = uncovered_gap_state[0]
+        if gap is not None:
+            if not isinstance(gap, Mapping):
+                raise TypeError("uncovered gap is not a mapping")
+            json.dumps(dict(gap), sort_keys=True)
+            scope_gap_payload = gap
+        attempts = [o.to_attempt() for o in outcomes]
+        scope_gap_path = scope_gap_publisher.update(
+            uncovered_gap_state[0], status.stagnation_signal(attempts))
+        scope_gap_error[0] = None
+        if scope_gap_path is not None:
+            print(f"profile   STAGNATION + UNCOVERED ROOFLINE GAP: wrote {scope_gap_path}")
+    except Exception as exc:
+        error = {"type": type(exc).__name__, "message": str(exc)}
+        if scope_gap_error[0] is None:
+            print(f"profile   scope-gap stagnation hook skipped ({type(exc).__name__}: {exc})")
+        scope_gap_error[0] = error
+    from . import keep_screen as akx_keep_screen
+    current_accumulator = accumulator_state()
+    keep_screen = akx_keep_screen.project(
+        args.store,
+        keeps=(current_accumulator or {}).get("keeps", ()),
+        resolved_targets=(
+            [target.to_dict() for target in resolved_campaign.targets]
+            if resolved_campaign is not None else None),
+        campaign_id=(resolved_campaign.campaign_id
+                     if resolved_campaign is not None else None),
+        manifest_digest=(resolved_campaign.manifest_digest
+                         if resolved_campaign is not None else None),
+        manifest_path=(str(Path(args.resolved_campaign).resolve())
+                       if resolved_campaign is not None else None),
+        stale_after_s=HEARTBEAT_S * 6)
+    status.write(
+        args.store, state=state, epoch=epoch, campaign_id="ak-loop",
+        anchor_commit=current_anchor_commit[0], surface=args.surface,
+        pairs=args.serving_pairs if direct_launch() else args.pairs,
+        noise_floor_pct=floor(), model=str(args.model),
+        source_identity="scripts.kernel_rnd.autokernel.loop.run",
+        outcomes=[o.to_attempt() for o in outcomes],
+        iterations_planned=args.iterations, step=step,
+        champion_head=_git(args.worktree, "rev-parse", "HEAD"),
+        **({"target": selected_identity} if selected_identity is not None else {}),
+        **({"batch": {"output_dir": str(args.out.resolve()), "pid": os.getpid()}}
+           if args.out is not None else {}),
+        **({"baseline_scope": "experimental_candidate_not_champion"} if experimental else {}),
+        **({"runtime_preparation": runtime_status[0]} if runtime_status[0] is not None else {}),
+        anchor_guard=anchor_guard_seen[-1] if anchor_guard_seen else None,
+        accumulator=current_accumulator, keep_screen=keep_screen,
+        pending_hypotheses=pending_view[0],
+        gpu=gpu if gpu is not None else gpu_reading(outcomes),
+        tail_seconds=live_tail[0].elapsed_seconds() if live_tail[0] else None,
+        hotspots=[row.to_dict() for row in hotspot_rows],
+        # heartbeat every HEARTBEAT_S below, so the envelope can be tight: silence now
+        # means the PROCESS is gone, not that a build or a 20-pair bench is long.
+        stale_after_s=HEARTBEAT_S * 6,
+        no_measurement_alarm_n=args.no_measurement_alarm_n,
+        keep_rate_alarm_window=args.keep_rate_alarm_window,
+        actor_health=actor_health(outcomes),
+        comparability=history_view[0],
+        scratch=(scratch_registry[0].stats() if scratch_registry[0] is not None else None),
+        uncovered_gap=scope_gap_payload,
+        scope_gap_error=scope_gap_error[0])
+
+
+def _gate_for(worker, *,
+        recorded_gate, build_cpu_list, runtime_preparation, long_identity_targets, tg, local_op_correctness,
+        direct_launch, runtime_env_keys, cpu_screen, build_jobs, cpu_launch, local_compiles,
+        runtime_probe_enabled, screen_confirmation, recipe, lane_binding, screen_prepared, ubatch,
+        keep_numerics, keep_the_diff, args, screen_state, cpu_measurement_window, frozen_requests, lane_peer_serving, suite_preflight, anchor_build, anchor_gate, runtime_enabled,
+        pp):
+    def gate(hypothesis, paths):
+        if screen_state and hypothesis.runtime_pair is not None:
+            return False, [gates.Verdict("cpu_screen", False,
+                                        "common-scope source screen does not select runtime recipes")]
+        if hypothesis.runtime_pair is not None:
+            if not runtime_enabled() and not runtime_probe_enabled:
+                return False, [gates.Verdict("runtime_preparation", False,
+                    runtime_preparation.get("reason", "strict runtime frame is unavailable"))]
+            pair = hypothesis.runtime_pair
+            if not direct_launch() or paths:
+                return False, [gates.Verdict("runtime_treatment", False,
+                                            "runtime treatment requires the owned serving route and no patch")]
+            allowed_env = runtime_env_keys
+            from .runtime_combinations import established
+            if not established(pair.dimension, allowed_env):
+                return False, [gates.Verdict("runtime_treatment", False,
+                                            "treatment is outside installed runtime fields")]
+            current = _cpu_arm(direct_launch(), anchor_build[0])
+            if pair.anchor.execution_digest != current.execution_digest:
+                raise loop.TailRefused("runtime treatment was proposed against a different anchor recipe")
+            from ..execution.cpu_region_claim import parse_cpu_list
+            if pair.candidate.template.cpu_list is not None and not parse_cpu_list(
+                    pair.candidate.template.cpu_list).issubset(parse_cpu_list(build_cpu_list)):
+                return False, [gates.Verdict("runtime_treatment", False,
+                                            "runtime treatment exceeds the owned CPU allocation")]
+            return gates.run_all(lambda: local_op_correctness(
+                anchor_build[0], backend="CPU" if cpu_launch() else direct_launch().template.device,
+                resolved_recipe=pair.candidate))
+        # The diff first: a build that fails still leaves a patch worth reading,
+        # and this is the last moment it exists on disk.
+        keep_the_diff(worker, hypothesis)
+        changed = tuple(archive._git(worker.worktree, "diff", "HEAD", "--name-only").splitlines())
+        untracked = tuple(archive._git(worker.worktree, "ls-files", "--others",
+                                       "--exclude-standard", "--", "ggml/src/", "src/").splitlines())
+        cpu_ops = worker.worktree / "ggml/src/ggml-cpu/ops.cpp"
+        iqk_rows_path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
+        iqk_gemm_path = "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"
+        iqk_paths = {iqk_rows_path, iqk_gemm_path}
+        # Widened single-file CPU routes (gates.CPU_SOURCE_ROUTES): same pre-build
+        # inputs as the IQK routes (post-image, HEAD image, -U0 hunks).
+        route_paths = set(gates.CPU_SOURCE_ROUTE_PATHS)
+        # AKX-AUTO-9: a lone compiled CPU file no hand-listed route names is governed by
+        # its generated default route (gates.default_cpu_route; flag AK_DEFAULT_ROUTE_ADMISSION).
+        if len(changed) == 1 and gates.default_cpu_route(changed[0]) is not None:
+            route_paths.add(changed[0])
+        # ops.cpp hosts a route AND the older GATED_DELTA_NET rule: a change is governed
+        # by a widened route only when its target symbol resolves to one.
+        route_edit = len(changed) == 1 and changed[0] in route_paths and \
+            gates.cpu_source_route(changed[0], hypothesis.target_symbol) is not None
+        # Multi-file routes (gates.CPU_MULTI_FILE_ROUTES, 2026-10-04): a model-specific
+        # fused op or the plan-time hook, named by the target symbol, whose target
+        # surface is one of the route's files.
+        multi_edit = not route_edit and any(
+            hypothesis.target_surface in r.paths
+            for r in gates.cpu_multi_file_routes(hypothesis.target_symbol))
+        if len(changed) == 1 and changed[0] in iqk_paths and not cpu_launch():
+            return False, [gates.Verdict(
+                "op_scope", False, "CPU IQK source route requires a CPU target recipe")]
+        if (route_edit or multi_edit) and not cpu_launch():
+            return False, [gates.Verdict(
+                "op_scope", False, "CPU source route requires a CPU target recipe")]
+        scope_source = (cpu_ops if changed == ("ggml/src/ggml-cpu/ops.cpp",) else
+                        worker.worktree / changed[0]
+                        if len(changed) == 1 and changed[0] in iqk_paths | route_paths
+                        else None)
+        scope_texts = dict(
+            source_text=(scope_source.read_text(encoding="utf-8")
+                         if scope_source is not None else None),
+            pre_source_text=(archive._git(
+                worker.worktree, "show",
+                "HEAD:" + str(scope_source.relative_to(worker.worktree)))
+                if scope_source is not None else None),
+            patch_text=(archive._git(worker.worktree, "diff", "-U0", "HEAD", "--",
+                                     str(scope_source.relative_to(worker.worktree)))
+                        if scope_source is not None else None))
+        file_texts = None
+        if multi_edit:
+            def _texts(path):
+                full = worker.worktree / path
+                try:
+                    head = archive._git(worker.worktree, "show", "HEAD:" + path)
+                except Exception:  # noqa: BLE001 -- a path new to HEAD: refused as empty
+                    head = None
+                return (full.read_text(encoding="utf-8") if full.is_file() else None, head,
+                        archive._git(worker.worktree, "diff", "-U0", "HEAD", "--", path))
+            file_texts = {path: _texts(path) for path in changed}
+        gpu_paths = [path for path in changed if path.startswith("ggml/src/ggml-cuda/")]
+        if gpu_paths:
+            # GPU-POOL-1 (2026-10-04): device memory kept across HIP-graph captures
+            # must not come from ctx.pool() (gates.gpu_graph_pool_hold_refusal).
+            pool_refusal = gates.gpu_graph_pool_hold_refusal(archive._git(
+                worker.worktree, "diff", "-U0", "HEAD", "--", *gpu_paths))
+            if pool_refusal is not None:
+                return False, [gates.Verdict("op_scope", False, pool_refusal)]
+        scope = gates.affected_op_scope(changed + untracked,
+                                         target_surface=hypothesis.target_surface,
+                                         target_symbol=hypothesis.target_symbol,
+                                         file_texts=file_texts, **scope_texts)
+        if isinstance(scope, gates.Verdict):
+            return False, [scope]
+        # AK-FAILRULE-1 rule 1: an empty oracle suite on the ANCHOR binary is
+        # refused here, before the build (cached per anchor digest + op).
+        suite_refusal = suite_preflight.refusal(
+            anchor_build[0], scope,
+            "CPU" if cpu_launch() else (direct_launch().template.device
+                                      if direct_launch() else "ROCm0"))
+        if suite_refusal is not None:
+            return False, [gates.Verdict(prebuild_rules.SUITE_EMPTY_GATE, False,
+                                         suite_refusal)]
+        # Several routes may name one body (2026-10-03): the gate below must be the
+        # one of the route that ADMITTED this patch, never merely the first named.
+        admitted_route = (gates.admit_cpu_route(changed[0], hypothesis.target_symbol,
+                                                **scope_texts)[0]
+                          if route_edit else None)
+        if multi_edit:
+            admitted_route, multi_refusal = gates.admit_cpu_multi_route(
+                tuple(sorted(changed + untracked)), hypothesis.target_symbol, file_texts)
+            if admitted_route is None or multi_refusal is not None:
+                # The scope passed under another rule (e.g. ops.cpp GATED_DELTA_NET).
+                admitted_route, multi_edit = None, False
+
+        def identity_targets(route, arm):
+            """This lane's target, then the lane binding's peers when the route asks."""
+            targets = [(str(args.target_id or "own"), _cpu_arm(direct_launch(), anchor_build[0]),
+                        arm, frozen_requests)]
+            if lane_binding is None or route.identity_targets == "own":
+                return targets + long_targets(route)
+            if route.identity_targets == "shared_peers":
+                from . import lane_targets
+                if not lane_targets.needs_cross_check(changed + untracked,
+                                                      lane_binding.lane.exclusive_paths):
+                    return targets + long_targets(route)
+            for peer in lane_binding.peers:
+                peer_launch, peer_requests = lane_peer_serving[peer.entry.name]
+                targets.append((peer.entry.target_id, _cpu_arm(peer_launch, anchor_build[0]),
+                                _cpu_arm(peer_launch, worker.build_dir), peer_requests))
+            return targets + long_targets(route)
+
+        def long_targets(route):
+            """The long-context manifest's identity targets, once the long surface
+            installs `long_identity_targets[0]` (audit 2026-10-04 C1/C2)."""
+            if not getattr(route, "long_identity", False) or long_identity_targets[0] is None:
+                return []
+            return list(long_identity_targets[0](anchor_build[0], worker.build_dir))
+
+        def identity_reference(route, arm):
+            targets = identity_targets(route, arm)
+            if len(targets) == 1 and not route.identity_arch:
+                return gates.check_model_output_identity(
+                    anchor_recipe=targets[0][1], candidate_recipe=arm,
+                    requests=frozen_requests, window=cpu_measurement_window,
+                    repeats=route.identity_repeats)
+            return gates.check_model_identity_targets(
+                targets, window=cpu_measurement_window, repeats=route.identity_repeats,
+                required_arch=route.identity_arch)
+
+        # The admitting route's gate: its witness (unless the whole model is its only
+        # reference) and, for a model_identity route, greedy identity on its targets.
+        route_references = []
+        keep_numerics[hypothesis.mechanism_id] = {"class": "reference"}
+        if route_edit or multi_edit:
+            from . import cpu_route_witness
+            witness = (cpu_route_witness.WITNESSES.get(admitted_route.route)
+                       if admitted_route is not None else None)
+            if witness is None or witness.reference not in ("model_identity",
+                                                             "fa_anchor_bits",
+                                                             "ppl_contract"):
+                route_references.append(lambda arm: gates.check_cpu_route_reference(
+                    worker.build_dir, worker.worktree, resolved_recipe=arm,
+                    path=changed[0] if route_edit else hypothesis.target_surface,
+                    target_symbol=hypothesis.target_symbol,
+                    route_name=admitted_route.route if admitted_route is not None else None))
+            if (admitted_route is not None and admitted_route.numerics == "ppl_contract"):
+                # 2026-10-06 operator amendment: a ppl_contract route NEVER folds on
+                # bench evidence alone. This is a `route_references` entry -- a
+                # BLOCKING pre-keep check exactly like every other route reference --
+                # so the four layers in `gates.ppl_contract_gate` refuse the keep
+                # outright before any `pool.advance_champion`, never after.
+                #
+                # PRODUCTION-LENGTH PROMPTS (review 2026-10-06): the frozen requests
+                # are (prompt_id, body) tuples of ~100-token probes -- the first cut
+                # read `.prompt` off them and always got NONE. Layer (c) now defaults
+                # to two pinned wikitext2 slices (>= 4096 tokens each, checked from
+                # the tool's own count), disjoint from layer (b)'s ppl window.
+                # The FIXED reference is the frozen production CPU kernel store: the
+                # anchor advances on every keep, so anchor-only bars would compound.
+                from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
+                # Marked durably BEFORE any layer runs: the fold-time bundle gate
+                # keys on this ledger (Bundle.keeps are mechanism ids).
+                try:
+                    gates.ppl_contract_ledger_add(args.store, hypothesis.mechanism_id)
+                except (OSError, ValueError) as exc:
+                    return False, [gates.Verdict(
+                        "ppl_contract", False,
+                        f"ppl_contract admission could not be recorded: {exc}")]
+                def _ppl_gate(arm, route=admitted_route):
+                    # Operator tiering (2026-10-06): a candidate pays layer (a) only;
+                    # (b)-(d) run once per bundle at the fold (ppl_contract_fold_check),
+                    # so no anchor tools build or reference pin is needed here.
+                    return gates.ppl_contract_gate(
+                        anchor_build[0], worker.build_dir, route=route,
+                        resolved_recipe=arm, model=args.model,
+                        threads=len(_parse_cpu_list(build_cpu_list)),
+                        cpu_list=build_cpu_list, env=dict(arm.launch_env),
+                        log_dir=Path(args.store) / "ppl_contract" / route.route,
+                        served_shape_manifest=Path(args.store) / "served_shape"
+                                              / "manifest.json")
+                route_references.append(_ppl_gate)
+            if witness is not None and witness.reference == "fa_anchor_bits":
+                # cpu_fa_schedule (audit 2026-10-04 C2/C3): the case-set corpus, bit
+                # identity with the ANCHOR build (including DS41 real masks), then
+                # the paired FA perf screen
+                # before the serving A/B; model identity follows below.
+                route_references.extend((
+                    lambda arm: gates.check_cpu_fa_case_set(worker.build_dir,
+                                                            resolved_recipe=arm),
+                    lambda arm: gates.check_cpu_fa_reference(
+                        anchor_build[0], worker.build_dir, worker.worktree,
+                        anchor_recipe=_cpu_arm(direct_launch(), anchor_build[0]),
+                        candidate_recipe=arm, window=cpu_measurement_window),
+                    lambda arm: gates.check_cpu_fa_real_mask_identity(
+                        anchor_build[0], worker.build_dir, worker.worktree,
+                        capture_dir=Path(args.store) / "cpu_fa_real_masks",
+                        anchor_recipe=_cpu_arm(direct_launch(), anchor_build[0]),
+                        candidate_recipe=arm, window=cpu_measurement_window),
+                    lambda arm: gates.check_cpu_fa_perf_screen(
+                        anchor_build[0], worker.build_dir,
+                        anchor_recipe=_cpu_arm(direct_launch(), anchor_build[0]),
+                        candidate_recipe=arm, window=cpu_measurement_window)))
+            if admitted_route is not None and admitted_route.model_identity:
+                route_references.append(
+                    lambda arm: identity_reference(admitted_route, arm))
+            if (admitted_route is not None and admitted_route.numerics == "bit_exact"
+                    and witness is not None
+                    and witness.reference in ("model_identity", "fa_anchor_bits")):
+                keep_numerics[hypothesis.mechanism_id] = {
+                    "class": "bit_exact", "route": admitted_route.route,
+                    "oracle_name": witness.reference,
+                    "changed": sorted(set(changed + untracked))}
+            elif admitted_route is not None and admitted_route.numerics == "ppl_contract":
+                keep_numerics[hypothesis.mechanism_id] = {"class": "ppl_contract"}
+        # 2026-10-21 (operator, DS41-1017): on a lane with a CPU_REPACK case set every CPU
+        # keep must run the REPACKED expert kernel the server uses (test-backend-ops never
+        # does). A ppl_contract route already runs it inside layer (a)
+        # (`gates.ppl_contract_op_nmse`); this covers every other route and edit. Fails
+        # closed: no manifest in `<store>/cpu_repack/` refuses the keep.
+        repack_lane = gates._lane_for_model(args.model)
+        def graph_kld_check():
+            # AK-FUSE-GRAPH-KLD-1 / P-AK-SEARCH-1-A5: a patch fusing across graph nodes
+            # must pass the ratified graph-level KLD/PPL/same-top clauses (or refuse).
+            return gates.graph_kld_keep_check(
+                changed + untracked, backend="cpu" if cpu_launch() else "gpu",
+                anchor_build=anchor_build[0], candidate_build=worker.build_dir,
+                base_dir=Path(args.store) / "graph_kld" / archive._git(
+                    worker.worktree, "rev-parse", "HEAD").strip())
+        graph_kld_extra = gates.touches_graph_fusion(changed + untracked)
+        repack_extra = bool(cpu_launch() and cpu_repack_cases.lane_has_cases(repack_lane)
+                            and not (admitted_route is not None
+                                     and admitted_route.numerics == "ppl_contract"))
+
+        # AK-PORT-LB1.1: a candidate record declaring non-bit-exact + multi-row (N>1) gets the
+        # noise-relative tolerance gate; no record / bit-exact / single-row adds nothing.
+        noise_checks = gates.noise_relative_chain_checks(
+            Path(args.store) / "noise_relative" / f"{hypothesis.mechanism_id}.json")
+        def repack_check(arm):
+            return gates.check_cpu_repack_case_set(
+                worker.build_dir, resolved_recipe=arm,
+                manifest_path=cpu_repack_cases.manifest_path(args.store), lane=repack_lane,
+                include_shared=cpu_repack_cases.touches_repack(changed + untracked))
+        if screen_confirmation is not None:
+            cpu_screen().verify_restored(screen_confirmation, worker, screen_prepared["launch"],
+                                       args.store, hypothesis)
+            # Original candidate executable/DSOs already proved, source restored
+            # exactly. Re-run the ordinary oracle at FULL conditions, no rebuild.
+            arm = _cpu_arm(direct_launch(), worker.build_dir)
+            checks = [lambda op=op: local_op_correctness(
+                worker.build_dir, op=op, backend="CPU", resolved_recipe=arm)
+                for op in scope]
+            if "GATED_DELTA_NET" in scope:
+                checks.append(lambda: gates.check_cpu_gdn_reference(
+                    worker.build_dir, worker.worktree, resolved_recipe=arm))
+            if cpu_launch() and len(changed) == 1 and changed[0] in iqk_paths:
+                checks.append(lambda: gates.check_cpu_iqk_reference(
+                    worker.build_dir, worker.worktree, resolved_recipe=arm,
+                    target_symbol=hypothesis.target_symbol))
+            if cpu_launch() and (route_edit or multi_edit):
+                checks.extend(lambda ref=ref: ref(arm) for ref in route_references)
+            if repack_extra:
+                checks.append(lambda: repack_check(arm))
+            if graph_kld_extra:
+                checks.append(graph_kld_check)
+            checks.extend(noise_checks)
+            return gates.run_all(*checks)
+        # Callables, so a failed build actually short-circuits: an eagerly
+        # evaluated op_correctness ran the suite against a stale binary and blamed
+        # this patch.
+        #
+        # `jobs=64, cpu_list="96-183"` is per BUILD, not per run. Under `--workers`
+        # this is safe only because the build runs inside the serialized tail: two
+        # concurrent 64-job builds would oversubscribe an 88-core lane and every
+        # build time recorded during the overlap would be a measurement of
+        # contention.
+        # Operator tiering: the candidate runs only layer (a) (test-backend-ops), so
+        # its build needs no extra tools; the anchor carries them for the fold.
+        checks = [
+            lambda: local_compiles(worker.worktree, worker.build_dir,
+                                   cmake_defines=recipe.cmake_defines(),
+                                   jobs=build_jobs, cpu_list=build_cpu_list,
+                                   **({"targets": gates.PROMOTION_TARGETS}
+                                      if direct_launch() else
+                                      {"targets": gates.DEFAULT_TARGETS
+                                       + ("llama-perplexity",)}
+                                      if graph_kld_extra else {})),
+        ]
+        if cpu_launch():
+            checks.extend(lambda op=op: local_op_correctness(worker.build_dir, op=op,
+                          require_reference=False, backend="CPU",
+                          resolved_recipe=_cpu_arm(direct_launch(), worker.build_dir))
+                          for op in scope)
+        else:
+            # GPU: a seeded-reference refusal is anchor-relative -- the anchor runs
+            # the identical gate once per (anchor, op) and, if it fails too, the
+            # refusal is the harness's oracle_unavailable, not a wrong patch.
+            checks.extend(lambda op=op: gates.anchor_relative_correctness(
+                local_op_correctness(worker.build_dir, op=op, require_reference=True),
+                lambda: anchor_gate(op)) for op in scope)
+        if cpu_launch() and "GATED_DELTA_NET" in scope:
+            checks.append(lambda: gates.check_cpu_gdn_reference(
+                worker.build_dir, worker.worktree,
+                resolved_recipe=_cpu_arm(direct_launch(), worker.build_dir)))
+        if cpu_launch() and len(changed) == 1 and changed[0] in iqk_paths:
+            checks.append(lambda: gates.check_cpu_iqk_reference(
+                worker.build_dir, worker.worktree,
+                resolved_recipe=_cpu_arm(direct_launch(), worker.build_dir),
+                target_symbol=hypothesis.target_symbol))
+        if cpu_launch() and (route_edit or multi_edit):
+            checks.extend(lambda ref=ref: ref(_cpu_arm(direct_launch(), worker.build_dir))
+                          for ref in route_references)
+        if repack_extra:
+            checks.append(lambda: repack_check(_cpu_arm(direct_launch(), worker.build_dir)))
+        if not direct_launch():
+            checks.extend((
+                lambda: gates.deterministic(worker.build_dir, args.model),
+                lambda: gates.no_fallback_dispatch(
+                    worker.build_dir, args.model, pp=pp, tg=tg, ubatch=ubatch),
+            ))
+        if graph_kld_extra:
+            checks.append(graph_kld_check)
+        checks.extend(noise_checks)
+        # Build owns only its narrow CPU claim. Every GPU correctness /
+        # dispatch invocation owns quiet separately, including anchor fallback.
+        if not cpu_launch():
+            compiled = checks.pop(0)()
+            if not compiled.passed:
+                return False, [compiled]
+            with cpu_measurement_window():
+                passed, verdicts = gates.run_all(*checks)
+            return passed, [compiled, *verdicts]
+        return gates.run_all(*checks)
+    return recorded_gate(gate)
+
+
+def _measure_for(worker, *, disable_runtime,
+        recipe, runtime_enabled, record_candidate_serving_profile, runtime_preparation, calibrated, ubatch,
+        report_runtime_progress, runtime_arm_declaration, keep_grade_runtime_compare, feedback,
+        cpu_measurement_window, anchor_build, pp, measured_bench_compare, longctx_surface, longctx_compare,
+        direct_launch, tg, measurement_epoch, cpu_launch, runtime_owner, cpu_compare, floor, frozen_requests, args,
+        runtime_keep_grade):
+    def _tripwire(compared):
+        from . import same_code_tripwire
+        serving_launch = None
+        if direct_launch() is not None:
+            # The resolved execution view keeps exact argv/env/workload but
+            # normalizes the build path and listen port. The code manifest
+            # below binds the executable/DSOs by code sections, not full-file
+            # linker metadata (RUNPATH legitimately changes across builds).
+            serving_launch = direct_launch()._normalized_execution_dict()
+            serving_launch["command_argv"][0] = "<measured-code-manifest>"
+            serving_launch["artifacts"].pop("executable", None)
+            serving_launch["artifacts"].pop("dsos", None)
+        return same_code_tripwire.inspect(
+            args.store, compared, anchor_build=anchor_build[0],
+            candidate_build=worker.build_dir,
+            library=same_code_tripwire.library_for(recipe, direct_launch()),
+            measurement_epoch=measurement_epoch,
+            launch_identity={"build_recipe": recipe.to_dict(),
+                             "serving_launch": serving_launch,
+                             "model": str(args.model), "surface": args.surface,
+                             "pp": pp, "tg": tg, "ubatch": ubatch,
+                             "declared_pairs": (args.serving_pairs if direct_launch()
+                                                else args.pairs)})
+
+    def measure(hypothesis, paths):
+        if hypothesis.runtime_pair is not None:
+            pair = hypothesis.runtime_pair
+            from . import runtime_arms, runtime_calibration
+            if runtime_keep_grade and runtime_arms.is_declared(pair, runtime_arm_declaration):
+                return keep_grade_runtime_compare(pair)
+            if runtime_enabled():
+                try:
+                    def strict_compare():
+                        row = runtime_owner[0].compare(pair)
+                        if row.get("belief_export_receipt"):
+                            feedback.exported(Path(row["belief_export_receipt"]))
+                        return row
+                    return _serving_comparison(strict_compare,
+                        "experimental_runtime_treatment_not_source_champion",
+                        measurement_window=cpu_measurement_window)
+                except runtime_calibration.RuntimeCalibrationRefused as exc:
+                    if isinstance(exc, runtime_calibration.RuntimeLaunchBudgetExhausted):
+                        disable_runtime()
+                        runtime_preparation.update(status="budget_exhausted", reason=str(exc))
+                        report_runtime_progress()
+                        raise loop.TailRefused("runtime preparation budget ended; original prefix retained, "
+                                               "source research and other targets remain available") from exc
+                    runtime_preparation.update(status="observed_not_admitted", reason=str(exc))
+                    report_runtime_progress()
+                    print(f"runtime admission unavailable: {exc}; retaining unqualified observation")
+            return _serving_comparison(lambda: serving.compare(
+                pair.anchor.template, anchor_build[0], anchor_build[0],
+                pairs=args.serving_pairs, floor_pct=None, port=pair.anchor.port,
+                anchor_resolved_recipe=pair.anchor, candidate_resolved_recipe=pair.candidate,
+                frozen_requests=frozen_requests, runtime_pair=pair),
+                "experimental_runtime_treatment_not_source_champion",
+                measurement_window=cpu_measurement_window)
+        if longctx_surface is not None and longctx.attention_route(hypothesis):
+            # Audit C1: an attention route is judged AT DEPTH first; the short
+            # surface becomes its no-regression gate at keep (commit_pooled).
+            return _tripwire(longctx_compare(worker.build_dir))
+        if direct_launch():
+            compared = cpu_compare(anchor_build[0], worker.build_dir)
+            if not cpu_launch():
+                record_candidate_serving_profile(compared, worker, hypothesis)
+            return _tripwire(compared)
+        # AKX-ALL-29.3: a HIP candidate whose gfx90a kernel bodies equal the
+        # anchor's is not timed. None (hash unavailable, bodies differ, CPU
+        # recipe) falls through to the normal measurement unchanged.
+        if str(dict(recipe.cmake_defines()).get("GGML_HIP", "ON")).upper() != "OFF":
+            same = noop_build.identical_bodies(
+                noop_build.find_hip_library(anchor_build[0]),
+                noop_build.find_hip_library(worker.build_dir))
+            if same is not None:
+                raise loop.NoOpBuild(same)
+        # The anchor build is SHARED across lanes and only ever read, so it needs
+        # no per-lane copy; the candidate binary is per lane because each lane
+        # built it from its own patch.
+        return _tripwire(measured_bench_compare(
+            bench.Arm("anchor", anchor_build[0] / "bin" / "llama-bench"),
+            bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
+            args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor(),
+            surface=args.surface, ubatch=ubatch, calibrated=calibrated()))
+    return measure
+
+
+def _run_pooled(*, set_runtime_selection,
+        args, runtime_enabled, runtime_owner, screen_confirmation, epoch, current_anchor_commit,
+        measurement_epoch, launch_actor_config, resume_carry, resume_bind, scratch_registry,
+        runtime_arm_declaration, author_plan, build_context, gate_for, measure_for, should_stop, experimental,
+        direct_launch, cpu_launch, cpu_window_ref, critic_backend, longctx_runtime_gate,
+        gpu_profile_observation, record_runtime_adoption, keep_timer, runtime_arm_events, lane_binding,
+        census, runtime_preparation, full_cpu_target, ubatch, original_source_keeps, live_tail, pending_view,
+        codegen_by_head, build_cpu_list, screen_state, runtime_store, planner_backend, cpu_measurement_window,
+        feedback, lane_actors, heldout_requests, calibrated, measured_serving_compare, anchor_build,
+        build_jobs, selected_identity, local_op_correctness, runtime_recipe_reference, cpu_screen, breaker,
+        tg, lane_targets, keep_the_diff, report_runtime_progress, pp, gfx_counter, lane_backends,
+        confirm_measure, longctx_surface, confirm, frozen_requests, publish, lane_actor_models,
+        accumulate_after_keep, measured_source_comparisons, feedback_anchor, promote_anchor, screen_prepared,
+        lineage_recorded_outcomes, recipe, lane_peer_serving, resolved_campaign, keep_timing_by_head,
+        keep_dims, keep_dimension_measures, variance_keep_by_head, runtime_keep_grade, source_instrument,
+        longctx_keep_gate, serving_recipe, latest, keep_numerics, cor_build, keep_stage, floor_request_digest, local_compiles, reprofile, invalidate_source_floor, hotspot_rows,
+        same_state) -> pool.PoolResult:
+    """Drive the loop across N detached lanes. THE run path -- the sequential
+    `loop.run` wiring was deleted 2026-08-31, and the `loop.run` seam itself on
+    2026-09-01 (R21-7): `iterate` under `pipeline.run_pool` is the only loop.
+
+    WHAT IS PER-LANE
+      * the worktree and the candidate build directory (`pipeline.Worker`);
+      * the planner and the critic, because each holds a workspace path;
+      * the saved patch filename, which carries the lane;
+      * the phase clock -- `pool.PhaseClock`, whose totals are LANE-seconds and
+        can legitimately sum to more than the wall clock.
+
+    WHAT STAYS GLOBAL
+      * the GPU claim: one `flock` for the process. A second `hold()` on a second
+        descriptor in this same process would refuse itself.
+      * the anchor build, which is only ever read;
+      * `build_context`, `args.store` and the status file. `record` and the status
+        publish both happen under the pipeline's outcomes lock, so they are
+        serialized -- at the cost of a slow status write briefly blocking every
+        lane's recording.
+      * `epoch`: pinned to the champion the run STARTED from, which is what makes
+        the archive rows comparable across the run.
+    """
+    candidate_integrity = {}
+    integrity_evidence = {}
+    # What a checkpoint is bound to, and matched against on the next launch.
+    resume_target = resume_mod.target_identity(measurement_surface=args().surface,
+                                               model=args().model)
+    resume_queue = [None]
+
+    def settle_resume(outcome) -> None:
+        # Lineage for the claim; a ledger fault never costs the durable row.
+        if outcome.resumed_from is None or resume_queue[0] is None:
+            return
+        try:
+            with resume_mod.ClaimLedger(args().store) as ledger:
+                # A validity outcome consumes the claim; an infrastructure
+                # lane_error releases it for a bounded retry (resume.py).
+                disposition = ledger.settle_outcome(
+                    outcome.resumed_from, current_anchor_commit()[0],
+                    result_status=outcome.status,
+                    detail=(outcome.reasons[0][:2000] if outcome.reasons else None))
+            if disposition in {"released", "exhausted"}:
+                print(f"resume    {outcome.resumed_from}: {outcome.status} is an "
+                      f"infrastructure fault -> claim {disposition}"
+                      + (" (the next launch retries it)" if disposition == "released"
+                         else " (infrastructure retry budget spent; consumed)"),
+                      flush=True)
+        except Exception as exc:      # noqa: BLE001
+            print(f"warning: resume claim settle failed: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+
+    def validate_pooled(worker, hypothesis, paths):
+        # A byte-bounded or otherwise partial census legitimately has no
+        # dominant quant.  Candidate integrity must still inspect the full
+        # patch and bench-shape literals; an absent optional type constraint
+        # is not a malformed candidate (and must never become a lane error).
+        quant_tokens = _candidate_quant_tokens(census().dominant_quant)
+        oracle_shape = {"op_ids": ["MUL_MAT", "GGML_OP_MUL_MAT"],
+                        "types": quant_tokens}
+        bench_shape = {"dims": [value for value in (pp(), tg(), ubatch()) if value],
+                       "types": quant_tokens}
+        checked = integrity.validate_candidate(
+            worker.worktree, paths, oracle_shape=oracle_shape,
+            bench_shape=bench_shape, expected_head=getattr(worker, "reset_base", None))
+        base = _git(worker.worktree, "rev-parse", "HEAD")
+        attempt = dispatch_guard.attempt_identity(
+            diff=_git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--"),
+            champion=current_anchor_commit()[0], cmake_defines=recipe().cmake_defines(),
+            bench_recipe={"pairs": args().serving_pairs if direct_launch() else args().pairs,
+                          "pp": pp(), "tg": tg(), "ubatch": ubatch()},
+            model=str(args().model), surface=args().surface)
+        key = integrity.evidence_key(lane=worker.name, attempt_id=attempt,
+                                     base_commit=base, paths=paths)
+        evidence = checked.to_dict()
+        evidence["evidence_key"] = key
+        evidence["attempt_identity"] = attempt
+        candidate_integrity[worker.name] = (checked, key)
+        integrity_evidence[key] = evidence
+        # loop.py retains this exact mutable mapping on the Outcome. Confirm
+        # evidence added later is therefore visible to status and the journal.
+        return evidence
+
+    def reserve_pooled(worker, _hypothesis, _paths, resume_point=None):
+        diff = _git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--")
+        diff_sha256 = hashlib.sha256(
+            dispatch_guard.normalized_diff(diff).encode()).hexdigest()
+        identity = dispatch_guard.attempt_identity(
+            diff=diff, champion=current_anchor_commit()[0],
+            cmake_defines=recipe().cmake_defines(),
+            bench_recipe={"pairs": args().serving_pairs if direct_launch() else args().pairs,
+                          "pp": pp(), "tg": tg(), "ubatch": ubatch()},
+            model=str(args().model), surface=args().surface)
+        registry = dispatch_guard.Registry(args().store)
+        try:
+            # A resumed BUILD re-dispatches a claimed checkpoint's exact bytes;
+            # its claim, not the one-retry bound, governs (dispatch_guard.reserve).
+            reservation = registry.reserve(identity, resumed=resume_point is not None)
+            return dispatch_guard.Reservation(
+                reservation.identity, reservation.dispatch_count, diff_sha256)
+        finally:
+            registry.close()
+
+    # The provisioned lanes by name, so the recorder can retain a lane's diff.
+    lanes_by_name: dict = {}
+
+    def retain_critic2(outcome, attempt) -> None:
+        """A critic2 checkpoint points at the patch its lane holds NOW (resume.py).
+
+        Recording happens before the lane's next reset, so the authored diff that
+        critic pass 2 never judged is still there: retain it (the same immutable
+        store as every gate-refused patch) or drop the checkpoint when the lane
+        holds no diff. DS41 runs 10d/10e lost such patches three times."""
+        checkpoints = attempt.get("resume_checkpoints")
+        if not checkpoints:
+            return
+        worker = lanes_by_name.get(str(outcome.branch_id or "").partition(":")[2])
+        resume_mod.retain_checkpoint_patches(
+            checkpoints, lambda mechanism: None if worker is None else
+            archive.retain_patch(args().store, worker.worktree, lane=worker.name,
+                                 mechanism_id=mechanism))
+        if not checkpoints:
+            attempt.pop("resume_checkpoints", None)
+
+    def record_pooled(outcome) -> None:
+        worker = lanes_by_name.get(str(outcome.branch_id or "").partition(":")[2])
+        if worker is None:
+            raise loop.RunAborted("cannot fence outcome: lane not found")
+        hold = pool.begin_custody_hold(
+            worker, getattr(outcome.hypothesis, "mechanism_id", None) or "unnamed",
+            identity={"resumed_from": outcome.resumed_from,
+                      "attempt_identity": outcome.attempt_identity,
+                      "spawn_parent": outcome.spawn_parent,
+                      "status": outcome.status})
+        if outcome.retained_patch is None:
+            kept = keep_the_diff()(worker, outcome.hypothesis)
+            if kept is not None:
+                outcome.retained_patch = {
+                    "patch_file": str(kept.resolve()),
+                    "metadata_file": str(kept.with_suffix(".json").resolve()),
+                    "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
+        attempt = attempt_with_codegen(outcome, codegen_by_head())
+        if outcome.status == "kept" and outcome.champion_head in keep_timing_by_head():
+            attempt[keep_timing.FIELD] = keep_timing_by_head().pop(outcome.champion_head)
+        if outcome.status == "kept" and outcome.champion_head in variance_keep_by_head():
+            attempt.update(variance_keep_by_head().pop(outcome.champion_head))
+        if isinstance(getattr(outcome, tail_timing.ATTR, None), dict):
+            attempt[tail_timing.FIELD] = getattr(outcome, tail_timing.ATTR)
+        if outcome.hypothesis is not None:
+            hypothesis_record = _write_custody_record(
+                args().store, "hypothesis-disposition",
+                {"hypothesis": outcome.hypothesis.to_dict(),
+                 "reason": "; ".join(outcome.reasons) or f"iteration {outcome.status}",
+                 "status": outcome.status, "retained_patch": outcome.retained_patch})
+            attempt["hypothesis_custody_record"] = str(hypothesis_record.resolve())
+        retain_critic2(outcome, attempt)
+        attempt["research_scope"] = archive.original_research_scope(
+            attempt, model=args().model, quant=census().quant_label,
+            backend="cpu" if cpu_launch() else "gpu", build_recipe=recipe().to_dict(),
+            surface=outcome.comparison.surface if outcome.comparison is not None else args().surface)
+        if screen_state() is not None:
+            attempt["cpu_screen"] = dict(screen_state())
+            attempt["research_scope"]["cpu_screen"] = dict(screen_state())
+        resume_mod.bind_checkpoints(attempt, epoch=epoch(),
+                                    anchor_commit=current_anchor_commit()[0],
+                                    target=resume_target,
+                                    measurement_epoch=measurement_epoch(),
+                                    actor_config=launch_actor_config(),
+                                    carry_family=resume_carry().family)
+        resume_mod.stamp_actor_diff(attempt, resume_queue[0])
+        shadow = same_state_stop.retry_budget_shadow(args().store, attempt)
+        if shadow is not None:
+            attempt["retry_budget_shadow"] = shadow
+        if outcome.status == "kept":
+            # AK-PM-12: the keep path's write-side lesson-admission receipt.
+            # Idempotent and never raises; a refusal never costs the keep.
+            attempt["keep_lesson"] = submit_keep_lesson(args().store, attempt)
+        journal_receipts = []
+        try:
+            archive.record(args().store, attempt, epoch=epoch(),
+                           recorded_at=loop._now(), campaign_id="ak-loop",
+                           on_serving_export=feedback().exported,
+                           journal_receipt_out=journal_receipts)
+        finally:
+            # A later markdown/export fault cannot erase an already-committed
+            # row receipt. Missing receipts remain explicit in the sidecar.
+            outcome.journal_receipt = journal_receipts[0] if journal_receipts else None
+            lineage_recorded_outcomes().append(outcome)
+        settle_resume(outcome)
+        if outcome.status in loop.PENDING_HYPOTHESIS_STATUSES \
+                or outcome.status == loop.HYPOTHESIS_RETIRED \
+                or outcome.resumed_from is not None:
+            pending_view()[0] = pending_hypotheses_view(args(), epoch(),
+                                                      current_anchor_commit()[0],
+                                                      carry=resume_carry(),
+                                                      **resume_bind())
+        if outcome.attempt_identity is not None:
+            registry = dispatch_guard.Registry(args().store)
+            try:
+                registry.finish(
+                    outcome.attempt_identity, status=outcome.status,
+                    effect=(outcome.comparison.effect
+                            if outcome.comparison is not None else None), epoch=epoch())
+            finally:
+                registry.close()
+        latest().append(outcome)
+        publish()("running", latest(), hotspot_rows=hotspot_rows())
+        pool.finish_custody_hold(hold)
+        if same_state().observe(outcome):
+            print(f"parked    {same_state_stop.PLANNER_SAME_STATE_SKIP}: "
+                  f"{same_state().last_skip}; no new iterations are dispatched; terminal "
+                  f"{same_state_stop.SAME_STATE_PARKED} (resumable with --resume-run)",
+                  flush=True)
+        if breaker().observe(outcome):
+            print(f"parked    provider breaker tripped: {breaker().streak} consecutive "
+                  f"provider-terminal iterations (threshold {breaker().threshold}); no new "
+                  f"iterations are dispatched; terminal {provider_breaker.PROVIDER_PARKED} "
+                  f"(resumable with --resume-run). last: {breaker().last_reason}", flush=True)
+
+    def record_abandoned_pooled(worker, candidate) -> None:
+        """Durable disposition for a candidate abandoned INSIDE an iteration.
+
+        Run 9c: a hoist implemented twice, critic-accepted twice and refused twice
+        by `op_scope` before any build left no row of its own -- the iteration's
+        only row, written at the stop, called it "never attempted". Every
+        abandoned candidate now gets a row naming the gate, its verbatim reason
+        and the retained patch, the narration names it, and the status step
+        shows it. Not an iteration: `latest` (the status and continuation
+        counts) is untouched.
+        """
+        hypothesis = candidate.hypothesis
+        hold = pool.begin_custody_hold(
+            worker, getattr(hypothesis, "mechanism_id", None) or "unnamed",
+            identity={"resumed_from": candidate.resumed_from,
+                      "resume_stage": candidate.resume_stage,
+                      "attempt_identity": candidate.attempt_identity,
+                      "candidate_diff_sha256": candidate.candidate_diff_sha256,
+                      "spawn_parent": candidate.spawn_parent})
+        if hypothesis is not None and hypothesis.runtime_pair is None \
+                and candidate.status != "hypothesis_rejected":
+            if candidate.retained_patch is not None:
+                pointer = candidate.retained_patch
+                raw = Path(pointer["patch_file"]).read_bytes()
+                if hashlib.sha256(raw).hexdigest() != pointer["patch_sha256"]:
+                    raise RuntimeError("retained author patch changed; lane remains held")
+            else:
+                kept = keep_the_diff()(worker, hypothesis)
+                if kept is None:
+                    if not pool.prove_empty_pre_author(worker, candidate.spawn_parent):
+                        raise RuntimeError("candidate has no patch and lane is not proven empty")
+                else:
+                    candidate.retained_patch = {
+                        "patch_file": str(kept.resolve()),
+                        "metadata_file": str(kept.with_suffix(".json").resolve()),
+                        "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
+        attempt = candidate.to_attempt()
+        if hypothesis is not None:
+            hypothesis_record = _write_custody_record(
+                args().store, "hypothesis-disposition",
+                {"hypothesis": hypothesis.to_dict(),
+                 "reason": "; ".join(candidate.reasons) or f"candidate {candidate.status}",
+                 "status": candidate.status, "retained_patch": candidate.retained_patch})
+            attempt["hypothesis_custody_record"] = str(hypothesis_record.resolve())
+        attempt["research_scope"] = archive.original_research_scope(
+            attempt, model=args().model, quant=census().quant_label,
+            backend="cpu" if cpu_launch() else "gpu", build_recipe=recipe().to_dict(),
+            surface=args().surface)
+        if screen_state() is not None:
+            attempt["cpu_screen"] = dict(screen_state())
+            attempt["research_scope"]["cpu_screen"] = dict(screen_state())
+        resume_mod.bind_checkpoints(attempt, epoch=epoch(),
+                                    anchor_commit=current_anchor_commit()[0],
+                                    target=resume_target,
+                                    measurement_epoch=measurement_epoch(),
+                                    actor_config=launch_actor_config(),
+                                    carry_family=resume_carry().family)
+        resume_mod.stamp_actor_diff(attempt, resume_queue[0])
+        shadow = same_state_stop.retry_budget_shadow(args().store, attempt)
+        if shadow is not None:
+            attempt["retry_budget_shadow"] = shadow
+        archive.record(args().store, attempt, epoch=epoch(), recorded_at=loop._now(),
+                       campaign_id="ak-loop")
+        settle_resume(candidate)
+        if candidate.attempt_identity is not None:
+            registry = dispatch_guard.Registry(args().store)
+            try:
+                registry.finish(candidate.attempt_identity, status=candidate.status,
+                                effect=None, epoch=epoch())
+            finally:
+                registry.close()
+        pool.finish_custody_hold(hold)
+        reason = candidate.reasons[0] if candidate.reasons else ""
+        patch = (candidate.retained_patch or {}).get("patch_file") \
+            or (candidate.retained_patch or {}).get("error") or "no patch"
+        line = (f"{candidate.status} by {candidate.refusal_gate} "
+                f"({hypothesis.mechanism_id if hypothesis else '-'}, round "
+                f"{candidate.hypothesis_round}.{candidate.patch_round}): {reason}")
+        print(f"disposed  [{worker.name}] {line}; patch: {patch}", flush=True)
+        publish()("running", latest(), hotspot_rows=hotspot_rows(),
+                step=f"[{worker.name}] {line[:600]}")
+
+    def record_resume_rejected(attempt) -> None:
+        """A checkpoint that failed re-validation before reaching a lane."""
+        attempt["research_scope"] = archive.original_research_scope(
+            attempt, model=args().model, quant=census().quant_label,
+            backend="cpu" if cpu_launch() else "gpu", build_recipe=recipe().to_dict(),
+            surface=args().surface)
+        if screen_state() is not None:
+            attempt["cpu_screen"] = dict(screen_state())
+            attempt["research_scope"]["cpu_screen"] = dict(screen_state())
+        archive.record(args().store, attempt, epoch=epoch(), recorded_at=loop._now(),
+                       campaign_id="ak-loop")
+        print(f"resume    rejected {attempt.get('mechanism_id') or '-'} "
+              f"({attempt.get('resumed_from')}): {attempt.get('reason')}", flush=True)
+
+    def step_pooled(worker_name: str, label: str) -> None:
+        if gfx_counter()[0] is not None:
+            gfx_counter()[0].sample(f"{worker_name}: {label}")
+        # The step line names the lane: an unattributed "building and gating" on a
+        # pooled run says nothing about which of N lanes is where.
+        if label.startswith("resuming "):
+            print(f"resume    [{worker_name}] {label}", flush=True)
+        publish()("running", latest(), hotspot_rows=hotspot_rows(),
+                step=f"[{worker_name}] {label}")
+
+    def commit_pooled(worker, hypothesis, paths, comparison) -> str:
+        """Advance the champion branch, then the ANCHOR.
+
+        The promotion once lived only in the sequential path's commit, which
+        would have left the anchor static across every lane -- reproducing run
+        13's defect (cumulative effects reported as marginal, a -2.864%
+        regression committed as a keep) at seven times the rate.
+
+        The anchor is BUILT from the champion tree, not taken from this lane: a
+        lane's build directory is not relocatable, and the champion tree is what
+        `advance_champion` just reset onto the accepted commit. Other lanes are
+        mid-formation against the old base and are refused as `superseded` on their
+        next tail entry -- their candidates were never built on this champion.
+        """
+        if hypothesis.runtime_pair is not None:
+            if longctx_surface() is not None:
+                # Audit C1 (integration 2026-10-04): the long surface gates EVERY keep,
+                # runtime-recipe keeps included -- those move depth the most.
+                long_gate = longctx_runtime_gate()(hypothesis.runtime_pair)
+                runtime_preparation()["longctx"] = long_gate
+                if not long_gate["passed"]:
+                    raise loop.ConfirmVetoed("KEEP_CANDIDATE-longctx: " + long_gate["reason"])
+            previous_recipe = feedback_anchor()[0]
+            previous_floor = runtime_preparation().get("source_comparison_floor")
+            if runtime_keep_grade():
+                from . import runtime_arms
+                pair = hypothesis.runtime_pair
+                if (not runtime_arms.is_declared(pair, runtime_arm_declaration())
+                        or comparison.row.get("admission") != "keep_grade_matched_serving_floor"
+                        or pair.anchor.execution_digest
+                        != _cpu_arm(direct_launch(), anchor_build()[0]).execution_digest):
+                    raise loop.TailRefused("runtime keep lacks keep-grade evidence for the "
+                                           "current recipe")
+                phase_owner.mark_integration({"kind": "runtime",
+                    "anchor_snapshot": pair.anchor.snapshot_digest,
+                    "candidate_snapshot": pair.candidate.snapshot_digest})
+                selected = pair.candidate
+            else:
+                pair = hypothesis.runtime_pair
+                phase_owner.mark_integration({"kind": "runtime",
+                    "anchor_snapshot": pair.anchor.snapshot_digest,
+                    "candidate_snapshot": pair.candidate.snapshot_digest})
+                selected = runtime_owner()[0].retain(comparison.row, feedback_anchor()[0])
+            if selected.snapshot_digest != hypothesis.runtime_pair.candidate.snapshot_digest:
+                raise loop.RunAborted("retained runtime recipe differs from integration intent")
+            set_runtime_selection(selected)
+            feedback_anchor()[0] = selected
+            # The old source-comparison floor belongs to the old recipe.
+            # A recipe keep neither transfers it nor promotes any source.
+            invalidate_source_floor()()
+            runtime_preparation().update(status="selected_runtime_recipe",
+                selected_recipe=comparison.row.get("runtime_admission"),
+                evidence="keep_grade" if runtime_keep_grade() else "strict")
+            if runtime_keep_grade():
+                runtime_recipe_reference()[0] = runtime_store().write(
+                    runtime_arms.KEEP_GRADE_SELECTION_NAMESPACE,
+                    runtime_arms.keep_grade_selection(
+                        adopted=selected, previous=previous_recipe,
+                        runtime_pair=pair.to_dict(), comparison=comparison.row,
+                        declaration=runtime_arm_declaration(),
+                        current_source_commit=current_anchor_commit()[0])).to_dict()
+                runtime_preparation()["selected_recipe"] = runtime_recipe_reference()[0]
+            else:
+                runtime_recipe_reference()[0] = runtime_owner()[0].selection_reference(
+                    selected, current_source_commit=current_anchor_commit()[0])
+            reference = runtime_recipe_reference()[0]
+            if (not isinstance(reference, Mapping) or reference.get("verified") is not True
+                    or not isinstance(reference.get("locator"), str)
+                    or Path(reference["locator"]).name != reference["locator"]):
+                raise loop.RunAborted("runtime integration lacks a durable selection receipt")
+            phase_owner.bind_runtime_completion({
+                "path": str((Path(args().store) / "runtime-preparation" / reference["locator"]).resolve()),
+                "sha256": reference.get("sha256")})
+            record_runtime_adoption()(previous_recipe, selected, comparison,
+                                    hypothesis.runtime_pair, previous_floor)
+            report_runtime_progress()()
+            reprofile()()
+            return None
+        candidate = candidate_integrity.get(worker.name)
+        if candidate is None:
+            raise integrity.IntegrityRefused(
+                "missing_prebuild_integrity", "candidate reached keep without validation")
+        checked, evidence_key = candidate
+        evidence = integrity_evidence[evidence_key]
+        # This check is after build/oracle/A-B and immediately before keep: the
+        # tree accepted by measurement must still be the tree being committed.
+        integrity.assert_measured_tree(worker.worktree, checked.tree)
+        if not (experimental() and calibrated()
+                and comparison.noise_floor_pct is not None
+                and comparison.decisive is False
+                and not comparison.drifting and comparison.effect > 0):
+            refuse_uncalibrated_keep(args().surface, calibrated(), comparison)
+        if screen_state() and screen_state()["scope"] in {"quarter", "half"}:
+            screen_state()["candidate"] = cpu_screen().retain_candidate(
+                store_root=args().store, origin_batch=args().out, worker=worker,
+                target=selected_identity(), hypothesis=hypothesis, paths=paths,
+                full_target=full_cpu_target(), comparison=comparison)
+            raise loop.ConfirmVetoed("reduced positive retained; original full-target confirmation pending")
+        # R23-44: the BENCH confirm rung is the KEEP GATE -- a cheap, deterministic screen
+        # a keep must clear to enter the accumulator (§5.3: one extra bench.compare per
+        # confirm surface, in this same serialized tail; the veto lands the candidate as
+        # keep_candidate, never kept). The SERVING gate is NO LONGER per-keep: it cannot
+        # resolve a 1-3% keep against the ~3.5% serving floor, so it fires on the BUNDLE in
+        # accumulate_after_keep once the compounded gain clears the floor.
+        if checked.needs_confirm and confirm() is None and heldout_requests() is None:
+            kinds = sorted({finding.kind for finding in checked.findings})
+            raise loop.ConfirmVetoed(
+                "KEEP_CANDIDATE-needs-confirm: integrity screen flagged "
+                + ", ".join(kinds)
+                + "; an unseen rotated/serving confirm rung is not configured")
+        if confirm() is not None:
+            held_out_identity = integrity.require_unseen_confirmation(
+                checked, screen_surface=comparison.surface,
+                screen_model=comparison.model, confirm_surfaces=confirm().surfaces,
+                confirm_model=str(confirm().model))
+            evidence.update(held_out_identity)
+            verdict = confirm().gate(hypothesis.mechanism_id, comparison,
+                                   confirm_measure()(worker))
+            if checked.needs_confirm:
+                confirm_effects = [row.get("effect")
+                                   for row in verdict.get("confirm", ())]
+                evidence["held_out_confirm"] = verdict
+                evidence["public_to_held_out_speedup_gap"] = [
+                    comparison.effect - effect for effect in confirm_effects
+                    if isinstance(effect, (int, float))]
+            if not verdict["promoted"]:
+                raise loop.ConfirmVetoed(verdict["reason"])
+        if checked.needs_confirm and heldout_requests() is not None:
+            public_digest, heldout_digest = heldout_serving.validate_requests(
+                serving_recipe(), frozen_requests(), heldout_requests())
+            heldout_anchor = _cpu_arm(direct_launch(), anchor_build()[0])
+            heldout_floor_store, heldout_floor = _load_heldout_floor(
+                args().store, serving_recipe(), direct_launch(),
+                tip_build=anchor_build()[0], reference_build=cor_build()[0],
+                frozen_requests=heldout_requests(),
+                instrument=args().serving_instrument, pairs=args().serving_pairs)
+            heldout_pct, heldout_unit = _gate_floor(heldout_floor)
+            if heldout_pct is None:
+                raise loop.ConfirmVetoed(
+                    "KEEP_CANDIDATE-needs-confirm: held-out request-bound serving floor is absent; "
+                    "run explicit --cpu-calibrate-heldout before candidate measurement")
+            heldout_row = _serving_comparison(lambda: measured_serving_compare()(
+                serving_recipe(), anchor_build()[0], worker.build_dir,
+                pairs=args().serving_pairs, floor_pct=heldout_pct,
+                floor_unit=heldout_unit, port=direct_launch().port,
+                anchor_resolved_recipe=heldout_anchor,
+                candidate_resolved_recipe=_cpu_arm(direct_launch(), worker.build_dir),
+                frozen_requests=heldout_requests(),
+                floor_request_digest=heldout_digest,
+                floor_record=heldout_floor.row or None,
+                **({"instrument": args().serving_instrument}
+                   if source_instrument() else {})),
+                "integrity_heldout_candidate_not_champion")
+            verdict = heldout_serving.decide(
+                store=args().store, mechanism_id=hypothesis.mechanism_id,
+                screen=comparison, heldout=heldout_row, public_digest=public_digest, heldout_digest=heldout_digest,
+                floor_path=heldout_floor.path)
+            evidence.update(integrity.require_unseen_confirmation(
+                checked, screen_surface=comparison.surface,
+                screen_model=comparison.row.get("model"),
+                confirm_surfaces=("serving:heldout:" + heldout_digest,),
+                confirm_model=str(args().model)))
+            evidence["held_out_confirm"] = verdict
+            evidence["public_to_held_out_speedup_gap"] = [
+                comparison.effect - heldout_row.effect]
+            if not verdict["promoted"]:
+                raise loop.ConfirmVetoed(verdict["reason"])
+        measured_dims: dict = {}
+        if direct_launch():
+            # G5: extend the cross-workload keep gate across every tracked
+            # dimension (surface_validation.keep_dimensions). Measured, recorded and
+            # able to refuse ONLY when the target declares dimensions; an undeclared
+            # target takes exactly the pre-existing keep path.
+            primary_dim = surface_validation.primary_dimension(serving_recipe().np)
+            for name, measure in keep_dimension_measures().items():
+                if name in keep_dims() and name != primary_dim:
+                    try:
+                        if (name == "prefill_at_depth" and longctx_surface() is not None
+                                and isinstance(measured_dims.get("long_decode"), Mapping)
+                                and "longctx" in measured_dims["long_decode"]):
+                            # One long-context A/B carries both dimensions.
+                            measured_dims[name] = longctx.prefill_dimension_row(
+                                measured_dims["long_decode"])
+                            continue
+                        with cpu_measurement_window()():
+                            measured_dims[name] = measure(worker)
+                    except Exception as exc:  # noqa: BLE001 -- recorded, fail closed
+                        measured_dims[name] = {"error": f"{type(exc).__name__}: {exc}"}
+            capacity_record = None
+            if "capacity" in keep_dims():
+                # Peak footprint over the MIXED sequence (n_max:0 alternation, varying
+                # batch), never one steady shape (GPU-POOL-1, capacity_probe.py).
+                from . import capacity_probe
+                backend = "cpu" if cpu_launch() else "gpu"
+                limit = (int(args().keep_capacity_limit_gib * 2**30)
+                         if args().keep_capacity_limit_gib is not None
+                         else surface_validation.GPU_CAPACITY_CEILING_BYTES
+                         if backend == "gpu" else None)
+                probe_launch = _cpu_arm(direct_launch(), worker.build_dir)
+                try:
+                    with cpu_measurement_window()():
+                        peaks = capacity_probe.run(
+                            argv=probe_launch.argv, env=dict(probe_launch.launch_env),
+                            port=probe_launch.port, backend=backend,
+                            sequence=capacity_probe.mixed_sequence(frozen_requests()))
+                    capacity_record = capacity_probe.evaluate(
+                        peaks, limit_bytes=limit, backend=backend,
+                        ctx=getattr(serving_recipe(), "ctx", None), np=serving_recipe().np)
+                except Exception as exc:  # noqa: BLE001 -- recorded, fail closed
+                    capacity_record = {"error": f"{type(exc).__name__}: {exc}"}
+            # Always recorded (an undeclared target carries five not_measured verdicts),
+            # so every direct-launch keep row has one verdict per dimension.
+            dims_record = surface_validation.keep_dimensions(
+                declared=keep_dims(), primary=primary_dim, comparisons=measured_dims,
+                capacity=capacity_record)
+            surface_validation.retain_dimensions(args().store, hypothesis.mechanism_id,
+                                                 dims_record)
+            evidence["keep_dimensions"] = dims_record
+            if not dims_record["passed"]:
+                raise loop.ConfirmVetoed("KEEP_CANDIDATE-dimensions: "
+                                         + dims_record["reason"])
+            if not cpu_launch():
+                # AKX-ALL-14 (G6): a GPU keep carries the build recipe digest and the
+                # row's HIP residency proof; unproven is recorded, never invented.
+                evidence["gpu_build_receipt"] = hip_launch_proof.build_receipt(
+                    recipe_name=recipe().name, recipe_digest=recipe().sha256(),
+                    residency=(getattr(comparison, "row", None) or {}).get("residency"))
+        cross = None
+        if lane_binding() is not None:
+            # LANE BINDING (lane_targets.py): a keep touching a path shared with
+            # another lane's target is A/B'd on that target. Same two builds this
+            # keep was measured with; the peer's own launch, requests and bar. A
+            # peer regression makes the keep target_only_pending_gate
+            # (cross_target.py), never a veto: it is held on this lane's working
+            # branch and a gating hypothesis is queued; it cannot fold until gated.
+            def cross_compare(peer, bar):
+                peer_launch, peer_requests = lane_peer_serving()[peer.entry.name]
+                return measured_serving_compare()(
+                    peer_launch.template, anchor_build()[0], worker.build_dir,
+                    pairs=args().serving_pairs, port=peer_launch.port,
+                    anchor_resolved_recipe=_cpu_arm(peer_launch, anchor_build()[0]),
+                    candidate_resolved_recipe=_cpu_arm(peer_launch, worker.build_dir),
+                    frozen_requests=peer_requests, instrument=serving.MATCHED_INSTRUMENT,
+                    **lane_targets().compare_kwargs(bar, peer_launch.template, peer_requests))
+            cross = lane_targets().cross_check(
+                lane_binding(), store=args().store, mechanism_id=hypothesis.mechanism_id,
+                changed=_git(worker.worktree, "diff-tree", "-r", "--name-only", "HEAD",
+                             checked.tree).splitlines(),
+                compare=cross_compare)
+            evidence["cross_target"] = cross
+        if longctx_surface() is not None:
+            # Audit C1 (operator 2026-10-04): no keep may regress the long-context
+            # surface (decode or prefill at depth), alongside the peer floor above.
+            evidence["longctx"] = longctx_keep_gate()(
+                worker, hypothesis, comparison,
+                measured_row=(measured_dims.get("long_decode")
+                              if direct_launch() and "long_decode" in keep_dims() else None))
+            if not evidence["longctx"]["passed"]:
+                raise loop.ConfirmVetoed("KEEP_CANDIDATE-longctx: "
+                                         + evidence["longctx"]["reason"])
+        # KERNEL FEATURE PRESERVATION (kernel_coverage.py), EVERY keep: no kernel
+        # path may disappear -- static (DSO symbol families), source (git feature
+        # inventory) and this target's executed path (launch stderr markers) --
+        # unless the patch declares and measures its replacement.
+        preservation = kernel_coverage.keep_gate(
+            store=args().store, repo=worker.worktree, base_ref="HEAD",
+            candidate_ref=checked.tree, anchor_build=anchor_build()[0],
+            candidate_build=worker.build_dir,
+            own_target=args().target_id or args().surface,
+            peer_shapes=({row["target_id"]: kernel_coverage.shape_names(
+                              lane_peer_serving()[row["lane"]][0].template)
+                          for row in cross["peers"]} if cross else {}),
+            measured_peers=[row["target_id"] for row in (cross or {}).get("peers", ())
+                            if isinstance(row.get("effect"), (int, float))],
+            declaration_texts=(hypothesis.statement, hypothesis.falsifier,
+                               hypothesis.mechanism_id),
+            mechanism_id=hypothesis.mechanism_id)
+        evidence["kernel_preservation"] = {
+            key: preservation[key] for key in ("passed", "reason", "failures", "losses",
+                                               "notes", "record", "layers")}
+        if not preservation["passed"]:
+            raise loop.ConfirmVetoed("KEEP_CANDIDATE-kernel-coverage: "
+                                     + preservation["reason"])
+        gate_texts = (hypothesis.statement, hypothesis.falsifier, hypothesis.mechanism_id)
+        if lane_binding() is not None and cross_target.gate_declarations(*gate_texts):
+            # A GATE (`GATES-KEEP:`) must key on GGUF metadata or argv, never an env
+            # var: runtime_attestation sees argv/GGUF, not undeclared env.
+            gate_ok, gate_why = cross_target.gate_mechanism(
+                _git(worker.worktree, "diff", "HEAD", checked.tree))
+            evidence["gate_mechanism"] = {"passed": gate_ok, "reason": gate_why}
+            if not gate_ok:
+                raise loop.ConfirmVetoed("KEEP_CANDIDATE-gate-attestation: " + gate_why)
+        cross_decision = (cross_target.decide(cross, preservation["peers"])
+                          if cross is not None else None)
+        if cross_decision is not None:
+            _ledger_x = gates.ppl_contract_ledger_read(args().store)
+            if _ledger_x is None or hypothesis.mechanism_id in _ledger_x:
+                # Re-review 2026-10-06: a cross-target FOLD moves the keep into THE
+                # global champion with peer A/B + kernel-coverage evidence only; a
+                # ppl_contract numerics change can alter a peer model's output with
+                # its executed-kernel manifest unchanged. No cross-lane quality gate
+                # exists, so such a keep is refused for the global champion and its
+                # series is held (cross_target.eligible skips refused series).
+                cross_decision = {"decision": cross_target.GATE_REFUSED,
+                                  "reason": "ppl_contract keep: no cross-target quality "
+                                            "gate (layers a-d on every peer model); held "
+                                            "off the global champion"}
+        if cross_decision is not None:
+            evidence["cross_target"] = {**cross, **cross_decision}
+        source_fold_candidate = experimental() and cpu_launch() \
+            and selected_identity() is not None
+        # The receipt describes the comparison that admitted this keep.  Promotion
+        # invalidates the in-memory floor for the next anchor, so retain the prior
+        # request identity before moving either source or build state.
+        accepted_floor_request_digest = floor_request_digest()
+        accepted_launch_snapshot_digest = (direct_launch().snapshot_digest
+                                            if direct_launch() is not None else None)
+        measured_comparison = getattr(comparison, "original", comparison)
+        if source_fold_candidate and (id(measured_comparison) not in measured_source_comparisons()
+                or measured_source_comparisons()[id(measured_comparison)][0]() is not measured_comparison):
+            raise loop.TailRefused("source keep lacks measuring-step comparison evidence")
+        patch_path = keep_the_diff()(worker, hypothesis) if source_fold_candidate else None
+        parent = (_git(worker.worktree, "rev-parse", "HEAD")
+                  if source_fold_candidate else None)
+        # Re-review 2026-10-06: a ppl_contract admission is recorded IN GIT (a commit
+        # trailer), not only in the store ledger; an unreadable ledger marks it.
+        _ledger = gates.ppl_contract_ledger_read(args().store)
+        _gate_record = keep_numerics().get(hypothesis.mechanism_id) or {}
+        ppl_keep = (_ledger is None or hypothesis.mechanism_id in _ledger
+                    or _gate_record.get("class") == "ppl_contract")
+        bit_exact_oracle = None
+        if not ppl_keep and _gate_record.get("passed") \
+                and _gate_record.get("class") == "bit_exact":
+            # Round-7 resolution A: the exemption is a RECORD in this store, built
+            # from the gate's own passing bit-exact verdicts and bound to the
+            # commit's tree and parent; the trailer only names its digest.
+            try:
+                bit_exact_oracle = gates.write_bit_exact_record(
+                    args().store, gates.bit_exact_record_bytes(
+                        tree=checked.tree,
+                        parent=_git(worker.worktree, "rev-parse", "HEAD"),
+                        route=str(_gate_record.get("route")),
+                        oracle=str(_gate_record.get("oracle_name")),
+                        verdict_digests=_gate_record.get("verdict_digests") or [],
+                        changed_files=_gate_record.get("changed") or [],
+                        mechanism_id=hypothesis.mechanism_id))
+            except (OSError, ValueError) as exc:
+                print(f"warning: bit-exact record not written ({exc}); this keep "
+                      "will require the quality gate at fold", file=sys.stderr)
+        phase_owner.mark_integration({"kind": "source", "repo": str(args().worktree.resolve()),
+            "branch": args().champion_branch, "candidate_tree": checked.tree})
+        head = pool.advance_champion(worker, hypothesis, paths, comparison,
+                                     champion_tree=args().worktree,
+                                     branch=args().champion_branch,
+                                     expected_tree=checked.tree,
+                                     ppl_contract=ppl_keep,
+                                     bit_exact_oracle=bit_exact_oracle)
+        if bit_exact_oracle is not None:
+            try:
+                gates.bind_bit_exact_record(args().store, head, bit_exact_oracle)
+            except (OSError, ValueError) as exc:
+                print(f"warning: bit-exact record not bound ({exc}); this keep will "
+                      "require the quality gate at fold", file=sys.stderr)
+        if cross_decision is not None:
+            # ONE-champion lineage (cross_target.py): ledger the decision, fold a
+            # non-regressing keep into THE champion (G0 first), or hold it and
+            # queue its gating hypothesis; then housekeep this lane's held series
+            # and bring the champion's missing commits onto this working branch
+            # BEFORE the anchor is rebuilt from it.
+            try:
+                cross_target.record_keep(
+                    lane_binding(), repo=args().worktree, keep_commit=head,
+                    decision=cross_decision, cross=cross,
+                    coverage=preservation["peers"], mechanism_id=hypothesis.mechanism_id,
+                    store=args().store, declaration_texts=gate_texts)
+                cross_target.refresh_gates(lane_binding(), repo=args().worktree,
+                                           store=args().store, branch=args().champion_branch)
+                cross_target.sync_from_champion(lane_binding(), repo=args().worktree,
+                                                champion_tree=args().worktree,
+                                                branch=args().champion_branch)
+            except Exception as exc:  # a missed propagation; the keep stands
+                print(f"warning: cross-target lineage step failed after keep: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        # keep_timing: the keep path starts at the committed keep; timed until return.
+        keep_timer()[0] = keep_timing.KeepTimer(head=head)
+        # The lane build is the exact candidate whose patch was just committed.
+        # Write this immediately: anchor promotion can take 30+ minutes or abort,
+        # but the champion commit already exists. Missing toolchain evidence is
+        # represented explicitly and must never veto that KEEP.
+        try:
+            with keep_stage()("codegen_summary"):
+                codegen_by_head()[head] = codegen_summary.retain_summary(
+                    args().store, head,
+                    backend="llama_cpu" if cpu_launch() else "llama_gpu",
+                    build_dir=worker.build_dir, recipe=recipe().to_dict(),
+                    attempt_identity=evidence["attempt_identity"],
+                    source_tree_oid=_git(worker.worktree, "rev-parse", f"{head}^{{tree}}"))
+        except Exception as exc:  # diagnostics cannot undo an accepted commit
+            codegen_by_head()[head] = {
+                "schema": codegen_summary.SCHEMA, "status": "unavailable",
+                "authority": "diagnostic_only", "champion_head": head,
+                "reason": f"codegen sidecar failed: {type(exc).__name__}"}
+            print(f"codegen   unavailable for {head[:12]}: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+        with keep_stage()("promote_anchor"):
+            promote_anchor()()
+        if source_fold_candidate and patch_path is not None and parent is not None:
+            _, measurement_ref, measured_fields = measured_source_comparisons()[id(measured_comparison)]
+            native = measured_comparison.to_dict()
+            comparison_block = {**native, **measured_fields, "measurement_ref": measurement_ref}
+            original_source_keeps().append({
+                "surface": args().surface, "mechanism_id": hypothesis.mechanism_id,
+                "request_id": selected_identity()["request_id"],
+                "repo": str(args().worktree.resolve()), "branch": args().champion_branch,
+                "parent_commit": parent, "kept_commit": head,
+                "patch_path": str(patch_path.resolve()),
+                "patch_metadata_path": str(patch_path.with_suffix(".json").resolve()),
+                "selected_target": selected_identity(),
+                "launch_snapshot_digest": accepted_launch_snapshot_digest,
+                "floor_request_digest": accepted_floor_request_digest,
+                "floor_unit": "process", "comparison": comparison_block,
+            })
+        # The accumulator advanced; batch this keep and, if the bundle now clears the
+        # serving floor, spend the one serving gate that can advance the champion of record.
+        with keep_stage()("accumulate_after_keep"):
+            accumulate_after_keep()(hypothesis.mechanism_id, phase_owner)
+        with keep_stage()("akx_keep_screen"):  # AKX-P1e; no census -> all UNKNOWN
+            blast_radius.record_keep_best_effort(
+                args().store, args().worktree, keep_id=hypothesis.mechanism_id, child=head,
+                resolved_campaign=resolved_campaign(), manifest_path=args().resolved_campaign,
+                champion_commit=current_anchor_commit()[0])
+        if lane_binding() is not None and cpu_launch() is not None:
+            with keep_stage()("fold_check_held"):
+                fold_check_held(worker)
+        if getattr(args(), "variance_input", None) is not None:
+            variance_keep_by_head()[head] = variance_keep.keep_record_fields(
+                args().variance_input, args().store / "keep-frontier.json")
+        if keep_timer()[0] is not None:
+            keep_timing_by_head()[head] = keep_timer()[0].to_dict()
+            keep_timer()[0] = None
+        return head
+
+    def fold_check_held(worker):
+        """ONE-champion fold check (cross_target.check_one): ONE eligible held
+        series of another lane -- its target-only keep(s) plus their gating
+        keep(s) -- applied onto this lane's working branch, built, MUL_MAT oracle,
+        A/B'd against this target's floor and kernel-coverage diffed on this
+        target's executed path. Approved when it does not regress this target and
+        leaves its executed path unchanged; once every other lane approves, the
+        series folds into THE champion (G0 first). This lane's branch never moves
+        here: the series reaches it through the champion. Never raises."""
+        own = lane_targets().PeerTarget(entry=lane_binding().lane, launch_path=Path("/"),
+                                      frozen_prompts=Path("/"), store=None)
+        own_target = args().target_id or args().surface
+        fold_state = {"base": None, "mechanism": "foldcheck"}
+
+        def measure(series):
+            _retain_fold_before_reset(worker, store=args().store, base=None,
+                                      mechanism="foldcheck-before")
+            pool.reset_to_champion(worker, champion_tree=args().worktree,
+                                   branch=args().champion_branch)
+            base = _git(worker.worktree, "rev-parse", "HEAD")
+            fold_state["base"] = base
+            fold_state["mechanism"] = f"foldcheck-{series['origin_head'][:12]}"
+            for commit in series["commits"]:
+                if cross_target.apply_in_worktree(worker.worktree, commit) is None:
+                    return {"error": f"{commit[:12]} does not apply onto this lane's "
+                                     "working branch"}
+            built = local_compiles()(worker.worktree, worker.build_dir,
+                                   cmake_defines=recipe().cmake_defines(), jobs=build_jobs(),
+                                   cpu_list=build_cpu_list(),
+                                   targets=gates.PROMOTION_TARGETS)
+            if not built.passed:
+                return {"error": f"build failed: {built.reason}"}
+            arm = _cpu_arm(direct_launch(), worker.build_dir)
+            oracle = local_op_correctness()(worker.build_dir, op="MUL_MAT", backend="CPU",
+                                          resolved_recipe=arm)
+            if not oracle.passed:
+                return {"error": f"MUL_MAT oracle: {oracle.reason}"}
+            bar = lane_targets().peer_bar(own)
+            if bar["mode"] == "absent":
+                return {"error": "this lane declares no floor file or point bar"}
+            row = measured_serving_compare()(
+                serving_recipe(), anchor_build()[0], worker.build_dir,
+                pairs=args().serving_pairs, port=direct_launch().port,
+                anchor_resolved_recipe=_cpu_arm(direct_launch(), anchor_build()[0]),
+                candidate_resolved_recipe=arm, frozen_requests=frozen_requests(),
+                instrument=serving.MATCHED_INSTRUMENT,
+                **lane_targets().compare_kwargs(bar, serving_recipe(), frozen_requests()))
+            passed, reason = lane_targets().decide(dict(row), bar)
+            kept = kernel_coverage.keep_gate(
+                store=args().store, repo=worker.worktree, base_ref=base,
+                candidate_ref="HEAD", anchor_build=anchor_build()[0],
+                candidate_build=worker.build_dir, own_target=own_target,
+                peer_shapes={own_target: kernel_coverage.shape_names(serving_recipe())},
+                measured_peers=[own_target], declaration_texts=(),
+                mechanism_id=f"foldcheck-{series['origin_head'][:12]}")
+            if not kept["passed"]:
+                return {"error": f"kernel coverage: {kept['reason']}"}
+            return {"row": dict(row), "passed": passed, "reason": reason,
+                    "coverage": kept["peers"].get(own_target) or {}}
+
+        try:
+            event = cross_target.check_one(lane_binding(), repo=args().worktree,
+                                           measure=measure, store=Path(args().store))
+            if event is not None:
+                print(f"crosstgt  fold-check {event['origin_head'][:12]} from "
+                      f"{event.get('origin_target')}: {event.get('result')} "
+                      f"({event.get('reason')})"
+                      + (f"; champion fold: {event['fold'].get('result')}"
+                         if event.get("fold") else ""))
+        except loop.RunAborted:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            print(f"warning: cross-target fold check failed: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+        finally:
+            _retain_fold_before_reset(worker, store=args().store, base=fold_state["base"],
+                                      mechanism=fold_state["mechanism"])
+            pool.reset_to_champion(worker, champion_tree=args().worktree,
+                                   branch=args().champion_branch)
+
+    def reset_retained(worker):
+        # STOP before the gate, or a hard interruption during authoring, leaves
+        # a dirty reused lane with no gate archive. Preserve it BEFORE the
+        # original owned reset. An archive failure must prevent that reset.
+        archive.retain_patch(args().store, worker.worktree, lane=worker.name)
+        return pool.reset_to_champion(worker, champion_tree=args().worktree,
+                                      branch=args().champion_branch)
+
+    from . import runtime_recovery
+    pending_pair = (runtime_owner()[0].pending_pair() if runtime_enabled() and
+                    runtime_owner()[0] is not None else None)
+    pending_slot = runtime_recovery.PendingPlanner.slot(pending_pair)
+
+    # RESUME before any fresh hypothesis (resume.py): checkpointed work of THIS
+    # anchor/epoch/target, most advanced first, each re-validated and claimed at
+    # most once. A retained screen candidate or a pending runtime pair already
+    # owns this launch's first draw, so neither is displaced.
+    if args().resume == "on" and not screen_confirmation() and pending_pair is None:
+        try:
+            resume_queue[0], resume_report = resume_mod.prepare(
+                args().store, epoch=epoch(), anchor_commit=current_anchor_commit()[0],
+                target=resume_target, repo=args().worktree,
+                on_rejected=record_resume_rejected, scratch=args().store,
+                measurement_epoch=measurement_epoch(),
+                actor_config=launch_actor_config(), carry=resume_carry())
+            print(f"resume    scanned {resume_report['scanned']} checkpoint(s): "
+                  f"{len(resume_report['queued'])} queued, "
+                  f"{len(resume_report['rejected'])} rejected, "
+                  f"{len(resume_report['ineligible'])} not resumable now, "
+                  f"{resume_report['already_claimed']} already claimed"
+                  + (f"; {resume_report['other_epoch_rows']} row(s) with checkpoints "
+                     f"in other epochs (not this launch's)"
+                     if resume_report["other_epoch_rows"] else "")
+                  + (f"; {len(resume_report['carried'])} carried forward from an "
+                     f"ancestor anchor or sibling epoch"
+                     if resume_report.get("carried") else ""), flush=True)
+            # In-run: a hypothesis a lane leaves pending THIS run is re-authored on
+            # the next draw, before the planner (resume.ResumeQueue._refresh).
+            resume_queue[0].enable_pending_refresh(resume_target, **resume_bind())
+            for row in resume_report["queued"]:
+                diff = row.get("actor_config_diff")
+                print(f"resume    queued {row['mechanism_id']} at {row['stage']} "
+                      f"(from {row['checkpoint_id']})"
+                      + (f"; carried ({row['carry']['action']}) from anchor "
+                         f"{str(row['carry']['carried_from_anchor'])[:12]}"
+                         if row.get("carry") else "")
+                      + (f"; actor config differs: {', '.join(diff)}" if diff else
+                         "; checkpoint predates actor-config recording"
+                         if "actor_config_diff" in row and diff is None else ""),
+                      flush=True)
+        except Exception as exc:      # noqa: BLE001 -- fresh research still runs
+            print(f"resume    unavailable: {type(exc).__name__}: {exc}", file=sys.stderr)
+    elif args().resume == "off":
+        print("resume    off (--resume off): checkpointed work is not scanned", flush=True)
+
+    sandbox_scratch = _sandbox_scratch(args(), scratch_registry()[0])
+    # Effective only with an allocator: without one the seat is the historical seat.
+    sandbox_seat = {"author_sandbox": sandbox_scratch is not None}
+
+    def sandbox_for(worker):
+        return (ak_check.scratch_provider(sandbox_scratch, worker.name)
+                if sandbox_scratch is not None else None)
+
+    arm_lanes = None
+    if runtime_arm_declaration() is not None and int(args().workers) > 1:
+        from . import runtime_arms as _runtime_arms
+        arm_lanes = _runtime_arms.ArmLanes()
+
+    def lane_backend(worker):
+        """The lane's planner/author backend: the global one unless overridden."""
+        lane = lane_actors().for_worker(lane_actor_models(), worker)
+        return planner_backend() if lane is None else lane_backends()[lane.lane]
+
+    def lane_seat(worker, seat):
+        return lane_actors().seat_for(lane_actors().for_worker(lane_actor_models(), worker), seat)
+
+    def make_planner(worker):
+        if screen_confirmation():
+            return cpu_screen().RetainedPlanner(screen_confirmation(), worker, screen_prepared()["launch"])
+        ordinary = actors.AgentPlanner(workspace=worker.worktree, backend=lane_backend(worker),
+                                       timeout_s=args().actor_timeout_s, default_budgets=True,
+                                       should_stop=should_stop(),
+                                       belief_context=args().actor_belief_context,
+                                       belief_root=args().belief_root_repo,
+                                       belief=_belief_config(args()),
+                                       belief_preseeded=args().preseeded_hypotheses,
+                                       sandbox_scratch=sandbox_for(worker),
+                                       seat=lane_seat(worker, actors.ActorSeat(
+                                           bounded=args().actor_seat == "bounded",
+                                           fan_out=args().actor_fan_out,
+                                           steps=args().actor_steps,
+                                           context_mode=args().actor_context_mode,
+                                           **_actor_knobs(args()), **_actor_limits(args()),
+                                           **_actor_budgets(args()),
+                                           **_actor_thinking(args()), **sandbox_seat,
+                                           **_actor_salvage(args()),
+                                           **_actor_reasoning_history(args()),
+                                           **_actor_serving(args()))))
+        ordinary = same_state_stop.GuardedPlanner(ordinary, same_state(),
+                                                  workspace=worker.worktree, lane=worker.name,
+                                                  should_stop=should_stop(),
+                                                  refresh_context=build_context())
+        planner = (runtime_recovery.PendingPlanner(ordinary, pending_slot)
+                   if pending_pair is not None else ordinary)
+        if runtime_arm_declaration() is not None and (runtime_enabled() or runtime_keep_grade()):
+            from . import runtime_arms
+
+            def arm_event(row):
+                runtime_arm_events().append(row)
+                del runtime_arm_events()[:-64]
+                runtime_preparation()["declared_arms"] = {
+                    "declaration_sha256": runtime_arm_declaration().digest(),
+                    "events": list(runtime_arm_events()[-16:])}
+                print(f"runtime   declared arm {row.get('arm_id')}: {row.get('status')}"
+                      + (f" ({row['reason']})" if row.get("reason") else ""), flush=True)
+
+            # A pending interrupted pair (PendingPlanner) still owns the first draw;
+            # declared arms come next, the ordinary planner after every arm settles.
+            planner = runtime_arms.DeclaredArmPlanner(
+                planner, runtime_arm_declaration(),
+                store_root=lambda: (runtime_store().root if runtime_store() is not None
+                                    and (runtime_enabled() or runtime_keep_grade()) else None),
+                on_event=arm_event,
+                evidence="keep_grade" if runtime_keep_grade() else "strict",
+                # Several lanes: one shared serving view, so two lanes never
+                # measure the same open arm at once (one lane: the historical path).
+                **({"lanes": arm_lanes, "lane": worker.name}
+                   if int(args().workers) > 1 else {}))
+        return planner
+
+    def make_author_panel(worker):
+        """Best-of-N (`--actor-authors`, N >= 2): one panel per lane, its members
+        the ordinary author seat with the member's thinking mode and the pool
+        budget's per-author limits, rooted at a scratch worktree. None = the
+        single-author path (N=1, a retained screen, or no scratch registry)."""
+        if not author_plan().panel or screen_confirmation():
+            return None
+        if lane_actors().for_worker(lane_actor_models(), worker) is not None:
+            return None   # an overridden lane authors single (`lane_actors`)
+        if scratch_registry()[0] is None:
+            # The run registry is created by the run body before any lane draws;
+            # without it there is nowhere marked to put the members' trees.
+            print("actors    WARNING best-of authoring needs the run's scratch "
+                  "registry; none is installed -- single author", file=sys.stderr)
+            return None
+        budget = author_plan().budget
+
+        def make_author(spec, workspace, member_stop):
+            sandbox_kw, sandbox_seat_kw = _member_sandbox(args(), workspace)
+            return actors.AgentPlanner(
+                workspace=Path(workspace), backend=planner_backend(),
+                timeout_s=args().actor_timeout_s, should_stop=member_stop,
+                default_budgets=True,
+                # A member that hits the hard timeout spent its budget: never
+                # retried in-round (operator 2026-09-27, DS41 run 10j).
+                retry_timeouts=False,
+                belief_context=args().actor_belief_context,
+                belief_root=args().belief_root_repo, **sandbox_kw,
+                seat=actors.ActorSeat(**sandbox_seat_kw,
+                    bounded=args().actor_seat == "bounded", fan_out=args().actor_fan_out,
+                    steps=args().actor_steps, context_mode=args().actor_context_mode,
+                    **_actor_knobs(args()),
+                    # This member's share of the pool and ITS output cap (asymmetric
+                    # by thinking mode, `bestof.panel_budget`); an output above
+                    # 32,000 reaches the wire via output_ceiling_env.
+                    **{**_actor_limits(args()),
+                       "context_limit": budget.for_member(spec).context_limit,
+                       "author_output_limit": budget.for_member(spec).output_limit},
+                    **_actor_budgets(args()),
+                    **{**_actor_thinking(args()), "author_thinking": spec.thinking},
+                    # F1 only: the answer protocol and think budget are planner-only.
+                    serving_f1=_actor_serving(args())["serving_f1"]))
+
+        return bestof.AuthorPanel(
+            lane=worker.name, specs=author_plan().specs, make_author=make_author,
+            scratch=scratch_registry()[0], budget=budget,
+            validator=_author_validator(args()),
+            retain=lambda **patch: archive.retain_patch_bytes(args().store, **patch),
+            should_stop=should_stop(), walls=author_plan().walls)
+
+    from . import phase_journal as phase_journal_module
+    _, phase_journal_dir = accumulate._surface_paths(args().store, args().bundle_surface)
+    phase_book = accumulate.journal.Journal(str(Path(args().store) / phase_journal_dir))
+    phase_owner = phase_journal_module.PhaseJournal(phase_book)
+    try:
+        pooled_lanes = pool.provision(args().workers, champion_tree=args().worktree,
+                                      champion_branch=args().champion_branch,
+                                      root=args().worker_root,
+                                      build_root=args().worker_build_root,
+                                      execute=True)
+        lanes_by_name.update({lane.name: lane for lane in pooled_lanes})
+        return pool.drive(
+            phase_journal=phase_owner,
+            # A best-of panel's winner check runs ak-check even with the author sandbox
+            # off; beside ANOTHER lane's tail (--workers > 1, `--lane-actor-models`)
+            # that is a compile during a measurement unless the tail takes the fence.
+            author_sandbox=(sandbox_seat["author_sandbox"]
+                            or (author_plan().panel and int(args().workers) > 1)),
+            commit=commit_pooled, reset=reset_retained, workers=pooled_lanes, make_planner=make_planner,
+            make_critic=lambda worker: (
+                cpu_screen().RetainedCritic(screen_confirmation())
+                if screen_confirmation() else actors.AgentCritic(
+                    workspace=worker.worktree, backend=critic_backend(),
+                    timeout_s=args().actor_timeout_s, should_stop=should_stop(),
+                    default_budgets=True,
+                    seat=actors.ActorSeat(bounded=False, **_actor_knobs(args()),
+                                          **_actor_limits(args()), **sandbox_seat,
+                                          serving_f1=_actor_serving(args())["serving_f1"]))),
+            build_context=build_context(), make_gate=gate_for(),
+            make_measure=measure_for(), record=record_pooled,
+            iterations=(args().iterations or None), should_stop=should_stop(),
+            # Reduced positives remain KEEP_CANDIDATE until original full-target
+            # confirmation; full-confirmed sub-floor positives may then enter the
+            # same working accumulator as unscreened experimental source keeps.
+            accumulate_valid_positive=experimental(),
+            # Per accepted hypothesis, across iterations (loop.HYPOTHESIS_AUTHOR_ATTEMPTS).
+            author_attempts=args().hypothesis_author_attempts,
+            validate_candidate=validate_pooled,
+            formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
+                hypothesis, {**context, "epoch_sha256": epoch(),
+                             "retired_mechanisms_path": Path(args().store) / "retired-mechanisms.jsonl",
+                             "measurement_epoch_sha256": measurement_epoch()}),
+            reserve_candidate=reserve_pooled, record_abandoned=record_abandoned_pooled,
+            begin_author_custody=lambda worker, h, checkpoint:
+                _begin_author_custody(worker, h, checkpoint, store=args().store),
+            finish_author_custody=lambda worker, ticket, h, failure:
+                _finish_author_custody(worker, ticket, h, failure, store=args().store),
+            next_resume=(resume_queue[0].take if resume_queue[0] is not None else None),
+            **({"make_author_panel": make_author_panel} if author_plan().panel else {}),
+            champion_tree=args().worktree, branch=args().champion_branch,
+            on_step=step_pooled,
+            on_tail_ready=lambda tail: live_tail().__setitem__(0, tail),
+            # AKX-ALL-29.2a: a GPU serving run times waiting candidates in descending
+            # launch-weighted order of the anchor profile's kernel they target.
+            **({"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(
+                    gpu_profile_observation(), getattr(hypothesis, "target_symbol", None))}
+               if direct_launch() and not cpu_launch() else {}),
+            **({"cpu_window": cpu_window_ref()[0]} if cpu_window_ref()[0] is not None else {}),
+            gate_wrappers=_gate_wrappers(args(), cpu_launch()),
+            # AKPL-P3 (AK-TAIL-SPLIT via rowflow): lanes emit candidate records unless
+            # --legacy-tail or --workers 1 keeps the in-process serialized tail.
+            **({"make_emitting_tail": _emitting_tail_factory(args())}
+               if _tail_split_enabled(args()) else {}))
+    finally:
+        phase_owner.close()
+
+
+def _accumulate_after_keep_impl(mechanism_id: str, phase_owner, *,
+        args, bundle, accum_policy, accum_bench_forced, serving_floor_pct, publish, latest, hotspot_rows,
+        original_source_keeps, promote_anchor, measured_serving_compare, serving_recipe, cor_build,
+        anchor_build, serving_floor_unit, direct_launch, frozen_requests, floor_request_digest, floor_record,
+        source_instrument, ppl_contract_fold_check, ppl_contract_evict_culprit, last_gate,
+        serving_floor_provenance, serving_floor_carry, cor_commit, epoch, feedback, publish_headline, cpu_compare, bench_floor, pp, bench_surface, ubatch, tg,
+        measured_bench_compare) -> None:
+    head = _git(args().worktree, "rev-parse", "HEAD")
+    previous_tip = bundle()[0].tip
+
+    def persist_comparison(row: dict, phase: str, *, measured_tip: str = head) -> dict:
+        """Retain the complete direct COR-vs-tip observation before using its scalar."""
+        body = {
+            "schema": "epyc.autokernel.accumulator_comparison.v1",
+            "phase": phase,
+            "mechanism_id": mechanism_id,
+            "champion_of_record": bundle()[0].champion_of_record,
+            "prior_tip": previous_tip,
+            "measured_tip": measured_tip,
+            "surface": bundle()[0].surface,
+            "harness": (direct_launch().snapshot_digest if direct_launch() else
+                        f"bench:{bench_surface()}:{pp()}:{tg()}:{ubatch()}:{args().pairs}"),
+            "comparison": row,
+        }
+        canonical = json.dumps(body, sort_keys=True, separators=(",", ":"),
+                               allow_nan=False).encode()
+        identity = hashlib.sha256(canonical).hexdigest()
+        root = args().store / "accumulator-comparisons"
+        target = root / f"{head[:12]}-{phase}-{identity}.json"
+        if target.exists():
+            if json.loads(target.read_text(encoding="utf-8")) != body:
+                raise RuntimeError(f"immutable accumulator evidence collision at {target}")
+        else:
+            status.write_json(root, target.name, body, prefix=".accumulator-comparison-")
+        return {"path": str(target.resolve()),
+                "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
+
+    def record_resolution(kind: str, first_ref: dict, second_ref: dict,
+                          restored_ref: dict | None = None) -> dict:
+        body = {
+            "schema": "epyc.autokernel.accumulator_comparison_resolution.v1",
+            "outcome": kind,
+            "mechanism_id": mechanism_id,
+            "champion_of_record": bundle()[0].champion_of_record,
+            "prior_tip": previous_tip,
+            "candidate_tip": head,
+            "candidate_tree": phase_owner.mutation_binding()["candidate_tree"],
+            "first": first_ref,
+            "repeat": second_ref,
+            **({"restored_tip_recheck": restored_ref} if restored_ref else {}),
+        }
+        canonical = json.dumps(body, sort_keys=True, separators=(",", ":"),
+                               allow_nan=False).encode()
+        identity = hashlib.sha256(canonical).hexdigest()
+        root = args().store / "accumulator-comparisons"
+        target = status.write_json(root, f"resolution-{head[:12]}-{identity}.json", body,
+                                   prefix=".accumulator-resolution-")
+        return {"path": str(target.resolve()),
+                "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
+
+    # 2026-10-03: the COR-vs-tip bench runs on a keep cadence, not after every keep
+    # (`--accumulate-bench-every-keeps`). A deferred keep advances membership, tip and
+    # the R23-54 cadence counter; its retained magnitude is marked stale, so the
+    # threshold trigger cannot fire on it, and the keep that reaches the cadence gate
+    # is always measured first (`accumulate.bench_due`).
+    due = accumulate.bench_due(bundle()[0], accum_policy(), args().accumulate_bench_every_keeps,
+                               force=accum_bench_forced()[0],
+                               gate_armed=serving_floor_pct() is not None)
+    if due is None:
+        bundle()[0].add_unmeasured_keep(mechanism_id, head)
+        bundle()[0].save(args().store)
+        landed = bundle()[0].keeps_since_serving_gate
+        every = args().accumulate_bench_every_keeps
+        print(f"accum     bundle {len(bundle()[0].keeps)} keep(s); COR-vs-tip bench deferred "
+              f"(keep {landed} since the serving gate; bench every {every} keeps and "
+              f"before the cadence gate at {accum_policy().every_keeps}); retained "
+              f"{bundle()[0].compounded_bench_pct:+.2f}% is stale until then")
+        return
+    accum_bench_forced()[0] = False
+    publish()("running", latest(), hotspot_rows=hotspot_rows(),
+            step=f"keep: accumulate — champion-of-record vs tip bench ({mechanism_id}, {due})")
+    # compounded bench: champion-of-record build (A) vs the just-advanced accumulator (B),
+    # re-measured (never a product of marginal effects -- keeps interact) because this is
+    # the number the fire threshold reads and the serving gate will be asked to confirm.
+    def compare_bundle() -> dict:
+        return (cpu_compare()(cor_build()[0], anchor_build()[0], rebind_feedback=False).to_dict()
+                if direct_launch() else measured_bench_compare()(
+                    bench.Arm("champion_of_record", cor_build()[0] / "bin" / "llama-bench"),
+                    bench.Arm("accumulator", anchor_build()[0] / "bin" / "llama-bench"),
+                    args().model, pp=pp(), tg=tg(), pairs=args().pairs,
+                    noise_floor_pct=bench_floor(), surface=bench_surface(), ubatch=ubatch(),
+                    calibrated=bench_floor() is not None).to_dict())
+
+    comp = compare_bundle()
+    comp_ref = persist_comparison(comp, "initial")
+    if accumulate.negative_beyond_floor(comp, serving_floor_pct()):
+        publish()("running", latest(), hotspot_rows=hotspot_rows(),
+                step=f"keep: accumulator negative repeat ({mechanism_id})")
+        repeated = compare_bundle()
+        repeated_ref = persist_comparison(repeated, "repeat")
+        if accumulate.negative_beyond_floor(repeated, serving_floor_pct()):
+            # The just-created commit remains in Git as evidence, but it must not
+            # remain the working champion. Restore the prior accumulator source,
+            # rebuild it into a fresh owned anchor slot, and recheck that slot.
+            _git(args().worktree, "reset", "--hard", previous_tip)
+            if original_source_keeps() and original_source_keeps()[-1].get("kept_commit") == head:
+                original_source_keeps().pop()
+            promote_anchor()()
+            restored = compare_bundle()
+            restored_ref = persist_comparison(
+                restored, "restored-prior-tip", measured_tip=previous_tip)
+            resolution_ref = record_resolution(
+                "interaction_regression", comp_ref, repeated_ref, restored_ref)
+            if not accumulate.negative_beyond_floor(restored, serving_floor_pct()):
+                bundle()[0].compounded_bench_pct = restored["effect"] * 100.0
+                bundle()[0].comparison_evidence = restored_ref
+                bundle()[0].measurement_validity = accumulate.MEASUREMENT_CURRENT
+                bundle()[0].save(args().store)
+            else:
+                # The restored tip still reads negative: with deferred benches the
+                # regression may predate the reverted keep, so the next keep must
+                # re-measure the whole bundle rather than wait for its cadence.
+                accum_bench_forced()[0] = True
+                bundle()[0].measurement_validity = accumulate.MEASUREMENT_STALE_RESTORED_REGRESSION
+                bundle()[0].comparison_evidence = restored_ref
+                bundle()[0].save(args().store)
+            phase_owner.mark_rollback(resolution_ref)
+            raise loop.InteractionRegression(
+                f"whole bundle regressed beyond floor twice; restored prior tip "
+                f"{previous_tip[:12]}; evidence {resolution_ref['path']}")
+        record_resolution("drift_null", comp_ref, repeated_ref)
+        comp, comp_ref = repeated, repeated_ref
+    bundle()[0].add_keep(mechanism_id, head, comp["effect"] * 100.0,
+                       comparison_evidence=comp_ref)
+    bundle()[0].save(args().store)   # durable BEFORE the gate decision, so a crash keeps it
+    thr = (f"{accum_policy().fire_threshold_pct(serving_floor_pct()):.2f}"
+           if serving_floor_pct() is not None else "uncalibrated")
+    if (accumulate.effective_measurement_validity(bundle()[0], args().store)
+            != accumulate.MEASUREMENT_CURRENT):
+        raise loop.RunAborted("stale_baseline: compounded gain cannot be quoted")
+    print(f"accum     bundle {len(bundle()[0].keeps)} keep(s), "
+          f"{bundle()[0].compounded_bench_pct:+.2f}% compounded bench vs champion of record "
+          f"(serving gate fires at {thr}%, or on cadence at "
+          f"{bundle()[0].keeps_since_serving_gate}/{accum_policy().every_keeps} keeps)")
+    # R23-54 (operator 2026-09-08): EITHER trigger fires the gate — the compounded bench
+    # estimate clearing the threshold, or the mandatory every-4-keeps cadence. The
+    # estimate keeps its early trigger but no longer holds a veto over the schedule.
+    trigger = accumulate.gate_trigger(bundle()[0], serving_floor_pct(), accum_policy(), store=args().store)
+    if trigger is None:
+        return
+    # The gate is being spent -- once, on the whole bundle.
+    sv_row = measured_serving_compare()(serving_recipe(), cor_build()[0], anchor_build()[0],
+                             pairs=args().serving_pairs, floor_pct=serving_floor_pct(),
+                             floor_unit=serving_floor_unit(),
+                             **({"port": direct_launch().port,
+                                 "anchor_resolved_recipe": _cpu_arm(direct_launch(), cor_build()[0]),
+                                 "candidate_resolved_recipe": _cpu_arm(direct_launch(), anchor_build()[0]),
+                                 "frozen_requests": frozen_requests(),
+                                 "floor_request_digest": floor_request_digest(),
+                                 "floor_record": floor_record(),
+                                 **({"instrument": args().serving_instrument}
+                                    if source_instrument() else {})}
+                                if direct_launch() else {}))
+    plan = accumulate.resolve(bundle()[0], sv_row, accum_policy(), store=args().store)
+    if plan["outcome"] is accumulate.Outcome.PROMOTE:
+        # Layer (e) at fold (review 2026-10-06): a serving win is bench/throughput
+        # evidence only. A bundle carrying a ppl_contract keep must also pass the
+        # quality layers (a)-(d) as a WHOLE before the champion of record advances;
+        # a refusal (or any error) HOLDS it exactly like a serving divergence.
+        quality = ppl_contract_fold_check()(head)
+        if quality is not None:
+            print(f"quality   ppl_contract bundle gate: passed={quality.passed} "
+                  f"{quality.reason}")
+        if quality is not None and not quality.passed:
+            plan = {**plan, "outcome": accumulate.Outcome.DIVERGED,
+                    "action": accum_policy().on_divergence,
+                    "new_champion_of_record": bundle()[0].champion_of_record,
+                    "reason": ("QUALITY HOLD: serving confirmed the bundle but the "
+                               f"ppl_contract bundle gate refused: {quality.reason}; "
+                               "champion of record HOLDS at "
+                               f"{bundle()[0].champion_of_record[:12]}"),
+                    "planner_evidence": {"kind": "ppl_contract_quality_hold",
+                                         "bundled_keeps": list(bundle()[0].keeps),
+                                         "reason": quality.reason}}
+            # Operator tiering: bisect the bundle's ppl-relevant keeps and evict the
+            # culprit from the accumulator instead of discarding the whole bundle;
+            # the champion of record still HOLDS this round, and the next trigger
+            # re-judges the bundle without it. Any fault leaves the plain hold.
+            eviction = ppl_contract_evict_culprit()(head, quality)
+            plan["planner_evidence"]["eviction"] = eviction
+            print(f"quality   bundle bisect: {eviction}")
+    # WHY it fired is part of the reading: a cadence firing at +2% compounded is a
+    # different fact from a threshold firing at +9%, and the 2026-09-08 divergence is
+    # the reason a reader must never have to infer which one happened.
+    last_gate()[0] = {"trigger": trigger, "outcome": plan["outcome"].value,
+                    "floor_provenance": serving_floor_provenance(),
+                    "floor_carry": serving_floor_carry(), **_floor_registry_receipt(),
+                    "at_commit": head, "keeps": len(bundle()[0].keeps),
+                    "compounded_bench_pct": (
+                        round(bundle()[0].compounded_bench_pct, 3)
+                        if accumulate.effective_measurement_validity(bundle()[0], args().store)
+                        == accumulate.MEASUREMENT_CURRENT else None),
+                    "serving_effect_pct": sv_row.get("effect_pct"),
+                    "serving_decisive": sv_row.get("decisive"),
+                    "at": loop._now()}
+    status.write_json(
+        args().store / "serving", f"bundle-{head[:12]}.json",
+        {"outcome": plan["outcome"].value, "trigger": trigger, "reason": plan["reason"],
+         # Whether the floor this verdict was judged against was ever proven to belong
+         # to this recipe. A grandfathered floor still gates, but it must never be
+         # indistinguishable from a verified one in the record it produced.
+         "floor_provenance": serving_floor_provenance(),
+         "floor_carry": serving_floor_carry(), **_floor_registry_receipt(),
+         "keeps_since_serving_gate": bundle()[0].keeps_since_serving_gate,
+         "gate_every_keeps": accum_policy().every_keeps,
+         "bundled_keeps": list(bundle()[0].keeps),
+         "planner_evidence": plan.get("planner_evidence"), **sv_row}, prefix=".sv-")
+    print(f"serving   [trigger={trigger}] {plan['reason']}")
+    # This is a whole-bundle observation, not another source keep. Export the
+    # original capture on BOTH dispositions before COR/bundle state advances.
+    # Preserve the established divergence fields for historical recall.
+    promoted = plan["outcome"] is accumulate.Outcome.PROMOTE
+    archive.record(
+        args().store,
+        {"schema": "epyc.autokernel.attempt.v1", "campaign_id": "ak-loop",
+         "mechanism_id": f"serving-{'gate' if promoted else 'divergence'}-{head[:12]}",
+         "status": "measured_serving_gate" if promoted else "measured_divergence",
+         "hypothesis": plan["reason"], "planner_evidence": plan.get("planner_evidence"),
+         "trigger": trigger, "floor_provenance": serving_floor_provenance(),
+         "floor_carry": serving_floor_carry(), **_floor_registry_receipt(),
+         "gate_outcome": plan["outcome"].value,
+         "bundled_keeps": list(bundle()[0].keeps),
+         "champion_of_record": cor_commit()[0], "at_commit": head,
+         "comparison": sv_row, "serving": sv_row},
+        epoch=epoch(), recorded_at=last_gate()[0]["at"], campaign_id="ak-loop",
+        on_serving_export=feedback().exported)
+    if plan["outcome"] is accumulate.Outcome.PROMOTE:
+        # The champion of record advances to the accumulator tip. Snapshot its build into
+        # the protected slot, publish the headline against it, and start a fresh bundle.
+        promoted_bundle = accumulate.Bundle(
+            champion_of_record=head, tip=head, surface=bundle()[0].surface)
+        promoted_bundle.mark_serving_gate_fired()
+        try:
+            if promoted_bundle.surface is None:
+                promoted_bundle.save(args().store)
+            else:
+                promoted_bundle.promote_shared_cor(
+                    args().store, expected_cor=bundle()[0].champion_of_record)
+        except accumulate.BundleRecoveryRequired as refusal:
+            raise loop.RunAborted(
+                f"shared COR promotion refused before publishing the new champion: {refusal}") from refusal
+        cor_commit()[0] = plan["new_champion_of_record"]
+        cor_build()[0] = anchor_build()[0]  # point at the verified gen; prune protects it
+        publish_headline()()
+        # Fresh bundle: no keeps, and the R23-54 cadence counter starts at 0 because the
+        # gate just ran (a fresh Bundle defaults to 0; mark it anyway so the reset is not
+        # an accident of the constructor).
+        bundle()[0] = promoted_bundle
+    else:
+        # DIVERGED + HOLD: hand the divergence to the planner as journal evidence so it can
+        # revert/revise a bundled keep or re-aim; the champion of record and the bundle hold.
+        # R23-54: the gate RAN, so the cadence counter resets even though the bundle
+        # HOLDS. It counts readings taken, not verdicts won — without this a diverged
+        # bundle would re-fire the expensive gate on every single subsequent keep.
+        bundle()[0].mark_serving_gate_fired()
+        bundle()[0].save(args().store)
+
+
+def _verify_anchor(*, guard_floor=None,
+        args, direct_launch, cpu_launch, anchor_build, floor, keep_timer, source_instrument, hotspot_rows,
+        keep_stage, measured_bench_compare, tg, feedback, cpu_compare, last_anchor_aa, calibrated,
+        source_floor_refresh, epoch, anchor_guard_seen, publish, ubatch, cpu_anchor_guard_compare, build_champion, pp,
+        latest) -> None:
+    """Prove the promoted binary IS the champion; `RunAborted` if not. Runs in the
+    serialized tail holding the claim: `commit` is called inside `tail_session`."""
+    def keep_verdict(verdict) -> None:
+        # Both outcomes, before any abort raises: store + status, so the dashboard
+        # says WHY a run stopped and the check is auditable after the fact.
+        archive.record(args().store, verdict.to_attempt(), epoch=epoch(),
+                       recorded_at=loop._now(), campaign_id="ak-loop",
+                       on_serving_export=feedback().exported)
+        anchor_guard_seen().append(verdict.to_dict())
+        if verdict.pairs and verdict.effect_pct is not None:
+            last_anchor_aa()[0] = (time.monotonic(), verdict.passed and not verdict.excursion)
+        publish()("running", latest(), hotspot_rows=hotspot_rows())
+        print(f"anchor    {verdict.detail}")
+
+    def aa_skip() -> str | None:
+        """Skip the identical-digest A/A only inside the window after a clean one."""
+        window = args().anchor_guard_aa_window_s
+        last = last_anchor_aa()[0]
+        if window <= 0 or last is None or not last[1]:
+            return None
+        age = time.monotonic() - last[0]
+        if age >= window:
+            return None
+        return (f"this run's previous anchor-guard A/A passed inside the floor "
+                f"{age / 60.0:.0f} min ago (--anchor-guard-aa-window-s {window:g})")
+
+    guard_commit = _git(args().worktree, "rev-parse", "HEAD")
+    guard_scratch = (args().store / ("anchor-verify-cpu" if cpu_launch() else
+                                   "anchor-verify-gpu-serving")
+                     if direct_launch() else anchor.SCRATCH_BUILD)
+    guard_builds = [0]
+
+    def timed_build(path):
+        guard_builds[0] += 1
+        name = "anchor_guard_build" if guard_builds[0] == 1 else "anchor_guard_heal_build"
+        with keep_stage()(name, commit=guard_commit, build_dir=str(path)):
+            return build_champion()(path)
+
+    def timed_digest(path):
+        with keep_stage()("anchor_guard_digest", build_dir=str(path)):
+            return anchor_integrity.object_digest(path)
+
+    def timed_aa_skip():
+        reason = aa_skip()
+        if reason and keep_timer()[0] is not None:
+            keep_timer()[0].skip("anchor_guard_aa", reason)
+        return reason
+
+    def guard_compare(promoted, fresh):
+        return (
+            cpu_anchor_guard_compare()(promoted, fresh)
+            if direct_launch() and source_instrument() and source_floor_refresh()[0]
+            else cpu_compare()(promoted, fresh)) if direct_launch() else measured_bench_compare()(
+            bench.Arm("promoted_anchor", promoted / "bin" / "llama-bench"),
+            bench.Arm("fresh_champion", fresh / "bin" / "llama-bench"),
+            args().model, pp=pp(), tg=tg(), pairs=args().pairs, noise_floor_pct=floor(),
+            surface=args().surface, ubatch=ubatch(), calibrated=calibrated())
+
+    def timed_compare(promoted, fresh):
+        with keep_stage()("anchor_guard_aa"):
+            return guard_compare(promoted, fresh)
+
+    anchor.verify(
+        champion_commit=guard_commit,
+        anchor_build=anchor_build()[0],
+        noise_floor_pct=floor() if guard_floor is None else guard_floor,
+        # 2026-09-06: OBJECT digest, not the linked .so. The compiler is reproducible
+        # (0/379 objects ever differed); the linker is not (four distinct .so digests
+        # for one commit aborted every keep on link noise). Objects prove identity.
+        digest=timed_digest, on_verdict=keep_verdict, build=timed_build, aa_skip=timed_aa_skip, compare=timed_compare,
+        on_step=lambda label: publish()("running", latest(),
+                                      hotspot_rows=hotspot_rows(), step=label),
+        **({"scratch_build": args().store / ("anchor-verify-cpu" if cpu_launch() else
+                                           "anchor-verify-gpu-serving")}
+           if direct_launch() else {}))
+
+
+def _promote_anchor(*, set_runtime_selection,
+        direct_launch, cpu_launch, serving_recipe, publish, latest, hotspot_rows, args, keep_stage,
+        anchor_build, build_champion, recipe, current_anchor_commit, experimental, source_instrument, floor,
+        feedback_anchor, invalidate_source_floor, verify_anchor, runtime_enabled, install_runtime_owner, publish_headline, reprofile, runtime_recipe_reference, runtime_owner,
+        cor_build) -> None:
+    """Advance the anchor by BUILDING the champion into the new slot, never by
+    renaming a build directory in (CMake dirs are not relocatable). `pool` owns the
+    mechanics so a test can EXECUTE them rather than grep for them."""
+    # R23-52: the keep path was silent for 30+ min (clean anchor build + guard + headline +
+    # reprofile + accumulate) and the dashboard read the loop as dead. Heartbeat every sub-stage.
+    publish()("running", latest(), hotspot_rows=hotspot_rows(),
+            step="keep: building the new anchor generation (clean build)")
+    clean_commit = _git(args().worktree, "rev-parse", "HEAD")
+    with keep_stage()("anchor_clean_build", commit=clean_commit) as clean_stage:
+        anchor_build()[0] = pool.promote_anchor(
+            args().store, build=build_champion(), recipe=recipe().to_dict(),
+            champion_commit=clean_commit,
+            # 2026-10-06 follow-up: widen to PPL_CONTRACT_TOOL_TARGETS only when this
+            # store has a ppl_contract obligation (an admitted mechanism, or an
+            # unreadable ledger failing wide) -- a store with no ppl_contract history
+            # keeps getting exactly gates.PROMOTION_TARGETS, so an existing run's
+            # resume is unaffected.
+            ppl_contract_obligated=gates.ppl_contract_anchor_obligated(args().store))
+        clean_stage["build_dir"] = str(anchor_build()[0])
+    current_anchor_commit()[0] = _git(args().worktree, "rev-parse", "HEAD")
+    print(f"anchor    advanced to {anchor_build()[0].name} — subsequent effects are "
+          f"MARGINAL against this {'experimental candidate' if experimental() else 'champion'}, "
+          "not cumulative")
+    if direct_launch() is not None and source_instrument():
+        # The accepted comparison above was judged against the prior anchor's
+        # floor. Only now bind the launch to the promoted executable/DSOs and
+        # require a new exact-identity A/A before another source candidate can
+        # run.  The integrity guard below is not a research candidate and uses
+        # the prior admitted tolerance without consuming this pending refresh.
+        prior_floor = floor()
+        set_runtime_selection(_cpu_arm(direct_launch(), anchor_build()[0]))
+        feedback_anchor()[0] = direct_launch()
+        invalidate_source_floor()()
+    else:
+        prior_floor = None
+    # FIRST, before the loop draws any further work: nothing below is worth doing
+    # against an anchor that is not the champion (run 18: 114 candidates, 6.5 h).
+    try:
+        with keep_stage()("anchor_guard"):
+            verify_anchor()(guard_floor=prior_floor)
+    except loop.RunAborted as aborted:
+        # The keep's commit already landed; name its head on the abort so the
+        # run_aborted row can carry it (loop.iterate adds the rest).
+        aborted.committed_head = current_anchor_commit()[0]
+        raise
+    if direct_launch() is not None:
+        # This slot supplies the next hypothesis, not the recipe of the run's
+        # initial binary. Rebind once at the actual owning keep boundary.
+        feedback_anchor()[0] = _cpu_arm(direct_launch(), anchor_build()[0])
+        if runtime_enabled():
+            install_runtime_owner()()
+    # AFTER the guard, never before (run 18's void number). 2026-09-07: publishing here
+    # is RESTORED. R23-44 had moved it to the serving-PROMOTE branch only, so the
+    # champion-vs-production headline froze for the whole accumulation phase -- the
+    # operator saw a 3.8-day-old, two-generations-stale number on the OLD surface
+    # (dec-b4) marked SUPERSEDED while 5 keeps had landed. The headline is a BENCH
+    # cumulative gain on the current surface and must stay fresh per keep; the
+    # serving-demonstrated state is the accumulator card's champion_of_record, not
+    # this number. Cost: one tip-vs-production bench per keep (the pre-R23-44 cost).
+    publish()("running", latest(), hotspot_rows=hotspot_rows(),
+            step=("keep: experimental serving candidate retained" if experimental() else
+                  "keep: champion-vs-production headline bench"))
+    with keep_stage()("headline"):
+        publish_headline()()
+    publish()("running", latest(), hotspot_rows=hotspot_rows(),
+            step=("keep: CPU profiling unavailable" if cpu_launch() else
+                  "keep: selected GPU serving profiling unavailable" if direct_launch() else
+                  "keep: re-profiling the new champion (rocprofv3)"))
+    # The champion moved, so the profile that named the hotspots is stale: the
+    # accepted patch changed the very distribution the next hypothesis should aim
+    # at. Re-profiling here is what makes a long run keep aiming at the truth
+    # rather than at wherever the time went hours ago.
+    with keep_stage()("reprofile"):
+        reprofile()()
+    runtime_original_build = (runtime_owner()[0].retained_build(runtime_recipe_reference()[0])
+        if runtime_recipe_reference()[0] is not None and runtime_owner()[0] is not None else None)
+    with keep_stage()("prune_anchor_generations"):
+        cleanup = pool.prune_anchor_generations(
+            args().store, current=anchor_build()[0],
+            protect=[cor_build()[0]] + ([runtime_original_build] if runtime_original_build is not None else []))
+    if cleanup.removed:
+        print(f"anchor    pruned {len(cleanup.removed)} superseded generation(s); "
+              "reclaimed bytes unknown (not scanned on measurement path)")
+    if cleanup.failed:
+        print("anchor    cleanup incomplete: "
+              + "; ".join(f"{path}: {reason}" for path, reason in cleanup.failed),
+              file=sys.stderr)
+    if cleanup.quarantined:
+        print("anchor    recoverable cleanup quarantine: "
+              + "; ".join(f"{original} -> {quarantine} ({reason})"
+                          for original, quarantine, reason in cleanup.quarantined),
+              file=sys.stderr)
+    if cleanup.retention_unknown:
+        print("anchor    cleanup skipped (retention_unknown): "
+              + "; ".join(cleanup.retention_unknown), file=sys.stderr)
+
+
+def _ensure_source_floor(anchor_recipe, a_build, *, apply_source_floor,
+        source_floor_refresh, args, serving_recipe, frozen_requests, current_anchor_commit, measured_serving_calibrate, source_instrument, direct_launch,
+        runtime_preparation) -> None:
+    if not source_floor_refresh()[0]:
+        return
+    # Resolve the newly retained anchor's floor before either candidate arm
+    # can launch. A different executable/DSO identity gets a distinct
+    # immutable artifact even when recipe and requests are unchanged.
+    # DS41-C69 (operator 2026-09-28): before paying 48 launches, carry the
+    # lineage floor under the SAME runtime recipe hash when the promoted
+    # anchor's own anchor-guard A/A (recorded by `verify_anchor` at this
+    # keep) sits inside it. Read-only; never written under this identity.
+    floor_store, reading, carry = _select_source_floor(
+        args().store, serving_recipe(), anchor_recipe,
+        frozen_requests=frozen_requests(), instrument=args().serving_instrument,
+        pairs=args().serving_pairs, dynamic=True,
+        anchor_commits=(current_anchor_commit()[0],),
+        carry_forward=args().floor_carry_forward)
+    if reading.floor_pct is None:
+        try:
+            value = measured_serving_calibrate()(serving_recipe(), a_build,
+                samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument() else max(2, args().serving_pairs),
+                port=direct_launch().port, resolved_recipe=anchor_recipe, frozen_requests=frozen_requests(),
+                **source_instrument())
+            floor_selfcheck.check_before_write(args().store, value)  # AKX-AUTO-4
+            written_path = _write_new_source_floor(
+                floor_store, serving_recipe(), anchor_recipe, value,
+                frozen_requests=frozen_requests(), instrument=args().serving_instrument,
+                pairs=args().serving_pairs)
+        except Exception:
+            if args().serving_instrument == serving.MATCHED_INSTRUMENT:
+                # AKX-FLOOR-REMEASURE-1 (C): a claimed request survives a failed
+                # calibration -- restored to pending (or retired as `.failed-` if
+                # a newer request has since arrived) so the next attempt tries again.
+                fail_remeasure_request(args().store, serving_recipe())
+            raise
+        if args().serving_instrument == serving.MATCHED_INSTRUMENT:
+            # AKX-FLOOR-REMEASURE-1 (C): a no-op when no request was claimed, so
+            # this is safe unconditionally -- consume it here, at keep time, the
+            # moment the forced calibration it requested lands on disk.
+            consume_remeasure_request(args().store, serving_recipe(),
+                                      new_floor_path=written_path)
+        _floor_store, reading = _load_source_floor(
+            args().store, serving_recipe(), anchor_recipe,
+            frozen_requests=frozen_requests(), instrument=args().serving_instrument,
+            pairs=args().serving_pairs, dynamic=True)
+    apply_source_floor(reading, carry)
+    source_floor_refresh()[0] = False
+    runtime_preparation()["source_comparison_floor"] = str(reading.path)
+
+
+def _keep_grade_runtime_compare(pair, *,
+        direct_launch, anchor_build, ensure_source_floor, floor, floor_record, cpu_measurement_window,
+        runtime_store, runtime_arm_declaration, args, floor_request_digest, frozen_requests,
+        serving_floor_unit):
+    """A declared runtime arm at keep-grade evidence: the matched paired serving A/B
+    against the CURRENT recipe's own matched floor, same instrument, pairs and order
+    randomization as a source candidate's keep A/B; both arms run the anchor build."""
+    from . import runtime_arms
+    anchor_recipe = _cpu_arm(direct_launch(), anchor_build()[0])
+    if anchor_recipe.execution_digest != pair.anchor.execution_digest:
+        raise loop.TailRefused("declared runtime arm was built against a different anchor recipe")
+    ensure_source_floor()(anchor_recipe, anchor_build()[0])
+    if floor() is None or not isinstance(floor_record(), dict):
+        raise loop.TailRefused("keep-grade runtime arm needs the current recipe's matched "
+                               "serving floor; none is calibrated")
+    comparison = _serving_comparison(lambda: serving.compare(
+        pair.anchor.template, anchor_build()[0], anchor_build()[0], pairs=args().serving_pairs,
+        floor_pct=floor(), floor_unit=serving_floor_unit(), port=pair.anchor.port,
+        anchor_resolved_recipe=pair.anchor, candidate_resolved_recipe=pair.candidate,
+        frozen_requests=frozen_requests(), floor_request_digest=floor_request_digest(),
+        runtime_pair=pair, runtime_evidence="keep_grade",
+        instrument=args().serving_instrument, floor_record=floor_record()),
+        "experimental_runtime_treatment_not_source_champion",
+        measurement_window=cpu_measurement_window())
+    try:
+        runtime_arms.record_attempt(runtime_store().root, pair=pair.to_dict(),
+                                    comparison=comparison.row,
+                                    declaration=runtime_arm_declaration())
+    except Exception as exc:     # noqa: BLE001 -- the comparison stands; the arm re-serves
+        print(f"runtime   WARNING keep-grade attempt not recorded: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
+    return comparison
+
+
+def _retain_measured_source_comparison(result, baseline_build, measured_under, model, *,
+        experimental, cpu_launch, selected_identity, args,
+        measured_source_comparisons):
+    if not (experimental() and cpu_launch() and selected_identity() is not None):
+        return result
+    # The measuring step, not the later keep writer, seals the native result.
+    result.row["model"] = str(model)
+    native = result.to_dict()
+    from .comparison_validation import validate_comparison
+    validate_comparison(native, require_provenance=False)
+    measured_fields = {
+        "measured_value": statistics.median(native["candidate_samples"]),
+        "baseline_value": statistics.median(native["anchor_samples"]),
+        "baseline_path": str(Path(baseline_build).resolve()), "measured_under": measured_under}
+    raw = surface_fold.canonical_bytes({
+        "schema": "epyc.autokernel.measured_comparison.v1", "comparison": native,
+        **measured_fields})
+    digest = hashlib.sha256(raw).hexdigest()
+    path = args().store.resolve() / "measured-comparisons" / (digest + ".json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    archive._retain_bytes(path, raw)
+    key = id(result)
+    reference = weakref.ref(result, lambda _ref, key=key: measured_source_comparisons().pop(key, None))
+    measured_source_comparisons()[key] = (
+        reference, {"path": str(path), "sha256": digest}, measured_fields)
+    return result
+
+
+def _cpu_compare(a_build, c_build, *, rebind_feedback=True,
+        direct_launch, feedback_anchor, ensure_source_floor, experimental, cpu_measurement_window, floor,
+        retain_measured_source_comparison, floor_request_digest, args, floor_record, source_instrument, serving_recipe, serving_floor_unit,
+        frozen_requests):
+    anchor_recipe = _cpu_arm(direct_launch(), a_build)
+    candidate_recipe = _cpu_arm(direct_launch(), c_build)
+    # Reuse the actual comparison's rebind, including after an anchor keep;
+    # never hash a build a second time merely to assemble a planner prompt.
+    # Only a comparison whose A-arm IS the current anchor may rebind: the
+    # accumulator's champion-of-record-vs-tip bundle has the OLD champion as
+    # its A-arm and would otherwise revert the post-keep planner scope.
+    if rebind_feedback:
+        feedback_anchor()[0] = anchor_recipe
+    ensure_source_floor()(anchor_recipe, a_build)
+    result = _serving_comparison(lambda: serving.compare(
+        serving_recipe(), a_build, c_build, pairs=args().serving_pairs,
+        floor_pct=floor(), floor_unit=serving_floor_unit(), port=direct_launch().port,
+        anchor_resolved_recipe=anchor_recipe, candidate_resolved_recipe=candidate_recipe,
+        frozen_requests=frozen_requests(), floor_request_digest=floor_request_digest(),
+        floor_record=floor_record(),
+        **({"instrument": args().serving_instrument} if source_instrument() else {})),
+        "experimental_candidate_not_champion" if experimental()
+        else "canonical_candidate_vs_current_anchor",
+        measurement_window=cpu_measurement_window(),
+        on_complete=lambda completed: retain_measured_source_comparison()(
+            completed, a_build, anchor_recipe.execution_digest, serving_recipe().model))
+    return result
+
+
+def _install_runtime_owner(*, set_runtime_selection,
+        direct_launch, cpu_launch, serving_recipe, selected_target, resolved_campaign, runtime_store,
+        runtime_epoch, runtime_statistical, args, anchor_build, original_argv, runtime_owner, original_claims,
+        manifest, epoch_inputs, current_anchor_commit, runtime_deadline, report_runtime_progress,
+        feedback_anchor, invalidate_source_floor, runtime_preparation, runtime_calibration_launches,
+        runtime_recipe_reference):
+    from . import runtime_admission, runtime_calibration
+    from ..evaluator import controls
+    campaign_id = resolved_campaign().campaign_id if selected_target() is not None else "ak-loop"
+    statistical = runtime_calibration.declare_statistics(store=runtime_store(),
+        campaign_id=campaign_id, epoch=runtime_epoch(), supplied=runtime_statistical())
+    escalation = None if args().runtime_control_escalation is None else controls.OperatorEscalation(
+        **_read_cpu_document(args().runtime_control_escalation))
+    original = _cpu_arm(direct_launch(), anchor_build()[0])
+    recovery = None
+    if args().runtime_recovery_reference is not None:
+        from . import runtime_recovery
+        try:
+            recovery = _read_cpu_document(args().runtime_recovery_reference)
+            runtime_recovery.reopen(recovery, current_argv=original_argv())
+        except (OSError, ValueError) as exc:
+            # Ordinary source work remains available; an interrupted runtime
+            # window will still refuse without a valid original teardown join.
+            print(f"runtime recovery unavailable: {exc}", file=sys.stderr)
+            recovery = None
+    runtime_owner()[0] = runtime_admission.RuntimeAdmission(store=runtime_store(),
+        held_claim=original_claims()[0], campaign_id=campaign_id, epoch=runtime_epoch(),
+        **({"gpu_claim": original_claims()[-1]} if not cpu_launch() else {}),
+        original=original, prompts=manifest(), statistical=statistical,
+        host_state={**epoch_inputs(), "nominal_khz": args().runtime_nominal_khz},
+        worktree=args().worktree, source_commit=current_anchor_commit()[0], escalation=escalation,
+        deadline_monotonic_s=runtime_deadline(), recovery_reference=recovery,
+        on_progress=report_runtime_progress())
+    selected = runtime_owner()[0].selected()
+    feedback_anchor()[0] = selected
+    if selected.to_dict() != original.to_dict():
+        set_runtime_selection(selected)
+        invalidate_source_floor()()
+    runtime_preparation().update(status="original_frame_ready",
+        default_recipe=runtime_owner()[0].default.to_dict(),
+        selected_recipe=runtime_owner()[0].state["selected"],
+        statistics=statistical.to_dict(),
+        calibration_launches=runtime_calibration_launches(),
+        historical_replay="original backend control owner supplies its separate declared frame")
+    runtime_recipe_reference()[0] = runtime_owner()[0].selection_reference(selected,
+        current_source_commit=current_anchor_commit()[0], origin=runtime_recipe_reference()[0])
+    report_runtime_progress()()
+    print(f"runtime   optional first-treatment setup: {runtime_calibration_launches()} "
+          "original calibration server launches plus controls; source proposals do not require it")
+
+
+def _publish_preclaim_failure_once(out, scheduler_selection, selected_identity, original_claims,
+                                   cpu_native_acquired, error):
+    if scheduler_selection is None or original_claims or cpu_native_acquired[0]:
+        return False
+    _publish_preclaim_failure(out, scheduler_selection, selected_identity, error)
+    return True
+
+
+def _publish_held_claims(*, set_attempted, set_evidence, set_error,
+        held_claim_attempted, scheduler_selection, stage_client, args, preclaim_failure_published, cpu_native_acquired, original_claims, selected_identity, gpu_local,
+        runtime_owner):
+    if scheduler_selection() is None or held_claim_attempted() or stage_client() is not None:
+        return
+    set_attempted(True)
+    if (args().cpu_held_intervals_v2 == "on" and preclaim_failure_published()
+            and not cpu_native_acquired()[0] and not original_claims()):
+        return  # Proved before-native failure, never a post-acquire discount.
+    from .measurement_capture import ArtifactStore
+    original_store = None
+    try:
+        args().out.mkdir(parents=True, exist_ok=True)
+        original_store = ArtifactStore(args().out / "held-claim-artifacts")
+        artifact = claim.publish_intervals(
+            original_store, scheduler_selection(), original_claims(),
+            target=selected_identity(),
+            phases=(gpu_local().closed_phases() if gpu_local() is not None and gpu_local().quiet
+                    else None),
+            cpu_segments=args().cpu_held_intervals_v2 == "on").to_dict()
+        evidence = {
+            "schema": "epyc.autokernel.direct_held_reference.v1",
+            "selection_digest": scheduler_selection().digest,
+            "evidence": artifact}
+        set_evidence(evidence)
+        status.write_json(args().out, "loop-held-claims.json", evidence,
+                          prefix=".held-claims-")
+        if runtime_owner()[0] is not None:
+            interrupted = runtime_owner()[0].interruption_reference()
+            if interrupted is not None:
+                status.write_json(args().out, "loop-runtime-interruption.json", interrupted,
+                                  prefix=".runtime-interruption-")
+    except Exception as capture_error:
+        # Missing accounting remains visible; never relabel an already
+        # archived comparison or replace the original operational exception.
+        error = f"{type(capture_error).__name__}: {capture_error}"
+        set_error(error)
+        print(f"held-resource evidence unavailable: {error}", file=sys.stderr)
+        if args().cpu_held_intervals_v2 == "on":
+            status.write_json(args().out, "loop-held-claims-refused.json", {
+                "schema": "epyc.autokernel.cpu_segment_refusal.v1",
+                "selection_digest": scheduler_selection().digest, "target": selected_identity(),
+                "error": error},
+                prefix=".held-claims-refused-")
+    finally:
+        if original_store is not None:
+            original_store.close()
+
+
 def _main(argv: list[str] | None = None) -> int:
     live_tail = [None]
     gfx_counter = [None]
     budget_debit: list = [None]
 
-    def counter_phase(label):
-        """Observe phase boundaries without changing the wrapped outcome."""
-        def decorate(function):
-            @wraps(function)
-            def observed(*args, **kwargs):
-                def sample(boundary):
-                    try:
-                        if gfx_counter[0] is not None:
-                            gfx_counter[0].sample(f"{label}:{boundary}")
-                    except Exception as exc:
-                        print(f"GPU counter observation unavailable: {type(exc).__name__}: {exc}",
-                              file=sys.stderr)
-                sample("start")
-                began = time.monotonic()
-                try:
-                    return function(*args, **kwargs)
-                finally:
-                    sample("end")
-                    if budget_debit[0] is not None:
-                        budget_debit[0](label, time.monotonic() - began)
-            return observed
-        return decorate
+    counter_phase = partial(_counter_phase, gfx_counter=gfx_counter, budget_debit=budget_debit)
     # Publish can be reached by startup/refusal paths before campaign resolution.
     resolved_campaign = None
     original_argv = list(sys.argv[1:] if argv is None else argv)
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--worktree", type=Path, required=True,
-                        help="candidate source tree the planner edits")
-    parser.add_argument("--anchor-build", type=Path, required="--planner-only" not in original_argv)
-    planner_only.add_arguments(parser)
-    amdahl.add_arguments(parser)
-    parser.add_argument("--cor-build", type=Path,
-                        help="original champion-of-record build when it differs from the current anchor")
-    parser.add_argument("--resume-run", type=Path,
-                        help="terminal result from the preceding finite batch of these exact inputs")
-    parser.add_argument("--source-anchor-continuation", type=Path,
-                        help="serial-owned latest anchor for another target sharing this source")
-    parser.add_argument("--source-anchor-sha256",
-                        help="exact retained digest for --source-anchor-continuation")
-    parser.add_argument("--validate-source-continuation", action="store_true",
-                        help="serial-owned regression A/B for a propagated source lineage")
-    parser.add_argument("--validate-source-loo", action="store_true",
-                        help="execute retained-keep omissions after exact target validation")
-    # THE single champion branch; the worktree must have it checked out at its tip or
-    # the loop refuses to start (`champion.verify_startup`).
-    parser.add_argument("--champion-branch", default=champion.CANONICAL_BRANCH)
-    # Proceed (loudly) on a hand-built anchor that carries no provenance.json;
-    # anchor-gen-* dirs never need or honour this.
-    parser.add_argument("--allow-unverified-anchor", action="store_true")
-    parser.add_argument("--lineage-capture", action="store_true",
-                        help="seal each kept diff's original patch + source via lineage_capture "
-                             "(default off; env AK_LINEAGE_CAPTURE=1 is equivalent; OD-3)")
-    parser.add_argument("--model", type=Path,
-                        help="required unless derived from an explicitly selected enrolled target")
-    parser.add_argument("--resolved-campaign", type=Path,
-                        help="existing resolved campaign or campaign_cli output; selects inputs only")
-    parser.add_argument("--target-id", help="exact enrolled target ID/alias; requires --resolved-campaign")
-    parser.add_argument("--store", type=Path, required=True)
-    parser.add_argument("--new-store", action="store_true",
-                        help="EXPLICIT opt-in to create a fresh experiments.db/inbox at "
-                             "--store; without it a store lacking experiments.db is refused")
-    parser.add_argument("--bundle-surface", choices=accumulate.SURFACES,
-                        help="opt in to isolated CPU/GPU bundle storage; omitted preserves the "
-                             "legacy unscoped accumulator paths")
-    parser.add_argument("--rebaseline-stale", action="store_true",
-                        help="measure an existing stale surface against the shared COR")
-    parser.add_argument("--new-anchor-epoch", metavar="COMMIT",
-                        help="EXPLICIT opt-in (DS41-C126), bound to ONE commit: when the "
-                        "persisted accumulator bundle's tip is not an ancestor of "
-                        "--anchor-build's commit (a champion-branch new epoch, never a "
-                        "corrupt journal -- any OTHER refusal reason still refuses even "
-                        "with this flag), archive the current bundle projection + matching "
-                        "journal under the store (timestamped, never deleted) and "
-                        "initialize a fresh bundle with champion_of_record = tip = "
-                        "anchor. The value MUST resolve to the exact anchor commit this "
-                        "run computes from --anchor-build/--worktree (full SHA compared) "
-                        "-- a mismatch refuses, so a watchdog that always passes a fixed "
-                        "value cannot silently repair a later, unrelated anchor move. "
-                        "Also refuses if the store has a live owner (its journal write "
-                        "lock is held). Preflight with "
-                        "`accumulate.would_refuse_anchor` before taking a CPU region lock")
-    parser.add_argument("--belief-root-repo", type=Path,
-                        help="ROOT owning serving-observation reader AND the shared belief "
-                             "reader scripts/vidya/loop_beliefs.py the planner calls before "
-                             "every proposal (default: EPYC_ROOT_REPO, then EPYC_ROOT; if both "
-                             "are unset, the shared root_checkout resolver refuses to guess)")
-    parser.add_argument("--belief-ledger", type=Path, default=None,
-                        help="belief reader: the Vidya ledger (default: ROOT's canonical "
-                             "ledger, loop_beliefs.resolve_ledger)")
-    parser.add_argument("--belief-known-good", type=Path, default=None,
-                        help="belief reader: the known-good snapshot each ready answer writes "
-                             "and degraded mode's check-seeds reads (default "
-                             "<state>/loop-known-good/autokernel.planner.json)")
-    parser.add_argument("--belief-escalate-after-s", type=_belief_seconds,
-                        default=belief_context.DEFAULT_ESCALATE_AFTER_S,
-                        help="belief reader: a refusal alarm active this long is escalated to "
-                             "the critical operator alarm (default: %(default)s)")
-    parser.add_argument("--belief-reader-timeout-s", type=_belief_seconds,
-                        default=belief_context.DEFAULT_READER_TIMEOUT_S,
-                        help="belief reader: the child's deadline (prepare may run the "
-                             "incremental ingest); a timeout refuses planning and raises the "
-                             "alarm (default: %(default)s)")
-    parser.add_argument("--belief-focus-symbol", action="append", default=None,
-                        type=_belief_focus_symbol, metavar="SYMBOL",
-                        help="belief reader: a kernel symbol this target owns (repeatable; "
-                             "serial_run passes owned-targets.json `focus_symbols`). Claims on "
-                             "these symbols rank first inside their group of the belief section "
-                             "(belief redesign §7.5); a ranking boost, never a filter")
-    parser.add_argument("--preseeded-hypotheses", type=Path, default=None,
-                        help="degraded mode only: JSONL of not-yet-tested hypotheses (the five "
-                             "Hypothesis fields + premises [claim ids] + seeded_against "
-                             "[ledger_state or its digest], optional id) planned earlier "
-                             "against a known-good ledger or seeded by the operator. While "
-                             "belief context is refused a lane runs one only when check-seeds "
-                             "admits it against the last known-good snapshot; never used "
-                             "while belief context is ready")
-    parser.add_argument("--iterations", type=int, default=10,
-                        help="0 means run CONTINUOUSLY until stopped: drop a STOP "
-                             "file in the store, or send SIGTERM/SIGINT. On a stop, "
-                             "a lane still FORMING abandons at its next stage "
-                             "boundary (no further planner/critic call is drawn); "
-                             "the lane holding the serialized tail finishes "
-                             "build/oracle/A-B/commit and publishes first.")
-    parser.add_argument("--no-measurement-alarm-n", type=int,
-                        default=status.NO_MEASUREMENT_ALARM_N,
-                        help="operator-attention warning after this many consecutive pool "
-                             "outcomes with no recorded native Comparison; observe-only, "
-                             "default %(default)s")
-    parser.add_argument("--gpu-counters", type=Path, default=None,
-                        help="RVP-CTR-1 treatment arm: a gpu_counter_signals observation JSON "
-                             "(declared rocprofv3 counter subset of this target's hotspots); "
-                             "the planner sees it and must cite a present counter. Omit for "
-                             "the control arm.")
-    parser.add_argument("--keep-rate-alarm-window", type=int,
-                        default=status.KEEP_RATE_ALARM_WINDOW,
-                        help="operator-attention warning window in measured candidates; "
-                             "observe-only, default %(default)s")
-    parser.add_argument("--pairs", type=int, default=bench.MIN_PAIRS)
-    parser.add_argument("--surface", choices=tuple(bench.SURFACES), default="pp512")
-    parser.add_argument("--calibrate-surface", type=int, metavar="N", default=None,
-                        help="A/A bootstrap-calibrate --surface: N pairs x 3 "
-                             "conditions (D8 method); floor lands in the store")
-    # ---- the two-rung screen/confirm keep gate (§5.3, operator-approved D1-D6).
-    # OFF unless --confirm-model is given: single-rung behavior is bit-identical
-    # without it, so the running run's semantics are untouched until the boundary
-    # that enables it.
-    parser.add_argument("--confirm-model", type=Path, default=None,
-                        help="production-shaped confirm rung: a screen keep is a "
-                             "KEEP_CANDIDATE until it survives this model's "
-                             "confirm surfaces (D1); headline moves to this rung")
-    parser.add_argument("--confirm-pairs", type=int,
-                        default=rung_confirm.DEFAULT_PAIRS,
-                        help="pairs per confirm surface (D3; 5 = calibrated k=5 row)")
-    parser.add_argument("--confirm-surfaces",
-                        default=",".join(rung_confirm.DEFAULT_SURFACES),
-                        help="comma-separated confirm gate surfaces (D2)")
-    # R23-43: the SERVING keep gate. When set, a screen keep must ALSO improve serving
-    # throughput on llama-server under the champion's canonical recipe -- the only
-    # performance that matters (operator 2026-09-04). Supersedes the bench confirm rung.
-    parser.add_argument("--serving-recipe", type=Path, default=None,
-                        help="canonical serving recipe JSON; a keep must improve serving "
-                             "throughput under it (llama-server), not just the bench screen")
-    parser.add_argument("--serving-pairs", type=int, default=5,
-                        help="paired serving A/B runs per bundle at the serving gate")
-    parser.add_argument("--keep-dimensions", default="",
-                        help="G5 (2026-10-04): comma-separated dimensions a keep must not "
-                             "regress, extending the cross-workload keep gate: "
-                             + ",".join(surface_validation.KEEP_DIMENSIONS) + ". Undeclared "
-                             "dimensions are skipped and recorded; a declared dimension with "
-                             "no measurement refuses the keep (default: none declared)")
-    parser.add_argument("--keep-capacity-limit-gib", type=float, default=None,
-                        help="capacity ceiling for the 'capacity' keep dimension: peak VRAM "
-                             "(GPU; default 62 GiB, stack-owner ceiling) or peak RSS (CPU; "
-                             "no default) of the candidate launch at the recipe's context "
-                             "and slots")
-    parser.add_argument("--serving-instrument", default=serving.LEGACY_INSTRUMENT,
-                        choices=(serving.LEGACY_INSTRUMENT, serving.MATCHED_INSTRUMENT),
-                        help="matched_process_v2 uses counterbalanced process pairs and a matching floor; "
-                             "direct CLI defaults to the historical v1 instrument")
-    parser.add_argument("--no-floor-carry-forward", dest="floor_carry_forward",
-                        action="store_false", default=True,
-                        help="DS41-C69 escape hatch: never carry a lineage serving floor across "
-                             "a source-only anchor change; recalibrate (24 pairs) as before")
-    parser.add_argument("--floor-registry", type=Path, metavar="MASTER.yaml|@code",
-                        help="OFF by default. Read the MASTER model registry's `serving_floors` "
-                             "section (loop.floor_registry; `@code` = the registry of the repo THIS code runs "
-                             "from, any other path is logged as an override) for a floor measured on a byte-equivalent "
-                             "build before calibrating; a floor THIS run calibrates is used "
-                             "in-process and a registry plan is emitted for the owning session to "
-                             "apply (this flag never writes the registry). Requires "
-                             "--serving-instrument matched_process_v2 and --floor-registry-role. A "
-                             "store build (kernels/builds/<name>: VERSION.txt + SHA256SUMS, no "
-                             "provenance.json) is then accepted as --anchor-build when its commit "
-                             "descends from the champion head.")
-    parser.add_argument("--floor-registry-role",
-                        help="the `serving_floors.<role>` key this target's floors live under")
-    parser.add_argument("--floor-allow-stale-upstream", action="store_true",
-                        help="proceed on the local registry even when origin/main cannot be refreshed "
-                             "(`git fetch origin main` failed) and the last fetch is >24h old. Without it "
-                             "that situation refuses to launch; a behind registry always refuses.")
-    parser.add_argument("--floor-numerics-epoch", default="default",
-                        help="numerics label of the registry era; a floor is never reused across "
-                             "a different label (e.g. bump it when the W5.1a numerics default flips)")
-    parser.add_argument("--floor-require-grade", choices=floor_registry.GRADES, default="decision",
-                        help="lowest grade a REGISTERED floor may have to be used as the bar")
-    parser.add_argument("--floor-co-tenancy", choices=floor_registry.CO_TENANCY, default="co-tenant",
-                        help="host state of THIS run's calibrations when it registers them; "
-                             "default co-tenant (=> indicative only). Declare `quiet` only when "
-                             "the host is quiet for the whole A/A.")
-    parser.add_argument("--require-serving-floor", action="store_true",
-                        help="refuse to start when no source serving floor exists for this "
-                             "launch (exact, champion-of-record or carried forward) instead of "
-                             "auto-calibrating one; an explicit --cpu-calibrate-serving N is "
-                             "still honoured. For a campaign whose floor is measured in a "
-                             "scheduled window (DS41-1017, 2026-10-21).")
-    parser.add_argument("--cpu-serving-launch", type=Path,
-                        help="selected target's canonical resolved CPU launch JSON")
-    parser.add_argument("--gpu-serving-launch", type=Path,
-                        help="explicit enrolled GPU target's canonical resolved serving launch JSON")
-    parser.add_argument("--frozen-prompts", type=Path,
-                        help="original FrozenPromptManifest for explicitly selected serving measurement")
-    parser.add_argument("--heldout-frozen-prompts", type=Path,
-                        help="separate frozen serving prompts for integrity-flagged keep candidates")
-    parser.add_argument("--longctx-surface", type=Path,
-                        help="opt-in long-context serving surface spec (longctx.py): decode/"
-                             "prefill at depth as the primary metric of attention routes and "
-                             "a no-regression gate on every keep; planner inputs at depth")
-    parser.add_argument("--cpu-calibrate-heldout", type=int,
-                        help="explicit startup A/A pair count for the held-out request-bound floor")
-    parser.add_argument("--heldout-calibration-only", action="store_true",
-                        help="finish after explicit held-out A/A calibration; draw no proposal")
-    parser.add_argument("--serving-calibration-only", action="store_true",
-                        help="finish after explicit --cpu-calibrate-serving A/A calibration: no "
-                             "reprofile, no planner, no proposal; the run ends 'stopped' with 0 "
-                             "outcomes (DS41-1017 floor window, operator 2026-10-21)")
-    parser.add_argument("--experimental-branch",
-                        help="explicit serving candidate branch; never the canonical champion")
-    parser.add_argument("--cpu-calibrate-serving", type=int,
-                        help="collect this many original serving calibration launches before iterations")
-    parser.add_argument("--runtime-statistics", type=Path,
-                        help="prospective original ServingStatisticsDeclaration for runtime work")
-    parser.add_argument("--runtime-calibration-max-launches", type=int,
-                        help="explicit upper bound for the complete A/A plus neutral runtime calibration")
-    parser.add_argument("--runtime-recipe-reference", type=Path,
-                        help="original serial-owned retained recipe reference; never a floor or launch permit")
-    parser.add_argument("--runtime-recovery-reference", type=Path,
-                        help="target-local original serial teardown reference; not admission or a claim")
-    parser.add_argument("--runtime-arms", type=Path,
-                        help="declared runtime arms (runtime_arms.RuntimeArmDeclaration): the loop "
-                             "draws each unsettled arm before planner proposals and adopts a winner "
-                             "under --runtime-arm-evidence")
-    parser.add_argument("--runtime-arm-evidence", choices=("keep_grade", "strict"),
-                        default="keep_grade",
-                        help="keep_grade (default): a declared bit-exact arm is judged by the same "
-                             "matched paired serving A/B a source keep clears, against the current "
-                             "recipe's matched serving floor; strict: the prospective runtime frame "
-                             "(requires --runtime-statistics)")
-    parser.add_argument("--calibrate-runtime", action="store_true",
-                        help="collect/reopen strict CPU anchor A/A and neutral calibration under the existing claim; "
-                             "does not qualify controls or bank a runtime treatment")
-    parser.add_argument("--runtime-control-escalation", type=Path,
-                        help="existing original OperatorEscalation record for unavailable historical replay; never inferred")
-    parser.add_argument("--runtime-nominal-khz", type=int, default=2_500_000,
-                        help="declared host reference (installed live_controls reference by default), not current maxfreq")
-    parser.add_argument("--cpu-profiler", type=Path, default=Path("/usr/bin/perf"),
-                        help="perf executable for separate observational CPU request profiling")
-    # Opt-in, not default-on: enabling it adds a full instrumented llama.cpp build and a
-    # SECOND server launch to every reprofile. That cost, and an extra launch inside the
-    # profile window, must be asked for rather than appear in a run nobody configured for
-    # it. With it off the profile stage is byte-for-byte what it was.
-    parser.add_argument("--node-profile", action="store_true",
-                        help="also run the out-of-band instrumented sibling profile "
-                             "(per-node CPU wall, host phases, engram gather counters) "
-                             "after every anchor/keep; the perf capture is unaffected")
-    # Default 2, not 1: level 2 is the only level at which minflt/majflt are measured at
-    # all, and the fault mix is what decides the residency question the engram levers all
-    # hang on. Its ~0.2-0.5%/token overhead prices nothing here -- this sibling never
-    # produces a timing number.
-    parser.add_argument("--node-profile-level", type=int, default=2, choices=(1, 2),
-                        help="engram counter level for the instrumented sibling; 2 adds "
-                             "per-thread fault attribution and perturbs more")
-    parser.add_argument("--cpu-screen-scope", choices=("quarter", "half"),
-                        help="common reduced CPU source screen; positive requires separate full confirmation")
-    parser.add_argument("--cpu-confirm-from", type=Path,
-                        help="original completed reduced batch retaining the exact source/build to confirm")
-    parser.add_argument("--gpu-calibrate-serving", type=int,
-                        help="collect this many original GPU serving calibration launches before iterations")
-    parser.add_argument("--fire-multiple", type=float, default=2.5,
-                        help="R23-44: run the serving gate once the accumulator's compounded "
-                             "bench gain over the champion of record reaches this multiple of "
-                             "the serving floor (operator: 2-3x; default 2.5)")
-    parser.add_argument("--variance-input", type=Path, default=None,
-                        help="U3-SEED/S3-AKU-04 (OP-AKU-U3): JSON epyc.autokernel.variance_input.v1 "
-                             "of paired session units. When given, each kept row records the "
-                             "variance_keep verdict and the (effect, spread) point and applies "
-                             "keep_frontier.retain; additive, never changes the keep decision. "
-                             "Absent (default): behaviour unchanged")
-    parser.add_argument("--accumulate-bench-every-keeps", type=int,
-                        default=accumulate.ACCUMULATE_BENCH_EVERY_KEEPS,
-                        help="re-measure champion-of-record vs accumulator tip on every Nth "
-                             "keep since the serving gate last ran, and always on the keep "
-                             "that fires the cadence gate; other keeps land with the "
-                             "compounded magnitude marked stale (deferred). 1 = after every "
-                             "keep, the pre-2026-10-03 behaviour (default: %(default)s)")
-    parser.add_argument("--anchor-guard-aa-window-s", type=float,
-                        default=ANCHOR_GUARD_AA_WINDOW_S,
-                        help="when the anchor guard's object digests prove the promoted "
-                             "anchor IS the champion, skip its A/A session-health sample if "
-                             "this run's previous A/A passed inside the floor less than this "
-                             "many seconds ago. The digest check, its heal and its abort are "
-                             "never skipped; a missing digest, a prior excursion or an "
-                             "expired window always samples. 0 = always sample, the "
-                             "pre-2026-10-03 behaviour (default: %(default)s)")
-    parser.add_argument("--out", type=Path)
-    parser.add_argument("--scheduler-selection", type=Path,
-                        help="original serial scheduler selection for held-resource accounting only")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="prove the wiring without a provider call or a build")
-    # `P-AK-SEARCH-1-A3` (RATIFIED 2026-08-31) narrows denial 4 to permit epoch-scoped
-    # ranking. DEFAULT ON since the operator decision of 2026-10-20 ("Flip the default
-    # now"; evidence AK-HR-2 render audit: recency recall shows no measured answer in
-    # 81.2% of planner calls, ranked 1.6%). `--no-rank-prior-experiments` restores
-    # recency recall. It grants ranking and nothing else -- banking, composition,
-    # readiness contribution and promotion are untouched, and the campaign still
-    # derives its own thresholds. The store/archive `recall()` API default is unchanged.
-    parser.add_argument("--rank-prior-experiments", action=argparse.BooleanOptionalAction,
-                        default=True,
-                        help="P-AK-SEARCH-1-A3: order recalled records by merit "
-                             "instead of recency, cross-epoch magnitudes redacted "
-                             "(default: on; --no-rank-prior-experiments = recency)")
-    parser.add_argument("--shared-history-root", type=Path, action="append", default=[],
-                        help="read-only prior mechanism store; historical outcomes do not transfer")
-    parser.add_argument("--operator-unblock-artifact", type=Path, action="append", default=[],
-                        help="content-addressed operator amendment reopening one do_not_repeat match")
-    parser.add_argument("--resume", choices=("on", "off"), default="on",
-                        help="before drawing fresh hypotheses, resume checkpointed work of "
-                             "this anchor/epoch/target: an accepted patch goes straight to "
-                             "the current gates and the measurement, an accepted hypothesis "
-                             "back to authoring; each at most once, re-validated first "
-                             "(resume.py; default: %(default)s)")
-    parser.add_argument("--hypothesis-author-attempts", type=int,
-                        default=loop.HYPOTHESIS_AUTHOR_ATTEMPTS,
-                        help="authoring attempts one critic-ACCEPTED hypothesis gets across "
-                             "iterations, each of the loop's patch rounds. Patch rounds that "
-                             "run out on author failures leave it pending "
-                             "(patch_rounds_exhausted) and the next draw re-authors it before "
-                             "the planner is asked; the last attempt retires it "
-                             "(hypothesis_retired). A scope_blocked attempt spends none. An "
-                             "author call that produces no diff (abstains, reports a change "
-                             "it never made; every best-of member) spends one "
-                             "(authoring_failed); one whose failures were all the harness's "
-                             "(truncated final step, timeout, provider error) spends none "
-                             "(authoring_harness_failure) until "
-                             f"{loop.AUTHOR_HARNESS_FAILURE_CAP} in a row "
-                             "(default: %(default)s)")
-    # ---- concurrency. EVERY run is pooled; --workers 1 is a one-lane pool. The
-    # separate sequential path was deleted 2026-08-31 once the pool owned the
-    # consecutive-error breaker -- two run paths were two things to drift.
-    parser.add_argument("--planner-model", default=actors.PLANNER_DEFAULT.model,
-                        help="planner/author model; claude-* routes via the claude CLI, "
-                             "a provider/model id via opencode (external provider: the "
-                             "prompt egresses off-host), orch:<role|auto> via the "
-                             "orchestrator's /chat (INF-78 OAB-2 opt-in: orch:auto lets it "
-                             "route, orch:architect_critic pins the 27B (ARCHSWAP-20260927); AK_ORCHESTRATOR_URL / "
-                             "AK_ORCHESTRATOR_ROOT override its API and CLI tree), anything "
-                             "else via codex (default: %(default)s)")
-    parser.add_argument("--planner-effort", default=actors.PLANNER_DEFAULT.effort)
-    parser.add_argument("--critic-model", default=actors.CRITIC_DEFAULT.model,
-                        help="critic model, both passes; same routing as "
-                             "--planner-model (default: %(default)s)")
-    parser.add_argument("--critic-effort", default=actors.CRITIC_DEFAULT.effort)
-    parser.add_argument("--actor-seat", choices=("bounded", "plain"), default="plain",
-                        help="opencode planner/author seat: 'plain' is the bare `opencode run` "
-                             "seat; 'bounded' writes a per-run opencode config (output-capped MCP "
-                             "tools, tool_output cap, step cap, guidance added via `instructions`). "
-                             "Default plain per the DS41-C20 A/B (2026-09-24, one pair on the 27B): "
-                             "plain 31.9 min vs bounded 44.3 min per proposal, both schema-valid; "
-                             "bounded's proposal was better grounded (instruction-level annotate "
-                             "evidence) but its perf-backed tools cost minutes of wall. No effect "
-                             "on codex/claude (default: %(default)s)")
-    parser.add_argument("--actor-fan-out", action=argparse.BooleanOptionalAction, default=True,
-                        help="bounded seat: let the agent spread independent reads over "
-                             "read-only scout subagents (default: %(default)s)")
-    parser.add_argument("--actor-context-mode", choices=("inline", "variable", "orchestrator-variable"),
-                        default="inline",
-                        help="opencode planner/author context bundle: 'inline' puts the whole "
-                             "rendered bundle in the prompt (every run through DS41 run 9: "
-                             "79.9k chars on run 8 with node_profile rendered); 'variable' "
-                             "writes it to a per-call directory beside the lane "
-                             "(workers/actor-context/) and sends an index -- task, schema, "
-                             "table of contents with sizes, a resolved target card, the "
-                             "always-needed sections and a node_profile summary (~18.1k chars "
-                             "on the run-8 bundle). Works in either --actor-seat; the call record's "
-                             "seat.arm gains '+ctx-variable'. No effect on codex/claude, or on "
-                             "the critic. 'orchestrator-variable' (INF-78 OAB-7, orch:<role> "
-                             "planners only; every other backend stays inline) ships the bundle "
-                             "as ChatRequest.context_bundle: the orchestrator REPL holds it as "
-                             "the variable `context`, the prompt carries the index, and the "
-                             "server echoes exact per-section pull bytes; seat.arm gains "
-                             "'+ctx-orch-variable' (default: %(default)s)")
-    parser.add_argument("--actor-context-print-cap-bytes", type=int, default=None,
-                        help="orchestrator-variable only (INF-78 OAB-7): per-turn cap on printed "
-                             "REPL output, which bounds what a pulled value can put into the "
-                             "root prompt (default: the server's, 4096)")
-    parser.add_argument("--actor-context-pull-budget-bytes", type=int, default=None,
-                        help="orchestrator-variable only (INF-78 OAB-7/OAB-12): cap on bytes "
-                             "the planner may pull from the bundle over one call (default: none)")
-    parser.add_argument("--actor-trim-instructions", choices=("on", "off"), default="on",
-                        help="opencode planner/author/critic (OAB-10): drop auto-loaded "
-                             "instruction files -- the lane's AGENTS.md (8.9k chars of ggml-org "
-                             "PR policy, incl. 'autonomous agents: STOP'), any CLAUDE.md/"
-                             "CONTEXT.md -- and the ~/.claude skill catalog + skill tool from "
-                             "every call (OPENCODE_DISABLE_PROJECT_CONFIG/_CLAUDE_CODE/"
-                             "_EXTERNAL_SKILLS + permission skill=deny). The author keeps the "
-                             "file's code-style lines as a short note. Off = the historical "
-                             "seat (default: %(default)s)")
-    parser.add_argument("--actor-trim-tools", choices=("on", "off"), default="on",
-                        help="opencode planner/author/critic (OAB-10): deny tools no DS41 "
-                             "planner transcript used (task, todowrite, webfetch, websearch, "
-                             "question, lsp) so their schemas leave every request; bounded "
-                             "fan-out keeps task (default: %(default)s)")
-    parser.add_argument("--actor-lane-guard", choices=("on", "off"), default="on",
-                        help="opencode planner/author/critic (OAB-11): the prompt names the lane "
-                             "as THE source tree and the build dir as the anchor BINARY; "
-                             "permission denies build/compile/benchmark commands, reads of the "
-                             "anchor SOURCE tree, every write for planner/critic and out-of-lane "
-                             "edits for the author. The loop measures on this CPU, so an actor's "
-                             "build is contamination, not help (default: %(default)s)")
-    parser.add_argument("--actor-author-sandbox", choices=("on", "off"), default="on",
-                        help="opencode author ONLY (operator 2026-09-26): the author may run "
-                             "`ak-check` (compile check; `--op-test` relinks libggml-cpu and runs "
-                             "test-backend-ops vs the CPU reference) in a per-iteration scratch "
-                             "dir, niced and pinned, refused while any tail measures; its prompt "
-                             "says to fix every error before replying. Planner/critic configs "
-                             "deny it. Off = the historical seat byte for byte "
-                             "(default: %(default)s)")
-    parser.add_argument("--actor-belief-context", choices=actors.BELIEF_CONTEXT_MODES,
-                        default="required",
-                        help="planner only, and MANDATORY (there is no 'off'): before every "
-                             "proposal the planner runs ROOT's shared belief reader "
-                             "(--belief-root-repo scripts/vidya/loop_beliefs.py prepare, a "
-                             "child killed at --belief-reader-timeout-s), which makes the "
-                             "ledger current (incremental ingest when stale) and returns the "
-                             "claims whose declared applicability scope EQUALS the planner "
-                             "target; they are added as a bounded, neutral section. A refused "
-                             "/ timed-out / invalid answer means NO planner call: the lane runs "
-                             "already-planned resume checkpoints and admissible "
-                             "--preseeded-hypotheses only, else ends the draw "
-                             "'belief_refused' and backs off. Every call (and refusal) writes "
-                             "a receipt (workers/actor-replies/belief-receipts.jsonl, v2: "
-                             "ledger_state + digest, presented/contested/withdrawn ids, "
-                             "outcome, relies_on_claims) (default: %(default)s)")
-    parser.add_argument("--actor-context-limit", type=int,
-                        default=actor_opencode_config.DEFAULT_CONTEXT_LIMIT,
-                        help="opencode planner/author/critic (OAB-23): `limit.context` on the "
-                             "call's provider/model in every per-call OPENCODE_CONFIG. opencode "
-                             "compacts once a step's total tokens reach context - output; "
-                             "without it (0) a config-only model NEVER compacts proactively "
-                             "and DS41 run 10's planner reached 183,710 of :8083's 196,608 "
-                             "unified-pool tokens (full pool + MTP crashes the server). "
-                             "At most 196608 - 16384 so >=16k of the pool stays free for the "
-                             "other slots (operator 2026-09-26) (default: %(default)s)")
-    parser.add_argument("--actor-output-limit", type=int,
-                        default=actor_opencode_config.DEFAULT_OUTPUT_LIMIT,
-                        help="opencode planner/author/critic (OAB-23): `limit.output`, sent as "
-                             "max_tokens on every request (0 = opencode's 32000). A step that "
-                             "hits it ends the opencode session (finish=length) "
-                             "(default: %(default)s)")
-    parser.add_argument("--actor-planner-output-limit", type=int,
-                        default=actor_opencode_config.DEFAULT_PLANNER_OUTPUT_LIMIT,
-                        help="opencode planner AND critic: their own `limit.output` "
-                             "(0 = --actor-output-limit). DS41 run 10b's planner hit 8,192 "
-                             "once and still replied (default: %(default)s)")
-    parser.add_argument("--actor-author-output-limit", type=int,
-                        default=actor_opencode_config.DEFAULT_AUTHOR_OUTPUT_LIMIT,
-                        help="opencode author: its own `limit.output` (0 = "
-                             "--actor-output-limit). A file-write tool call's arguments are "
-                             "output tokens; DS41 run 10b's author ended on one 8,192-token "
-                             "step with no report (failure_class=output_capped_empty). Must "
-                             "stay below --actor-context-limit - 32768; above 32000 the call "
-                             "raises opencode's own ceiling (OPENCODE_EXPERIMENTAL_OUTPUT_"
-                             "TOKEN_MAX) (default: %(default)s)")
-    parser.add_argument("--actor-author-thinking",
-                        choices=actor_opencode_config.THINKING_CHOICES,
-                        default=actor_opencode_config.DEFAULT_AUTHOR_THINKING,
-                        help="opencode author ONLY (OAB-24): 'medium' (operator 2026-09-26) "
-                             "sends chat_template_kwargs {enable_thinking: true, "
-                             "reasoning_effort: medium} on every request of an authoring call "
-                             "(per-call config, model options); 'off' sends {enable_thinking: "
-                             "false}. The planner and critic keep the server's default "
-                             "reasoning. Thinking uncapped, DS41 run 10c's author decoded "
-                             "74,288 tokens re-deriving a layout and made zero edits; "
-                             "thinking off (run 10g) it edited but wrote broken AVX-512. "
-                             "'default' = the historical config byte for byte "
-                             "(default: %(default)s)")
-    parser.add_argument("--actor-author-action-rule", choices=("on", "off"), default="on",
-                        help="opencode author ONLY (operator 2026-09-26): append the author "
-                             "action rule (think briefly then act in small verified edits, "
-                             "copy the tree's own idioms, only intrinsics seen in the tree or "
-                             "the GCC headers, signatures match callers, stay in scope or "
-                             "abstain). Off = the historical prompt byte for byte "
-                             "(default: %(default)s)")
-    parser.add_argument("--actor-planner-reasoning-history",
-                        choices=actor_opencode_config.REASONING_HISTORY_CHOICES,
-                        default=actor_opencode_config.DEFAULT_PLANNER_REASONING_HISTORY,
-                        help="opencode PLANNER only (2026-09-29): 'drop' stops a planner "
-                             "call re-sending its earlier steps' reasoning -- opencode sends "
-                             "every prior step's reasoning as reasoning_content and the served "
-                             "Qwen template renders it inside the tool chain whatever "
-                             "preserve_thinking says -- via the per-call config's model "
-                             "`interleaved` field (llama-server providers only; lane overrides "
-                             "keep theirs). The current step still reasons. Costs a re-prefill "
-                             "from the last assistant turn per step. 'keep' = the historical "
-                             "config byte for byte (default: %(default)s)")
-    parser.add_argument("--actor-concise", choices=("on", "off"), default="on",
-                        help="opencode planner/author (OAB-22): append the concision rule "
-                             "(derive each fact once, analysis under ~4,000 tokens, reply is "
-                             "the JSON object only). Off = the historical prompt byte for "
-                             "byte (default: %(default)s)")
-    # 2700 -> 4500 (DS41-C71, 2026-09-28): run 10m batches 7 and 9 ended budget_exhausted
-    # at 2700 s mid-session (22 and 39 tool steps; single reasoning steps of 15-16k output
-    # tokens on the thinking-on 27B), batch 8 on the output cap in between. The planner
-    # phase holds no CPU measurement (the CPU window is open to peers), so the longer
-    # wall costs only GPU time; 4500 s matches the thinking-on author's member budget.
-    for flag, kind, what in (("--max-run-wall-s", float, "elapsed wall seconds"),
-                             ("--max-run-gpu-s", float, "GPU-seconds (measurement stages)"),
-                             ("--max-run-decoded-tokens", int,
-                              "decoded tokens; a seat that meters none fails this closed")):
-        parser.add_argument(flag, type=kind, default=None,
-                            help=f"run-level ceiling on {what}: park at the next boundary "
-                                 "with terminal budget_parked (default: none)")
-    parser.add_argument("--bench-kv-type", default=None,
-                        help="llama-bench -ctk/-ctv for a bench surface with no resolved "
-                             "recipe (a resolved recipe's own KV type always wins). Default: "
-                             "no flag, an f16 cell. Floors are per KV type: a value other "
-                             "than f16 needs its own --calibrate-surface first.")
-    parser.add_argument("--actor-planner-budget-s", type=int, default=4500,
-                        help="opencode planner (OAB-23): wall budget per proposal call, under "
-                             "--actor-timeout-s. Past it the call is ended through the stop "
-                             "path and recorded failure_class=budget_exhausted; a complete "
-                             "reply is salvaged, otherwise the iteration ends (never retried). "
-                             "0 = none (default: %(default)s)")
-    # DS41 run 10m (2026-09-28): 5 of 9 planner calls ran 21-46 tool steps into the
-    # budget and never wrote the proposal; each wasted 45-75 min. One continuation of the
-    # same session asks for the JSON now (actors.AgentPlanner._salvage_proposal).
-    parser.add_argument("--actor-planner-salvage-s", type=int, default=900,
-                        help="opencode planner: when a proposal call ends by "
-                             "--actor-planner-budget-s with no complete reply and its "
-                             "session is known, run ONE follow-up call continuing that "
-                             "session (opencode run --session) that asks for the proposal "
-                             "JSON now, with no tool calls, under this wall budget "
-                             "(seconds; capped by what is left of --actor-timeout-s). A "
-                             "valid proposal proceeds (planner_report_source=salvage_turn); "
-                             "anything else ends the iteration budget_exhausted as before. "
-                             "0 = off (default: %(default)s)")
-    # UFH14-B1 (DS41-C95 F12, graded 2026-10-03): the two harness fixes proven on the 27B,
-    # model-agnostic. Both apply to opencode seats whose provider is a LOCAL llama-server
-    # only (hosted APIs and the codex/claude CLIs are untouched).
-    parser.add_argument("--actor-serving-f1", choices=("on", "off"), default="on",
-                        help="opencode, local llama-server providers, every role (UFH14-B1 "
-                             "F1): derive the client's serving parameters from the server "
-                             "(actor_serving): provider headerTimeout/chunkTimeout above the "
-                             "worst-case silent prefill (2 full-window prefills at the "
-                             "measured rate x 1.25, from the orchestrator's serving-call "
-                             "records; 4 h when unmeasured) -- opencode's 300 s defaults abort "
-                             "long prefills, which keep running server-side -- and "
-                             "limit.context clamped to the server's /props per-request window "
-                             "with compaction at <= 0.76 of it. Off = the historical config "
-                             "byte for byte (default: %(default)s)")
-    parser.add_argument("--actor-answer-protocol",
-                        choices=actors.ANSWER_PROTOCOL_CHOICES, default="f2",
-                        help="opencode PLANNER with a wall budget (UFH14-B1 F2): 'f2' adds a "
-                             "JSON-first rule, cuts the call at --actor-answer-force-frac of "
-                             "--actor-planner-budget-s, then (no complete answer printed yet) "
-                             "a forced-answer turn with compaction off, then a refine turn "
-                             "for the rest of the budget; the last COMPLETE answer wins; "
-                             "nothing complete falls back to the salvage turn. 'off' = the "
-                             "historical call (default: %(default)s)")
-    parser.add_argument("--actor-answer-force-frac", type=float, default=0.65,
-                        help="F2: fraction of the planner budget at which the answer is "
-                             "forced (F12: 0.65) (default: %(default)s)")
-    parser.add_argument("--actor-planner-think-budget", type=int, default=8000,
-                        help="opencode PLANNER, local llama-server providers (UFH14-B1 F2): "
-                             "per-turn thinking cap sent as thinking_budget_tokens (plus the "
-                             "F12 reasoning_budget_message) on every request of the call; "
-                             "0 = off (default: %(default)s)")
-    parser.add_argument("--actor-local-via-orchestrator", choices=("on", "off"), default="off",
-                        help="opencode seats whose provider is a LOCAL llama-server (operator "
-                             "2026-10-04, actor_passthrough): send their requests through the "
-                             "orchestrator passthrough (AK_ORCHESTRATOR_URL/v1/passthrough/"
-                             "<role>), which takes that server's CPU region lock (the lock a "
-                             "CPU measurement claim takes) or refuses a parked GPU role, per "
-                             "request. Hosted providers (codex, claude, hosted opencode) are "
-                             "untouched; F1 still reads the backing server. 'off' = raw ports "
-                             "(default: %(default)s)")
-    parser.add_argument("--actor-local-orchestrator-roles",
-                        default=actor_passthrough.DEFAULT_ROLES_SPEC,
-                        help="with --actor-local-via-orchestrator on: opencode provider -> "
-                             "orchestrator role, provider=role[,...]; a local provider not "
-                             "listed is refused at startup (default: %(default)s)")
-    parser.add_argument("--actor-author-budget-s", type=int, default=0,
-                        help="opencode author (OAB-23): the same wall budget for authoring "
-                             "calls; 0 = none (default: %(default)s)")
-    parser.add_argument("--actor-steps", type=int, default=actors.ActorSeat.steps,
-                        help="bounded seat: opencode step cap per call (default: %(default)s)")
-    parser.add_argument("--actor-wire-test-record", type=Path,
-                        help="passing native-client wire record for this exact actor seat configuration")
-    parser.add_argument("--allow-untested-actor-seats", metavar="REASON",
-                        help="explicit wire-gate override, durably recorded before actor calls")
-    parser.add_argument("--actor-timeout-s", type=int, default=actors.DEFAULT_TIMEOUT_S,
-                        help="wall budget per planner/critic call before it is a transient "
-                             "(default: %(default)s). The default was sized for cloud actors; "
-                             "a local ~17 t/s planner running --auto at high needs more -- "
-                             "measured 2026-09-24: two consecutive 30-min kills at step ~80, "
-                             "zero proposals")
-    parser.add_argument("--exact-lane-config", type=Path, default=None,
-                        help="INF06-EXACT-LANE: JSON naming the incumbent store, model, "
-                             "draft, fixed prompts and port; enables the exact-lane token-ID "
-                             "judge for candidates declaring lane \"exact\" (others unchanged)")
-    parser.add_argument("--isa-claims-gate", choices=isa_claims.GATE_MODES, default="off",
-                        help="C5-ISA-1: archive every GPU candidate's AMDGCN ISA (touched "
-                             "kernels of the built libggml-hip.so) under <out>/isa-claims/ "
-                             "and check the mechanisms its statement/falsifier claims "
-                             "(mfma, lds_staging, ...). advisory records only; enforce "
-                             "refuses an ABSENT/NOT_EXECUTED claim. Default: off (unchanged)")
-    parser.add_argument("--isa-claims-counter-command", type=Path, default=None,
-                        help="C5-ISA-1 execution witness: JSON list (argv template; "
-                             "{build_dir} and {lib} are substituted) of the candidate's own "
-                             "short GPU workload, run under rocprofv3 for the alu and lds "
-                             "counter passes so claims resolve to EXECUTED / NOT_EXECUTED. "
-                             "Omit: claims stay STATIC_ONLY. Needs --isa-claims-gate.")
-    parser.add_argument("--workers", type=int, default=pipeline.DEFAULT_WORKERS,
-                        help="concurrent lanes (default: the measured tail-saturation "
-                             "point; see pipeline.DEFAULT_WORKERS)")
-    parser.add_argument("--legacy-tail", action="store_true",
-                        help="AKPL-P3 rollback: measure in-process through the serialized tail "
-                             "(build, oracle, A/B, commit under one lock). Default with --workers > 1: "
-                             "lanes emit candidate records and hand them to the rowflow row chain "
-                             "(tailsplit.py); --workers 1 always uses the legacy tail")
-    parser.add_argument("--chain-spool", type=Path, default=None,
-                        help="AKPL-P3 candidate-record spool (default tailsplit.SPOOL)")
-    parser.add_argument("--worker-root", type=Path, default=pool.WORKER_ROOT,
-                        help="parent of the per-lane detached worktrees")
-    parser.add_argument("--worker-build-root", type=Path,
-                        default=pool.WORKER_BUILD_ROOT,
-                        help="parent of the per-lane candidate build directories")
-    parser.add_argument("--lane-actor-models", default="",
-                        help="per-lane planner+author model override (operator 2026-09-29, "
-                             "'2nd lane on external model'): comma list of "
-                             "K=provider/model[@effort] for lanes 1..workers-1. That lane's "
-                             "planner and SINGLE author run on the model (effort defaults to "
-                             "--planner-effort; no qwen-gpu reasoning kwargs); the critic stays "
-                             "global; lane 0 is never overridden. Actor provenance only, never "
-                             "an epoch or continuation identity (see lane_actors.py)")
-    scratch.add_arguments(parser)
-    parser.add_argument("--actor-authors", default=None,
-                        help="best-of-N authoring (operator 2026-09-26): a comma list of "
-                             "author thinking modes, one CONCURRENT author call per entry for "
-                             "each accepted hypothesis, each in its own scratch worktree; the "
-                             "first diff that passes the validator lands on the lane and the "
-                             "other calls are ended. N=len(list). 'single' (or one mode) is "
-                             "the single-author path byte for byte. Each author's opencode "
-                             "context/output comes from --actor-authors-budget (by thinking "
-                             "mode). Default: " + DEFAULT_ACTOR_AUTHORS + " (degrades to "
-                             "single when this build lacks a mode or --workers > 1)")
-    parser.add_argument("--actor-authors-budget", default="",
-                        help="best-of-N per-thinking-mode budget, merged over the defaults: "
-                             "comma list of <mode>=<context weight>:<output tokens>. The pool "
-                             "above its 16384 reserve is split by weight; each member takes "
-                             "its mode's output cap (must stay 32768 below its context). "
-                             "Defaults: " + ",".join(
-                                 f"{mode}={weight}:{output}" for mode, (weight, output)
-                                 in bestof.DEFAULT_MODE_BUDGETS.items())
-                             + " (off,medium on 196608: 65536/16384 and 114688/40960)")
-    parser.add_argument("--actor-authors-wall", default="",
-                        help="best-of-N per-member wall budget by thinking mode, merged over "
-                             "the defaults: comma list of <mode>=<seconds>. At its budget a "
-                             "member's call is ended (process-group stop), its lane diff is "
-                             "salvaged, and it is never retried in-round. Defaults: "
-                             + ",".join(f"{mode}={seconds}" for mode, seconds
-                                        in bestof.DEFAULT_MEMBER_WALL_S.items())
-                             + " (operator 2026-09-27). Panels only: N=1 is unchanged")
-    parser.add_argument("--actor-authors-panel-wall", default=str(bestof.DEFAULT_PANEL_WALL_S),
-                        help="best-of-N hard wall for the whole panel (authoring and the "
-                             "winner check), seconds; caps every member's budget "
-                             "(default: %(default)s)")
-    parser.add_argument("--actor-authors-cancel-factor",
-                        default=str(bestof.DEFAULT_CANCEL_FACTOR),
-                        help="best-of-N early cancel: once one member finishes (a winner, a "
-                             "genuine abstention or a diff that failed the check), end any "
-                             "member still authoring past this multiple of the finisher's "
-                             "wall without an ak-check-passing patch; 0 = off, else >= 1 "
-                             "(default: %(default)s)")
-    parser.add_argument("--actor-pool-tokens", type=int, default=bestof.DEFAULT_POOL_TOKENS,
-                        help=":8083's unified KV pool the concurrent authors share "
-                             "(np4 --kv-unified; default: %(default)s)")
-    parser.add_argument("--actor-authors-check", default="",
-                        help="best-of-N winner check after the integrity screen, run in each "
-                             "author's scratch tree. Empty = `ak-check --op-test` when this "
-                             "build has ak_check.py, else the screen alone; 'off' = the screen "
-                             "alone; anything else = an argv with {worktree}/{base}/{paths}/"
-                             "{scratch}/{build_dir} placeholders (exit 0 passes, 2 is "
-                             "inconclusive) (default: %(default)r)")
-    parser.add_argument("--cpu-held-intervals-v2", choices=("on", "off"), default="off",
-                        help="Capture original closed CPU ownership generations for settlement. "
-                             "Requires a new compatible parent/worker epoch; off preserves v1 "
-                             "receipts (default: %(default)s)")
-    parser.add_argument("--cpu-window-yield", choices=("on", "off"), default="on",
-                        help="CPU windows (operator proposal 2026-09-26): release the CPU-region "
-                             "claim while every lane is in an actor phase (planner, critics, "
-                             "author), publish the window for peers, and re-acquire it (waiting "
-                             "on a peer, never pre-empting it) before every build, measurement "
-                             "and at teardown; see cpu_window.py. Off = the claim is held for "
-                             "the whole batch, byte for byte (default: %(default)s)")
-    parser.add_argument("--cpu-measurement-gpu-quiet",
-                        type=_gpu_quiet_policy,
-                        choices=CPU_MEASUREMENT_GPU_QUIET_POLICIES,
-                        default=CPU_MEASUREMENT_GPU_QUIET_DEFAULT,
-                        help="CPU/GPU measurement quiet window (operator 2026-10-04: GPU "
-                             "benches and CPU measurements never overlap). lock = the "
-                             "orchestrator's host-wide gpu-quiet flock: a CPU run holds it "
-                             "SHARED with its region claim (yielded with it in actor "
-                             "phases), a GPU measurement holds it EXCLUSIVE for the "
-                             "measurement only and takes no CPU region -- never production "
-                             ":8083 traffic; off = neither (explicit opt-out); q3 = "
-                             "deprecated spelling of lock (default: %(default)s)")
-    parser.add_argument("--gpu-cpu-region-claim", choices=("on", "off"), default="on",
-                        help="selected GPU serving target only: off = take NO orchestrator CPU "
-                             "region claim for the batch (the mi210_0 device claim is still "
-                             "held; each host build takes a narrow role=build claim with "
-                             "affinity confined to four declared host CPUs; GPU compute "
-                             "takes quiet EXCLUSIVE). "
-                             "lock policy records actual local phases; off requires the "
-                             "legacy launcher-held continuous quiet hold; no CPU window "
-                             "(default: %(default)s)")
-    parser.add_argument("--gpu-window", choices=(GPU_WINDOW_OFF, GPU_WINDOW_REQUIRED),
-                        default=GPU_WINDOW_OFF,
-                        help="G1 MI210 window: required = every GPU measurement re-reads the "
-                             "stack-owned executor's window file and the run stops unless it "
-                             "grants AutoKernel the device (gpu_window.py) "
-                             "(default: %(default)s)")
-    parser.add_argument("--gpu-window-path", type=Path, default=gpu_window.WINDOW_FILE,
-                        help="the executor-owned MI210 window file, read-only "
-                             "(default: %(default)s)")
-    parser.add_argument("--cpu-window-wait-bound-s", type=float,
-                        default=cpu_window.DEFAULT_WAIT_BOUND_S,
-                        help="how long a re-acquire waits on a peer before it is logged as "
-                             "overdue; it keeps waiting either way (default: %(default)s)")
-    parser.add_argument("--cpu-window-path", type=Path, default=cpu_window.DEFAULT_PATH,
-                        help="the well-known window file; a per-campaign copy is written to "
-                             "<store>/cpu-window.json (default: %(default)s)")
-    parser.add_argument("--lane-targets", type=Path,
-                        help="lane -> target binding file (lane_targets.py, operator "
-                             "2026-10-03: one lane per model on one champion lineage). With "
-                             "--lane: refuses a target the file binds to another lane, needs "
-                             "--workers 1, holds the lane's lock, and cross-checks every keep "
-                             "touching a shared path against each peer target (no regression)")
-    parser.add_argument("--lane", help="this instance's lane name in --lane-targets (lane<N>)")
-    parser.add_argument("--cpu-window-bus-agent", default=cpu_window.DEFAULT_BUS_AGENT,
-                        help="session-bus roster id whose OWN outbox receives the window "
-                             "events as `status` broadcasts; 'off' (or empty) disables the bus "
-                             "(the window file and its events.jsonl remain) (default: %(default)s)")
+    parser = run_args.build_parser(original_argv, description=__doc__, run_module=sys.modules[__name__])
     args = parser.parse_args(argv)
     from . import stage_coordination
     stage_client = stage_coordination.client_from_env()
@@ -3525,7 +6651,7 @@ def _main(argv: list[str] | None = None) -> int:
         parser.error("--heldout-calibration-only requires --cpu-calibrate-heldout")
     if args.serving_calibration_only and (
             args.cpu_calibrate_serving is None or not args.cpu_serving_launch
-            or args.validate_source_continuation or getattr(args, "validate_source_loo", False)):
+            or args.validate_source_continuation or args.validate_source_loo):
         parser.error("--serving-calibration-only requires CPU serving with an explicit "
                      "--cpu-calibrate-serving N and no source validation")
     cpu_launch = direct_launch if args.cpu_serving_launch else None
@@ -4066,7 +7192,7 @@ def _main(argv: list[str] | None = None) -> int:
             if _gate_floor(heldout_reading)[0] is None:
                 parser.error("held-out serving floor absent for these exact request bytes and "
                              "anchor execution; run explicit --cpu-calibrate-heldout first")
-        if floor is None and getattr(args, "require_serving_floor", False) \
+        if floor is None and args.require_serving_floor \
                 and not calibration_samples:
             parser.error("--require-serving-floor: no source serving floor for "
                          f"{serving_recipe.name} (recipe_hash {serving_recipe.recipe_hash[:12]}, "
@@ -4186,8 +7312,7 @@ def _main(argv: list[str] | None = None) -> int:
         if direct_launch is not None:
             try:
                 _dry_run_accumulator_and_resume(
-                    args, anchor_commit=anchor_commit, experimental=experimental,
-                    epoch=epoch, measurement_epoch=measurement_epoch,
+                    args, anchor_commit=anchor_commit, experimental=experimental, epoch=epoch, measurement_epoch=measurement_epoch,
                     actor_config=launch_actor_config, carry=resume_carry,
                     surface=args.bundle_surface)
             except champion.StartupRefused as exc:
@@ -4281,183 +7406,18 @@ def _main(argv: list[str] | None = None) -> int:
         source_floor_refresh[0] = True
 
     def build_context() -> dict:
-        # Accepted hypotheses still pending authoring: the planner must not re-propose
-        # them (the next draws re-author them first). Only present when non-empty.
-        pending_view[0] = pending_hypotheses_view(args, epoch, current_anchor_commit[0],
-                                                  carry=resume_carry, **resume_bind)
-        # The status surface's comparability counts move as rows are recorded.
-        history_view[0] = (history_comparability(args.store, epoch=epoch,
-                                                 measurement_epoch=measurement_epoch)
-                           or history_view[0])
-        program = loop.program_text()
-        if cpu_launch:
-            program = (
-                "CPU EXPERIMENTAL TARGET — overrides inapplicable GPU instructions below.\n"
-                "Use the selected CPU launch, frozen requests and build recipe in target. "
-                "Do not follow ROCm/rocprofv3, GPU residency, -ngl 99 or GPU-specific "
-                "kernel-probe instructions for this target. Read cpu_profile for original "
-                "request-scoped sampled user-cycle attribution (or its unavailable reason); "
-                "fractions are not wall-time shares or optimization gains. Read node_profile "
-                "for the same anchor's per-op wall SHARES (MUL_MAT dense vs MUL_MAT_ID "
-                "experts vs FLASH_ATTN vs RMS_NORM vs the engram row gather), host phases "
-                "and engram fault mix, measured on an INSTRUMENTED SIBLING build: shares "
-                "transfer to the measured binary, absolutes do not, and it is never a "
-                "baseline nor comparable to any measured number. An absent section is a "
-                "missing instrument, never a zero. Do not invent "
-                "hotspots or reuse GPU timing evidence as CPU evidence. "
-                "Bit-exact FLASH_ATTN_EXT scheduling is an admitted source route "
-                "(cpu_fa_schedule in program.md): the frozen requests run at a KV depth of "
-                "~300 tokens, so the measured attention share understates production, "
-                "where most Q38FN decode wall is above 32k context. "
-                "Author/review source only for source hypotheses; runtime treatments "
-                "have no source edit and are observation-only unless separately admitted. "
-                "The existing loop owns compilation, the CPU "
-                "oracle, resource locking and paired serving measurements. Preserve the "
-                "selected request, cache/seed/speculation and placement conditions. "
-                "Keeps remain on the explicitly selected experimental candidate branch; "
-                "they do not promote the canonical champion or production.\n\n"
-                + program)
-            if screen_state is not None:
-                program = (
-                    "CPU COMMON-SCOPE SOURCE WORK: " + screen_state["scope"] + ". "
-                    "Both A/B arms share the listed threads and affinity; this is NOT an "
-                    "effect from changing those settings. Author source only, not a runtime "
-                    "treatment. Reduced positive is provisional until the SAME source/build "
-                    "clears the original full target; reduced null cannot globally retire a "
-                    "scaling-sensitive mechanism. No NUMA-local or full-scale transfer assumed.\n\n"
-                    + program)
-                if screen_hint is not None:
-                    program = ("Original common-scope selection hint: " + json.dumps(screen_hint,
-                        sort_keys=True) + ". Propose a source mechanism matching this stated family; "
-                        "the hint is advice, not evidence of full-target transfer.\n\n" + program)
-        elif direct_launch:
-            program = (
-                "EXPLICIT GPU SERVING TARGET — measure the selected server launch and frozen "
-                "requests, not the legacy bench screen. Preserve its GPU/environment, "
-                "cache/seed/speculation and placement settings. Author/review source only; "
-                "the existing loop owns builds, GPU oracle, claim and paired measurements. "
-                "Serving profiling is unavailable; do not invent hotspots or treat the "
-                "legacy bench screen as a profile of these requests. "
-                + ("Keeps remain on the explicit experimental branch, not the canonical champion. "
-                   if experimental else "Canonical COR advancement retains the existing bundle gate. ")
-                + "\n\n" + program)
-        # The next actual planner call sees the pool's native, observe-only alarm
-        # projection. `latest` is appended by record_pooled before a lane draws again.
-        # No alarm changes the iteration budget, measurement, or keep rules.
-        loop_health = status.pool_health_signal(
-            [outcome.to_attempt() for outcome in list(latest)],
-            no_measurement_n=args.no_measurement_alarm_n,
-            keep_window=args.keep_rate_alarm_window)
-        return {
-            "program": program,
-            "loop_health_alarm": loop_health,
-            "actor_provenance": {
-                "planner": planner_backend.describe(),
-                "critic": critic_backend.describe(),
-            },
-            # The store the context's paths point into (experiments.md, runtime floors,
-            # cpu/node profiles) and the campaign root holding it (inputs/, state-*/,
-            # sibling stores): the read-only critic's seat allows reads there and denies
-            # every other external path (actors._read_roots). DS41 run 10i: the critic
-            # grepped the campaign root to verify a hypothesis.
-            "actor_read_roots": list(dict.fromkeys(
-                str(p) for p in (Path(args.store).resolve(), Path(args.store).resolve().parent)
-                if str(p) != "/")),
-            **({"serving_instrument": dict(source_instrument)} if source_instrument else {}),
-            **({"cpu_screen": {**screen_state,
-                               "full_target": full_cpu_target.to_dict()}} if screen_state else {}),
-            "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
-            **({"cpu_profile": dict(cpu_profile_observation)} if cpu_launch else {}),
-            **({"node_profile": dict(node_profile_observation)} if cpu_launch else {}),
-            **({"gpu_serving_profile": dict(gpu_profile_observation)}
-               if direct_launch and not cpu_launch else {}),
-            # AK-AMDAHL-PRUNE: per-kernel e2e ceilings from the AKX-ALL-16 shares file.
-            **({"amdahl_ceilings": _amdahl_assessor(args).planner_view()}
-               if not cpu_launch and getattr(args, "amdahl_prune", "off") != "off" else {}),
-            **({"gpu_counters": gpu_counter_signals.load_observation(args.gpu_counters)}
-               if getattr(args, "gpu_counters", None) and not cpu_launch else {}),
-            **({"long_context": longctx.planner_context(
-                longctx_surface.spec, histogram=longctx_observation["histogram"],
-                cpu_profile=longctx_observation["cpu_profile"],
-                node_profile=longctx_observation["node_profile"])}
-               if longctx_surface is not None else {}),
-            "prior_experiments": prior_experiments(args, epoch, measurement_epoch),
-            **({"accumulator_keeps": keeps} if (keeps := accumulator_keeps(args.store))
-               else {}),
-            **({"pending_accepted_hypotheses": list(pending_view[0])}
-               if pending_view[0] else {}),
-            "current_regime": {
-                "model": {"path": str(args.model)}, "quant": census.quant_label,
-                "backend": "cpu" if cpu_launch else "gpu",
-                "recipe": {"build_recipe": recipe.to_dict()},
-                "measurement_surface": args.surface},
-            **({"operator_unblock_artifacts": operator_unblocks}
-               if operator_unblocks else {}),
-            **({"shared_prior_experiments": shared_history.recall(scope={
-                "model": str(args.model), "quant": census.quant_label,
-                "backend": "cpu" if cpu_launch else "gpu", "measurement_surface": args.surface})}
-               if args.shared_history_root else {}),
-            "serving_observations": feedback.context(lambda: serving_beliefs.feedback_scope(
-                epoch=epoch, recipe=serving_recipe, resolved=feedback_anchor[0],
-                frozen_requests=frozen_requests, anchor_build=anchor_build[0])),
-            # Re-read EVERY iteration, never cached at startup, and hardened so one
-            # unreadable file cannot kill the run through the breaker (R22-6): the
-            # rationale for both lives on `controller.inbox.read_inbox`'s docstring.
-            "inbox": inbox.read_inbox(args.store / "inbox"),
-            **({"runtime_anchor": feedback_anchor[0].to_dict(),
-                "runtime_env_keys": sorted(runtime_env_keys),
-                "runtime_observation_only": not runtime_enabled,
-                **runtime_treatment_context(args.store, feedback_anchor[0], frozen_requests)}
-               if direct_launch and screen_state is None
-               and (runtime_enabled or runtime_probe_enabled) else {}),
-            **({"runtime_preparation": dict(runtime_preparation)}
-               if direct_launch and screen_state is None else {}),
-            **({"target": {"scope": "experimental candidate, NOT canonical champion",
-                            "recipe": feedback_anchor[0].to_dict(),
-                            "requests": str(args.frozen_prompts),
-                            "build_recipe": recipe.to_dict(),
-                            "hotspot_status": cpu_profile_observation["status"],
-                            **({"long_context": longctx.target_card(longctx_surface.spec)}
-                               if longctx_surface is not None else {}),
-                            **({"common_cpu_scope": {**screen_state,
-                                "original_selection_hint": screen_hint,
-                                "full_transfer_target": full_cpu_target.to_dict()}}
-                               if screen_state is not None else {}),
-                            **({"enrollment": selected_identity} if selected_identity else {})}}
-               if cpu_launch else {"target": {"scope": "selected GPU serving workload",
-                                             "recipe": feedback_anchor[0].to_dict(),
-                                             "requests": str(args.frozen_prompts),
-                                             "build_recipe": recipe.to_dict(),
-                                             "hotspot_status": gpu_profile_observation["status"],
-                                             "enrollment": selected_identity}}
-               if direct_launch else {"target": {"scope": "legacy GPU screen, NOT enrolled serving recipe",
-                                             "enrollment": selected_identity}}
-               if selected_identity else {}),
-        }
+        return _build_context(
+            pending_view, args, epoch, current_anchor_commit, resume_carry, resume_bind,
+            history_view, measurement_epoch, lambda: cpu_launch,
+            screen_state, screen_hint, lambda: direct_launch,
+            experimental, latest, planner_backend, critic_backend, source_instrument, full_cpu_target, hotspot_rows, cpu_profile_observation, node_profile_observation,
+            gpu_profile_observation, longctx_surface, longctx_observation, census, recipe, operator_unblocks,
+            shared_history, feedback, lambda: runtime_enabled,
+            runtime_probe_enabled, feedback_anchor, runtime_env_keys, frozen_requests, runtime_preparation, selected_identity,
+            anchor_build, lambda: serving_recipe,
+        )
 
-    def keep_the_diff(worker, hypothesis) -> Path | None:
-        """Preserve every candidate patch, kept or not.
-
-        `pool.reset_to_champion` returns a lane to the champion before each iteration, so
-        a refused patch exists nowhere afterwards. Run 9 lost all ten: seven died on
-        `MUL_MAT failed on ROCm0` and not one of them can now be reproduced, re-read or
-        diagnosed. A negative written up without its diff is not evidence anyone can
-        act on -- and the whole point of durable memory is that the next iteration does
-        not re-derive what this one paid for.
-
-        The filename carries the LANE. Mechanism ids repeat -- one bit-deposit rewrite
-        of `vec_dot_q5_0_q8_1_impl` was proposed 38 times -- so with concurrent lanes a
-        bare `<mechanism>.patch` is two lanes overwriting one file, which is run 9's
-        lost-diffs defect returning by a different route.
-        """
-        name = getattr(hypothesis, "mechanism_id", None) or "unnamed"
-        kept = archive.retain_patch(args.store, worker.worktree, lane=worker.name,
-                                    mechanism_id=name)
-        if kept is not None:  # OD-3: default-off AK_LINEAGE_CAPTURE=1, never raises
-            lineage_capture.capture_at_keep(args.store, worker.worktree, lane=worker.name,
-                                            mechanism_id=name,
-                                            enabled=True if getattr(args, "lineage_capture", False) else None)
-        return kept
+    keep_the_diff = partial(_keep_the_diff_impl, args)
 
     #: Round-5 resolution A: per-mechanism record of THIS process's gate run -- the
     #: numerics class of the admitting route and the sha256 of the passing verdicts.
@@ -4465,378 +7425,18 @@ def _main(argv: list[str] | None = None) -> int:
     #: anchor bits) is stamped `AK-Numerics: bit_exact`; everything else is not.
     keep_numerics: dict = {}
 
-    def _recorded_gate(gate):
-        def wrapped(hypothesis, paths):
-            keep_numerics.pop(hypothesis.mechanism_id, None)
-            passed, verdicts = gate(hypothesis, paths)
-            entry = keep_numerics.setdefault(hypothesis.mechanism_id, {"class": "reference"})
-            entry["passed"] = bool(passed)
-            entry["verdict_digests"] = [hashlib.sha256(json.dumps(
-                v.to_dict(), sort_keys=True).encode()).hexdigest() for v in verdicts]
-            return passed, verdicts
-        return wrapped
+    recorded_gate = partial(_recorded_gate, keep_numerics)
 
     def gate_for(worker):
-        def gate(hypothesis, paths):
-            if screen_state and hypothesis.runtime_pair is not None:
-                return False, [gates.Verdict("cpu_screen", False,
-                                            "common-scope source screen does not select runtime recipes")]
-            if hypothesis.runtime_pair is not None:
-                if not runtime_enabled and not runtime_probe_enabled:
-                    return False, [gates.Verdict("runtime_preparation", False,
-                        runtime_preparation.get("reason", "strict runtime frame is unavailable"))]
-                pair = hypothesis.runtime_pair
-                if not direct_launch or paths:
-                    return False, [gates.Verdict("runtime_treatment", False,
-                                                "runtime treatment requires the owned serving route and no patch")]
-                allowed_env = runtime_env_keys
-                from .runtime_combinations import established
-                if not established(pair.dimension, allowed_env):
-                    return False, [gates.Verdict("runtime_treatment", False,
-                                                "treatment is outside installed runtime fields")]
-                current = _cpu_arm(direct_launch, anchor_build[0])
-                if pair.anchor.execution_digest != current.execution_digest:
-                    raise loop.TailRefused("runtime treatment was proposed against a different anchor recipe")
-                from ..execution.cpu_region_claim import parse_cpu_list
-                if pair.candidate.template.cpu_list is not None and not parse_cpu_list(
-                        pair.candidate.template.cpu_list).issubset(parse_cpu_list(build_cpu_list)):
-                    return False, [gates.Verdict("runtime_treatment", False,
-                                                "runtime treatment exceeds the owned CPU allocation")]
-                return gates.run_all(lambda: local_op_correctness(
-                    anchor_build[0], backend="CPU" if cpu_launch else direct_launch.template.device,
-                    resolved_recipe=pair.candidate))
-            # The diff first: a build that fails still leaves a patch worth reading,
-            # and this is the last moment it exists on disk.
-            keep_the_diff(worker, hypothesis)
-            changed = tuple(archive._git(worker.worktree, "diff", "HEAD", "--name-only").splitlines())
-            untracked = tuple(archive._git(worker.worktree, "ls-files", "--others",
-                                           "--exclude-standard", "--", "ggml/src/", "src/").splitlines())
-            cpu_ops = worker.worktree / "ggml/src/ggml-cpu/ops.cpp"
-            iqk_rows_path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
-            iqk_gemm_path = "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"
-            iqk_paths = {iqk_rows_path, iqk_gemm_path}
-            # Widened single-file CPU routes (gates.CPU_SOURCE_ROUTES): same pre-build
-            # inputs as the IQK routes (post-image, HEAD image, -U0 hunks).
-            route_paths = set(gates.CPU_SOURCE_ROUTE_PATHS)
-            # AKX-AUTO-9: a lone compiled CPU file no hand-listed route names is governed by
-            # its generated default route (gates.default_cpu_route; flag AK_DEFAULT_ROUTE_ADMISSION).
-            if len(changed) == 1 and gates.default_cpu_route(changed[0]) is not None:
-                route_paths.add(changed[0])
-            # ops.cpp hosts a route AND the older GATED_DELTA_NET rule: a change is governed
-            # by a widened route only when its target symbol resolves to one.
-            route_edit = len(changed) == 1 and changed[0] in route_paths and \
-                gates.cpu_source_route(changed[0], hypothesis.target_symbol) is not None
-            # Multi-file routes (gates.CPU_MULTI_FILE_ROUTES, 2026-10-04): a model-specific
-            # fused op or the plan-time hook, named by the target symbol, whose target
-            # surface is one of the route's files.
-            multi_edit = not route_edit and any(
-                hypothesis.target_surface in r.paths
-                for r in gates.cpu_multi_file_routes(hypothesis.target_symbol))
-            if len(changed) == 1 and changed[0] in iqk_paths and not cpu_launch:
-                return False, [gates.Verdict(
-                    "op_scope", False, "CPU IQK source route requires a CPU target recipe")]
-            if (route_edit or multi_edit) and not cpu_launch:
-                return False, [gates.Verdict(
-                    "op_scope", False, "CPU source route requires a CPU target recipe")]
-            scope_source = (cpu_ops if changed == ("ggml/src/ggml-cpu/ops.cpp",) else
-                            worker.worktree / changed[0]
-                            if len(changed) == 1 and changed[0] in iqk_paths | route_paths
-                            else None)
-            scope_texts = dict(
-                source_text=(scope_source.read_text(encoding="utf-8")
-                             if scope_source is not None else None),
-                pre_source_text=(archive._git(
-                    worker.worktree, "show",
-                    "HEAD:" + str(scope_source.relative_to(worker.worktree)))
-                    if scope_source is not None else None),
-                patch_text=(archive._git(worker.worktree, "diff", "-U0", "HEAD", "--",
-                                         str(scope_source.relative_to(worker.worktree)))
-                            if scope_source is not None else None))
-            file_texts = None
-            if multi_edit:
-                def _texts(path):
-                    full = worker.worktree / path
-                    try:
-                        head = archive._git(worker.worktree, "show", "HEAD:" + path)
-                    except Exception:  # noqa: BLE001 -- a path new to HEAD: refused as empty
-                        head = None
-                    return (full.read_text(encoding="utf-8") if full.is_file() else None, head,
-                            archive._git(worker.worktree, "diff", "-U0", "HEAD", "--", path))
-                file_texts = {path: _texts(path) for path in changed}
-            gpu_paths = [path for path in changed if path.startswith("ggml/src/ggml-cuda/")]
-            if gpu_paths:
-                # GPU-POOL-1 (2026-10-04): device memory kept across HIP-graph captures
-                # must not come from ctx.pool() (gates.gpu_graph_pool_hold_refusal).
-                pool_refusal = gates.gpu_graph_pool_hold_refusal(archive._git(
-                    worker.worktree, "diff", "-U0", "HEAD", "--", *gpu_paths))
-                if pool_refusal is not None:
-                    return False, [gates.Verdict("op_scope", False, pool_refusal)]
-            scope = gates.affected_op_scope(changed + untracked,
-                                             target_surface=hypothesis.target_surface,
-                                             target_symbol=hypothesis.target_symbol,
-                                             file_texts=file_texts, **scope_texts)
-            if isinstance(scope, gates.Verdict):
-                return False, [scope]
-            # AK-FAILRULE-1 rule 1: an empty oracle suite on the ANCHOR binary is
-            # refused here, before the build (cached per anchor digest + op).
-            suite_refusal = suite_preflight.refusal(
-                anchor_build[0], scope,
-                "CPU" if cpu_launch else (direct_launch.template.device
-                                          if direct_launch else "ROCm0"))
-            if suite_refusal is not None:
-                return False, [gates.Verdict(prebuild_rules.SUITE_EMPTY_GATE, False,
-                                             suite_refusal)]
-            # Several routes may name one body (2026-10-03): the gate below must be the
-            # one of the route that ADMITTED this patch, never merely the first named.
-            admitted_route = (gates.admit_cpu_route(changed[0], hypothesis.target_symbol,
-                                                    **scope_texts)[0]
-                              if route_edit else None)
-            if multi_edit:
-                admitted_route, multi_refusal = gates.admit_cpu_multi_route(
-                    tuple(sorted(changed + untracked)), hypothesis.target_symbol, file_texts)
-                if admitted_route is None or multi_refusal is not None:
-                    # The scope passed under another rule (e.g. ops.cpp GATED_DELTA_NET).
-                    admitted_route, multi_edit = None, False
-
-            def identity_targets(route, arm):
-                """This lane's target, then the lane binding's peers when the route asks."""
-                targets = [(str(args.target_id or "own"), _cpu_arm(direct_launch, anchor_build[0]),
-                            arm, frozen_requests)]
-                if lane_binding is None or route.identity_targets == "own":
-                    return targets + long_targets(route)
-                if route.identity_targets == "shared_peers":
-                    from . import lane_targets
-                    if not lane_targets.needs_cross_check(changed + untracked,
-                                                          lane_binding.lane.exclusive_paths):
-                        return targets + long_targets(route)
-                for peer in lane_binding.peers:
-                    peer_launch, peer_requests = lane_peer_serving[peer.entry.name]
-                    targets.append((peer.entry.target_id, _cpu_arm(peer_launch, anchor_build[0]),
-                                    _cpu_arm(peer_launch, worker.build_dir), peer_requests))
-                return targets + long_targets(route)
-
-            def long_targets(route):
-                """The long-context manifest's identity targets, once the long surface
-                installs `long_identity_targets[0]` (audit 2026-10-04 C1/C2)."""
-                if not getattr(route, "long_identity", False) or long_identity_targets[0] is None:
-                    return []
-                return list(long_identity_targets[0](anchor_build[0], worker.build_dir))
-
-            def identity_reference(route, arm):
-                targets = identity_targets(route, arm)
-                if len(targets) == 1 and not route.identity_arch:
-                    return gates.check_model_output_identity(
-                        anchor_recipe=targets[0][1], candidate_recipe=arm,
-                        requests=frozen_requests, window=cpu_measurement_window,
-                        repeats=route.identity_repeats)
-                return gates.check_model_identity_targets(
-                    targets, window=cpu_measurement_window, repeats=route.identity_repeats,
-                    required_arch=route.identity_arch)
-
-            # The admitting route's gate: its witness (unless the whole model is its only
-            # reference) and, for a model_identity route, greedy identity on its targets.
-            route_references = []
-            keep_numerics[hypothesis.mechanism_id] = {"class": "reference"}
-            if route_edit or multi_edit:
-                from . import cpu_route_witness
-                witness = (cpu_route_witness.WITNESSES.get(admitted_route.route)
-                           if admitted_route is not None else None)
-                if witness is None or witness.reference not in ("model_identity",
-                                                                 "fa_anchor_bits",
-                                                                 "ppl_contract"):
-                    route_references.append(lambda arm: gates.check_cpu_route_reference(
-                        worker.build_dir, worker.worktree, resolved_recipe=arm,
-                        path=changed[0] if route_edit else hypothesis.target_surface,
-                        target_symbol=hypothesis.target_symbol,
-                        route_name=admitted_route.route if admitted_route is not None else None))
-                if (admitted_route is not None and admitted_route.numerics == "ppl_contract"):
-                    # 2026-10-06 operator amendment: a ppl_contract route NEVER folds on
-                    # bench evidence alone. This is a `route_references` entry -- a
-                    # BLOCKING pre-keep check exactly like every other route reference --
-                    # so the four layers in `gates.ppl_contract_gate` refuse the keep
-                    # outright before any `pool.advance_champion`, never after.
-                    #
-                    # PRODUCTION-LENGTH PROMPTS (review 2026-10-06): the frozen requests
-                    # are (prompt_id, body) tuples of ~100-token probes -- the first cut
-                    # read `.prompt` off them and always got NONE. Layer (c) now defaults
-                    # to two pinned wikitext2 slices (>= 4096 tokens each, checked from
-                    # the tool's own count), disjoint from layer (b)'s ppl window.
-                    # The FIXED reference is the frozen production CPU kernel store: the
-                    # anchor advances on every keep, so anchor-only bars would compound.
-                    from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
-                    # Marked durably BEFORE any layer runs: the fold-time bundle gate
-                    # keys on this ledger (Bundle.keeps are mechanism ids).
-                    try:
-                        gates.ppl_contract_ledger_add(args.store, hypothesis.mechanism_id)
-                    except (OSError, ValueError) as exc:
-                        return False, [gates.Verdict(
-                            "ppl_contract", False,
-                            f"ppl_contract admission could not be recorded: {exc}")]
-                    def _ppl_gate(arm, route=admitted_route):
-                        # Operator tiering (2026-10-06): a candidate pays layer (a) only;
-                        # (b)-(d) run once per bundle at the fold (ppl_contract_fold_check),
-                        # so no anchor tools build or reference pin is needed here.
-                        return gates.ppl_contract_gate(
-                            anchor_build[0], worker.build_dir, route=route,
-                            resolved_recipe=arm, model=args.model,
-                            threads=len(_parse_cpu_list(build_cpu_list)),
-                            cpu_list=build_cpu_list, env=dict(arm.launch_env),
-                            log_dir=Path(args.store) / "ppl_contract" / route.route,
-                            served_shape_manifest=Path(args.store) / "served_shape"
-                                                  / "manifest.json")
-                    route_references.append(_ppl_gate)
-                if witness is not None and witness.reference == "fa_anchor_bits":
-                    # cpu_fa_schedule (audit 2026-10-04 C2/C3): the case-set corpus, bit
-                    # identity with the ANCHOR build (including DS41 real masks), then
-                    # the paired FA perf screen
-                    # before the serving A/B; model identity follows below.
-                    route_references.extend((
-                        lambda arm: gates.check_cpu_fa_case_set(worker.build_dir,
-                                                                resolved_recipe=arm),
-                        lambda arm: gates.check_cpu_fa_reference(
-                            anchor_build[0], worker.build_dir, worker.worktree,
-                            anchor_recipe=_cpu_arm(direct_launch, anchor_build[0]),
-                            candidate_recipe=arm, window=cpu_measurement_window),
-                        lambda arm: gates.check_cpu_fa_real_mask_identity(
-                            anchor_build[0], worker.build_dir, worker.worktree,
-                            capture_dir=Path(args.store) / "cpu_fa_real_masks",
-                            anchor_recipe=_cpu_arm(direct_launch, anchor_build[0]),
-                            candidate_recipe=arm, window=cpu_measurement_window),
-                        lambda arm: gates.check_cpu_fa_perf_screen(
-                            anchor_build[0], worker.build_dir,
-                            anchor_recipe=_cpu_arm(direct_launch, anchor_build[0]),
-                            candidate_recipe=arm, window=cpu_measurement_window)))
-                if admitted_route is not None and admitted_route.model_identity:
-                    route_references.append(
-                        lambda arm: identity_reference(admitted_route, arm))
-                if (admitted_route is not None and admitted_route.numerics == "bit_exact"
-                        and witness is not None
-                        and witness.reference in ("model_identity", "fa_anchor_bits")):
-                    keep_numerics[hypothesis.mechanism_id] = {
-                        "class": "bit_exact", "route": admitted_route.route,
-                        "oracle_name": witness.reference,
-                        "changed": sorted(set(changed + untracked))}
-                elif admitted_route is not None and admitted_route.numerics == "ppl_contract":
-                    keep_numerics[hypothesis.mechanism_id] = {"class": "ppl_contract"}
-            # 2026-10-21 (operator, DS41-1017): on a lane with a CPU_REPACK case set every CPU
-            # keep must run the REPACKED expert kernel the server uses (test-backend-ops never
-            # does). A ppl_contract route already runs it inside layer (a)
-            # (`gates.ppl_contract_op_nmse`); this covers every other route and edit. Fails
-            # closed: no manifest in `<store>/cpu_repack/` refuses the keep.
-            repack_lane = gates._lane_for_model(args.model)
-            def graph_kld_check():
-                # AK-FUSE-GRAPH-KLD-1 / P-AK-SEARCH-1-A5: a patch fusing across graph nodes
-                # must pass the ratified graph-level KLD/PPL/same-top clauses (or refuse).
-                return gates.graph_kld_keep_check(
-                    changed + untracked, backend="cpu" if cpu_launch else "gpu",
-                    anchor_build=anchor_build[0], candidate_build=worker.build_dir,
-                    base_dir=Path(args.store) / "graph_kld" / archive._git(
-                        worker.worktree, "rev-parse", "HEAD").strip())
-            graph_kld_extra = gates.touches_graph_fusion(changed + untracked)
-            repack_extra = bool(cpu_launch and cpu_repack_cases.lane_has_cases(repack_lane)
-                                and not (admitted_route is not None
-                                         and admitted_route.numerics == "ppl_contract"))
-
-            # AK-PORT-LB1.1: a candidate record declaring non-bit-exact + multi-row (N>1) gets the
-            # noise-relative tolerance gate; no record / bit-exact / single-row adds nothing.
-            noise_checks = gates.noise_relative_chain_checks(
-                Path(args.store) / "noise_relative" / f"{hypothesis.mechanism_id}.json")
-            def repack_check(arm):
-                return gates.check_cpu_repack_case_set(
-                    worker.build_dir, resolved_recipe=arm,
-                    manifest_path=cpu_repack_cases.manifest_path(args.store), lane=repack_lane,
-                    include_shared=cpu_repack_cases.touches_repack(changed + untracked))
-            if screen_confirmation is not None:
-                cpu_screen.verify_restored(screen_confirmation, worker, screen_prepared["launch"],
-                                           args.store, hypothesis)
-                # Original candidate executable/DSOs already proved, source restored
-                # exactly. Re-run the ordinary oracle at FULL conditions, no rebuild.
-                arm = _cpu_arm(direct_launch, worker.build_dir)
-                checks = [lambda op=op: local_op_correctness(
-                    worker.build_dir, op=op, backend="CPU", resolved_recipe=arm)
-                    for op in scope]
-                if "GATED_DELTA_NET" in scope:
-                    checks.append(lambda: gates.check_cpu_gdn_reference(
-                        worker.build_dir, worker.worktree, resolved_recipe=arm))
-                if cpu_launch and len(changed) == 1 and changed[0] in iqk_paths:
-                    checks.append(lambda: gates.check_cpu_iqk_reference(
-                        worker.build_dir, worker.worktree, resolved_recipe=arm,
-                        target_symbol=hypothesis.target_symbol))
-                if cpu_launch and (route_edit or multi_edit):
-                    checks.extend(lambda ref=ref: ref(arm) for ref in route_references)
-                if repack_extra:
-                    checks.append(lambda: repack_check(arm))
-                if graph_kld_extra:
-                    checks.append(graph_kld_check)
-                checks.extend(noise_checks)
-                return gates.run_all(*checks)
-            # Callables, so a failed build actually short-circuits: an eagerly
-            # evaluated op_correctness ran the suite against a stale binary and blamed
-            # this patch.
-            #
-            # `jobs=64, cpu_list="96-183"` is per BUILD, not per run. Under `--workers`
-            # this is safe only because the build runs inside the serialized tail: two
-            # concurrent 64-job builds would oversubscribe an 88-core lane and every
-            # build time recorded during the overlap would be a measurement of
-            # contention.
-            # Operator tiering: the candidate runs only layer (a) (test-backend-ops), so
-            # its build needs no extra tools; the anchor carries them for the fold.
-            checks = [
-                lambda: local_compiles(worker.worktree, worker.build_dir,
-                                       cmake_defines=recipe.cmake_defines(),
-                                       jobs=build_jobs, cpu_list=build_cpu_list,
-                                       **({"targets": gates.PROMOTION_TARGETS}
-                                          if direct_launch else
-                                          {"targets": gates.DEFAULT_TARGETS
-                                           + ("llama-perplexity",)}
-                                          if graph_kld_extra else {})),
-            ]
-            if cpu_launch:
-                checks.extend(lambda op=op: local_op_correctness(worker.build_dir, op=op,
-                              require_reference=False, backend="CPU",
-                              resolved_recipe=_cpu_arm(direct_launch, worker.build_dir))
-                              for op in scope)
-            else:
-                # GPU: a seeded-reference refusal is anchor-relative -- the anchor runs
-                # the identical gate once per (anchor, op) and, if it fails too, the
-                # refusal is the harness's oracle_unavailable, not a wrong patch.
-                checks.extend(lambda op=op: gates.anchor_relative_correctness(
-                    local_op_correctness(worker.build_dir, op=op, require_reference=True),
-                    lambda: _anchor_gate(op)) for op in scope)
-            if cpu_launch and "GATED_DELTA_NET" in scope:
-                checks.append(lambda: gates.check_cpu_gdn_reference(
-                    worker.build_dir, worker.worktree,
-                    resolved_recipe=_cpu_arm(direct_launch, worker.build_dir)))
-            if cpu_launch and len(changed) == 1 and changed[0] in iqk_paths:
-                checks.append(lambda: gates.check_cpu_iqk_reference(
-                    worker.build_dir, worker.worktree,
-                    resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),
-                    target_symbol=hypothesis.target_symbol))
-            if cpu_launch and (route_edit or multi_edit):
-                checks.extend(lambda ref=ref: ref(_cpu_arm(direct_launch, worker.build_dir))
-                              for ref in route_references)
-            if repack_extra:
-                checks.append(lambda: repack_check(_cpu_arm(direct_launch, worker.build_dir)))
-            if not direct_launch:
-                checks.extend((
-                    lambda: gates.deterministic(worker.build_dir, args.model),
-                    lambda: gates.no_fallback_dispatch(
-                        worker.build_dir, args.model, pp=pp, tg=tg, ubatch=ubatch),
-                ))
-            if graph_kld_extra:
-                checks.append(graph_kld_check)
-            checks.extend(noise_checks)
-            # Build owns only its narrow CPU claim. Every GPU correctness /
-            # dispatch invocation owns quiet separately, including anchor fallback.
-            if not cpu_launch:
-                compiled = checks.pop(0)()
-                if not compiled.passed:
-                    return False, [compiled]
-                with cpu_measurement_window():
-                    passed, verdicts = gates.run_all(*checks)
-                return passed, [compiled, *verdicts]
-            return gates.run_all(*checks)
-        return _recorded_gate(gate)
+        return _gate_for(worker,
+            recorded_gate=recorded_gate, build_cpu_list=build_cpu_list, runtime_preparation=runtime_preparation, long_identity_targets=long_identity_targets, tg=tg,
+            local_op_correctness=local_op_correctness, direct_launch=lambda: direct_launch, runtime_env_keys=runtime_env_keys, cpu_screen=lambda: cpu_screen, build_jobs=build_jobs,
+            cpu_launch=lambda: cpu_launch, local_compiles=local_compiles, runtime_probe_enabled=runtime_probe_enabled, screen_confirmation=screen_confirmation,
+            recipe=recipe, lane_binding=lane_binding, screen_prepared=screen_prepared, ubatch=ubatch,
+            keep_numerics=keep_numerics, keep_the_diff=keep_the_diff, args=args, screen_state=screen_state,
+            cpu_measurement_window=cpu_measurement_window, frozen_requests=frozen_requests,
+            lane_peer_serving=lane_peer_serving, suite_preflight=suite_preflight, anchor_build=anchor_build, anchor_gate=anchor_gate, runtime_enabled=lambda: runtime_enabled,
+            pp=pp)
 
     #: The anchor ADVANCES with the champion. It used to be a fixed binary while the
     #: candidate worktree accumulated every kept patch, so a reported effect was
@@ -4855,14 +7455,8 @@ def _main(argv: list[str] | None = None) -> int:
     anchor_gate_cache: dict = {}
     suite_preflight = prebuild_rules.SuitePreflight(selector=gates.backend_ops_selector)
 
-    def _anchor_gate(op):
-        key = (str(anchor_build[0]), op)
-        if key not in anchor_gate_cache:
-            anchor_gate_cache[key] = local_op_correctness(anchor_build[0], op=op,
-                                                          require_reference=True)
-            print(f"gate      anchor {Path(anchor_build[0]).name} seeded {op}: "
-                  f"{anchor_gate_cache[key].gate} passed={anchor_gate_cache[key].passed}")
-        return anchor_gate_cache[key]
+    anchor_gate = partial(_anchor_gate, anchor_build, anchor_gate_cache,
+                          lambda *a, **kw: local_op_correctness(*a, **kw))
     #: Long-context identity hook (audit 2026-10-04 C1/C2), read by every route with
     #: `long_identity` (cpu_fa_schedule). The long-context surface installs a callable
     #: (anchor_build, candidate_build) -> [(label, anchor recipe, candidate recipe,
@@ -4893,10 +7487,7 @@ def _main(argv: list[str] | None = None) -> int:
     # restart AND advanced the champion of record to the accumulated tip, laundering
     # bench-only keeps into the serving-demonstrated slot; five keeps and +6.13% were absorbed
     # that way, and the gate never fired because the bundle was reset before reaching +8.84%.
-    def _is_ancestor(a: str, b: str) -> bool:
-        return subprocess.run(["git", "-C", str(args.worktree), "merge-base",
-                               "--is-ancestor", a, b],
-                              capture_output=True).returncode == 0
+    _is_ancestor = partial(_run_is_ancestor, args)
     try:
         # Experimental serving historically skipped R23-44 entirely.  A genuinely
         # new experimental store may therefore create its first empty durable bundle
@@ -4994,182 +7585,31 @@ def _main(argv: list[str] | None = None) -> int:
     print(f"accum     {note}")
 
 
-    def measure_for(worker):
-        def _tripwire(compared):
-            from . import same_code_tripwire
-            serving_launch = None
-            if direct_launch is not None:
-                # The resolved execution view keeps exact argv/env/workload but
-                # normalizes the build path and listen port. The code manifest
-                # below binds the executable/DSOs by code sections, not full-file
-                # linker metadata (RUNPATH legitimately changes across builds).
-                serving_launch = direct_launch._normalized_execution_dict()
-                serving_launch["command_argv"][0] = "<measured-code-manifest>"
-                serving_launch["artifacts"].pop("executable", None)
-                serving_launch["artifacts"].pop("dsos", None)
-            return same_code_tripwire.inspect(
-                args.store, compared, anchor_build=anchor_build[0],
-                candidate_build=worker.build_dir,
-                library=same_code_tripwire.library_for(recipe, direct_launch),
-                measurement_epoch=measurement_epoch,
-                launch_identity={"build_recipe": recipe.to_dict(),
-                                 "serving_launch": serving_launch,
-                                 "model": str(args.model), "surface": args.surface,
-                                 "pp": pp, "tg": tg, "ubatch": ubatch,
-                                 "declared_pairs": (args.serving_pairs if direct_launch
-                                                    else args.pairs)})
+    def disable_runtime():
+        nonlocal runtime_enabled
+        runtime_enabled = False
 
-        def measure(hypothesis, paths):
-            nonlocal runtime_enabled
-            if hypothesis.runtime_pair is not None:
-                pair = hypothesis.runtime_pair
-                from . import runtime_arms, runtime_calibration
-                if runtime_keep_grade and runtime_arms.is_declared(pair, runtime_arm_declaration):
-                    return keep_grade_runtime_compare(pair)
-                if runtime_enabled:
-                    try:
-                        def strict_compare():
-                            row = runtime_owner[0].compare(pair)
-                            if row.get("belief_export_receipt"):
-                                feedback.exported(Path(row["belief_export_receipt"]))
-                            return row
-                        return _serving_comparison(strict_compare,
-                            "experimental_runtime_treatment_not_source_champion",
-                            measurement_window=cpu_measurement_window)
-                    except runtime_calibration.RuntimeCalibrationRefused as exc:
-                        if isinstance(exc, runtime_calibration.RuntimeLaunchBudgetExhausted):
-                            runtime_enabled = False
-                            runtime_preparation.update(status="budget_exhausted", reason=str(exc))
-                            report_runtime_progress()
-                            raise loop.TailRefused("runtime preparation budget ended; original prefix retained, "
-                                                   "source research and other targets remain available") from exc
-                        runtime_preparation.update(status="observed_not_admitted", reason=str(exc))
-                        report_runtime_progress()
-                        print(f"runtime admission unavailable: {exc}; retaining unqualified observation")
-                return _serving_comparison(lambda: serving.compare(
-                    pair.anchor.template, anchor_build[0], anchor_build[0],
-                    pairs=args.serving_pairs, floor_pct=None, port=pair.anchor.port,
-                    anchor_resolved_recipe=pair.anchor, candidate_resolved_recipe=pair.candidate,
-                    frozen_requests=frozen_requests, runtime_pair=pair),
-                    "experimental_runtime_treatment_not_source_champion",
-                    measurement_window=cpu_measurement_window)
-            if longctx_surface is not None and longctx.attention_route(hypothesis):
-                # Audit C1: an attention route is judged AT DEPTH first; the short
-                # surface becomes its no-regression gate at keep (commit_pooled).
-                return _tripwire(longctx_compare(worker.build_dir))
-            if direct_launch:
-                compared = cpu_compare(anchor_build[0], worker.build_dir)
-                if not cpu_launch:
-                    record_candidate_serving_profile(compared, worker, hypothesis)
-                return _tripwire(compared)
-            # AKX-ALL-29.3: a HIP candidate whose gfx90a kernel bodies equal the
-            # anchor's is not timed. None (hash unavailable, bodies differ, CPU
-            # recipe) falls through to the normal measurement unchanged.
-            if str(dict(recipe.cmake_defines()).get("GGML_HIP", "ON")).upper() != "OFF":
-                same = noop_build.identical_bodies(
-                    noop_build.find_hip_library(anchor_build[0]),
-                    noop_build.find_hip_library(worker.build_dir))
-                if same is not None:
-                    raise loop.NoOpBuild(same)
-            # The anchor build is SHARED across lanes and only ever read, so it needs
-            # no per-lane copy; the candidate binary is per lane because each lane
-            # built it from its own patch.
-            return _tripwire(measured_bench_compare(
-                bench.Arm("anchor", anchor_build[0] / "bin" / "llama-bench"),
-                bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
-                args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
-                surface=args.surface, ubatch=ubatch, calibrated=calibrated))
-        return measure
+    def measure_for(worker):
+        return _measure_for(worker, disable_runtime=disable_runtime,
+            recipe=recipe, runtime_enabled=lambda: runtime_enabled, record_candidate_serving_profile=record_candidate_serving_profile,
+            runtime_preparation=runtime_preparation, calibrated=lambda: calibrated, ubatch=ubatch,
+            report_runtime_progress=report_runtime_progress, runtime_arm_declaration=runtime_arm_declaration,
+            keep_grade_runtime_compare=keep_grade_runtime_compare, feedback=feedback, cpu_measurement_window=cpu_measurement_window, anchor_build=anchor_build, pp=pp,
+            measured_bench_compare=measured_bench_compare, longctx_surface=longctx_surface, longctx_compare=longctx_compare, direct_launch=lambda: direct_launch, tg=tg,
+            measurement_epoch=measurement_epoch, cpu_launch=lambda: cpu_launch, runtime_owner=runtime_owner,
+            cpu_compare=cpu_compare, floor=lambda: floor, frozen_requests=frozen_requests, args=args,
+            runtime_keep_grade=runtime_keep_grade)
 
     def record_candidate_serving_profile(compared, worker, hypothesis) -> None:
-        """AKX-ALL-29.2 cheapest recording rule: the FIRST time a GPU candidate reaches
-        timing, re-run the AKX-ALL-16 serving profile on ITS build over the same windows
-        and store the record beside its experiment row (`comparison.candidate_serving_profile`).
+        return _record_candidate_serving_profile(current_anchor_commit, cpu_measurement_window,
+                                                lambda: direct_launch, frozen_requests, args,
+                                                gpu_long_context_hook, gpu_profile_observation,
+                                                compared, worker, hypothesis)
 
-        Cached by the candidate diff, so a re-timed identical candidate reuses its profile.
-        Runs AFTER the A/B so it cannot perturb it; a failure is recorded and never
-        refuses or changes the comparison (the keep gate is unchanged)."""
-        row = getattr(compared, "row", None)
-        if not isinstance(row, dict):
-            return
-        def retain_profile(profile):
-            row.update(serving_beliefs.annotate(row, {"candidate_serving_profile": profile}))
-        from . import gpu_serving_profile as gsp
-        try:
-            diff = archive._git(worker.worktree, "diff", "HEAD")
-            identity = ("candidate:" + str(current_anchor_commit[0]) + ":"
-                        + hashlib.sha256(diff.encode()).hexdigest())
-            with cpu_measurement_window():
-                view, _rows = hotspots.serving_profile(
-                    _cpu_arm(direct_launch, worker.build_dir), frozen_requests,
-                    store=args.store, anchor_commit=identity,
-                    long_context=gpu_long_context_hook[0])
-        except loop.MeasurementInvalid as exc:
-            retain_profile({"status": "measurement_invalid", "reason": str(exc)[:512]})
-            return
-        except (hotspots.ProfileFailed, OSError, ValueError, RuntimeError, ImportError,
-                subprocess.SubprocessError) as exc:
-            retain_profile({"status": "unavailable", "reason": f"{type(exc).__name__}: {exc}"[:512]})
-            return
-        table = view.get("launch_weighted") or {}
-        retain_profile({
-            "status": "observed", "record": view.get("record"), "key": view.get("key"),
-            "cached": view.get("cached"), "candidate_identity": identity,
-            "launch_weighted_status": table.get("status"),
-            "target_weight_ns_per_token": gsp.kernel_weight(view, hypothesis.target_symbol),
-            "anchor_target_weight_ns_per_token": gsp.kernel_weight(
-                gpu_profile_observation, hypothesis.target_symbol),
-            "top_kernels": [{"kernel": k["kernel"],
-                             "weighted_ns_per_token": k["weighted_ns_per_token"]}
-                            for k in (table.get("kernels") or [])[:8]]})
-
-    def ensure_source_floor(anchor_recipe, a_build) -> None:
+    def apply_source_floor(reading, carry):
         nonlocal floor, floor_request_digest, floor_record, calibrated
         nonlocal serving_floor_pct, serving_floor_provenance, serving_floor_unit
         nonlocal serving_floor_carry
-        if not source_floor_refresh[0]:
-            return
-        # Resolve the newly retained anchor's floor before either candidate arm
-        # can launch. A different executable/DSO identity gets a distinct
-        # immutable artifact even when recipe and requests are unchanged.
-        # DS41-C69 (operator 2026-09-28): before paying 48 launches, carry the
-        # lineage floor under the SAME runtime recipe hash when the promoted
-        # anchor's own anchor-guard A/A (recorded by `verify_anchor` at this
-        # keep) sits inside it. Read-only; never written under this identity.
-        floor_store, reading, carry = _select_source_floor(
-            args.store, serving_recipe, anchor_recipe,
-            frozen_requests=frozen_requests, instrument=args.serving_instrument,
-            pairs=args.serving_pairs, dynamic=True,
-            anchor_commits=(current_anchor_commit[0],),
-            carry_forward=args.floor_carry_forward)
-        if reading.floor_pct is None:
-            try:
-                value = measured_serving_calibrate(serving_recipe, a_build,
-                    samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument else max(2, args.serving_pairs),
-                    port=direct_launch.port, resolved_recipe=anchor_recipe, frozen_requests=frozen_requests,
-                    **source_instrument)
-                floor_selfcheck.check_before_write(args.store, value)  # AKX-AUTO-4
-                written_path = _write_new_source_floor(
-                    floor_store, serving_recipe, anchor_recipe, value,
-                    frozen_requests=frozen_requests, instrument=args.serving_instrument,
-                    pairs=args.serving_pairs)
-            except Exception:
-                if args.serving_instrument == serving.MATCHED_INSTRUMENT:
-                    # AKX-FLOOR-REMEASURE-1 (C): a claimed request survives a failed
-                    # calibration -- restored to pending (or retired as `.failed-` if
-                    # a newer request has since arrived) so the next attempt tries again.
-                    fail_remeasure_request(args.store, serving_recipe)
-                raise
-            if args.serving_instrument == serving.MATCHED_INSTRUMENT:
-                # AKX-FLOOR-REMEASURE-1 (C): a no-op when no request was claimed, so
-                # this is safe unconditionally -- consume it here, at keep time, the
-                # moment the forced calibration it requested lands on disk.
-                consume_remeasure_request(args.store, serving_recipe,
-                                          new_floor_path=written_path)
-            _floor_store, reading = _load_source_floor(
-                args.store, serving_recipe, anchor_recipe,
-                frozen_requests=frozen_requests, instrument=args.serving_instrument,
-                pairs=args.serving_pairs, dynamic=True)
         serving_floor_pct, serving_floor_unit = _gate_floor(reading)
         floor = serving_floor_pct
         floor_request_digest = reading.request_digest
@@ -5177,150 +7617,45 @@ def _main(argv: list[str] | None = None) -> int:
         calibrated = floor is not None
         serving_floor_provenance = reading.provenance
         serving_floor_carry = carry if reading.provenance == FLOOR_CARRY_PROVENANCE else None
-        source_floor_refresh[0] = False
-        runtime_preparation["source_comparison_floor"] = str(reading.path)
+
+    def ensure_source_floor(anchor_recipe, a_build) -> None:
+        return _ensure_source_floor(anchor_recipe, a_build, apply_source_floor=apply_source_floor,
+            source_floor_refresh=lambda: source_floor_refresh, args=lambda: args, serving_recipe=lambda: serving_recipe, frozen_requests=lambda: frozen_requests,
+            current_anchor_commit=lambda: current_anchor_commit, measured_serving_calibrate=lambda: measured_serving_calibrate,
+            source_instrument=lambda: source_instrument, direct_launch=lambda: direct_launch,
+            runtime_preparation=lambda: runtime_preparation)
 
     def keep_grade_runtime_compare(pair):
-        """A declared runtime arm at keep-grade evidence: the matched paired serving A/B
-        against the CURRENT recipe's own matched floor, same instrument, pairs and order
-        randomization as a source candidate's keep A/B; both arms run the anchor build."""
-        from . import runtime_arms
-        anchor_recipe = _cpu_arm(direct_launch, anchor_build[0])
-        if anchor_recipe.execution_digest != pair.anchor.execution_digest:
-            raise loop.TailRefused("declared runtime arm was built against a different anchor recipe")
-        ensure_source_floor(anchor_recipe, anchor_build[0])
-        if floor is None or not isinstance(floor_record, dict):
-            raise loop.TailRefused("keep-grade runtime arm needs the current recipe's matched "
-                                   "serving floor; none is calibrated")
-        comparison = _serving_comparison(lambda: serving.compare(
-            pair.anchor.template, anchor_build[0], anchor_build[0], pairs=args.serving_pairs,
-            floor_pct=floor, floor_unit=serving_floor_unit, port=pair.anchor.port,
-            anchor_resolved_recipe=pair.anchor, candidate_resolved_recipe=pair.candidate,
-            frozen_requests=frozen_requests, floor_request_digest=floor_request_digest,
-            runtime_pair=pair, runtime_evidence="keep_grade",
-            instrument=args.serving_instrument, floor_record=floor_record),
-            "experimental_runtime_treatment_not_source_champion",
-            measurement_window=cpu_measurement_window)
-        try:
-            runtime_arms.record_attempt(runtime_store.root, pair=pair.to_dict(),
-                                        comparison=comparison.row,
-                                        declaration=runtime_arm_declaration)
-        except Exception as exc:     # noqa: BLE001 -- the comparison stands; the arm re-serves
-            print(f"runtime   WARNING keep-grade attempt not recorded: {type(exc).__name__}: {exc}",
-                  file=sys.stderr)
-        return comparison
+        return _keep_grade_runtime_compare(pair,
+            direct_launch=lambda: direct_launch, anchor_build=lambda: anchor_build, ensure_source_floor=lambda: ensure_source_floor, floor=lambda: floor,
+            floor_record=lambda: floor_record, cpu_measurement_window=lambda: cpu_measurement_window,
+            runtime_store=lambda: runtime_store, runtime_arm_declaration=lambda: runtime_arm_declaration, args=lambda: args, floor_request_digest=lambda: floor_request_digest,
+            frozen_requests=lambda: frozen_requests,
+            serving_floor_unit=lambda: serving_floor_unit)
 
     measured_source_comparisons = {}
 
+    def retain_measured_source_comparison(result, baseline_build, measured_under, model):
+        return _retain_measured_source_comparison(result, baseline_build, measured_under, model,
+            experimental=lambda: experimental, cpu_launch=lambda: cpu_launch, selected_identity=lambda: selected_identity, args=lambda: args,
+            measured_source_comparisons=lambda: measured_source_comparisons)
+
     @counter_phase("serving_with_warmup")
     def cpu_compare(a_build, c_build, *, rebind_feedback=True):
-        anchor_recipe = _cpu_arm(direct_launch, a_build)
-        candidate_recipe = _cpu_arm(direct_launch, c_build)
-        # Reuse the actual comparison's rebind, including after an anchor keep;
-        # never hash a build a second time merely to assemble a planner prompt.
-        # Only a comparison whose A-arm IS the current anchor may rebind: the
-        # accumulator's champion-of-record-vs-tip bundle has the OLD champion as
-        # its A-arm and would otherwise revert the post-keep planner scope.
-        if rebind_feedback:
-            feedback_anchor[0] = anchor_recipe
-        ensure_source_floor(anchor_recipe, a_build)
-        result = _serving_comparison(lambda: serving.compare(
-            serving_recipe, a_build, c_build, pairs=args.serving_pairs,
-            floor_pct=floor, floor_unit=serving_floor_unit, port=direct_launch.port,
-            anchor_resolved_recipe=anchor_recipe,
-            candidate_resolved_recipe=candidate_recipe,
-            frozen_requests=frozen_requests, floor_request_digest=floor_request_digest,
-            floor_record=floor_record,
-            **({"instrument": args.serving_instrument} if source_instrument else {})),
-            "experimental_candidate_not_champion" if experimental
-            else "canonical_candidate_vs_current_anchor",
-            measurement_window=cpu_measurement_window,
-            on_complete=lambda completed: retain_measured_source_comparison(
-                completed, a_build, anchor_recipe.execution_digest, serving_recipe.model))
-        return result
-
-    def retain_measured_source_comparison(result, baseline_build, measured_under, model):
-        if not (experimental and cpu_launch and selected_identity is not None):
-            return result
-        # The measuring step, not the later keep writer, seals the native result.
-        result.row["model"] = str(model)
-        native = result.to_dict()
-        from .comparison_validation import validate_comparison
-        validate_comparison(native, require_provenance=False)
-        measured_fields = {
-            "measured_value": statistics.median(native["candidate_samples"]),
-            "baseline_value": statistics.median(native["anchor_samples"]),
-            "baseline_path": str(Path(baseline_build).resolve()), "measured_under": measured_under}
-        raw = surface_fold.canonical_bytes({
-            "schema": "epyc.autokernel.measured_comparison.v1", "comparison": native,
-            **measured_fields})
-        digest = hashlib.sha256(raw).hexdigest()
-        path = args.store.resolve() / "measured-comparisons" / (digest + ".json")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        archive._retain_bytes(path, raw)
-        key = id(result)
-        reference = weakref.ref(result, lambda _ref, key=key: measured_source_comparisons.pop(key, None))
-        measured_source_comparisons[key] = (
-            reference, {"path": str(path), "sha256": digest}, measured_fields)
-        return result
+        return _cpu_compare(a_build, c_build, rebind_feedback=rebind_feedback,
+            direct_launch=lambda: direct_launch, feedback_anchor=lambda: feedback_anchor, ensure_source_floor=lambda: ensure_source_floor, experimental=lambda: experimental,
+            cpu_measurement_window=lambda: cpu_measurement_window, floor=lambda: floor, retain_measured_source_comparison=lambda: retain_measured_source_comparison,
+            floor_request_digest=lambda: floor_request_digest, args=lambda: args, floor_record=lambda: floor_record, source_instrument=lambda: source_instrument,
+            serving_recipe=lambda: serving_recipe, serving_floor_unit=lambda: serving_floor_unit,
+            frozen_requests=lambda: frozen_requests)
 
     def longctx_compare(c_build):
-        """The current anchor vs `c_build` on the opt-in long-context surface (longctx.py):
-        slot restored, decode at depth as the scalar, prefill at depth in `row['longctx']`."""
-        long_launch = longctx_surface.launch_for(direct_launch)
-        anchor_arm = _cpu_arm(long_launch, anchor_build[0])
-        result = _serving_comparison(lambda: longctx_surface.compare(
-            anchor_arm, _cpu_arm(long_launch, c_build),
-            pairs=args.serving_pairs),
-            "experimental_candidate_not_champion" if experimental
-            else "canonical_candidate_vs_current_anchor",
-            measurement_window=cpu_measurement_window,
-            on_complete=lambda completed: retain_measured_source_comparison(
-                completed, anchor_build[0], anchor_arm.execution_digest, anchor_arm.template.model))
-        return result
+        return _longctx_compare(c_build,
+            longctx_surface=lambda: longctx_surface, direct_launch=lambda: direct_launch, anchor_build=lambda: anchor_build, experimental=lambda: experimental,
+            cpu_measurement_window=lambda: cpu_measurement_window, args=lambda: args,
+            retain_measured_source_comparison=lambda: retain_measured_source_comparison)
 
-    def longctx_keep_gate(worker, hypothesis, comparison, *, measured_row=None) -> dict:
-        """Every keep of an opted-in target must not regress either surface: a long-primary
-        (attention-route) keep is checked on the short surface and on its own prefill at
-        depth; any other keep is A/B'd at depth (decode and prefill). Fails closed.
-        `measured_row`: this keep's long-context A/B already taken by the G5 dimension
-        pass, reused instead of measured twice."""
-        if longctx.attention_route(hypothesis):
-            try:
-                short = cpu_compare(anchor_build[0], worker.build_dir, rebind_feedback=False)
-            except loop.MeasurementInvalid:
-                raise
-            except (loop.MeasurementFailed, RuntimeError, ValueError, OSError) as exc:
-                return {"primary": "longctx", "passed": False,
-                        "reason": f"short-surface gate failed: {type(exc).__name__}: {exc}"}
-            long_verdict = comparison.row.get("longctx") or {}
-            regressed = short.decisive is True and short.effect < 0
-            undecided = short.decisive is None or bool(getattr(short, "drifting", False))
-            passed = long_verdict.get("passed") is True and not regressed and not undecided
-            return {"primary": "longctx", "passed": passed, "longctx": long_verdict,
-                    "short": {"effect": short.effect, "decisive": short.decisive,
-                              "floor_pct": short.noise_floor_pct,
-                              "drifting": bool(getattr(short, "drifting", False))},
-                    "reason": (long_verdict.get("reason", "no long-context verdict")
-                               + (f"; short surface regressed {short.effect * 100:+.3f}%"
-                                  if regressed else "")
-                               + ("; short surface uncalibrated or drifting (no verdict)"
-                                  if undecided else ""))}
-        row = (measured_row if isinstance(measured_row, Mapping)
-               and isinstance(measured_row.get("longctx"), Mapping) else None)
-        try:
-            if row is None:
-                row = longctx_compare(worker.build_dir).row
-        except loop.MeasurementInvalid:
-            raise
-        except (loop.MeasurementFailed, RuntimeError, ValueError, OSError) as exc:
-            return {"primary": "short", "passed": False,
-                    "reason": f"long-context gate failed: {type(exc).__name__}: {exc}"}
-        return {"primary": "short", **row["longctx"],
-                "comparison": {key: row.get(key) for key in (
-                    "recipe", "recipe_hash", "anchor_tok_s", "candidate_tok_s", "effect",
-                    "decisive", "noise_floor_pct", "pairs", "anchor_samples",
-                    "candidate_samples", "floor_sha256")}}
+    longctx_keep_gate = partial(_longctx_keep_gate, cpu_compare, anchor_build, longctx_compare)
 
     # Integration seams (2026-10-04): the long surface is the instrument behind the
     # G5 `long_decode` / `prefill_at_depth` keep dimensions and the `long_identity`
@@ -5328,73 +7663,29 @@ def _main(argv: list[str] | None = None) -> int:
     # declared long dimensions are pending (refuse) and identity runs short-only.
     if longctx_surface is not None:
         def _longctx_dimension_row(worker):
-            return longctx_compare(worker.build_dir).row
+            return _longctx_dimension_row_impl(longctx_compare, worker)
 
         def _longctx_prefill_row(worker):
-            return longctx.prefill_dimension_row(_longctx_dimension_row(worker))
+            return _longctx_prefill_row_impl(_longctx_dimension_row, worker)
 
         keep_dimension_measures["long_decode"] = _longctx_dimension_row
         keep_dimension_measures["prefill_at_depth"] = _longctx_prefill_row
 
         def _long_identity_targets(a_build, c_build):
-            long_launch = longctx_surface.launch_for(direct_launch)
-            with cpu_measurement_window():
-                return longctx_surface.identity_targets(_cpu_arm(long_launch, a_build),
-                                                        _cpu_arm(long_launch, c_build))
+            return _long_identity_targets_impl(longctx_surface, direct_launch, cpu_measurement_window,
+                                               a_build, c_build)
 
         long_identity_targets[0] = _long_identity_targets
 
-    def longctx_runtime_gate(pair) -> dict:
-        """A runtime-recipe keep (threads, batch, KV type...) is judged at depth like any
-        other keep: the pair's two recipes on the same anchor build, slot restored. A
-        recipe whose slot cannot restore (a KV-layout change) is refused, not assumed."""
-        try:
-            row = _serving_comparison(lambda: longctx_surface.compare(
-                _cpu_arm(longctx_surface.launch_for(pair.anchor), anchor_build[0]),
-                _cpu_arm(longctx_surface.launch_for(pair.candidate), anchor_build[0]),
-                pairs=args.serving_pairs),
-                "runtime_recipe_pair_at_depth",
-                measurement_window=cpu_measurement_window).row
-        except loop.MeasurementInvalid:
-            raise
-        except (loop.MeasurementFailed, RuntimeError, ValueError, OSError) as exc:
-            return {"primary": "runtime", "passed": False,
-                    "reason": f"long-context gate failed: {type(exc).__name__}: {exc}"}
-        return {"primary": "runtime", **row["longctx"]}
+    longctx_runtime_gate = partial(_longctx_runtime_gate, longctx_surface, anchor_build, args,
+                                   lambda: cpu_measurement_window())
 
-    def cpu_anchor_guard_compare(a_build, c_build):
-        """Measure the promoted-anchor integrity A/A without consuming a source floor.
+    cpu_anchor_guard_compare = partial(
+        _cpu_anchor_guard_compare, lambda: direct_launch, lambda: serving_recipe,
+        lambda: cpu_measurement_window(), source_instrument, args, frozen_requests)
 
-        The keep was admitted against the previous anchor's floor.  The promoted
-        executable needs its own prospective floor, but calibration is candidate
-        work: it must not sit between moving the champion and completing this guard.
-        The guard therefore measures an explicitly uncalibrated matched A/A and lets
-        ``anchor.verify`` apply the already-admitted numeric tolerance itself.
-        """
-        anchor_recipe = _cpu_arm(direct_launch, a_build)
-        candidate_recipe = _cpu_arm(direct_launch, c_build)
-        return _serving_comparison(lambda: serving.compare(
-            serving_recipe, a_build, c_build, pairs=args.serving_pairs,
-            floor_pct=None, port=direct_launch.port,
-            anchor_resolved_recipe=anchor_recipe,
-            candidate_resolved_recipe=candidate_recipe,
-            frozen_requests=frozen_requests,
-            **({"instrument": args.serving_instrument} if source_instrument else {})),
-            "promoted_anchor_integrity_not_source_candidate",
-            measurement_window=cpu_measurement_window)
-
-    def confirm_measure(worker):
-        """The confirm rung's A/B for one keep-candidate (§5.3): same arms, the
-        production-shaped model, the confirm surface's own keyed floor."""
-        def measure(surface, floor_pct):
-            cpp, ctg, cub = bench.SURFACES[surface]
-            return measured_bench_compare(
-                bench.Arm("anchor", anchor_build[0] / "bin" / "llama-bench"),
-                bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
-                args.confirm_model, pp=cpp, tg=ctg, pairs=args.confirm_pairs,
-                noise_floor_pct=floor_pct, surface=surface, ubatch=cub,
-                calibrated=floor_pct is not None)
-        return measure
+    confirm_measure = partial(_confirm_measure, args, anchor_build,
+                              lambda *a, **kw: measured_bench_compare(*a, **kw))
 
     hotspot_rows: list = []
     cpu_profile_observation = {"status": "not_collected"}
@@ -5411,258 +7702,33 @@ def _main(argv: list[str] | None = None) -> int:
     uncovered_gap_state: list = [None]
 
     def node_reprofile(profile_arm) -> None:
-        """The SECOND, out-of-band capture of the same anchor and the same requests.
-
-        The perf capture above samples the measured binary and names symbols. The three
-        in-tree instrumented profilers name OPS, host phases and engram faults -- and
-        they exist only in a build configured with `-DGGML_CPU_PROF=ON`, which the
-        measured binary must never be. So this builds a sibling of the current anchor,
-        launches it only here, and reads the shares. It is observation-only: a failure
-        anywhere in it leaves the perf capture standing and never fails the stage.
-        """
-        from . import node_profile
-        node_profile_observation.clear()
-        node_profile_observation["status"] = "not_collected"
-        # Checked even when the sibling is off, and it RAISES: an anchor arm carrying
-        # the instrument's environment is a contaminated measurement, not a profile
-        # that failed to collect.
-        node_profile.refuse_instrumented_measurement(profile_arm)
-        if not args.node_profile:
-            node_profile_observation["reason"] = "instrumented sibling profiling disabled"
-            return
-        scope = (screen_state or {}).get("scope", "full")
-        key = {"anchor_commit": current_anchor_commit[0],
-               "execution_digest": profile_arm.execution_digest,
-               "prompt_manifest_digest": manifest.digest, "scope": scope,
-               "level": args.node_profile_level}
-        retained = node_profile.cached_observation(store_root=args.store, **key)
-        if retained is not None:
-            node_profile_observation.update(retained)
-            node_profile_observation["anchor_commit"] = current_anchor_commit[0]
-            print("profile   reused original instrumented node/host/engram observation")
-            return
-        node_profile_observation.update(node_profile.absent("sibling build not completed"))
-        build_dir = node_profile.profiling_build_dir(anchor_build[0])
-        publish("running", latest, step="instrumented sibling node/host/engram profiling")
-        try:
-            verdict = local_compiles(
-                args.worktree, build_dir,
-                cmake_defines=build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.cmake_defines(),
-                # Only the server: this sibling is never benched and never validated,
-                # so llama-bench/test-backend-ops would be paid for and never read.
-                jobs=build_jobs, cpu_list=build_cpu_list, targets=("llama-server",))
-            if not verdict.passed:
-                node_profile_observation.update(node_profile.absent(
-                    f"instrumented sibling build refused at {verdict.gate}: {verdict.reason}"))
-                print(f"profile   NODE UNAVAILABLE ({verdict.gate}: {verdict.reason})")
-                return
-            build = {"dir": str(build_dir),
-                     "recipe": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.name,
-                     "recipe_sha256": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.sha256(),
-                     "anchor_commit": current_anchor_commit[0],
-                     "measured_build_dir": str(anchor_build[0])}
-            from . import roofline_coverage
-            with cpu_measurement_window():
-                observed = node_profile.profile_loop(
-                    lambda env: _cpu_arm(direct_launch, build_dir, extra_env=env),
-                    manifest, store_root=args.store, build=build,
-                    level=args.node_profile_level,
-                    timeout_s=min(1800, resolved_campaign.resources.stage_timeout_s)
-                    if selected_identity else 1800,
-                    host_ceiling_gb_s=roofline_coverage.DEFAULT_HOST_CEILING_GB_S)
-        except (node_profile.NodeProfileRefused, serving.ServerDied, loop.MeasurementInvalid,
-                OSError, ValueError, subprocess.SubprocessError) as exc:
-            node_profile_observation.update(node_profile.absent(
-                f"{type(exc).__name__}: {exc}"))
-            print(f"profile   NODE UNAVAILABLE ({exc})")
-            return
-        node_profile_observation.update(observed)
-        node_profile_observation["anchor_commit"] = current_anchor_commit[0]
-        node_profile.retain_observation(observed, store_root=args.store, **key)
-        print(f"profile   node/host/engram {observed['status']}; "
-              f"{len(observed.get('mechanism_shares', []))} grouped op mechanisms")
-        # 2026-10-06 autonomy self-check: refresh the live uncovered-gap reading.
-        # Observe-only -- a failure here must never cost this stage its own result.
-        try:
-            uncovered_gap_state[0] = (
-                (observed.get("roofline_gaps") or {}).get("uncovered_gap"))
-            if uncovered_gap_state[0] and uncovered_gap_state[0].get("triggered"):
-                print("profile   ROOFLINE GAP (where headroom is): "
-                      f"{uncovered_gap_state[0]['uncovered_fraction'] * 100:.1f}% of "
-                      "top-K gap share sits in nodes with NO admitted route")
-        except Exception as exc:  # pragma: no cover - defensive, observe-only
-            print(f"profile   roofline-gap coverage check skipped "
-                  f"({type(exc).__name__}: {exc})")
+        return _node_reprofile(profile_arm,
+            node_profile_observation=node_profile_observation, args=args, screen_state=screen_state,
+            current_anchor_commit=current_anchor_commit, manifest=lambda: manifest, anchor_build=anchor_build,
+            publish=publish, latest=latest, local_compiles=local_compiles, build_jobs=build_jobs, build_cpu_list=build_cpu_list, cpu_measurement_window=cpu_measurement_window,
+            selected_identity=selected_identity, resolved_campaign=resolved_campaign, uncovered_gap_state=uncovered_gap_state,
+            direct_launch=lambda: direct_launch)
 
     #: Audit C4: planner inputs AT DEPTH for an opted-in target (`--longctx-surface`).
     longctx_observation: dict = {"cpu_profile": None, "node_profile": None, "histogram": None}
 
     def longctx_reprofile() -> None:
-        """The perf capture and the node profile repeated on the long-context manifest with
-        the anchor's slot restored, and the production context histogram regenerated from
-        the spec's server logs. Observation-only: a failure is recorded, never raised."""
-        if longctx_surface is None:
-            return
-        from . import cpu_profile, node_profile
-        spec = longctx_surface.spec
-        try:
-            longctx_observation["histogram"] = (
-                longctx.parse_server_logs(spec.body["production_logs"])
-                if spec.body["production_logs"] else None)
-        except OSError as exc:
-            longctx_observation["histogram"] = {"status": "unavailable", "reason": str(exc)}
-        long_launch = longctx_surface.launch_for(direct_launch)
-        arm = _cpu_arm(long_launch, anchor_build[0])
-        unavailable = (cpu_profile.CpuProfileRefused, node_profile.NodeProfileRefused,
-                       loop.MeasurementFailed, loop.MeasurementInvalid, OSError, ValueError,
-                       subprocess.SubprocessError)
-        publish("running", latest, step="long-context perf capture at depth (slot restored)")
-        try:
-            with cpu_measurement_window():
-                surface_launch = longctx_surface.ensure_slot(arm)
-                longctx_observation["cpu_profile"] = cpu_profile.profile_loop(
-                    arm, longctx_surface.manifest, store_root=args.store,
-                    perf_path=args.cpu_profiler, timeout_s=1800,
-                    longctx=surface_launch.with_mode("profile"))
-        except cpu_profile.CpuProfileCleanupUncertain:
-            raise  # An unproven terminal child must not overlap the next A/B.
-        except unavailable as exc:
-            longctx_observation["cpu_profile"] = {
-                "status": "unavailable", "reason": f"{type(exc).__name__}: {exc}"[:1024]}
-            longctx_observation["node_profile"] = {"status": "not_collected",
-                                                   "reason": "slot or perf capture failed"}
-            print(f"longctx   profile at depth UNAVAILABLE ({exc})")
-            return
-        if not args.node_profile:
-            longctx_observation["node_profile"] = node_profile.absent(
-                "instrumented sibling profiling disabled")
-            return
-        key = {"anchor_commit": current_anchor_commit[0], "execution_digest": arm.execution_digest,
-               "prompt_manifest_digest": longctx_surface.manifest.digest, "scope": "longctx",
-               "level": args.node_profile_level}
-        retained = node_profile.cached_observation(store_root=args.store, **key)
-        if retained is not None:
-            longctx_observation["node_profile"] = retained
-            return
-        build_dir = node_profile.profiling_build_dir(anchor_build[0])
-        publish("running", latest, step="long-context node profile at depth (slot restored)")
-        try:
-            verdict = local_compiles(
-                args.worktree, build_dir,
-                cmake_defines=build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.cmake_defines(),
-                jobs=build_jobs, cpu_list=build_cpu_list, targets=("llama-server",))
-            if not verdict.passed:
-                raise ValueError(f"instrumented sibling build refused at {verdict.gate}: "
-                                 f"{verdict.reason}")
-            build = {"dir": str(build_dir),
-                     "recipe": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.name,
-                     "recipe_sha256": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.sha256(),
-                     "anchor_commit": current_anchor_commit[0],
-                     "measured_build_dir": str(anchor_build[0]), "longctx_spec": spec.digest}
-            with cpu_measurement_window():
-                observed = node_profile.profile_loop(
-                    lambda env: _cpu_arm(long_launch, build_dir, extra_env=env),
-                    longctx_surface.manifest, store_root=args.store, build=build,
-                    level=args.node_profile_level, timeout_s=1800,
-                    launch=lambda *a, **k: serving._measure_once(*a, longctx=surface_launch, **k))
-        except unavailable as exc:
-            longctx_observation["node_profile"] = node_profile.absent(f"{type(exc).__name__}: {exc}")
-            print(f"longctx   node profile at depth UNAVAILABLE ({exc})")
-            return
-        longctx_observation["node_profile"] = observed
-        node_profile.retain_observation(observed, store_root=args.store, **key)
+        return _longctx_reprofile(longctx_surface=longctx_surface,
+            longctx_observation=longctx_observation, direct_launch=lambda: direct_launch, anchor_build=anchor_build, publish=publish, latest=latest,
+            cpu_measurement_window=cpu_measurement_window, args=args, current_anchor_commit=current_anchor_commit, local_compiles=local_compiles, build_jobs=build_jobs,
+            build_cpu_list=build_cpu_list)
 
     @counter_phase("profile")
     def reprofile() -> None:
-        """Re-derive the hotspots from the CURRENT champion.
-
-        A profile names where the time goes in one binary. Once a patch is kept that
-        binary no longer exists, and the accepted change moved the very distribution
-        the next hypothesis should aim at. A continuous run that profiled once would
-        spend hours aiming at a distribution it had already altered.
-        """
-        if cpu_launch:
-            from . import cpu_profile
-            cpu_profile_observation.clear()
-            cpu_profile_observation["status"] = "unavailable"
-            profile_arm = _cpu_arm(direct_launch, anchor_build[0])
-            retained = resumed.get("cpu_profile_reference") if resumed is not None else None
-            if retained is not None:
-                try:
-                    observed = cpu_profile.cached_loop_observation(retained,
-                        store_root=args.store, anchor_commit=current_anchor_commit[0],
-                        execution_digest=profile_arm.execution_digest,
-                        prompt_manifest_digest=manifest.digest,
-                        scope=(screen_state or {}).get("scope", "full"))
-                except (cpu_profile.CpuProfileRefused, OSError, ValueError) as exc:
-                    print(f"profile   retained CPU observation unavailable ({exc}); reprofile")
-                else:
-                    if observed is not None:
-                        cpu_profile_observation.update(observed)
-                        cpu_profile_observation["anchor_commit"] = current_anchor_commit[0]
-                        print(f"profile   reused original CPU observation; record {observed['record']}")
-                        node_reprofile(profile_arm)
-                        longctx_reprofile()
-                        return
-            publish("running", latest, step="CPU original-request observational profiling")
-            try:
-                with cpu_measurement_window():
-                    observed = cpu_profile.profile_loop(
-                        profile_arm, manifest,
-                        store_root=args.store, perf_path=args.cpu_profiler,
-                        timeout_s=min(1800, resolved_campaign.resources.stage_timeout_s)
-                        if selected_identity else 1800)
-            except cpu_profile.CpuProfileCleanupUncertain:
-                raise  # An unproven terminal child must not overlap the next A/B.
-            except (cpu_profile.CpuProfileRefused, serving.ServerDied, OSError) as exc:
-                cpu_profile_observation["reason"] = f"{type(exc).__name__}: {exc}"[:1024]
-                print(f"profile   CPU UNAVAILABLE ({exc})")
-            else:
-                cpu_profile_observation.update(observed)
-                cpu_profile_observation["anchor_commit"] = current_anchor_commit[0]
-                print(f"profile   CPU {len(observed['hotspots'])} sampled symbols; "
-                      f"record {observed['record']}")
-            node_reprofile(profile_arm)
-            longctx_reprofile()
-            return
-        if direct_launch:
-            # G2: the target's OWN server under rocprofv3 (whole life, windows cut by
-            # timestamp marks), one anchor launch per anchor change, cached by anchor +
-            # execution digest + request digest. mi210_0 is held for this run's life;
-            # gpu-quiet EXCLUSIVE is taken around the launch (quiet window).
-            gpu_profile_observation.clear()
-            gpu_profile_observation["status"] = "unavailable"
-            publish("running", latest, step="GPU serving profile (rocprofv3, one anchor launch)")
-            try:
-                with cpu_measurement_window():
-                    view, rows = hotspots.serving_profile(
-                        _cpu_arm(direct_launch, anchor_build[0]), frozen_requests,
-                        store=args.store, anchor_commit=current_anchor_commit[0],
-                        long_context=gpu_long_context_hook[0])
-            except loop.MeasurementInvalid:
-                raise
-            except (hotspots.ProfileFailed, OSError, ValueError, RuntimeError, ImportError,
-                    subprocess.SubprocessError) as exc:
-                gpu_profile_observation["reason"] = f"{type(exc).__name__}: {exc}"[:1024]
-                print(f"profile   GPU SERVING UNAVAILABLE ({exc}); the planner is told so; "
-                      f"legacy bench profile not substituted")
-                return
-            gpu_profile_observation.update(view)
-            hotspot_rows[:] = rows
-            print(f"profile   GPU serving {'reused' if view.get('cached') else 'captured'}; "
-                  f"primary {view['primary_window']}; {len(rows)} kernels; record {view['record']}")
-            return
-        try:
-            with cpu_measurement_window():
-                rows = hotspots.profile(anchor_build[0] / "bin" / "llama-bench",
-                                        args.model, pp=pp, tg=tg)
-        except hotspots.ProfileFailed as exc:
-            print(f"profile   UNAVAILABLE ({exc}); the planner is told so rather than "
-                  f"left to guess")
-            return
-        hotspot_rows[:] = rows
-        print(f"profile   {len(rows)} hotspots; top: "
-              f"{rows[0].signature[:60] if rows else '(none)'}")
+        return _reprofile(
+            cpu_launch=lambda: cpu_launch, cpu_profile_observation=cpu_profile_observation,
+            direct_launch=lambda: direct_launch, anchor_build=anchor_build, resumed=resumed, args=args,
+            current_anchor_commit=current_anchor_commit, manifest=lambda: manifest, screen_state=screen_state,
+            node_reprofile=node_reprofile, longctx_reprofile=longctx_reprofile, publish=publish,
+            latest=latest, cpu_measurement_window=cpu_measurement_window, selected_identity=selected_identity,
+            resolved_campaign=resolved_campaign, gpu_profile_observation=gpu_profile_observation, frozen_requests=frozen_requests, gpu_long_context_hook=gpu_long_context_hook,
+            hotspot_rows=hotspot_rows, pp=pp,
+            tg=tg)
 
     # SCRATCH (operator 2026-09-26): this run's ONE scratch registry, rooted in the
     # store; created when the run body starts (below) and read by status/loop-run.
@@ -5672,18 +7738,8 @@ def _main(argv: list[str] | None = None) -> int:
     #: The CPU window of this run (`--cpu-window-yield on` with a CPU claim), else None.
     cpu_window_ref: list = [None]
 
-    def _ask_stop(signum, _frame) -> None:
-        # Never abort mid-measurement: a killed A/B wastes the device time already
-        # spent and leaves a half-written candidate. Flag it and let the stage
-        # boundaries handle it, exactly as the STOP file does: forming lanes abandon
-        # before their next actor call, the tail holder finishes and publishes.
-        stopping["asked"] = True
-        print(f"\nstopping  signal {signum} received — forming lanes abandon at "
-              f"their next stage boundary; a lane holding the tail finishes its "
-              f"measurement and publishes first")
-
     for _sig in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(_sig, _ask_stop)
+        signal.signal(_sig, partial(_ask_stop, stopping))
 
     # Provider circuit breaker (provider_breaker.py): N consecutive provider-terminal
     # iterations park the run at the next iteration boundary, via `should_stop`.
@@ -5691,8 +7747,7 @@ def _main(argv: list[str] | None = None) -> int:
         resolved_campaign.resources.effective_provider_park_after
         if resolved_campaign is not None else provider_breaker.DEFAULT_PARK_AFTER)
 
-    def stop_asked() -> bool:
-        return stopping["asked"] or pool.stop_requested(args.store)
+    stop_asked = partial(_stop_asked, stopping, args.store)
 
     # Identical-state abstention stop (same_state_stop.py): a lane whose planner
     # abstained on exactly the state it would see again is not re-asked: it parks until
@@ -5709,14 +7764,8 @@ def _main(argv: list[str] | None = None) -> int:
         decoded_tokens=args.max_run_decoded_tokens), args.worker_root)
     budget_debit[0] = lambda label, wall_s: budget.debit_stage(label, wall_s, gpu=not cpu_launch)
 
-    def should_stop() -> bool:
-        return (stop_asked() or breaker.tripped or same_state.tripped or deadline_guard.tripped
-                or budget.tripped)
-
-    def run_terminal() -> str:
-        return provider_breaker.terminal(stop_asked=stop_asked(), breaker=breaker,
-                                         same_state=same_state, deadline=deadline_guard,
-                                         budget=budget)
+    should_stop = partial(_should_stop, stop_asked, breaker, same_state, deadline_guard, budget)
+    run_terminal = partial(_run_terminal, stop_asked, breaker, same_state, deadline_guard, budget)
 
     #: Per-thread nesting depth of the quiet window: a measurement called from inside
     #: another's window must not re-acquire a flock this process already holds (flock
@@ -5731,14 +7780,7 @@ def _main(argv: list[str] | None = None) -> int:
         if gpu_skip_cpu_claim else None)
 
     def local_compiles(*positional, **keyword):
-        if gpu_local is None:
-            return gates.compiles(*positional, **keyword)
-        with gpu_local.build() if gpu_local is not None else nullcontext():
-            paths = (*positional[:2], *(keyword[name] for name in ("source_root", "build_dir")
-                                        if name in keyword))
-            with gpu_local.compile_env(keyword.get("env"), paths=paths) as child_env:
-                keyword["env"] = child_env
-                return gates.compiles(*positional, **keyword)
+        return _local_compiles_impl(gpu_local, *positional, **keyword)
 
     @counter_phase("oracle")
     def local_op_correctness(*positional, **keyword):
@@ -5746,35 +7788,8 @@ def _main(argv: list[str] | None = None) -> int:
             return gates.op_correctness(*positional, **keyword)
 
     def cpu_measurement_window():
-        """The measurement window of THIS run, CPU or GPU (quiet-window ruling above).
-
-        A CPU run's half of the quiet window is the SHARED gpu-quiet hold that rides
-        with its region claim (`hold_cpu_claim`), so its window is the CPU step alone.
-        """
-        if gpu_local is not None:
-            return gpu_local.compute()
-        quiet = _gpu_quiet_measurement_window(
-            not cpu_launch, should_stop=should_stop, policy=args.cpu_measurement_gpu_quiet,
-            on_wait=lambda: publish("running", latest,
-                step="GPU measurement waiting for gpu-quiet (a CPU measurement holds it shared)"))
-        if not cpu_launch:
-            # G1 GPU measurement boundary: the window check comes first -- a preempted
-            # window never waits on a lock.
-            # Round-2 item 5: the window is checked again AFTER the gpu-quiet wait (a
-            # long wait can outlive the window); the outer boundary also watches
-            # expected_end for the whole measurement (F6).
-            window_required = args.gpu_window == GPU_WINDOW_REQUIRED
-            quiet = _stacked(_gpu_window_boundary(
-                window_required, args.gpu_window_path,
-                on_preempt=lambda: stopping.__setitem__("asked", True)),
-                _stacked(quiet, _gpu_window_boundary(
-                    window_required, args.gpu_window_path, watch=False,
-                    on_preempt=lambda: stopping.__setitem__("asked", True))))
-        quiet = _reentrant(quiet_depth, quiet)
-        if cpu_window_ref[0] is None:
-            return quiet
-        # A CPU measurement never runs on a yielded claim, wherever it is called from.
-        return _stacked(cpu_window_ref[0].cpu_step("measurement"), quiet)
+        return _cpu_measurement_window_impl(gpu_local, lambda: cpu_launch, should_stop, args,
+                                            lambda: publish, lambda: latest, stopping, quiet_depth, cpu_window_ref)
 
     def measured_serving_compare(*args_, **kwargs_):
         with cpu_measurement_window():
@@ -5820,97 +7835,19 @@ def _main(argv: list[str] | None = None) -> int:
     last_anchor_aa: list = [None]
 
     def build_champion(dest: Path, targets: tuple = gates.DEFAULT_TARGETS):
-        """The loop's recipe, compiled AT the path used. Shared by promotion and guard —
-        at DIFFERENT widths (R22-7). `pool.promote_anchor` calls this with
-        `gates.PROMOTION_TARGETS` (llama-server included: a champion that is not
-        production-complete is not promotable — operator ruling, 2026-09-01), while
-        the anchor guard's throwaway fresh build and its heal retry take the narrow
-        default: the guard answers "is the anchor slot the champion", its digest
-        hashes `bin/libggml-hip.so` alone, and paying server link time per keep for
-        a binary nobody runs would buy nothing. Candidate lane builds (`gate_for`)
-        stay narrow for the same reason at hundreds of iterations per run."""
-        # R23-40 (2026-09-03): HIP recipes build at jobs=1, NOT 64. This recipe feeds
-        # BOTH the promoted anchor and the guard's fresh comparison build, and `-j64`
-        # HIP builds of one commit are NON-reproducible on this host -- three
-        # same-recipe builds of 445e93a8 differed in every code section
-        # (.text/.hip_fatbin/.rodata), so the digest guard aborted the run (Run-18
-        # fault class). Serial build makes the promoted anchor and the fresh guard
-        # build bit-identical; R23-41 (hipcc determinism at -j64) is still open.
-        # C46 (2026-09-27): CPU/gcc recipes ARE reproducible at -j64, so they take the
-        # run's normal `build_jobs`. `anchor_build_jobs` owns the split.
-        return local_compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
-                              jobs=anchor_build_jobs(recipe, build_jobs),
-                              cpu_list=build_cpu_list,
-                              # Review 2026-10-06: a direct launch always carries
-                              # PROMOTION_TARGETS, but must not DROP targets the caller
-                              # widened (ppl_contract tools) -- the old override silently
-                              # discarded them while provenance.json recorded them.
-                              targets=(tuple(dict.fromkeys((*gates.PROMOTION_TARGETS,
-                                                            *targets)))
-                                       if direct_launch else targets))
+        return _build_champion(local_compiles, args, recipe, build_jobs, build_cpu_list,
+                               lambda: direct_launch, dest, targets)
 
     def build_baseline(dest: Path, commit: str):
-        """The frozen production kernel, built at most once PER FREEZE. Never in the
-        production tree itself.
-
-        `commit` is the LIVE-resolved freeze (`production.resolve_frozen`), not a
-        pinned constant: after a promotion the headline must follow the newly frozen
-        kernel, never stale v9. The build-source copy is checked against it before a
-        single compiler is invoked -- a copy that has not followed the promotion would
-        produce a binary published under the new freeze's name, which is the one way
-        this headline can be quietly wrong. A refusal here is a `Verdict`, not an
-        exception -- `production.refresh` turns it into a skipped refresh (the panel
-        reads SUPERSEDED, naming why), and the run carries on.
-        """
-        head = _git(production.BASELINE_TREE, "rev-parse", "HEAD")
-        if head != commit:
-            return gates.Verdict("baseline-tree", False,
-                                 f"{production.BASELINE_TREE} is at {head[:12]}, not "
-                                 f"the frozen production kernel {commit[:12]}; "
-                                 f"refresh the copy to follow the promotion")
-        return local_compiles(production.BASELINE_TREE, dest,
-                              cmake_defines=recipe.cmake_defines(),
-                              jobs=build_jobs, cpu_list=build_cpu_list)
+        return _build_baseline(local_compiles, recipe, build_jobs, build_cpu_list, dest, commit)
 
     def publish_headline() -> None:
-        """Refresh the dashboard headline for the current verified anchor.
-
-        The champion arm is `anchor_build[0]`: verified at startup, then rebuilt
-        and guarded by the promotion path after each advance. This reuses that
-        build; `production.refresh` contains baseline/measurement failures.
-        """
-        if experimental:
-            print("headline  experimental serving results only; production comparison not applicable")
-            return
-        outcome = production.refresh(
-            store=args.store, champion_commit=current_anchor_commit[0],
-            champion_build=anchor_build[0], build_baseline=build_baseline,
-            # An excursion-flagged promotion still publishes (the anchor is
-            # hash-proven), but the bundle must carry the session-health note.
-            note=next((g["detail"] for g in anchor_guard_seen[-1:]
-                       if g.get("excursion")), None),
-            compare=lambda base, champ: measured_bench_compare(
-                bench.Arm("production_v9", base / "bin" / "llama-bench"),
-                bench.Arm("champion", champ / "bin" / "llama-bench"),
-                headline_model, pp=pp, tg=tg, pairs=args.pairs,
-                noise_floor_pct=headline_floor, surface=bench_surface, ubatch=ubatch,
-                calibrated=headline_floor is not None),
-            # Carry-over (2026-10-04): with a matching recorded production baseline
-            # the champion is measured ALONE, under exactly this protocol -- the same
-            # model, surface and llama-bench argv `bench.compare` would run.
-            measure=lambda champ: measured_bench_measure(
-                bench.Arm("champion", champ / "bin" / "llama-bench"),
-                headline_model, pp=pp, tg=tg, launches=args.pairs,
-                surface=bench_surface, ubatch=ubatch),
-            protocol=production.protocol(model=headline_model, surface=bench_surface),
-            on_step=lambda label: publish("running", latest,
-                                          hotspot_rows=hotspot_rows, step=label))
-        archive.record(args.store, outcome.to_attempt(), epoch=epoch,
-                       recorded_at=loop._now(), campaign_id="ak-loop",
-                       on_serving_export=feedback.exported)
-        print(f"headline  {outcome.reason}")
-        if outcome.carryover:
-            print(f"headline  carry-over: {outcome.carryover}")
+        return _publish_headline(
+            experimental=experimental, args=args, current_anchor_commit=current_anchor_commit,
+            anchor_build=anchor_build, build_baseline=build_baseline, anchor_guard_seen=anchor_guard_seen,
+            headline_model=headline_model, bench_surface=bench_surface, epoch=epoch, feedback=feedback, measured_bench_compare=measured_bench_compare, tg=tg,
+            measured_bench_measure=measured_bench_measure, publish=publish, latest=latest, pp=pp, headline_floor=headline_floor, ubatch=ubatch,
+            hotspot_rows=hotspot_rows)
 
     #: Per-stage keep-path timing (keep_timing.py): set for the duration of one keep,
     #: attached to that keep's `kept` row. Observability only, never control flow.
@@ -5918,822 +7855,83 @@ def _main(argv: list[str] | None = None) -> int:
     keep_timing_by_head: dict[str, dict] = {}
     variance_keep_by_head: dict[str, dict] = {}
 
-    def keep_stage(name: str, **identity):
-        timer = keep_timer[0]
-        return nullcontext({}) if timer is None else timer.stage(name, **identity)
+    keep_stage = partial(_keep_stage, keep_timer)
 
     def verify_anchor(*, guard_floor=None) -> None:
-        """Prove the promoted binary IS the champion; `RunAborted` if not. Runs in the
-        serialized tail holding the claim: `commit` is called inside `tail_session`."""
-        def keep_verdict(verdict) -> None:
-            # Both outcomes, before any abort raises: store + status, so the dashboard
-            # says WHY a run stopped and the check is auditable after the fact.
-            archive.record(args.store, verdict.to_attempt(), epoch=epoch,
-                           recorded_at=loop._now(), campaign_id="ak-loop",
-                           on_serving_export=feedback.exported)
-            anchor_guard_seen.append(verdict.to_dict())
-            if verdict.pairs and verdict.effect_pct is not None:
-                last_anchor_aa[0] = (time.monotonic(), verdict.passed and not verdict.excursion)
-            publish("running", latest, hotspot_rows=hotspot_rows)
-            print(f"anchor    {verdict.detail}")
-
-        def aa_skip() -> str | None:
-            """Skip the identical-digest A/A only inside the window after a clean one."""
-            window = args.anchor_guard_aa_window_s
-            last = last_anchor_aa[0]
-            if window <= 0 or last is None or not last[1]:
-                return None
-            age = time.monotonic() - last[0]
-            if age >= window:
-                return None
-            return (f"this run's previous anchor-guard A/A passed inside the floor "
-                    f"{age / 60.0:.0f} min ago (--anchor-guard-aa-window-s {window:g})")
-
-        guard_commit = _git(args.worktree, "rev-parse", "HEAD")
-        guard_scratch = (args.store / ("anchor-verify-cpu" if cpu_launch else
-                                       "anchor-verify-gpu-serving")
-                         if direct_launch else anchor.SCRATCH_BUILD)
-        guard_builds = [0]
-
-        def timed_build(path):
-            guard_builds[0] += 1
-            name = "anchor_guard_build" if guard_builds[0] == 1 else "anchor_guard_heal_build"
-            with keep_stage(name, commit=guard_commit, build_dir=str(path)):
-                return build_champion(path)
-
-        def timed_digest(path):
-            with keep_stage("anchor_guard_digest", build_dir=str(path)):
-                return anchor_integrity.object_digest(path)
-
-        def timed_aa_skip():
-            reason = aa_skip()
-            if reason and keep_timer[0] is not None:
-                keep_timer[0].skip("anchor_guard_aa", reason)
-            return reason
-
-        def guard_compare(promoted, fresh):
-            return (
-                cpu_anchor_guard_compare(promoted, fresh)
-                if direct_launch and source_instrument and source_floor_refresh[0]
-                else cpu_compare(promoted, fresh)) if direct_launch else measured_bench_compare(
-                bench.Arm("promoted_anchor", promoted / "bin" / "llama-bench"),
-                bench.Arm("fresh_champion", fresh / "bin" / "llama-bench"),
-                args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
-                surface=args.surface, ubatch=ubatch, calibrated=calibrated)
-
-        def timed_compare(promoted, fresh):
-            with keep_stage("anchor_guard_aa"):
-                return guard_compare(promoted, fresh)
-
-        anchor.verify(
-            champion_commit=guard_commit,
-            anchor_build=anchor_build[0],
-            noise_floor_pct=floor if guard_floor is None else guard_floor,
-            # 2026-09-06: OBJECT digest, not the linked .so. The compiler is reproducible
-            # (0/379 objects ever differed); the linker is not (four distinct .so digests
-            # for one commit aborted every keep on link noise). Objects prove identity.
-            digest=timed_digest,
-            on_verdict=keep_verdict, build=timed_build, aa_skip=timed_aa_skip,
-            compare=timed_compare,
-            on_step=lambda label: publish("running", latest,
-                                          hotspot_rows=hotspot_rows, step=label),
-            **({"scratch_build": args.store / ("anchor-verify-cpu" if cpu_launch else
-                                               "anchor-verify-gpu-serving")}
-               if direct_launch else {}))
+        return _verify_anchor(guard_floor=guard_floor,
+            args=lambda: args, direct_launch=lambda: direct_launch, cpu_launch=lambda: cpu_launch,
+            anchor_build=lambda: anchor_build, floor=lambda: floor, keep_timer=lambda: keep_timer, source_instrument=lambda: source_instrument, hotspot_rows=lambda: hotspot_rows,
+            keep_stage=lambda: keep_stage, measured_bench_compare=lambda: measured_bench_compare, tg=lambda: tg, feedback=lambda: feedback, cpu_compare=lambda: cpu_compare,
+            last_anchor_aa=lambda: last_anchor_aa, calibrated=lambda: calibrated, source_floor_refresh=lambda: source_floor_refresh, epoch=lambda: epoch,
+            anchor_guard_seen=lambda: anchor_guard_seen, publish=lambda: publish, ubatch=lambda: ubatch,
+            cpu_anchor_guard_compare=lambda: cpu_anchor_guard_compare, build_champion=lambda: build_champion, pp=lambda: pp,
+            latest=lambda: latest)
 
     def promote_anchor() -> None:
-        """Advance the anchor by BUILDING the champion into the new slot, never by
-        renaming a build directory in (CMake dirs are not relocatable). `pool` owns the
-        mechanics so a test can EXECUTE them rather than grep for them."""
-        nonlocal direct_launch, cpu_launch, serving_recipe
-        # R23-52: the keep path was silent for 30+ min (clean anchor build + guard + headline +
-        # reprofile + accumulate) and the dashboard read the loop as dead. Heartbeat every sub-stage.
-        publish("running", latest, hotspot_rows=hotspot_rows,
-                step="keep: building the new anchor generation (clean build)")
-        clean_commit = _git(args.worktree, "rev-parse", "HEAD")
-        with keep_stage("anchor_clean_build", commit=clean_commit) as clean_stage:
-            anchor_build[0] = pool.promote_anchor(
-                args.store, build=build_champion, recipe=recipe.to_dict(),
-                champion_commit=clean_commit,
-                # 2026-10-06 follow-up: widen to PPL_CONTRACT_TOOL_TARGETS only when this
-                # store has a ppl_contract obligation (an admitted mechanism, or an
-                # unreadable ledger failing wide) -- a store with no ppl_contract history
-                # keeps getting exactly gates.PROMOTION_TARGETS, so an existing run's
-                # resume is unaffected.
-                ppl_contract_obligated=gates.ppl_contract_anchor_obligated(args.store))
-            clean_stage["build_dir"] = str(anchor_build[0])
-        current_anchor_commit[0] = _git(args.worktree, "rev-parse", "HEAD")
-        print(f"anchor    advanced to {anchor_build[0].name} — subsequent effects are "
-              f"MARGINAL against this {'experimental candidate' if experimental else 'champion'}, "
-              "not cumulative")
-        if direct_launch is not None and source_instrument:
-            # The accepted comparison above was judged against the prior anchor's
-            # floor. Only now bind the launch to the promoted executable/DSOs and
-            # require a new exact-identity A/A before another source candidate can
-            # run.  The integrity guard below is not a research candidate and uses
-            # the prior admitted tolerance without consuming this pending refresh.
-            prior_floor = floor
-            direct_launch = _cpu_arm(direct_launch, anchor_build[0])
-            cpu_launch = direct_launch if direct_launch.backend == "cpu" else None
-            serving_recipe = direct_launch.template
-            feedback_anchor[0] = direct_launch
-            invalidate_source_floor()
-        else:
-            prior_floor = None
-        # FIRST, before the loop draws any further work: nothing below is worth doing
-        # against an anchor that is not the champion (run 18: 114 candidates, 6.5 h).
-        try:
-            with keep_stage("anchor_guard"):
-                verify_anchor(guard_floor=prior_floor)
-        except loop.RunAborted as aborted:
-            # The keep's commit already landed; name its head on the abort so the
-            # run_aborted row can carry it (loop.iterate adds the rest).
-            aborted.committed_head = current_anchor_commit[0]
-            raise
-        if direct_launch is not None:
-            # This slot supplies the next hypothesis, not the recipe of the run's
-            # initial binary. Rebind once at the actual owning keep boundary.
-            feedback_anchor[0] = _cpu_arm(direct_launch, anchor_build[0])
-            if runtime_enabled:
-                install_runtime_owner()
-        # AFTER the guard, never before (run 18's void number). 2026-09-07: publishing here
-        # is RESTORED. R23-44 had moved it to the serving-PROMOTE branch only, so the
-        # champion-vs-production headline froze for the whole accumulation phase -- the
-        # operator saw a 3.8-day-old, two-generations-stale number on the OLD surface
-        # (dec-b4) marked SUPERSEDED while 5 keeps had landed. The headline is a BENCH
-        # cumulative gain on the current surface and must stay fresh per keep; the
-        # serving-demonstrated state is the accumulator card's champion_of_record, not
-        # this number. Cost: one tip-vs-production bench per keep (the pre-R23-44 cost).
-        publish("running", latest, hotspot_rows=hotspot_rows,
-                step=("keep: experimental serving candidate retained" if experimental else
-                      "keep: champion-vs-production headline bench"))
-        with keep_stage("headline"):
-            publish_headline()
-        publish("running", latest, hotspot_rows=hotspot_rows,
-                step=("keep: CPU profiling unavailable" if cpu_launch else
-                      "keep: selected GPU serving profiling unavailable" if direct_launch else
-                      "keep: re-profiling the new champion (rocprofv3)"))
-        # The champion moved, so the profile that named the hotspots is stale: the
-        # accepted patch changed the very distribution the next hypothesis should aim
-        # at. Re-profiling here is what makes a long run keep aiming at the truth
-        # rather than at wherever the time went hours ago.
-        with keep_stage("reprofile"):
-            reprofile()
-        runtime_original_build = (runtime_owner[0].retained_build(runtime_recipe_reference[0])
-            if runtime_recipe_reference[0] is not None and runtime_owner[0] is not None else None)
-        with keep_stage("prune_anchor_generations"):
-            cleanup = pool.prune_anchor_generations(
-                args.store, current=anchor_build[0],
-                protect=[cor_build[0]] + ([runtime_original_build] if runtime_original_build is not None else []))
-        if cleanup.removed:
-            print(f"anchor    pruned {len(cleanup.removed)} superseded generation(s); "
-                  "reclaimed bytes unknown (not scanned on measurement path)")
-        if cleanup.failed:
-            print("anchor    cleanup incomplete: "
-                  + "; ".join(f"{path}: {reason}" for path, reason in cleanup.failed),
-                  file=sys.stderr)
-        if cleanup.quarantined:
-            print("anchor    recoverable cleanup quarantine: "
-                  + "; ".join(f"{original} -> {quarantine} ({reason})"
-                              for original, quarantine, reason in cleanup.quarantined),
-                  file=sys.stderr)
-        if cleanup.retention_unknown:
-            print("anchor    cleanup skipped (retention_unknown): "
-                  + "; ".join(cleanup.retention_unknown), file=sys.stderr)
+        return _promote_anchor(set_runtime_selection=set_runtime_selection,
+            direct_launch=lambda: direct_launch, cpu_launch=lambda: cpu_launch, serving_recipe=lambda: serving_recipe, publish=lambda: publish, latest=lambda: latest,
+            hotspot_rows=lambda: hotspot_rows, args=lambda: args, keep_stage=lambda: keep_stage,
+            anchor_build=lambda: anchor_build, build_champion=lambda: build_champion, recipe=lambda: recipe,
+            current_anchor_commit=lambda: current_anchor_commit, experimental=lambda: experimental, source_instrument=lambda: source_instrument, floor=lambda: floor,
+            feedback_anchor=lambda: feedback_anchor, invalidate_source_floor=lambda: invalidate_source_floor,
+            verify_anchor=lambda: verify_anchor, runtime_enabled=lambda: runtime_enabled,
+            install_runtime_owner=lambda: install_runtime_owner, publish_headline=lambda: publish_headline,
+            reprofile=lambda: reprofile, runtime_recipe_reference=lambda: runtime_recipe_reference, runtime_owner=lambda: runtime_owner,
+            cor_build=lambda: cor_build)
 
     def accumulate_after_keep(mechanism_id: str, phase_owner) -> None:
-        """R23-44 compound-then-gate. The accumulator just advanced on a bench keep; batch it
-        and, only when the bundle's compounded bench gain over the champion of record clears
-        `fire_multiple` x the serving floor, spend the serving gate ONCE on the whole bundle.
-
-        No serving_recipe -> no serving tier: the loop reverts to a pure bench-keep loop.
-
-        On a serving win the champion of record advances to the accumulator tip and the
-        headline follows it; on a divergence (bundle cleared bench, serving did not confirm)
-        the champion of record HOLDS, the bundle is KEPT, and the divergence is journaled as
-        planner evidence naming the bundled keeps (operator 2026-09-04)."""
-        if serving_recipe is None:
-            return
-        try:
-            _accumulate_after_keep(mechanism_id, phase_owner)
-        except loop.InteractionRegression:
-            # This is a scientific disposition after a completed rollback, not a
-            # bookkeeping failure. Let iterate record it instead of returning the
-            # now-orphaned candidate commit as a keep.
-            raise
-        except Exception as exc:  # the keep is already committed AND promoted: a
-            # bookkeeping failure here must be LOUD, never a silent un-record (the
-            # 2026-09-06 gen-018 keep vanished from dispositions with no trace).
-            print(f"accum     FAILED — keep {mechanism_id} stands but its bundle entry is "
-                  f"lost: {type(exc).__name__}: {exc}")
-            status.write_json(args.store / "serving", f"accum-error-{mechanism_id}.json",
-                              {"mechanism_id": mechanism_id, "error": str(exc)},
-                              prefix=".sv-")
-            raise loop.RunAborted(
-                "committed keep has unresolved accumulator bookkeeping") from exc
+        return _accumulate_after_keep_guard(mechanism_id, phase_owner, serving_recipe=serving_recipe, _accumulate_after_keep=_accumulate_after_keep, args=args)
 
     def _accumulate_after_keep(mechanism_id: str, phase_owner) -> None:
-        head = _git(args.worktree, "rev-parse", "HEAD")
-        previous_tip = bundle[0].tip
-
-        def persist_comparison(row: dict, phase: str, *, measured_tip: str = head) -> dict:
-            """Retain the complete direct COR-vs-tip observation before using its scalar."""
-            body = {
-                "schema": "epyc.autokernel.accumulator_comparison.v1",
-                "phase": phase,
-                "mechanism_id": mechanism_id,
-                "champion_of_record": bundle[0].champion_of_record,
-                "prior_tip": previous_tip,
-                "measured_tip": measured_tip,
-                "surface": bundle[0].surface,
-                "harness": (direct_launch.snapshot_digest if direct_launch else
-                            f"bench:{bench_surface}:{pp}:{tg}:{ubatch}:{args.pairs}"),
-                "comparison": row,
-            }
-            canonical = json.dumps(body, sort_keys=True, separators=(",", ":"),
-                                   allow_nan=False).encode()
-            identity = hashlib.sha256(canonical).hexdigest()
-            root = args.store / "accumulator-comparisons"
-            target = root / f"{head[:12]}-{phase}-{identity}.json"
-            if target.exists():
-                if json.loads(target.read_text(encoding="utf-8")) != body:
-                    raise RuntimeError(f"immutable accumulator evidence collision at {target}")
-            else:
-                status.write_json(root, target.name, body, prefix=".accumulator-comparison-")
-            return {"path": str(target.resolve()),
-                    "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
-
-        def record_resolution(kind: str, first_ref: dict, second_ref: dict,
-                              restored_ref: dict | None = None) -> dict:
-            body = {
-                "schema": "epyc.autokernel.accumulator_comparison_resolution.v1",
-                "outcome": kind,
-                "mechanism_id": mechanism_id,
-                "champion_of_record": bundle[0].champion_of_record,
-                "prior_tip": previous_tip,
-                "candidate_tip": head,
-                "candidate_tree": phase_owner.mutation_binding()["candidate_tree"],
-                "first": first_ref,
-                "repeat": second_ref,
-                **({"restored_tip_recheck": restored_ref} if restored_ref else {}),
-            }
-            canonical = json.dumps(body, sort_keys=True, separators=(",", ":"),
-                                   allow_nan=False).encode()
-            identity = hashlib.sha256(canonical).hexdigest()
-            root = args.store / "accumulator-comparisons"
-            target = status.write_json(root, f"resolution-{head[:12]}-{identity}.json", body,
-                                       prefix=".accumulator-resolution-")
-            return {"path": str(target.resolve()),
-                    "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
-
-        # 2026-10-03: the COR-vs-tip bench runs on a keep cadence, not after every keep
-        # (`--accumulate-bench-every-keeps`). A deferred keep advances membership, tip and
-        # the R23-54 cadence counter; its retained magnitude is marked stale, so the
-        # threshold trigger cannot fire on it, and the keep that reaches the cadence gate
-        # is always measured first (`accumulate.bench_due`).
-        due = accumulate.bench_due(bundle[0], accum_policy, args.accumulate_bench_every_keeps,
-                                   force=accum_bench_forced[0],
-                                   gate_armed=serving_floor_pct is not None)
-        if due is None:
-            bundle[0].add_unmeasured_keep(mechanism_id, head)
-            bundle[0].save(args.store)
-            landed = bundle[0].keeps_since_serving_gate
-            every = args.accumulate_bench_every_keeps
-            print(f"accum     bundle {len(bundle[0].keeps)} keep(s); COR-vs-tip bench deferred "
-                  f"(keep {landed} since the serving gate; bench every {every} keeps and "
-                  f"before the cadence gate at {accum_policy.every_keeps}); retained "
-                  f"{bundle[0].compounded_bench_pct:+.2f}% is stale until then")
-            return
-        accum_bench_forced[0] = False
-        publish("running", latest, hotspot_rows=hotspot_rows,
-                step=f"keep: accumulate — champion-of-record vs tip bench ({mechanism_id}, {due})")
-        # compounded bench: champion-of-record build (A) vs the just-advanced accumulator (B),
-        # re-measured (never a product of marginal effects -- keeps interact) because this is
-        # the number the fire threshold reads and the serving gate will be asked to confirm.
-        def compare_bundle() -> dict:
-            return (cpu_compare(cor_build[0], anchor_build[0], rebind_feedback=False).to_dict()
-                    if direct_launch else measured_bench_compare(
-                        bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
-                        bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
-                        args.model, pp=pp, tg=tg, pairs=args.pairs,
-                        noise_floor_pct=bench_floor, surface=bench_surface, ubatch=ubatch,
-                        calibrated=bench_floor is not None).to_dict())
-
-        comp = compare_bundle()
-        comp_ref = persist_comparison(comp, "initial")
-        if accumulate.negative_beyond_floor(comp, serving_floor_pct):
-            publish("running", latest, hotspot_rows=hotspot_rows,
-                    step=f"keep: accumulator negative repeat ({mechanism_id})")
-            repeated = compare_bundle()
-            repeated_ref = persist_comparison(repeated, "repeat")
-            if accumulate.negative_beyond_floor(repeated, serving_floor_pct):
-                # The just-created commit remains in Git as evidence, but it must not
-                # remain the working champion. Restore the prior accumulator source,
-                # rebuild it into a fresh owned anchor slot, and recheck that slot.
-                _git(args.worktree, "reset", "--hard", previous_tip)
-                if original_source_keeps and original_source_keeps[-1].get("kept_commit") == head:
-                    original_source_keeps.pop()
-                promote_anchor()
-                restored = compare_bundle()
-                restored_ref = persist_comparison(
-                    restored, "restored-prior-tip", measured_tip=previous_tip)
-                resolution_ref = record_resolution(
-                    "interaction_regression", comp_ref, repeated_ref, restored_ref)
-                if not accumulate.negative_beyond_floor(restored, serving_floor_pct):
-                    bundle[0].compounded_bench_pct = restored["effect"] * 100.0
-                    bundle[0].comparison_evidence = restored_ref
-                    bundle[0].measurement_validity = accumulate.MEASUREMENT_CURRENT
-                    bundle[0].save(args.store)
-                else:
-                    # The restored tip still reads negative: with deferred benches the
-                    # regression may predate the reverted keep, so the next keep must
-                    # re-measure the whole bundle rather than wait for its cadence.
-                    accum_bench_forced[0] = True
-                    bundle[0].measurement_validity = accumulate.MEASUREMENT_STALE_RESTORED_REGRESSION
-                    bundle[0].comparison_evidence = restored_ref
-                    bundle[0].save(args.store)
-                phase_owner.mark_rollback(resolution_ref)
-                raise loop.InteractionRegression(
-                    f"whole bundle regressed beyond floor twice; restored prior tip "
-                    f"{previous_tip[:12]}; evidence {resolution_ref['path']}")
-            record_resolution("drift_null", comp_ref, repeated_ref)
-            comp, comp_ref = repeated, repeated_ref
-        bundle[0].add_keep(mechanism_id, head, comp["effect"] * 100.0,
-                           comparison_evidence=comp_ref)
-        bundle[0].save(args.store)   # durable BEFORE the gate decision, so a crash keeps it
-        thr = (f"{accum_policy.fire_threshold_pct(serving_floor_pct):.2f}"
-               if serving_floor_pct is not None else "uncalibrated")
-        if (accumulate.effective_measurement_validity(bundle[0], args.store)
-                != accumulate.MEASUREMENT_CURRENT):
-            raise loop.RunAborted("stale_baseline: compounded gain cannot be quoted")
-        print(f"accum     bundle {len(bundle[0].keeps)} keep(s), "
-              f"{bundle[0].compounded_bench_pct:+.2f}% compounded bench vs champion of record "
-              f"(serving gate fires at {thr}%, or on cadence at "
-              f"{bundle[0].keeps_since_serving_gate}/{accum_policy.every_keeps} keeps)")
-        # R23-54 (operator 2026-09-08): EITHER trigger fires the gate — the compounded bench
-        # estimate clearing the threshold, or the mandatory every-4-keeps cadence. The
-        # estimate keeps its early trigger but no longer holds a veto over the schedule.
-        trigger = accumulate.gate_trigger(bundle[0], serving_floor_pct, accum_policy, store=args.store)
-        if trigger is None:
-            return
-        # The gate is being spent -- once, on the whole bundle.
-        sv_row = measured_serving_compare(serving_recipe, cor_build[0], anchor_build[0],
-                                 pairs=args.serving_pairs, floor_pct=serving_floor_pct,
-                                 floor_unit=serving_floor_unit,
-                                 **({"port": direct_launch.port,
-                                     "anchor_resolved_recipe": _cpu_arm(direct_launch, cor_build[0]),
-                                     "candidate_resolved_recipe": _cpu_arm(direct_launch, anchor_build[0]),
-                                     "frozen_requests": frozen_requests,
-                                     "floor_request_digest": floor_request_digest,
-                                     "floor_record": floor_record,
-                                     **({"instrument": args.serving_instrument}
-                                        if source_instrument else {})}
-                                    if direct_launch else {}))
-        plan = accumulate.resolve(bundle[0], sv_row, accum_policy, store=args.store)
-        if plan["outcome"] is accumulate.Outcome.PROMOTE:
-            # Layer (e) at fold (review 2026-10-06): a serving win is bench/throughput
-            # evidence only. A bundle carrying a ppl_contract keep must also pass the
-            # quality layers (a)-(d) as a WHOLE before the champion of record advances;
-            # a refusal (or any error) HOLDS it exactly like a serving divergence.
-            quality = ppl_contract_fold_check(head)
-            if quality is not None:
-                print(f"quality   ppl_contract bundle gate: passed={quality.passed} "
-                      f"{quality.reason}")
-            if quality is not None and not quality.passed:
-                plan = {**plan, "outcome": accumulate.Outcome.DIVERGED,
-                        "action": accum_policy.on_divergence,
-                        "new_champion_of_record": bundle[0].champion_of_record,
-                        "reason": ("QUALITY HOLD: serving confirmed the bundle but the "
-                                   f"ppl_contract bundle gate refused: {quality.reason}; "
-                                   "champion of record HOLDS at "
-                                   f"{bundle[0].champion_of_record[:12]}"),
-                        "planner_evidence": {"kind": "ppl_contract_quality_hold",
-                                             "bundled_keeps": list(bundle[0].keeps),
-                                             "reason": quality.reason}}
-                # Operator tiering: bisect the bundle's ppl-relevant keeps and evict the
-                # culprit from the accumulator instead of discarding the whole bundle;
-                # the champion of record still HOLDS this round, and the next trigger
-                # re-judges the bundle without it. Any fault leaves the plain hold.
-                eviction = ppl_contract_evict_culprit(head, quality)
-                plan["planner_evidence"]["eviction"] = eviction
-                print(f"quality   bundle bisect: {eviction}")
-        # WHY it fired is part of the reading: a cadence firing at +2% compounded is a
-        # different fact from a threshold firing at +9%, and the 2026-09-08 divergence is
-        # the reason a reader must never have to infer which one happened.
-        last_gate[0] = {"trigger": trigger, "outcome": plan["outcome"].value,
-                        "floor_provenance": serving_floor_provenance,
-                        "floor_carry": serving_floor_carry, **_floor_registry_receipt(),
-                        "at_commit": head, "keeps": len(bundle[0].keeps),
-                        "compounded_bench_pct": (
-                            round(bundle[0].compounded_bench_pct, 3)
-                            if accumulate.effective_measurement_validity(bundle[0], args.store)
-                            == accumulate.MEASUREMENT_CURRENT else None),
-                        "serving_effect_pct": sv_row.get("effect_pct"),
-                        "serving_decisive": sv_row.get("decisive"),
-                        "at": loop._now()}
-        status.write_json(
-            args.store / "serving", f"bundle-{head[:12]}.json",
-            {"outcome": plan["outcome"].value, "trigger": trigger, "reason": plan["reason"],
-             # Whether the floor this verdict was judged against was ever proven to belong
-             # to this recipe. A grandfathered floor still gates, but it must never be
-             # indistinguishable from a verified one in the record it produced.
-             "floor_provenance": serving_floor_provenance,
-             "floor_carry": serving_floor_carry, **_floor_registry_receipt(),
-             "keeps_since_serving_gate": bundle[0].keeps_since_serving_gate,
-             "gate_every_keeps": accum_policy.every_keeps,
-             "bundled_keeps": list(bundle[0].keeps),
-             "planner_evidence": plan.get("planner_evidence"), **sv_row}, prefix=".sv-")
-        print(f"serving   [trigger={trigger}] {plan['reason']}")
-        # This is a whole-bundle observation, not another source keep. Export the
-        # original capture on BOTH dispositions before COR/bundle state advances.
-        # Preserve the established divergence fields for historical recall.
-        promoted = plan["outcome"] is accumulate.Outcome.PROMOTE
-        archive.record(
-            args.store,
-            {"schema": "epyc.autokernel.attempt.v1", "campaign_id": "ak-loop",
-             "mechanism_id": f"serving-{'gate' if promoted else 'divergence'}-{head[:12]}",
-             "status": "measured_serving_gate" if promoted else "measured_divergence",
-             "hypothesis": plan["reason"], "planner_evidence": plan.get("planner_evidence"),
-             "trigger": trigger, "floor_provenance": serving_floor_provenance,
-             "floor_carry": serving_floor_carry, **_floor_registry_receipt(),
-             "gate_outcome": plan["outcome"].value,
-             "bundled_keeps": list(bundle[0].keeps),
-             "champion_of_record": cor_commit[0], "at_commit": head,
-             "comparison": sv_row, "serving": sv_row},
-            epoch=epoch, recorded_at=last_gate[0]["at"], campaign_id="ak-loop",
-            on_serving_export=feedback.exported)
-        if plan["outcome"] is accumulate.Outcome.PROMOTE:
-            # The champion of record advances to the accumulator tip. Snapshot its build into
-            # the protected slot, publish the headline against it, and start a fresh bundle.
-            promoted_bundle = accumulate.Bundle(
-                champion_of_record=head, tip=head, surface=bundle[0].surface)
-            promoted_bundle.mark_serving_gate_fired()
-            try:
-                if promoted_bundle.surface is None:
-                    promoted_bundle.save(args.store)
-                else:
-                    promoted_bundle.promote_shared_cor(
-                        args.store, expected_cor=bundle[0].champion_of_record)
-            except accumulate.BundleRecoveryRequired as refusal:
-                raise loop.RunAborted(
-                    f"shared COR promotion refused before publishing the new champion: {refusal}") from refusal
-            cor_commit[0] = plan["new_champion_of_record"]
-            cor_build[0] = anchor_build[0]  # point at the verified gen; prune protects it
-            publish_headline()
-            # Fresh bundle: no keeps, and the R23-54 cadence counter starts at 0 because the
-            # gate just ran (a fresh Bundle defaults to 0; mark it anyway so the reset is not
-            # an accident of the constructor).
-            bundle[0] = promoted_bundle
-        else:
-            # DIVERGED + HOLD: hand the divergence to the planner as journal evidence so it can
-            # revert/revise a bundled keep or re-aim; the champion of record and the bundle hold.
-            # R23-54: the gate RAN, so the cadence counter resets even though the bundle
-            # HOLDS. It counts readings taken, not verdicts won — without this a diverged
-            # bundle would re-fire the expensive gate on every single subsequent keep.
-            bundle[0].mark_serving_gate_fired()
-            bundle[0].save(args.store)
+        return _accumulate_after_keep_impl(mechanism_id, phase_owner,
+            args=lambda: args, bundle=lambda: bundle, accum_policy=lambda: accum_policy, accum_bench_forced=lambda: accum_bench_forced, serving_floor_pct=lambda: serving_floor_pct,
+            publish=lambda: publish, latest=lambda: latest, hotspot_rows=lambda: hotspot_rows,
+            original_source_keeps=lambda: original_source_keeps, promote_anchor=lambda: promote_anchor,
+            measured_serving_compare=lambda: measured_serving_compare, serving_recipe=lambda: serving_recipe, cor_build=lambda: cor_build, anchor_build=lambda: anchor_build,
+            serving_floor_unit=lambda: serving_floor_unit, direct_launch=lambda: direct_launch,
+            frozen_requests=lambda: frozen_requests, floor_request_digest=lambda: floor_request_digest,
+            floor_record=lambda: floor_record, source_instrument=lambda: source_instrument, ppl_contract_fold_check=lambda: ppl_contract_fold_check,
+            ppl_contract_evict_culprit=lambda: ppl_contract_evict_culprit, last_gate=lambda: last_gate, serving_floor_provenance=lambda: serving_floor_provenance,
+            serving_floor_carry=lambda: serving_floor_carry, cor_commit=lambda: cor_commit,
+            epoch=lambda: epoch, feedback=lambda: feedback, publish_headline=lambda: publish_headline,
+            cpu_compare=lambda: cpu_compare, bench_floor=lambda: bench_floor, pp=lambda: pp, bench_surface=lambda: bench_surface, ubatch=lambda: ubatch, tg=lambda: tg,
+            measured_bench_compare=lambda: measured_bench_compare)
 
     def ppl_contract_tools_build(slot: Path, commit: str) -> Path:
-        """`slot` when it carries PPL_CONTRACT_TOOL_TARGETS; otherwise a tools build of
-        the SAME commit and recipe (re-review 2026-10-06: an anchor promoted before the
-        ppl_contract obligation lacked the tools, so the first candidate could never
-        pass the gate that would widen the next anchor). Built from the champion tree
-        only when it is clean at `commit`, into the store (the slot is never touched),
-        and admitted only when its library OBJECT digest equals the slot's -- the
-        anchor guard's own identity rule, so its numerics are the slot's. Raises on
-        anything else; callers fail closed."""
-        slot = Path(slot)
-        if all((slot / "bin" / tool).is_file() for tool in gates.PPL_CONTRACT_TOOL_TARGETS):
-            return slot
-        slot_digest = anchor_integrity.object_digest(slot)
-        if slot_digest is None:
-            raise ValueError(f"{slot} has no library objects to prove a tools build against")
-        owner = scratch.current("run") or scratch.active_scope(args.store / "scratch")
-        dest = Path(args.store) / "ppl_contract" / f"tools-{commit[:12]}-{owner.registry.instance}-{owner.id}"
-        marker = dest / "ak_ppl_tools_build.json"
-        def artifact_digest(build: Path) -> str:
-            return hashlib.sha256("\n".join(
-                gates._build_identity(build, tool)
-                for tool in gates.PPL_CONTRACT_TOOL_TARGETS).encode()).hexdigest()
-
-        if marker.is_file():
-            if not any(Path(r["path"]) == dest.absolute() for r in owner.resources):
-                raise ValueError(f"{dest} is not owned by this run; refusing a foreign tools build")
-            # Round-3 review: the marker is never trusted alone -- the directory's
-            # objects AND its linked tools/DSOs are re-hashed on every reuse.
-            body = json.loads(marker.read_text(encoding="utf-8"))
-            if (body.get("commit") != commit or body.get("object_digest") != slot_digest
-                    or anchor_integrity.object_digest(dest) != slot_digest
-                    or body.get("artifact_digest") != artifact_digest(dest)):
-                raise ValueError(f"{dest} no longer matches its marker / {slot} at "
-                                 f"{commit[:12]}; refusing the stale tools build")
-            return dest
-        head = _git(args.worktree, "rev-parse", "HEAD")
-        dirty = _git(args.worktree, "status", "--porcelain", "--untracked-files=no")
-        if head != commit or dirty:
-            raise ValueError(f"champion tree is not clean at {commit[:12]} (HEAD {head[:12]}"
-                             f"{', dirty' if dirty else ''}); cannot build its tools")
-        dest = owner.dir("ppl-tools-build", commit[:12], at=dest)
-        with owner.scope("call", name=f"ppl-tools-compile-{commit[:12]}") as command_scope:
-            # The original CPU owner outlives the cookie-owned compiler sweep.
-            # local_compiles reuses this same-kind owner instead of acquiring again.
-            with (gpu_local.build() if gpu_local is not None else nullcontext()), \
-                    scratch.owned_child_env(command_scope, protect=((owner, (dest,)),)) as child_env:
-                verdict = local_compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
-                                         jobs=anchor_build_jobs(recipe, build_jobs),
-                                         cpu_list=build_cpu_list, env=child_env,
-                                         targets=gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS)
-        if not verdict.passed:
-            raise ValueError(f"tools build of {commit[:12]} failed: {verdict.reason}")
-        if _git(args.worktree, "rev-parse", "HEAD") != commit:
-            raise ValueError("champion tree moved during the tools build")
-        built_digest = anchor_integrity.object_digest(dest)
-        if built_digest != slot_digest:
-            raise ValueError(f"tools build of {commit[:12]} is not object-identical to {slot}")
-        marker.write_text(json.dumps({"commit": commit, "object_digest": slot_digest,
-                                      "artifact_digest": artifact_digest(dest),
-                                      "slot": str(slot)}), encoding="utf-8")
-        return dest
+        return _ppl_contract_tools_build(slot, commit, args=args, gpu_local=gpu_local, local_compiles=local_compiles, recipe=recipe, build_jobs=build_jobs, build_cpu_list=build_cpu_list)
 
     def ppl_contract_anchor_for_gate() -> Path:
         return ppl_contract_tools_build(anchor_build[0], current_anchor_commit[0])
 
     def ppl_contract_bisect_build(commit: str) -> Path:
-        """A tools-carrying build of `commit` for the bundle bisect: the tip reuses the
-        anchor (tools build); any other commit is built from a detached scratch worktree
-        under the store (never the champion tree, which stays at the tip)."""
-        if commit == current_anchor_commit[0]:
-            return ppl_contract_anchor_for_gate()
-        if commit == cor_commit[0] and all((Path(cor_build[0]) / "bin" / tool).is_file()
-                                           for tool in gates.PPL_CONTRACT_TOOL_TARGETS):
-            return Path(cor_build[0])
-        owner = scratch.current("run") or scratch.active_scope(args.store / "scratch")
-        base = Path(args.store) / "ppl_contract" / "bisect" / owner.registry.instance / owner.id
-        src, dest = base / f"src-{commit[:12]}", base / f"build-{commit[:12]}"
-        marker = dest / "ak_bisect_build.json"
-        if marker.is_file() and json.loads(marker.read_text(encoding="utf-8")).get(
-                "commit") == commit:
-            if not any(Path(r["path"]) == dest.absolute() for r in owner.resources):
-                raise ValueError(f"{dest} is not owned by this run; refusing a foreign bisect build")
-            return dest
-        src = owner.worktree(args.worktree, commit, f"ppl-bisect-{commit[:12]}", at=src,
-                             force_remove=False)
-        dest = owner.dir("ppl-bisect-build", commit[:12], at=dest)
-        if _git(src, "rev-parse", "HEAD") != commit or \
-                _git(src, "status", "--porcelain", "--untracked-files=no"):
-            raise ValueError(f"bisect source {src} is not clean at {commit[:12]}")
-        with owner.scope("call", name=f"ppl-bisect-compile-{commit[:12]}") as command_scope:
-            with (gpu_local.build() if gpu_local is not None else nullcontext()), \
-                    scratch.owned_child_env(command_scope, protect=((owner, (src, dest)),)) as child_env:
-                verdict = local_compiles(src, dest, cmake_defines=recipe.cmake_defines(),
-                                         jobs=anchor_build_jobs(recipe, build_jobs),
-                                         cpu_list=build_cpu_list, env=child_env,
-                                         targets=gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS)
-        if not verdict.passed:
-            raise ValueError(f"bisect build of {commit[:12]} failed: {verdict.reason}")
-        marker.write_text(json.dumps({"commit": commit}), encoding="utf-8")
-        return dest
+        return _ppl_contract_bisect_build(commit, current_anchor_commit=current_anchor_commit, ppl_contract_anchor_for_gate=ppl_contract_anchor_for_gate, cor_commit=cor_commit, cor_build=cor_build, args=args, gpu_local=gpu_local, local_compiles=local_compiles, recipe=recipe, build_jobs=build_jobs, build_cpu_list=build_cpu_list)
 
-    def ppl_contract_judge_bundle(build: Path) -> "gates.Verdict":
-        """Layers (a)-(d) of champion-of-record -> `build`, as the fold judges them."""
-        from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
-        arm = _cpu_arm(direct_launch, build)
-        reference = gates.pinned_production_reference(args.store, env=dict(arm.launch_env),
-                                                      candidate_build=build)
-        cor_has_tools = all((Path(cor_build[0]) / "bin" / tool).is_file()
-                            for tool in gates.PPL_CONTRACT_TOOL_TARGETS)
-        return gates.ppl_contract_bundle_gate(
-            cor_build[0] if cor_has_tools else reference, build, resolved_recipe=arm,
-            model=args.model, threads=len(_parse_cpu_list(build_cpu_list)),
-            cpu_list=build_cpu_list, env=dict(arm.launch_env), reference_build=reference,
-            cache_dir=Path(args.store) / "ppl_contract" / "cache",
-            log_dir=Path(args.store) / "ppl_contract" / "bundle",
-            served_shape_manifest=Path(args.store) / "served_shape" / "manifest.json")
+    ppl_contract_judge_bundle = partial(_ppl_contract_judge_bundle, args,
+                                        lambda: direct_launch, cor_build, build_cpu_list)
 
     class _EvidenceUnavailable(Exception):
         """A bisect step could not MEASURE (tool/reference/parse failure)."""
 
     def ppl_contract_evict_culprit(tip_commit: str, quality=None) -> dict:
-        """Bisect the bundle's ppl-relevant (non-merge) commits for the FIRST whose state
-        NUMERICALLY fails the bundle gate, revert it on the accumulator, rebuild the
-        anchor and drop its mechanism from the bundle. Round-12: unavailable evidence
-        (reference load, tool, parse failure) anywhere -- in the fold verdict, the base
-        or any bisect step -- HOLDS without evicting; and the champion-of-record base
-        state must itself pass before any keep is blamed. Returns evidence; never raises."""
-        try:
-            if quality is not None and gates.ppl_contract_failure_class(quality) != "numerical":
-                return {"result": "held_unavailable",
-                        "reason": "the fold verdict is unavailable evidence, not a "
-                                  "numerical failure; nothing evicted"}
-            if tip_commit != current_anchor_commit[0] or \
-                    _git(args.worktree, "rev-parse", "HEAD") != tip_commit or \
-                    _git(args.worktree, "status", "--porcelain", "--untracked-files=no"):
-                return {"result": "skipped", "reason": "champion tree is not clean at the tip"}
-            shas = _git(args.worktree, "rev-list", "--reverse", "--no-merges",
-                        f"{cor_commit[0]}..{tip_commit}").split()
-            suspects = [sha for sha in shas if gates.ppl_contract_range_requires_gate(
-                args.worktree, f"{sha}^", sha)]
-            if not suspects:
-                return {"result": "no_suspect"}
-            judged = {}
-
-            def fails(sha):
-                if sha not in judged:
-                    verdict = ppl_contract_judge_bundle(ppl_contract_bisect_build(sha))
-                    if not verdict.passed and \
-                            gates.ppl_contract_failure_class(verdict) != "numerical":
-                        raise _EvidenceUnavailable(f"{sha[:12]}: {verdict.reason}")
-                    judged[sha] = not verdict.passed
-                return judged[sha]
-            try:
-                # The base (champion of record) must pass before any keep is blamed.
-                if fails(cor_commit[0]):
-                    return {"result": "held_base_fails", "judged": judged,
-                            "reason": "the champion-of-record state itself fails the "
-                                      "bundle gate; no keep is attributable"}
-                last_fails = fails(suspects[-1])
-            except _EvidenceUnavailable as exc:
-                return {"result": "held_unavailable", "judged": judged, "reason": str(exc)}
-            if not last_fails:
-                return {"result": "not_isolated", "judged": judged,
-                        "reason": "the last ppl-relevant keep's state passes; the failure "
-                                  "is not attributable to one keep"}
-            lo, hi = 0, len(suspects) - 1
-            try:
-                while lo < hi:
-                    mid = (lo + hi) // 2
-                    if fails(suspects[mid]):
-                        hi = mid
-                    else:
-                        lo = mid + 1
-            except _EvidenceUnavailable as exc:
-                return {"result": "held_unavailable", "judged": judged, "reason": str(exc)}
-            culprit = suspects[lo]
-            subject = _git(args.worktree, "log", "-1", "--format=%s", culprit)
-            done = subprocess.run(["git", "-C", str(args.worktree), "revert", "--no-edit",
-                                   culprit], capture_output=True, text=True)
-            if done.returncode != 0:
-                subprocess.run(["git", "-C", str(args.worktree), "revert", "--abort"],
-                               capture_output=True, text=True)
-                return {"result": "revert_conflict", "culprit": culprit, "judged": judged}
-            new_tip = _git(args.worktree, "rev-parse", "HEAD")
-            mechanism = subject.split(":", 1)[0].strip()
-            if mechanism in bundle[0].keeps:
-                bundle[0].keeps.remove(mechanism)
-            bundle[0].tip = new_tip
-            bundle[0].measurement_validity = accumulate.MEASUREMENT_DEFERRED_BENCH
-            bundle[0].save(args.store)
-            promote_anchor()
-            return {"result": "evicted", "culprit": culprit, "mechanism_id": mechanism,
-                    "new_tip": new_tip, "judged": judged}
-        except Exception as exc:  # noqa: BLE001 -- a failed bisect leaves the plain hold
-            return {"result": "error", "reason": f"{type(exc).__name__}: {exc}"}
+        return _ppl_contract_evict_culprit(tip_commit, quality, current_anchor_commit=current_anchor_commit, args=args, cor_commit=cor_commit, _EvidenceUnavailable=_EvidenceUnavailable, bundle=bundle, promote_anchor=promote_anchor, ppl_contract_judge_bundle=ppl_contract_judge_bundle, ppl_contract_bisect_build=ppl_contract_bisect_build)
 
     def ppl_contract_fold_check(tip_commit: str) -> "gates.Verdict | None":
-        """None when the bundle carries no ppl_contract change; else the whole-bundle
-        quality verdict (cor build vs tip build, fixed production reference). Any error
-        while deciding is a refusal, never a pass."""
-        try:
-            changed = _git(args.worktree, "diff", "--name-only", cor_commit[0],
-                           tip_commit).splitlines()
-            ledger = gates.ppl_contract_ledger_read(args.store)
-            # Round-3 review: provenance from HISTORY -- a trailer, or any change to a
-            # ppl_contract path not positively classified non-ppl -- requires the gate.
-            trailer = gates.ppl_contract_range_requires_gate(args.worktree, cor_commit[0],
-                                                             tip_commit, store=args.store)
-            if not gates.ppl_contract_fold_required(bundle[0].keeps, changed, ledger,
-                                                    trailer=trailer):
-                return None
-            if cpu_launch is None:
-                return gates.Verdict("ppl_contract_bundle", False,
-                                     "ppl_contract bundle on a non-CPU target")
-            from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
-            tip_tools = ppl_contract_anchor_for_gate()
-            # Round-9 resolution D: the bundle's "candidate" is the tip's tools build, so
-            # its resolved recipe (and LD_LIBRARY_PATH) is rebound to THAT build.
-            arm = _cpu_arm(direct_launch, tip_tools)
-            reference = gates.pinned_production_reference(args.store,
-                                                          env=dict(arm.launch_env),
-                                                          candidate_build=tip_tools)
-            # The champion of record's build predates the tools when it was promoted
-            # before the obligation; it cannot be rebuilt here (the champion tree is at
-            # the tip). Judge the bundle against the PINNED reference alone then -- the
-            # strict bar (allowed drift = the bar itself), never a skipped comparison.
-            cor_has_tools = all((Path(cor_build[0]) / "bin" / tool).is_file()
-                                for tool in gates.PPL_CONTRACT_TOOL_TARGETS)
-            return gates.ppl_contract_bundle_gate(
-                cor_build[0] if cor_has_tools else reference, tip_tools,
-                resolved_recipe=arm, model=args.model,
-                threads=len(_parse_cpu_list(build_cpu_list)), cpu_list=build_cpu_list,
-                env=dict(arm.launch_env),
-                reference_build=reference,
-                cache_dir=Path(args.store) / "ppl_contract" / "cache",
-                log_dir=Path(args.store) / "ppl_contract" / "bundle",
-                # The fold judges the WHOLE bundle with the same layer (a) the keep did,
-                # served-shape case set included (review 2026-10-06).
-                served_shape_manifest=Path(args.store) / "served_shape" / "manifest.json")
-        except Exception as exc:  # noqa: BLE001 -- fail CLOSED
-            return gates.Verdict("ppl_contract_bundle", False,
-                                 f"bundle quality check errored: {type(exc).__name__}: {exc}")
+        return _ppl_contract_fold_check(tip_commit, args=args, cor_commit=cor_commit, bundle=bundle, cpu_launch=lambda: cpu_launch, ppl_contract_anchor_for_gate=ppl_contract_anchor_for_gate, direct_launch=lambda: direct_launch, cor_build=cor_build, build_cpu_list=build_cpu_list)
 
     def gpu_reading(outcomes=()) -> dict:
-        """Report claim hold and comparison wall time; device utilization is unknown.
-
-        Comparison.device_seconds includes spawn, model loading and CPU gaps. It is
-        retained as wall time only and cannot support a physical idle fraction.
-        """
-        if claim_started is None:
-            return {}
-        held = time.monotonic() - claim_started
-        if cpu_launch:  # AKU-23: the CPU arm row carries utilisation, observed or None + reason
-            return {"claim_held_s": round(held, 1), "arm_accounting": arm_accounting.from_cpu_work(held)}
-        walls = ([] if direct_launch else
-                 [(o.comparison.to_dict() or {}).get("device_seconds")
-                  for o in outcomes if o.comparison is not None])
-        try:
-            if not walls or any(not isinstance(v, (int, float)) or isinstance(v, bool)
-                                for v in walls):
-                wall_total = None
-            else:
-                values = [float(v) for v in walls]
-                total = sum(values)
-                wall_total = (round(total, 1) if all(math.isfinite(v) and v >= 0
-                                                       for v in values)
-                              and math.isfinite(total) else None)
-        except OverflowError:
-            wall_total = None
-        if gfx_counter[0] is not None:
-            gfx_counter[0].sample("live_status")
-        counter = gfx_counter[0].snapshot() if gfx_counter[0] is not None else None
-        counter_view = ({key: value for key, value in counter.items() if key != "samples"}
-                        if counter is not None else None)
-        acct = arm_accounting.from_gfx_trace(held, counter)  # observed counter only, never wall time
-        return {"claim_held_s": round(held, 1),
-                "gfx_counter": counter_view,
-                "comparison_wall_seconds": wall_total,
-                "device_seconds_under_load": None,
-                "arm_accounting": acct,
-                "gpu_seconds_idle_while_claimed": acct["arm_seconds_idle_while_claimed"],
-                "idle_fraction_while_claimed": acct["idle_fraction_while_claimed"]}
+        return _gpu_reading(lambda: claim_started, lambda: cpu_launch,
+                            lambda: direct_launch, gfx_counter, outcomes)
 
     def accumulator_state() -> dict | None:
-        """Project the two-tier bundle without upgrading a stale measurement.
+        return _accumulator_state(lambda: serving_recipe,
+            lambda: serving_floor_pct,
+            accum_policy, bundle, args, cor_commit,
+            lambda: serving_floor_provenance,
+            lambda: serving_floor_carry,
+            lambda: serving_floor_unit,
+            last_gate)
 
-        Membership and cadence remain live operational state. Numeric gain/progress
-        are current only when measured for this exact tip; a retained older magnitude
-        is separately labelled historical. None means there is no serving tier.
-        """
-        if serving_recipe is None:
-            return None
-        thr = (accum_policy.fire_threshold_pct(serving_floor_pct)
-               if serving_floor_pct is not None else None)
-        validity = accumulate.effective_measurement_validity(bundle[0], args.store)
-        measurement_current = validity == accumulate.MEASUREMENT_CURRENT
-        historical_comp = (None if measurement_current
-                           else round(bundle[0].compounded_bench_pct, 3))
-        comp = (round(bundle[0].compounded_bench_pct, 3)
-                if measurement_current else None)
-        # R23-54: the cadence half of the trigger, so the card can say "2/8 keeps to the
-        # mandatory gate" and name the reason the last gate fired instead of leaving a
-        # reader to infer it from the compounded number that 2026-09-08 proved unreliable.
-        trig = accumulate.gate_trigger(bundle[0], serving_floor_pct, accum_policy, store=args.store)
-        return {
-            "champion_of_record": cor_commit[0],
-            "accumulator_tip": bundle[0].tip,
-            "keeps": list(bundle[0].keeps),
-            "n_keeps": len(bundle[0].keeps),
-            "measurement_validity": validity,
-            "compounded_bench_pct": comp,
-            "historical_compounded_bench_pct": historical_comp,
-            "serving_floor_pct": serving_floor_pct,
-            # R23-49's lesson on the surface: a floor nobody could prove belonged to this
-            # recipe looked exactly like one that did. R23-55's, beside it: a floor whose
-            # UNIT nobody recorded looked exactly like one measured in the effect's unit.
-            "serving_floor_provenance": serving_floor_provenance,
-            # DS41-C69: which sealed parent floor was carried and which A/A admitted it.
-            "serving_floor_carry": serving_floor_carry, **_floor_registry_receipt(),
-            "serving_floor_unit": serving_floor_unit,
-            "fire_multiple": accum_policy.fire_multiple,
-            "fire_threshold_pct": round(thr, 3) if thr is not None else None,
-            "progress_fraction": (round(min(comp / thr, 1.0), 4)
-                                  if comp is not None and thr and thr > 0 else None),
-            "keeps_since_serving_gate": bundle[0].keeps_since_serving_gate,
-            "gate_every_keeps": accum_policy.every_keeps,
-            "next_trigger": trig,
-            "fires_next": trig is not None,
-            "last_serving_gate": last_gate[0],
-        }
-
-    def actor_health(outcomes) -> dict:
-        """What the dashboard needs to say 'the critic is failing' instead of 'running'."""
-        rows = [o.to_attempt() for o in list(outcomes)[-60:]]
-        failing = {"planner_transient", loop.AUTHORING_HARNESS_FAILURE}
-        fails = [r for r in rows if r.get("status") in failing]
-        last = next((r for r in reversed(rows) if r.get("status") in failing), None)
-        reason = str((last or {}).get("refusal_reason") or "")[:200]
-        return {"recent_attempts": len(rows), "planner_transient": len(fails),
-                "failing": len(rows) >= 5 and len(fails) * 2 > len(rows),
-                "last_failure": reason or None}
+    actor_health = _actor_health
 
     from . import roofline_coverage
     scope_gap_publisher = roofline_coverage.ScopeGapPublisher(args.store)
@@ -6741,77 +7939,13 @@ def _main(argv: list[str] | None = None) -> int:
 
     def publish(state: str, outcomes=(), gpu=None, hotspot_rows=(),
                 step: str | None = None) -> None:
-        """A loop that only reports when it succeeds looks identical to a stuck one."""
-        # 2026-10-06 autonomy self-check: on confirmed stagnation (flat best-effect
-        # slope, or a long run of measured nulls) WITH an uncovered roofline gap
-        # already triggered, write the durable scope_gap.json naming the uncovered
-        # files/symbols for a human to act on. Entirely observe-only: never widens a
-        # route, never blocks the publish this function exists to make.
-        scope_gap_payload = None
-        try:
-            gap = uncovered_gap_state[0]
-            if gap is not None:
-                if not isinstance(gap, Mapping):
-                    raise TypeError("uncovered gap is not a mapping")
-                json.dumps(dict(gap), sort_keys=True)
-                scope_gap_payload = gap
-            attempts = [o.to_attempt() for o in outcomes]
-            scope_gap_path = scope_gap_publisher.update(
-                uncovered_gap_state[0], status.stagnation_signal(attempts))
-            scope_gap_error[0] = None
-            if scope_gap_path is not None:
-                print(f"profile   STAGNATION + UNCOVERED ROOFLINE GAP: wrote {scope_gap_path}")
-        except Exception as exc:
-            error = {"type": type(exc).__name__, "message": str(exc)}
-            if scope_gap_error[0] is None:
-                print(f"profile   scope-gap stagnation hook skipped ({type(exc).__name__}: {exc})")
-            scope_gap_error[0] = error
-        from . import keep_screen as akx_keep_screen
-        current_accumulator = accumulator_state()
-        keep_screen = akx_keep_screen.project(
-            args.store,
-            keeps=(current_accumulator or {}).get("keeps", ()),
-            resolved_targets=(
-                [target.to_dict() for target in resolved_campaign.targets]
-                if resolved_campaign is not None else None),
-            campaign_id=(resolved_campaign.campaign_id
-                         if resolved_campaign is not None else None),
-            manifest_digest=(resolved_campaign.manifest_digest
-                             if resolved_campaign is not None else None),
-            manifest_path=(str(Path(args.resolved_campaign).resolve())
-                           if resolved_campaign is not None else None),
-            stale_after_s=HEARTBEAT_S * 6)
-        status.write(
-            args.store, state=state, epoch=epoch, campaign_id="ak-loop",
-            anchor_commit=current_anchor_commit[0], surface=args.surface,
-            pairs=args.serving_pairs if direct_launch else args.pairs,
-            noise_floor_pct=floor, model=str(args.model),
-            source_identity="scripts.kernel_rnd.autokernel.loop.run",
-            outcomes=[o.to_attempt() for o in outcomes],
-            iterations_planned=args.iterations, step=step,
-            champion_head=_git(args.worktree, "rev-parse", "HEAD"),
-            **({"target": selected_identity} if selected_identity is not None else {}),
-            **({"batch": {"output_dir": str(args.out.resolve()), "pid": os.getpid()}}
-               if args.out is not None else {}),
-            **({"baseline_scope": "experimental_candidate_not_champion"} if experimental else {}),
-            **({"runtime_preparation": runtime_status[0]} if runtime_status[0] is not None else {}),
-            anchor_guard=anchor_guard_seen[-1] if anchor_guard_seen else None,
-            accumulator=current_accumulator,
-            keep_screen=keep_screen,
-            pending_hypotheses=pending_view[0],
-            gpu=gpu if gpu is not None else gpu_reading(outcomes),
-            tail_seconds=live_tail[0].elapsed_seconds() if live_tail[0] else None,
-            hotspots=[row.to_dict() for row in hotspot_rows],
-            # heartbeat every HEARTBEAT_S below, so the envelope can be tight: silence now
-            # means the PROCESS is gone, not that a build or a 20-pair bench is long.
-            stale_after_s=HEARTBEAT_S * 6,
-            no_measurement_alarm_n=args.no_measurement_alarm_n,
-            keep_rate_alarm_window=args.keep_rate_alarm_window,
-            actor_health=actor_health(outcomes),
-            comparability=history_view[0],
-            scratch=(scratch_registry[0].stats() if scratch_registry[0] is not None else None),
-            uncovered_gap=scope_gap_payload,
-            scope_gap_error=scope_gap_error[0])
+        return _publish(state, outcomes, gpu, hotspot_rows, step,
+            uncovered_gap_state=uncovered_gap_state, scope_gap_publisher=scope_gap_publisher, scope_gap_error=scope_gap_error, accumulator_state=accumulator_state, args=args,
+            resolved_campaign=resolved_campaign, epoch=epoch, current_anchor_commit=current_anchor_commit,
+            direct_launch=lambda: direct_launch, floor=lambda: floor, selected_identity=selected_identity,
+            experimental=experimental, runtime_status=runtime_status, anchor_guard_seen=anchor_guard_seen, pending_view=pending_view, gpu_reading=gpu_reading, live_tail=live_tail,
+            actor_health=actor_health, history_view=history_view,
+            scratch_registry=scratch_registry)
 
     latest: list = []
     original_source_keeps: list[dict] = []
@@ -6824,8 +7958,7 @@ def _main(argv: list[str] | None = None) -> int:
         publish,
         lambda: {"outcomes": list(latest),
                  "hotspot_rows": list(hotspot_rows)},
-        interval_s=HEARTBEAT_S,
-        join_timeout_s=HEARTBEAT_STOP_TIMEOUT_S,
+        interval_s=HEARTBEAT_S, join_timeout_s=HEARTBEAT_STOP_TIMEOUT_S,
         error_sink=lambda message: print(f"status     {message}", file=sys.stderr),
     )
     # All existing closure call sites resolve this rebound name at execution time.
@@ -6833,1139 +7966,50 @@ def _main(argv: list[str] | None = None) -> int:
     # the sole lifecycle/serialization path into it.
     publish = status_publisher.publish
 
-    def report_runtime_progress(row=None):
-        # Snapshot on the execution thread. The heartbeat only reuses this
-        # detached compact view; it never reads runtime artifacts or refreshes
-        # the owning progress timestamp.
-        try:
-            previous = runtime_status[0] or {}
-            progress = dict(row) if row is not None else previous.get("progress")
-            runtime_status[0] = {
-                "status": runtime_preparation.get("status", "preparing"),
-                "reason": str(runtime_preparation.get("reason") or "")[:256],
-                "calibration_launches": runtime_preparation.get("calibration_launches"),
-                "progress": progress,
-                "selected_execution_digest": feedback_anchor[0].execution_digest,
-                "selected_recipe": (
-                    f"threads={feedback_anchor[0].template.threads} "
-                    f"topology={' '.join(feedback_anchor[0].topology_prefix) or 'inherited'} · "
-                    + feedback_anchor[0].template.describe())[:512],
-                "selected_recipe_reference": (None if runtime_recipe_reference[0] is None
-                                              else dict(runtime_recipe_reference[0]))}
-            if row is not None:
-                label = "CPU runtime: " + row["operation"]
-                if "completed_launches" in row:
-                    bound = "up to " if row["limit_is_upper_bound"] else ""
-                    label += (f" / {row['phase']} — {row['completed_launches']}/"
-                              f"{bound}{row['launch_limit']} valid launches")
-                publish("running", latest, hotspot_rows=hotspot_rows, step=label)
-        except Exception as exc:
-            print(f"runtime progress unavailable: {type(exc).__name__}: {exc}", file=sys.stderr)
+    report_runtime_progress = partial(_report_runtime_progress, runtime_status, runtime_preparation,
+                                      feedback_anchor, runtime_recipe_reference, publish, latest, hotspot_rows)
 
     lineage_recorded_outcomes = []
 
     codegen_by_head: dict[str, dict] = {}
 
+    def set_runtime_selection(selected):
+        nonlocal direct_launch, cpu_launch, serving_recipe
+        direct_launch = selected
+        cpu_launch = selected if selected.backend == "cpu" else None
+        serving_recipe = selected.template
+
     def run_pooled() -> pool.PoolResult:
-        """Drive the loop across N detached lanes. THE run path -- the sequential
-        `loop.run` wiring was deleted 2026-08-31, and the `loop.run` seam itself on
-        2026-09-01 (R21-7): `iterate` under `pipeline.run_pool` is the only loop.
-
-        WHAT IS PER-LANE
-          * the worktree and the candidate build directory (`pipeline.Worker`);
-          * the planner and the critic, because each holds a workspace path;
-          * the saved patch filename, which carries the lane;
-          * the phase clock -- `pool.PhaseClock`, whose totals are LANE-seconds and
-            can legitimately sum to more than the wall clock.
-
-        WHAT STAYS GLOBAL
-          * the GPU claim: one `flock` for the process. A second `hold()` on a second
-            descriptor in this same process would refuse itself.
-          * the anchor build, which is only ever read;
-          * `build_context`, `args.store` and the status file. `record` and the status
-            publish both happen under the pipeline's outcomes lock, so they are
-            serialized -- at the cost of a slow status write briefly blocking every
-            lane's recording.
-          * `epoch`: pinned to the champion the run STARTED from, which is what makes
-            the archive rows comparable across the run.
-        """
-        candidate_integrity = {}
-        integrity_evidence = {}
-        # What a checkpoint is bound to, and matched against on the next launch.
-        resume_target = resume_mod.target_identity(measurement_surface=args.surface,
-                                                   model=args.model)
-        resume_queue = [None]
-
-        def settle_resume(outcome) -> None:
-            # Lineage for the claim; a ledger fault never costs the durable row.
-            if outcome.resumed_from is None or resume_queue[0] is None:
-                return
-            try:
-                with resume_mod.ClaimLedger(args.store) as ledger:
-                    # A validity outcome consumes the claim; an infrastructure
-                    # lane_error releases it for a bounded retry (resume.py).
-                    disposition = ledger.settle_outcome(
-                        outcome.resumed_from, current_anchor_commit[0],
-                        result_status=outcome.status,
-                        detail=(outcome.reasons[0][:2000] if outcome.reasons else None))
-                if disposition in {"released", "exhausted"}:
-                    print(f"resume    {outcome.resumed_from}: {outcome.status} is an "
-                          f"infrastructure fault -> claim {disposition}"
-                          + (" (the next launch retries it)" if disposition == "released"
-                             else " (infrastructure retry budget spent; consumed)"),
-                          flush=True)
-            except Exception as exc:      # noqa: BLE001
-                print(f"warning: resume claim settle failed: {type(exc).__name__}: {exc}",
-                      file=sys.stderr)
-
-        def validate_pooled(worker, hypothesis, paths):
-            # A byte-bounded or otherwise partial census legitimately has no
-            # dominant quant.  Candidate integrity must still inspect the full
-            # patch and bench-shape literals; an absent optional type constraint
-            # is not a malformed candidate (and must never become a lane error).
-            quant_tokens = _candidate_quant_tokens(census.dominant_quant)
-            oracle_shape = {"op_ids": ["MUL_MAT", "GGML_OP_MUL_MAT"],
-                            "types": quant_tokens}
-            bench_shape = {"dims": [value for value in (pp, tg, ubatch) if value],
-                           "types": quant_tokens}
-            checked = integrity.validate_candidate(
-                worker.worktree, paths, oracle_shape=oracle_shape,
-                bench_shape=bench_shape, expected_head=getattr(worker, "reset_base", None))
-            base = _git(worker.worktree, "rev-parse", "HEAD")
-            attempt = dispatch_guard.attempt_identity(
-                diff=_git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--"),
-                champion=current_anchor_commit[0], cmake_defines=recipe.cmake_defines(),
-                bench_recipe={"pairs": args.serving_pairs if direct_launch else args.pairs,
-                              "pp": pp, "tg": tg, "ubatch": ubatch},
-                model=str(args.model), surface=args.surface)
-            key = integrity.evidence_key(lane=worker.name, attempt_id=attempt,
-                                         base_commit=base, paths=paths)
-            evidence = checked.to_dict()
-            evidence["evidence_key"] = key
-            evidence["attempt_identity"] = attempt
-            candidate_integrity[worker.name] = (checked, key)
-            integrity_evidence[key] = evidence
-            # loop.py retains this exact mutable mapping on the Outcome. Confirm
-            # evidence added later is therefore visible to status and the journal.
-            return evidence
-
-        def reserve_pooled(worker, _hypothesis, _paths, resume_point=None):
-            diff = _git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--")
-            diff_sha256 = hashlib.sha256(
-                dispatch_guard.normalized_diff(diff).encode()).hexdigest()
-            identity = dispatch_guard.attempt_identity(
-                diff=diff, champion=current_anchor_commit[0],
-                cmake_defines=recipe.cmake_defines(),
-                bench_recipe={"pairs": args.serving_pairs if direct_launch else args.pairs,
-                              "pp": pp, "tg": tg, "ubatch": ubatch},
-                model=str(args.model), surface=args.surface)
-            registry = dispatch_guard.Registry(args.store)
-            try:
-                # A resumed BUILD re-dispatches a claimed checkpoint's exact bytes;
-                # its claim, not the one-retry bound, governs (dispatch_guard.reserve).
-                reservation = registry.reserve(identity, resumed=resume_point is not None)
-                return dispatch_guard.Reservation(
-                    reservation.identity, reservation.dispatch_count, diff_sha256)
-            finally:
-                registry.close()
-
-        # The provisioned lanes by name, so the recorder can retain a lane's diff.
-        lanes_by_name: dict = {}
-
-        def retain_critic2(outcome, attempt) -> None:
-            """A critic2 checkpoint points at the patch its lane holds NOW (resume.py).
-
-            Recording happens before the lane's next reset, so the authored diff that
-            critic pass 2 never judged is still there: retain it (the same immutable
-            store as every gate-refused patch) or drop the checkpoint when the lane
-            holds no diff. DS41 runs 10d/10e lost such patches three times."""
-            checkpoints = attempt.get("resume_checkpoints")
-            if not checkpoints:
-                return
-            worker = lanes_by_name.get(str(outcome.branch_id or "").partition(":")[2])
-            resume_mod.retain_checkpoint_patches(
-                checkpoints, lambda mechanism: None if worker is None else
-                archive.retain_patch(args.store, worker.worktree, lane=worker.name,
-                                     mechanism_id=mechanism))
-            if not checkpoints:
-                attempt.pop("resume_checkpoints", None)
-
-        def record_pooled(outcome) -> None:
-            worker = lanes_by_name.get(str(outcome.branch_id or "").partition(":")[2])
-            if worker is None:
-                raise loop.RunAborted("cannot fence outcome: lane not found")
-            hold = pool.begin_custody_hold(
-                worker, getattr(outcome.hypothesis, "mechanism_id", None) or "unnamed",
-                identity={"resumed_from": outcome.resumed_from,
-                          "attempt_identity": outcome.attempt_identity,
-                          "spawn_parent": outcome.spawn_parent,
-                          "status": outcome.status})
-            if outcome.retained_patch is None:
-                kept = keep_the_diff(worker, outcome.hypothesis)
-                if kept is not None:
-                    outcome.retained_patch = {
-                        "patch_file": str(kept.resolve()),
-                        "metadata_file": str(kept.with_suffix(".json").resolve()),
-                        "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
-            attempt = attempt_with_codegen(outcome, codegen_by_head)
-            if outcome.status == "kept" and outcome.champion_head in keep_timing_by_head:
-                attempt[keep_timing.FIELD] = keep_timing_by_head.pop(outcome.champion_head)
-            if outcome.status == "kept" and outcome.champion_head in variance_keep_by_head:
-                attempt.update(variance_keep_by_head.pop(outcome.champion_head))
-            if isinstance(getattr(outcome, tail_timing.ATTR, None), dict):
-                attempt[tail_timing.FIELD] = getattr(outcome, tail_timing.ATTR)
-            if outcome.hypothesis is not None:
-                hypothesis_record = _write_custody_record(
-                    args.store, "hypothesis-disposition",
-                    {"hypothesis": outcome.hypothesis.to_dict(),
-                     "reason": "; ".join(outcome.reasons) or f"iteration {outcome.status}",
-                     "status": outcome.status, "retained_patch": outcome.retained_patch})
-                attempt["hypothesis_custody_record"] = str(hypothesis_record.resolve())
-            retain_critic2(outcome, attempt)
-            attempt["research_scope"] = archive.original_research_scope(
-                attempt, model=args.model, quant=census.quant_label,
-                backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
-                surface=outcome.comparison.surface if outcome.comparison is not None else args.surface)
-            if screen_state is not None:
-                attempt["cpu_screen"] = dict(screen_state)
-                attempt["research_scope"]["cpu_screen"] = dict(screen_state)
-            resume_mod.bind_checkpoints(attempt, epoch=epoch,
-                                        anchor_commit=current_anchor_commit[0],
-                                        target=resume_target,
-                                        measurement_epoch=measurement_epoch,
-                                        actor_config=launch_actor_config,
-                                        carry_family=resume_carry.family)
-            resume_mod.stamp_actor_diff(attempt, resume_queue[0])
-            shadow = same_state_stop.retry_budget_shadow(args.store, attempt)
-            if shadow is not None:
-                attempt["retry_budget_shadow"] = shadow
-            if outcome.status == "kept":
-                # AK-PM-12: the keep path's write-side lesson-admission receipt.
-                # Idempotent and never raises; a refusal never costs the keep.
-                attempt["keep_lesson"] = submit_keep_lesson(args.store, attempt)
-            journal_receipts = []
-            try:
-                archive.record(args.store, attempt, epoch=epoch,
-                               recorded_at=loop._now(), campaign_id="ak-loop",
-                               on_serving_export=feedback.exported,
-                               journal_receipt_out=journal_receipts)
-            finally:
-                # A later markdown/export fault cannot erase an already-committed
-                # row receipt. Missing receipts remain explicit in the sidecar.
-                outcome.journal_receipt = journal_receipts[0] if journal_receipts else None
-                lineage_recorded_outcomes.append(outcome)
-            settle_resume(outcome)
-            if outcome.status in loop.PENDING_HYPOTHESIS_STATUSES \
-                    or outcome.status == loop.HYPOTHESIS_RETIRED \
-                    or outcome.resumed_from is not None:
-                pending_view[0] = pending_hypotheses_view(args, epoch,
-                                                          current_anchor_commit[0],
-                                                          carry=resume_carry,
-                                                          **resume_bind)
-            if outcome.attempt_identity is not None:
-                registry = dispatch_guard.Registry(args.store)
-                try:
-                    registry.finish(
-                        outcome.attempt_identity, status=outcome.status,
-                        effect=(outcome.comparison.effect
-                                if outcome.comparison is not None else None), epoch=epoch)
-                finally:
-                    registry.close()
-            latest.append(outcome)
-            publish("running", latest, hotspot_rows=hotspot_rows)
-            pool.finish_custody_hold(hold)
-            if same_state.observe(outcome):
-                print(f"parked    {same_state_stop.PLANNER_SAME_STATE_SKIP}: "
-                      f"{same_state.last_skip}; no new iterations are dispatched; terminal "
-                      f"{same_state_stop.SAME_STATE_PARKED} (resumable with --resume-run)",
-                      flush=True)
-            if breaker.observe(outcome):
-                print(f"parked    provider breaker tripped: {breaker.streak} consecutive "
-                      f"provider-terminal iterations (threshold {breaker.threshold}); no new "
-                      f"iterations are dispatched; terminal {provider_breaker.PROVIDER_PARKED} "
-                      f"(resumable with --resume-run). last: {breaker.last_reason}", flush=True)
-
-        def record_abandoned_pooled(worker, candidate) -> None:
-            """Durable disposition for a candidate abandoned INSIDE an iteration.
-
-            Run 9c: a hoist implemented twice, critic-accepted twice and refused twice
-            by `op_scope` before any build left no row of its own -- the iteration's
-            only row, written at the stop, called it "never attempted". Every
-            abandoned candidate now gets a row naming the gate, its verbatim reason
-            and the retained patch, the narration names it, and the status step
-            shows it. Not an iteration: `latest` (the status and continuation
-            counts) is untouched.
-            """
-            hypothesis = candidate.hypothesis
-            hold = pool.begin_custody_hold(
-                worker, getattr(hypothesis, "mechanism_id", None) or "unnamed",
-                identity={"resumed_from": candidate.resumed_from,
-                          "resume_stage": candidate.resume_stage,
-                          "attempt_identity": candidate.attempt_identity,
-                          "candidate_diff_sha256": candidate.candidate_diff_sha256,
-                          "spawn_parent": candidate.spawn_parent})
-            if hypothesis is not None and hypothesis.runtime_pair is None \
-                    and candidate.status != "hypothesis_rejected":
-                if candidate.retained_patch is not None:
-                    pointer = candidate.retained_patch
-                    raw = Path(pointer["patch_file"]).read_bytes()
-                    if hashlib.sha256(raw).hexdigest() != pointer["patch_sha256"]:
-                        raise RuntimeError("retained author patch changed; lane remains held")
-                else:
-                    kept = keep_the_diff(worker, hypothesis)
-                    if kept is None:
-                        if not pool.prove_empty_pre_author(worker, candidate.spawn_parent):
-                            raise RuntimeError("candidate has no patch and lane is not proven empty")
-                    else:
-                        candidate.retained_patch = {
-                            "patch_file": str(kept.resolve()),
-                            "metadata_file": str(kept.with_suffix(".json").resolve()),
-                            "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()}
-            attempt = candidate.to_attempt()
-            if hypothesis is not None:
-                hypothesis_record = _write_custody_record(
-                    args.store, "hypothesis-disposition",
-                    {"hypothesis": hypothesis.to_dict(),
-                     "reason": "; ".join(candidate.reasons) or f"candidate {candidate.status}",
-                     "status": candidate.status, "retained_patch": candidate.retained_patch})
-                attempt["hypothesis_custody_record"] = str(hypothesis_record.resolve())
-            attempt["research_scope"] = archive.original_research_scope(
-                attempt, model=args.model, quant=census.quant_label,
-                backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
-                surface=args.surface)
-            if screen_state is not None:
-                attempt["cpu_screen"] = dict(screen_state)
-                attempt["research_scope"]["cpu_screen"] = dict(screen_state)
-            resume_mod.bind_checkpoints(attempt, epoch=epoch,
-                                        anchor_commit=current_anchor_commit[0],
-                                        target=resume_target,
-                                        measurement_epoch=measurement_epoch,
-                                        actor_config=launch_actor_config,
-                                        carry_family=resume_carry.family)
-            resume_mod.stamp_actor_diff(attempt, resume_queue[0])
-            shadow = same_state_stop.retry_budget_shadow(args.store, attempt)
-            if shadow is not None:
-                attempt["retry_budget_shadow"] = shadow
-            archive.record(args.store, attempt, epoch=epoch, recorded_at=loop._now(),
-                           campaign_id="ak-loop")
-            settle_resume(candidate)
-            if candidate.attempt_identity is not None:
-                registry = dispatch_guard.Registry(args.store)
-                try:
-                    registry.finish(candidate.attempt_identity, status=candidate.status,
-                                    effect=None, epoch=epoch)
-                finally:
-                    registry.close()
-            pool.finish_custody_hold(hold)
-            reason = candidate.reasons[0] if candidate.reasons else ""
-            patch = (candidate.retained_patch or {}).get("patch_file") \
-                or (candidate.retained_patch or {}).get("error") or "no patch"
-            line = (f"{candidate.status} by {candidate.refusal_gate} "
-                    f"({hypothesis.mechanism_id if hypothesis else '-'}, round "
-                    f"{candidate.hypothesis_round}.{candidate.patch_round}): {reason}")
-            print(f"disposed  [{worker.name}] {line}; patch: {patch}", flush=True)
-            publish("running", latest, hotspot_rows=hotspot_rows,
-                    step=f"[{worker.name}] {line[:600]}")
-
-        def record_resume_rejected(attempt) -> None:
-            """A checkpoint that failed re-validation before reaching a lane."""
-            attempt["research_scope"] = archive.original_research_scope(
-                attempt, model=args.model, quant=census.quant_label,
-                backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
-                surface=args.surface)
-            if screen_state is not None:
-                attempt["cpu_screen"] = dict(screen_state)
-                attempt["research_scope"]["cpu_screen"] = dict(screen_state)
-            archive.record(args.store, attempt, epoch=epoch, recorded_at=loop._now(),
-                           campaign_id="ak-loop")
-            print(f"resume    rejected {attempt.get('mechanism_id') or '-'} "
-                  f"({attempt.get('resumed_from')}): {attempt.get('reason')}", flush=True)
-
-        def step_pooled(worker_name: str, label: str) -> None:
-            if gfx_counter[0] is not None:
-                gfx_counter[0].sample(f"{worker_name}: {label}")
-            # The step line names the lane: an unattributed "building and gating" on a
-            # pooled run says nothing about which of N lanes is where.
-            if label.startswith("resuming "):
-                print(f"resume    [{worker_name}] {label}", flush=True)
-            publish("running", latest, hotspot_rows=hotspot_rows,
-                    step=f"[{worker_name}] {label}")
-
-        def commit_pooled(worker, hypothesis, paths, comparison) -> str:
-            """Advance the champion branch, then the ANCHOR.
-
-            The promotion once lived only in the sequential path's commit, which
-            would have left the anchor static across every lane -- reproducing run
-            13's defect (cumulative effects reported as marginal, a -2.864%
-            regression committed as a keep) at seven times the rate.
-
-            The anchor is BUILT from the champion tree, not taken from this lane: a
-            lane's build directory is not relocatable, and the champion tree is what
-            `advance_champion` just reset onto the accepted commit. Other lanes are
-            mid-formation against the old base and are refused as `superseded` on their
-            next tail entry -- their candidates were never built on this champion.
-            """
-            if hypothesis.runtime_pair is not None:
-                nonlocal direct_launch, cpu_launch, serving_recipe
-                if longctx_surface is not None:
-                    # Audit C1 (integration 2026-10-04): the long surface gates EVERY keep,
-                    # runtime-recipe keeps included -- those move depth the most.
-                    long_gate = longctx_runtime_gate(hypothesis.runtime_pair)
-                    runtime_preparation["longctx"] = long_gate
-                    if not long_gate["passed"]:
-                        raise loop.ConfirmVetoed("KEEP_CANDIDATE-longctx: " + long_gate["reason"])
-                previous_recipe = feedback_anchor[0]
-                previous_floor = runtime_preparation.get("source_comparison_floor")
-                if runtime_keep_grade:
-                    from . import runtime_arms
-                    pair = hypothesis.runtime_pair
-                    if (not runtime_arms.is_declared(pair, runtime_arm_declaration)
-                            or comparison.row.get("admission") != "keep_grade_matched_serving_floor"
-                            or pair.anchor.execution_digest
-                            != _cpu_arm(direct_launch, anchor_build[0]).execution_digest):
-                        raise loop.TailRefused("runtime keep lacks keep-grade evidence for the "
-                                               "current recipe")
-                    phase_owner.mark_integration({"kind": "runtime",
-                        "anchor_snapshot": pair.anchor.snapshot_digest,
-                        "candidate_snapshot": pair.candidate.snapshot_digest})
-                    selected = pair.candidate
-                else:
-                    pair = hypothesis.runtime_pair
-                    phase_owner.mark_integration({"kind": "runtime",
-                        "anchor_snapshot": pair.anchor.snapshot_digest,
-                        "candidate_snapshot": pair.candidate.snapshot_digest})
-                    selected = runtime_owner[0].retain(comparison.row, feedback_anchor[0])
-                if selected.snapshot_digest != hypothesis.runtime_pair.candidate.snapshot_digest:
-                    raise loop.RunAborted("retained runtime recipe differs from integration intent")
-                direct_launch = selected
-                cpu_launch = selected if selected.backend == "cpu" else None
-                serving_recipe = selected.template
-                feedback_anchor[0] = selected
-                # The old source-comparison floor belongs to the old recipe.
-                # A recipe keep neither transfers it nor promotes any source.
-                invalidate_source_floor()
-                runtime_preparation.update(status="selected_runtime_recipe",
-                    selected_recipe=comparison.row.get("runtime_admission"),
-                    evidence="keep_grade" if runtime_keep_grade else "strict")
-                if runtime_keep_grade:
-                    runtime_recipe_reference[0] = runtime_store.write(
-                        runtime_arms.KEEP_GRADE_SELECTION_NAMESPACE,
-                        runtime_arms.keep_grade_selection(
-                            adopted=selected, previous=previous_recipe,
-                            runtime_pair=pair.to_dict(), comparison=comparison.row,
-                            declaration=runtime_arm_declaration,
-                            current_source_commit=current_anchor_commit[0])).to_dict()
-                    runtime_preparation["selected_recipe"] = runtime_recipe_reference[0]
-                else:
-                    runtime_recipe_reference[0] = runtime_owner[0].selection_reference(
-                        selected, current_source_commit=current_anchor_commit[0])
-                reference = runtime_recipe_reference[0]
-                if (not isinstance(reference, Mapping) or reference.get("verified") is not True
-                        or not isinstance(reference.get("locator"), str)
-                        or Path(reference["locator"]).name != reference["locator"]):
-                    raise loop.RunAborted("runtime integration lacks a durable selection receipt")
-                phase_owner.bind_runtime_completion({
-                    "path": str((Path(args.store) / "runtime-preparation" / reference["locator"]).resolve()),
-                    "sha256": reference.get("sha256")})
-                record_runtime_adoption(previous_recipe, selected, comparison,
-                                        hypothesis.runtime_pair, previous_floor)
-                report_runtime_progress()
-                reprofile()
-                return None
-            candidate = candidate_integrity.get(worker.name)
-            if candidate is None:
-                raise integrity.IntegrityRefused(
-                    "missing_prebuild_integrity", "candidate reached keep without validation")
-            checked, evidence_key = candidate
-            evidence = integrity_evidence[evidence_key]
-            # This check is after build/oracle/A-B and immediately before keep: the
-            # tree accepted by measurement must still be the tree being committed.
-            integrity.assert_measured_tree(worker.worktree, checked.tree)
-            if not (experimental and calibrated
-                    and comparison.noise_floor_pct is not None
-                    and comparison.decisive is False
-                    and not comparison.drifting and comparison.effect > 0):
-                refuse_uncalibrated_keep(args.surface, calibrated, comparison)
-            if screen_state and screen_state["scope"] in {"quarter", "half"}:
-                screen_state["candidate"] = cpu_screen.retain_candidate(
-                    store_root=args.store, origin_batch=args.out, worker=worker,
-                    target=selected_identity, hypothesis=hypothesis, paths=paths,
-                    full_target=full_cpu_target, comparison=comparison)
-                raise loop.ConfirmVetoed("reduced positive retained; original full-target confirmation pending")
-            # R23-44: the BENCH confirm rung is the KEEP GATE -- a cheap, deterministic screen
-            # a keep must clear to enter the accumulator (§5.3: one extra bench.compare per
-            # confirm surface, in this same serialized tail; the veto lands the candidate as
-            # keep_candidate, never kept). The SERVING gate is NO LONGER per-keep: it cannot
-            # resolve a 1-3% keep against the ~3.5% serving floor, so it fires on the BUNDLE in
-            # accumulate_after_keep once the compounded gain clears the floor.
-            if checked.needs_confirm and confirm is None and heldout_requests is None:
-                kinds = sorted({finding.kind for finding in checked.findings})
-                raise loop.ConfirmVetoed(
-                    "KEEP_CANDIDATE-needs-confirm: integrity screen flagged "
-                    + ", ".join(kinds)
-                    + "; an unseen rotated/serving confirm rung is not configured")
-            if confirm is not None:
-                held_out_identity = integrity.require_unseen_confirmation(
-                    checked, screen_surface=comparison.surface,
-                    screen_model=comparison.model, confirm_surfaces=confirm.surfaces,
-                    confirm_model=str(confirm.model))
-                evidence.update(held_out_identity)
-                verdict = confirm.gate(hypothesis.mechanism_id, comparison,
-                                       confirm_measure(worker))
-                if checked.needs_confirm:
-                    confirm_effects = [row.get("effect")
-                                       for row in verdict.get("confirm", ())]
-                    evidence["held_out_confirm"] = verdict
-                    evidence["public_to_held_out_speedup_gap"] = [
-                        comparison.effect - effect for effect in confirm_effects
-                        if isinstance(effect, (int, float))]
-                if not verdict["promoted"]:
-                    raise loop.ConfirmVetoed(verdict["reason"])
-            if checked.needs_confirm and heldout_requests is not None:
-                public_digest, heldout_digest = heldout_serving.validate_requests(
-                    serving_recipe, frozen_requests, heldout_requests)
-                heldout_anchor = _cpu_arm(direct_launch, anchor_build[0])
-                heldout_floor_store, heldout_floor = _load_heldout_floor(
-                    args.store, serving_recipe, direct_launch,
-                    tip_build=anchor_build[0], reference_build=cor_build[0],
-                    frozen_requests=heldout_requests,
-                    instrument=args.serving_instrument, pairs=args.serving_pairs)
-                heldout_pct, heldout_unit = _gate_floor(heldout_floor)
-                if heldout_pct is None:
-                    raise loop.ConfirmVetoed(
-                        "KEEP_CANDIDATE-needs-confirm: held-out request-bound serving floor is absent; "
-                        "run explicit --cpu-calibrate-heldout before candidate measurement")
-                heldout_row = _serving_comparison(lambda: measured_serving_compare(
-                    serving_recipe, anchor_build[0], worker.build_dir,
-                    pairs=args.serving_pairs, floor_pct=heldout_pct,
-                    floor_unit=heldout_unit, port=direct_launch.port,
-                    anchor_resolved_recipe=heldout_anchor,
-                    candidate_resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),
-                    frozen_requests=heldout_requests,
-                    floor_request_digest=heldout_digest,
-                    floor_record=heldout_floor.row or None,
-                    **({"instrument": args.serving_instrument}
-                       if source_instrument else {})),
-                    "integrity_heldout_candidate_not_champion")
-                verdict = heldout_serving.decide(
-                    store=args.store, mechanism_id=hypothesis.mechanism_id,
-                    screen=comparison, heldout=heldout_row,
-                    public_digest=public_digest, heldout_digest=heldout_digest,
-                    floor_path=heldout_floor.path)
-                evidence.update(integrity.require_unseen_confirmation(
-                    checked, screen_surface=comparison.surface,
-                    screen_model=comparison.row.get("model"),
-                    confirm_surfaces=("serving:heldout:" + heldout_digest,),
-                    confirm_model=str(args.model)))
-                evidence["held_out_confirm"] = verdict
-                evidence["public_to_held_out_speedup_gap"] = [
-                    comparison.effect - heldout_row.effect]
-                if not verdict["promoted"]:
-                    raise loop.ConfirmVetoed(verdict["reason"])
-            measured_dims: dict = {}
-            if direct_launch:
-                # G5: extend the cross-workload keep gate across every tracked
-                # dimension (surface_validation.keep_dimensions). Measured, recorded and
-                # able to refuse ONLY when the target declares dimensions; an undeclared
-                # target takes exactly the pre-existing keep path.
-                primary_dim = surface_validation.primary_dimension(serving_recipe.np)
-                for name, measure in keep_dimension_measures.items():
-                    if name in keep_dims and name != primary_dim:
-                        try:
-                            if (name == "prefill_at_depth" and longctx_surface is not None
-                                    and isinstance(measured_dims.get("long_decode"), Mapping)
-                                    and "longctx" in measured_dims["long_decode"]):
-                                # One long-context A/B carries both dimensions.
-                                measured_dims[name] = longctx.prefill_dimension_row(
-                                    measured_dims["long_decode"])
-                                continue
-                            with cpu_measurement_window():
-                                measured_dims[name] = measure(worker)
-                        except Exception as exc:  # noqa: BLE001 -- recorded, fail closed
-                            measured_dims[name] = {"error": f"{type(exc).__name__}: {exc}"}
-                capacity_record = None
-                if "capacity" in keep_dims:
-                    # Peak footprint over the MIXED sequence (n_max:0 alternation, varying
-                    # batch), never one steady shape (GPU-POOL-1, capacity_probe.py).
-                    from . import capacity_probe
-                    backend = "cpu" if cpu_launch else "gpu"
-                    limit = (int(args.keep_capacity_limit_gib * 2**30)
-                             if args.keep_capacity_limit_gib is not None
-                             else surface_validation.GPU_CAPACITY_CEILING_BYTES
-                             if backend == "gpu" else None)
-                    probe_launch = _cpu_arm(direct_launch, worker.build_dir)
-                    try:
-                        with cpu_measurement_window():
-                            peaks = capacity_probe.run(
-                                argv=probe_launch.argv, env=dict(probe_launch.launch_env),
-                                port=probe_launch.port, backend=backend,
-                                sequence=capacity_probe.mixed_sequence(frozen_requests))
-                        capacity_record = capacity_probe.evaluate(
-                            peaks, limit_bytes=limit, backend=backend,
-                            ctx=getattr(serving_recipe, "ctx", None), np=serving_recipe.np)
-                    except Exception as exc:  # noqa: BLE001 -- recorded, fail closed
-                        capacity_record = {"error": f"{type(exc).__name__}: {exc}"}
-                # Always recorded (an undeclared target carries five not_measured verdicts),
-                # so every direct-launch keep row has one verdict per dimension.
-                dims_record = surface_validation.keep_dimensions(
-                    declared=keep_dims, primary=primary_dim, comparisons=measured_dims,
-                    capacity=capacity_record)
-                surface_validation.retain_dimensions(args.store, hypothesis.mechanism_id,
-                                                     dims_record)
-                evidence["keep_dimensions"] = dims_record
-                if not dims_record["passed"]:
-                    raise loop.ConfirmVetoed("KEEP_CANDIDATE-dimensions: "
-                                             + dims_record["reason"])
-                if not cpu_launch:
-                    # AKX-ALL-14 (G6): a GPU keep carries the build recipe digest and the
-                    # row's HIP residency proof; unproven is recorded, never invented.
-                    evidence["gpu_build_receipt"] = hip_launch_proof.build_receipt(
-                        recipe_name=recipe.name, recipe_digest=recipe.sha256(),
-                        residency=(getattr(comparison, "row", None) or {}).get("residency"))
-            cross = None
-            if lane_binding is not None:
-                # LANE BINDING (lane_targets.py): a keep touching a path shared with
-                # another lane's target is A/B'd on that target. Same two builds this
-                # keep was measured with; the peer's own launch, requests and bar. A
-                # peer regression makes the keep target_only_pending_gate
-                # (cross_target.py), never a veto: it is held on this lane's working
-                # branch and a gating hypothesis is queued; it cannot fold until gated.
-                def cross_compare(peer, bar):
-                    peer_launch, peer_requests = lane_peer_serving[peer.entry.name]
-                    return measured_serving_compare(
-                        peer_launch.template, anchor_build[0], worker.build_dir,
-                        pairs=args.serving_pairs, port=peer_launch.port,
-                        anchor_resolved_recipe=_cpu_arm(peer_launch, anchor_build[0]),
-                        candidate_resolved_recipe=_cpu_arm(peer_launch, worker.build_dir),
-                        frozen_requests=peer_requests, instrument=serving.MATCHED_INSTRUMENT,
-                        **lane_targets.compare_kwargs(bar, peer_launch.template, peer_requests))
-                cross = lane_targets.cross_check(
-                    lane_binding, store=args.store, mechanism_id=hypothesis.mechanism_id,
-                    changed=_git(worker.worktree, "diff-tree", "-r", "--name-only", "HEAD",
-                                 checked.tree).splitlines(),
-                    compare=cross_compare)
-                evidence["cross_target"] = cross
-            if longctx_surface is not None:
-                # Audit C1 (operator 2026-10-04): no keep may regress the long-context
-                # surface (decode or prefill at depth), alongside the peer floor above.
-                evidence["longctx"] = longctx_keep_gate(
-                    worker, hypothesis, comparison,
-                    measured_row=(measured_dims.get("long_decode")
-                                  if direct_launch and "long_decode" in keep_dims else None))
-                if not evidence["longctx"]["passed"]:
-                    raise loop.ConfirmVetoed("KEEP_CANDIDATE-longctx: "
-                                             + evidence["longctx"]["reason"])
-            # KERNEL FEATURE PRESERVATION (kernel_coverage.py), EVERY keep: no kernel
-            # path may disappear -- static (DSO symbol families), source (git feature
-            # inventory) and this target's executed path (launch stderr markers) --
-            # unless the patch declares and measures its replacement.
-            preservation = kernel_coverage.keep_gate(
-                store=args.store, repo=worker.worktree, base_ref="HEAD",
-                candidate_ref=checked.tree, anchor_build=anchor_build[0],
-                candidate_build=worker.build_dir,
-                own_target=args.target_id or args.surface,
-                peer_shapes=({row["target_id"]: kernel_coverage.shape_names(
-                                  lane_peer_serving[row["lane"]][0].template)
-                              for row in cross["peers"]} if cross else {}),
-                measured_peers=[row["target_id"] for row in (cross or {}).get("peers", ())
-                                if isinstance(row.get("effect"), (int, float))],
-                declaration_texts=(hypothesis.statement, hypothesis.falsifier,
-                                   hypothesis.mechanism_id),
-                mechanism_id=hypothesis.mechanism_id)
-            evidence["kernel_preservation"] = {
-                key: preservation[key] for key in ("passed", "reason", "failures", "losses",
-                                                   "notes", "record", "layers")}
-            if not preservation["passed"]:
-                raise loop.ConfirmVetoed("KEEP_CANDIDATE-kernel-coverage: "
-                                         + preservation["reason"])
-            gate_texts = (hypothesis.statement, hypothesis.falsifier, hypothesis.mechanism_id)
-            if lane_binding is not None and cross_target.gate_declarations(*gate_texts):
-                # A GATE (`GATES-KEEP:`) must key on GGUF metadata or argv, never an env
-                # var: runtime_attestation sees argv/GGUF, not undeclared env.
-                gate_ok, gate_why = cross_target.gate_mechanism(
-                    _git(worker.worktree, "diff", "HEAD", checked.tree))
-                evidence["gate_mechanism"] = {"passed": gate_ok, "reason": gate_why}
-                if not gate_ok:
-                    raise loop.ConfirmVetoed("KEEP_CANDIDATE-gate-attestation: " + gate_why)
-            cross_decision = (cross_target.decide(cross, preservation["peers"])
-                              if cross is not None else None)
-            if cross_decision is not None:
-                _ledger_x = gates.ppl_contract_ledger_read(args.store)
-                if _ledger_x is None or hypothesis.mechanism_id in _ledger_x:
-                    # Re-review 2026-10-06: a cross-target FOLD moves the keep into THE
-                    # global champion with peer A/B + kernel-coverage evidence only; a
-                    # ppl_contract numerics change can alter a peer model's output with
-                    # its executed-kernel manifest unchanged. No cross-lane quality gate
-                    # exists, so such a keep is refused for the global champion and its
-                    # series is held (cross_target.eligible skips refused series).
-                    cross_decision = {"decision": cross_target.GATE_REFUSED,
-                                      "reason": "ppl_contract keep: no cross-target quality "
-                                                "gate (layers a-d on every peer model); held "
-                                                "off the global champion"}
-            if cross_decision is not None:
-                evidence["cross_target"] = {**cross, **cross_decision}
-            source_fold_candidate = experimental and cpu_launch \
-                and selected_identity is not None
-            # The receipt describes the comparison that admitted this keep.  Promotion
-            # invalidates the in-memory floor for the next anchor, so retain the prior
-            # request identity before moving either source or build state.
-            accepted_floor_request_digest = floor_request_digest
-            accepted_launch_snapshot_digest = (direct_launch.snapshot_digest
-                                                if direct_launch is not None else None)
-            measured_comparison = getattr(comparison, "original", comparison)
-            if source_fold_candidate and (id(measured_comparison) not in measured_source_comparisons
-                    or measured_source_comparisons[id(measured_comparison)][0]() is not measured_comparison):
-                raise loop.TailRefused("source keep lacks measuring-step comparison evidence")
-            patch_path = keep_the_diff(worker, hypothesis) if source_fold_candidate else None
-            parent = (_git(worker.worktree, "rev-parse", "HEAD")
-                      if source_fold_candidate else None)
-            # Re-review 2026-10-06: a ppl_contract admission is recorded IN GIT (a commit
-            # trailer), not only in the store ledger; an unreadable ledger marks it.
-            _ledger = gates.ppl_contract_ledger_read(args.store)
-            _gate_record = keep_numerics.get(hypothesis.mechanism_id) or {}
-            ppl_keep = (_ledger is None or hypothesis.mechanism_id in _ledger
-                        or _gate_record.get("class") == "ppl_contract")
-            bit_exact_oracle = None
-            if not ppl_keep and _gate_record.get("passed") \
-                    and _gate_record.get("class") == "bit_exact":
-                # Round-7 resolution A: the exemption is a RECORD in this store, built
-                # from the gate's own passing bit-exact verdicts and bound to the
-                # commit's tree and parent; the trailer only names its digest.
-                try:
-                    bit_exact_oracle = gates.write_bit_exact_record(
-                        args.store, gates.bit_exact_record_bytes(
-                            tree=checked.tree,
-                            parent=_git(worker.worktree, "rev-parse", "HEAD"),
-                            route=str(_gate_record.get("route")),
-                            oracle=str(_gate_record.get("oracle_name")),
-                            verdict_digests=_gate_record.get("verdict_digests") or [],
-                            changed_files=_gate_record.get("changed") or [],
-                            mechanism_id=hypothesis.mechanism_id))
-                except (OSError, ValueError) as exc:
-                    print(f"warning: bit-exact record not written ({exc}); this keep "
-                          "will require the quality gate at fold", file=sys.stderr)
-            phase_owner.mark_integration({"kind": "source", "repo": str(args.worktree.resolve()),
-                "branch": args.champion_branch, "candidate_tree": checked.tree})
-            head = pool.advance_champion(worker, hypothesis, paths, comparison,
-                                         champion_tree=args.worktree,
-                                         branch=args.champion_branch,
-                                         expected_tree=checked.tree,
-                                         ppl_contract=ppl_keep,
-                                         bit_exact_oracle=bit_exact_oracle)
-            if bit_exact_oracle is not None:
-                try:
-                    gates.bind_bit_exact_record(args.store, head, bit_exact_oracle)
-                except (OSError, ValueError) as exc:
-                    print(f"warning: bit-exact record not bound ({exc}); this keep will "
-                          "require the quality gate at fold", file=sys.stderr)
-            if cross_decision is not None:
-                # ONE-champion lineage (cross_target.py): ledger the decision, fold a
-                # non-regressing keep into THE champion (G0 first), or hold it and
-                # queue its gating hypothesis; then housekeep this lane's held series
-                # and bring the champion's missing commits onto this working branch
-                # BEFORE the anchor is rebuilt from it.
-                try:
-                    cross_target.record_keep(
-                        lane_binding, repo=args.worktree, keep_commit=head,
-                        decision=cross_decision, cross=cross,
-                        coverage=preservation["peers"], mechanism_id=hypothesis.mechanism_id,
-                        store=args.store, declaration_texts=gate_texts)
-                    cross_target.refresh_gates(lane_binding, repo=args.worktree,
-                                               store=args.store, branch=args.champion_branch)
-                    cross_target.sync_from_champion(lane_binding, repo=args.worktree,
-                                                    champion_tree=args.worktree,
-                                                    branch=args.champion_branch)
-                except Exception as exc:  # a missed propagation; the keep stands
-                    print(f"warning: cross-target lineage step failed after keep: "
-                          f"{type(exc).__name__}: {exc}", file=sys.stderr)
-            # keep_timing: the keep path starts at the committed keep; timed until return.
-            keep_timer[0] = keep_timing.KeepTimer(head=head)
-            # The lane build is the exact candidate whose patch was just committed.
-            # Write this immediately: anchor promotion can take 30+ minutes or abort,
-            # but the champion commit already exists. Missing toolchain evidence is
-            # represented explicitly and must never veto that KEEP.
-            try:
-                with keep_stage("codegen_summary"):
-                    codegen_by_head[head] = codegen_summary.retain_summary(
-                        args.store, head,
-                        backend="llama_cpu" if cpu_launch else "llama_gpu",
-                        build_dir=worker.build_dir, recipe=recipe.to_dict(),
-                        attempt_identity=evidence["attempt_identity"],
-                        source_tree_oid=_git(worker.worktree, "rev-parse", f"{head}^{{tree}}"))
-            except Exception as exc:  # diagnostics cannot undo an accepted commit
-                codegen_by_head[head] = {
-                    "schema": codegen_summary.SCHEMA, "status": "unavailable",
-                    "authority": "diagnostic_only", "champion_head": head,
-                    "reason": f"codegen sidecar failed: {type(exc).__name__}"}
-                print(f"codegen   unavailable for {head[:12]}: {type(exc).__name__}: {exc}",
-                      file=sys.stderr)
-            with keep_stage("promote_anchor"):
-                promote_anchor()
-            if source_fold_candidate and patch_path is not None and parent is not None:
-                _, measurement_ref, measured_fields = measured_source_comparisons[id(measured_comparison)]
-                native = measured_comparison.to_dict()
-                comparison_block = {**native, **measured_fields, "measurement_ref": measurement_ref}
-                original_source_keeps.append({
-                    "surface": args.surface, "mechanism_id": hypothesis.mechanism_id,
-                    "request_id": selected_identity["request_id"],
-                    "repo": str(args.worktree.resolve()), "branch": args.champion_branch,
-                    "parent_commit": parent, "kept_commit": head,
-                    "patch_path": str(patch_path.resolve()),
-                    "patch_metadata_path": str(patch_path.with_suffix(".json").resolve()),
-                    "selected_target": selected_identity,
-                    "launch_snapshot_digest": accepted_launch_snapshot_digest,
-                    "floor_request_digest": accepted_floor_request_digest,
-                    "floor_unit": "process", "comparison": comparison_block,
-                })
-            # The accumulator advanced; batch this keep and, if the bundle now clears the
-            # serving floor, spend the one serving gate that can advance the champion of record.
-            with keep_stage("accumulate_after_keep"):
-                accumulate_after_keep(hypothesis.mechanism_id, phase_owner)
-            with keep_stage("akx_keep_screen"):  # AKX-P1e; no census -> all UNKNOWN
-                blast_radius.record_keep_best_effort(
-                    args.store, args.worktree, keep_id=hypothesis.mechanism_id, child=head,
-                    resolved_campaign=resolved_campaign, manifest_path=args.resolved_campaign,
-                    champion_commit=current_anchor_commit[0])
-            if lane_binding is not None and cpu_launch is not None:
-                with keep_stage("fold_check_held"):
-                    fold_check_held(worker)
-            if getattr(args, "variance_input", None) is not None:
-                variance_keep_by_head[head] = variance_keep.keep_record_fields(
-                    args.variance_input, args.store / "keep-frontier.json")
-            if keep_timer[0] is not None:
-                keep_timing_by_head[head] = keep_timer[0].to_dict()
-                keep_timer[0] = None
-            return head
-
-        def fold_check_held(worker):
-            """ONE-champion fold check (cross_target.check_one): ONE eligible held
-            series of another lane -- its target-only keep(s) plus their gating
-            keep(s) -- applied onto this lane's working branch, built, MUL_MAT oracle,
-            A/B'd against this target's floor and kernel-coverage diffed on this
-            target's executed path. Approved when it does not regress this target and
-            leaves its executed path unchanged; once every other lane approves, the
-            series folds into THE champion (G0 first). This lane's branch never moves
-            here: the series reaches it through the champion. Never raises."""
-            own = lane_targets.PeerTarget(entry=lane_binding.lane, launch_path=Path("/"),
-                                          frozen_prompts=Path("/"), store=None)
-            own_target = args.target_id or args.surface
-            fold_state = {"base": None, "mechanism": "foldcheck"}
-
-            def measure(series):
-                _retain_fold_before_reset(worker, store=args.store, base=None,
-                                          mechanism="foldcheck-before")
-                pool.reset_to_champion(worker, champion_tree=args.worktree,
-                                       branch=args.champion_branch)
-                base = _git(worker.worktree, "rev-parse", "HEAD")
-                fold_state["base"] = base
-                fold_state["mechanism"] = f"foldcheck-{series['origin_head'][:12]}"
-                for commit in series["commits"]:
-                    if cross_target.apply_in_worktree(worker.worktree, commit) is None:
-                        return {"error": f"{commit[:12]} does not apply onto this lane's "
-                                         "working branch"}
-                built = local_compiles(worker.worktree, worker.build_dir,
-                                       cmake_defines=recipe.cmake_defines(), jobs=build_jobs,
-                                       cpu_list=build_cpu_list,
-                                       targets=gates.PROMOTION_TARGETS)
-                if not built.passed:
-                    return {"error": f"build failed: {built.reason}"}
-                arm = _cpu_arm(direct_launch, worker.build_dir)
-                oracle = local_op_correctness(worker.build_dir, op="MUL_MAT", backend="CPU",
-                                              resolved_recipe=arm)
-                if not oracle.passed:
-                    return {"error": f"MUL_MAT oracle: {oracle.reason}"}
-                bar = lane_targets.peer_bar(own)
-                if bar["mode"] == "absent":
-                    return {"error": "this lane declares no floor file or point bar"}
-                row = measured_serving_compare(
-                    serving_recipe, anchor_build[0], worker.build_dir,
-                    pairs=args.serving_pairs, port=direct_launch.port,
-                    anchor_resolved_recipe=_cpu_arm(direct_launch, anchor_build[0]),
-                    candidate_resolved_recipe=arm, frozen_requests=frozen_requests,
-                    instrument=serving.MATCHED_INSTRUMENT,
-                    **lane_targets.compare_kwargs(bar, serving_recipe, frozen_requests))
-                passed, reason = lane_targets.decide(dict(row), bar)
-                kept = kernel_coverage.keep_gate(
-                    store=args.store, repo=worker.worktree, base_ref=base,
-                    candidate_ref="HEAD", anchor_build=anchor_build[0],
-                    candidate_build=worker.build_dir, own_target=own_target,
-                    peer_shapes={own_target: kernel_coverage.shape_names(serving_recipe)},
-                    measured_peers=[own_target], declaration_texts=(),
-                    mechanism_id=f"foldcheck-{series['origin_head'][:12]}")
-                if not kept["passed"]:
-                    return {"error": f"kernel coverage: {kept['reason']}"}
-                return {"row": dict(row), "passed": passed, "reason": reason,
-                        "coverage": kept["peers"].get(own_target) or {}}
-
-            try:
-                event = cross_target.check_one(lane_binding, repo=args.worktree,
-                                               measure=measure, store=Path(args.store))
-                if event is not None:
-                    print(f"crosstgt  fold-check {event['origin_head'][:12]} from "
-                          f"{event.get('origin_target')}: {event.get('result')} "
-                          f"({event.get('reason')})"
-                          + (f"; champion fold: {event['fold'].get('result')}"
-                             if event.get("fold") else ""))
-            except loop.RunAborted:
-                raise
-            except Exception as exc:  # noqa: BLE001
-                print(f"warning: cross-target fold check failed: {type(exc).__name__}: {exc}",
-                      file=sys.stderr)
-            finally:
-                _retain_fold_before_reset(worker, store=args.store, base=fold_state["base"],
-                                          mechanism=fold_state["mechanism"])
-                pool.reset_to_champion(worker, champion_tree=args.worktree,
-                                       branch=args.champion_branch)
-
-        def reset_retained(worker):
-            # STOP before the gate, or a hard interruption during authoring, leaves
-            # a dirty reused lane with no gate archive. Preserve it BEFORE the
-            # original owned reset. An archive failure must prevent that reset.
-            archive.retain_patch(args.store, worker.worktree, lane=worker.name)
-            return pool.reset_to_champion(worker, champion_tree=args.worktree,
-                                          branch=args.champion_branch)
-
-        from . import runtime_recovery
-        pending_pair = (runtime_owner[0].pending_pair() if runtime_enabled and
-                        runtime_owner[0] is not None else None)
-        pending_slot = runtime_recovery.PendingPlanner.slot(pending_pair)
-
-        # RESUME before any fresh hypothesis (resume.py): checkpointed work of THIS
-        # anchor/epoch/target, most advanced first, each re-validated and claimed at
-        # most once. A retained screen candidate or a pending runtime pair already
-        # owns this launch's first draw, so neither is displaced.
-        if args.resume == "on" and not screen_confirmation and pending_pair is None:
-            try:
-                resume_queue[0], resume_report = resume_mod.prepare(
-                    args.store, epoch=epoch, anchor_commit=current_anchor_commit[0],
-                    target=resume_target, repo=args.worktree,
-                    on_rejected=record_resume_rejected, scratch=args.store,
-                    measurement_epoch=measurement_epoch,
-                    actor_config=launch_actor_config, carry=resume_carry)
-                print(f"resume    scanned {resume_report['scanned']} checkpoint(s): "
-                      f"{len(resume_report['queued'])} queued, "
-                      f"{len(resume_report['rejected'])} rejected, "
-                      f"{len(resume_report['ineligible'])} not resumable now, "
-                      f"{resume_report['already_claimed']} already claimed"
-                      + (f"; {resume_report['other_epoch_rows']} row(s) with checkpoints "
-                         f"in other epochs (not this launch's)"
-                         if resume_report["other_epoch_rows"] else "")
-                      + (f"; {len(resume_report['carried'])} carried forward from an "
-                         f"ancestor anchor or sibling epoch"
-                         if resume_report.get("carried") else ""), flush=True)
-                # In-run: a hypothesis a lane leaves pending THIS run is re-authored on
-                # the next draw, before the planner (resume.ResumeQueue._refresh).
-                resume_queue[0].enable_pending_refresh(resume_target, **resume_bind)
-                for row in resume_report["queued"]:
-                    diff = row.get("actor_config_diff")
-                    print(f"resume    queued {row['mechanism_id']} at {row['stage']} "
-                          f"(from {row['checkpoint_id']})"
-                          + (f"; carried ({row['carry']['action']}) from anchor "
-                             f"{str(row['carry']['carried_from_anchor'])[:12]}"
-                             if row.get("carry") else "")
-                          + (f"; actor config differs: {', '.join(diff)}" if diff else
-                             "; checkpoint predates actor-config recording"
-                             if "actor_config_diff" in row and diff is None else ""),
-                          flush=True)
-            except Exception as exc:      # noqa: BLE001 -- fresh research still runs
-                print(f"resume    unavailable: {type(exc).__name__}: {exc}", file=sys.stderr)
-        elif args.resume == "off":
-            print("resume    off (--resume off): checkpointed work is not scanned", flush=True)
-
-        sandbox_scratch = _sandbox_scratch(args, scratch_registry[0])
-        # Effective only with an allocator: without one the seat is the historical seat.
-        sandbox_seat = {"author_sandbox": sandbox_scratch is not None}
-
-        def sandbox_for(worker):
-            return (ak_check.scratch_provider(sandbox_scratch, worker.name)
-                    if sandbox_scratch is not None else None)
-
-        arm_lanes = None
-        if runtime_arm_declaration is not None and int(args.workers) > 1:
-            from . import runtime_arms as _runtime_arms
-            arm_lanes = _runtime_arms.ArmLanes()
-
-        def lane_backend(worker):
-            """The lane's planner/author backend: the global one unless overridden."""
-            lane = lane_actors.for_worker(lane_actor_models, worker)
-            return planner_backend if lane is None else lane_backends[lane.lane]
-
-        def lane_seat(worker, seat):
-            return lane_actors.seat_for(lane_actors.for_worker(lane_actor_models, worker), seat)
-
-        def make_planner(worker):
-            if screen_confirmation:
-                return cpu_screen.RetainedPlanner(screen_confirmation, worker, screen_prepared["launch"])
-            ordinary = actors.AgentPlanner(workspace=worker.worktree, backend=lane_backend(worker),
-                                           timeout_s=args.actor_timeout_s, default_budgets=True,
-                                           should_stop=should_stop,
-                                           belief_context=args.actor_belief_context,
-                                           belief_root=args.belief_root_repo,
-                                           belief=_belief_config(args),
-                                           belief_preseeded=args.preseeded_hypotheses,
-                                           sandbox_scratch=sandbox_for(worker),
-                                           seat=lane_seat(worker, actors.ActorSeat(
-                                               bounded=args.actor_seat == "bounded",
-                                               fan_out=args.actor_fan_out,
-                                               steps=args.actor_steps,
-                                               context_mode=args.actor_context_mode,
-                                               **_actor_knobs(args), **_actor_limits(args),
-                                               **_actor_budgets(args),
-                                               **_actor_thinking(args), **sandbox_seat,
-                                               **_actor_salvage(args),
-                                               **_actor_reasoning_history(args),
-                                               **_actor_serving(args))))
-            ordinary = same_state_stop.GuardedPlanner(ordinary, same_state,
-                                                      workspace=worker.worktree, lane=worker.name,
-                                                      should_stop=should_stop,
-                                                      refresh_context=build_context)
-            planner = (runtime_recovery.PendingPlanner(ordinary, pending_slot)
-                       if pending_pair is not None else ordinary)
-            if runtime_arm_declaration is not None and (runtime_enabled or runtime_keep_grade):
-                from . import runtime_arms
-
-                def arm_event(row):
-                    runtime_arm_events.append(row)
-                    del runtime_arm_events[:-64]
-                    runtime_preparation["declared_arms"] = {
-                        "declaration_sha256": runtime_arm_declaration.digest(),
-                        "events": list(runtime_arm_events[-16:])}
-                    print(f"runtime   declared arm {row.get('arm_id')}: {row.get('status')}"
-                          + (f" ({row['reason']})" if row.get("reason") else ""), flush=True)
-
-                # A pending interrupted pair (PendingPlanner) still owns the first draw;
-                # declared arms come next, the ordinary planner after every arm settles.
-                planner = runtime_arms.DeclaredArmPlanner(
-                    planner, runtime_arm_declaration,
-                    store_root=lambda: (runtime_store.root if runtime_store is not None
-                                        and (runtime_enabled or runtime_keep_grade) else None),
-                    on_event=arm_event,
-                    evidence="keep_grade" if runtime_keep_grade else "strict",
-                    # Several lanes: one shared serving view, so two lanes never
-                    # measure the same open arm at once (one lane: the historical path).
-                    **({"lanes": arm_lanes, "lane": worker.name}
-                       if int(args.workers) > 1 else {}))
-            return planner
-
-        def make_author_panel(worker):
-            """Best-of-N (`--actor-authors`, N >= 2): one panel per lane, its members
-            the ordinary author seat with the member's thinking mode and the pool
-            budget's per-author limits, rooted at a scratch worktree. None = the
-            single-author path (N=1, a retained screen, or no scratch registry)."""
-            if not author_plan.panel or screen_confirmation:
-                return None
-            if lane_actors.for_worker(lane_actor_models, worker) is not None:
-                return None   # an overridden lane authors single (`lane_actors`)
-            if scratch_registry[0] is None:
-                # The run registry is created by the run body before any lane draws;
-                # without it there is nowhere marked to put the members' trees.
-                print("actors    WARNING best-of authoring needs the run's scratch "
-                      "registry; none is installed -- single author", file=sys.stderr)
-                return None
-            budget = author_plan.budget
-
-            def make_author(spec, workspace, member_stop):
-                sandbox_kw, sandbox_seat_kw = _member_sandbox(args, workspace)
-                return actors.AgentPlanner(
-                    workspace=Path(workspace), backend=planner_backend,
-                    timeout_s=args.actor_timeout_s, should_stop=member_stop,
-                    default_budgets=True,
-                    # A member that hits the hard timeout spent its budget: never
-                    # retried in-round (operator 2026-09-27, DS41 run 10j).
-                    retry_timeouts=False,
-                    belief_context=args.actor_belief_context,
-                    belief_root=args.belief_root_repo, **sandbox_kw,
-                    seat=actors.ActorSeat(**sandbox_seat_kw,
-                        bounded=args.actor_seat == "bounded", fan_out=args.actor_fan_out,
-                        steps=args.actor_steps, context_mode=args.actor_context_mode,
-                        **_actor_knobs(args),
-                        # This member's share of the pool and ITS output cap (asymmetric
-                        # by thinking mode, `bestof.panel_budget`); an output above
-                        # 32,000 reaches the wire via output_ceiling_env.
-                        **{**_actor_limits(args),
-                           "context_limit": budget.for_member(spec).context_limit,
-                           "author_output_limit": budget.for_member(spec).output_limit},
-                        **_actor_budgets(args),
-                        **{**_actor_thinking(args), "author_thinking": spec.thinking},
-                        # F1 only: the answer protocol and think budget are planner-only.
-                        serving_f1=_actor_serving(args)["serving_f1"]))
-
-            return bestof.AuthorPanel(
-                lane=worker.name, specs=author_plan.specs, make_author=make_author,
-                scratch=scratch_registry[0], budget=budget,
-                validator=_author_validator(args),
-                retain=lambda **patch: archive.retain_patch_bytes(args.store, **patch),
-                should_stop=should_stop, walls=author_plan.walls)
-
-        from . import phase_journal as phase_journal_module
-        _, phase_journal_dir = accumulate._surface_paths(args.store, args.bundle_surface)
-        phase_book = accumulate.journal.Journal(str(Path(args.store) / phase_journal_dir))
-        phase_owner = phase_journal_module.PhaseJournal(phase_book)
-        try:
-            pooled_lanes = pool.provision(args.workers, champion_tree=args.worktree,
-                                          champion_branch=args.champion_branch,
-                                          root=args.worker_root,
-                                          build_root=args.worker_build_root,
-                                          execute=True)
-            lanes_by_name.update({lane.name: lane for lane in pooled_lanes})
-            return pool.drive(
-                phase_journal=phase_owner,
-                # A best-of panel's winner check runs ak-check even with the author sandbox
-                # off; beside ANOTHER lane's tail (--workers > 1, `--lane-actor-models`)
-                # that is a compile during a measurement unless the tail takes the fence.
-                author_sandbox=(sandbox_seat["author_sandbox"]
-                                or (author_plan.panel and int(args.workers) > 1)),
-                commit=commit_pooled,
-                reset=reset_retained,
-                workers=pooled_lanes,
-                make_planner=make_planner,
-                make_critic=lambda worker: (
-                    cpu_screen.RetainedCritic(screen_confirmation)
-                    if screen_confirmation else actors.AgentCritic(
-                        workspace=worker.worktree, backend=critic_backend,
-                        timeout_s=args.actor_timeout_s, should_stop=should_stop,
-                        default_budgets=True,
-                        seat=actors.ActorSeat(bounded=False, **_actor_knobs(args),
-                                              **_actor_limits(args), **sandbox_seat,
-                                              serving_f1=_actor_serving(args)["serving_f1"]))),
-                build_context=build_context, make_gate=gate_for,
-                make_measure=measure_for, record=record_pooled,
-                iterations=(args.iterations or None), should_stop=should_stop,
-                # Reduced positives remain KEEP_CANDIDATE until original full-target
-                # confirmation; full-confirmed sub-floor positives may then enter the
-                # same working accumulator as unscreened experimental source keeps.
-                accumulate_valid_positive=experimental,
-                # Per accepted hypothesis, across iterations (loop.HYPOTHESIS_AUTHOR_ATTEMPTS).
-                author_attempts=args.hypothesis_author_attempts,
-                validate_candidate=validate_pooled,
-                formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
-                    hypothesis, {**context, "epoch_sha256": epoch,
-                                 "retired_mechanisms_path": Path(args.store) / "retired-mechanisms.jsonl",
-                                 "measurement_epoch_sha256": measurement_epoch}),
-                reserve_candidate=reserve_pooled,
-                record_abandoned=record_abandoned_pooled,
-                begin_author_custody=lambda worker, h, checkpoint:
-                    _begin_author_custody(worker, h, checkpoint, store=args.store),
-                finish_author_custody=lambda worker, ticket, h, failure:
-                    _finish_author_custody(worker, ticket, h, failure, store=args.store),
-                next_resume=(resume_queue[0].take if resume_queue[0] is not None else None),
-                **({"make_author_panel": make_author_panel} if author_plan.panel else {}),
-                champion_tree=args.worktree, branch=args.champion_branch,
-                on_step=step_pooled,
-                on_tail_ready=lambda tail: live_tail.__setitem__(0, tail),
-                # AKX-ALL-29.2a: a GPU serving run times waiting candidates in descending
-                # launch-weighted order of the anchor profile's kernel they target.
-                **({"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(
-                        gpu_profile_observation, getattr(hypothesis, "target_symbol", None))}
-                   if direct_launch and not cpu_launch else {}),
-                **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}),
-                gate_wrappers=_gate_wrappers(args, cpu_launch),
-                # AKPL-P3 (AK-TAIL-SPLIT via rowflow): lanes emit candidate records unless
-                # --legacy-tail or --workers 1 keeps the in-process serialized tail.
-                **({"make_emitting_tail": _emitting_tail_factory(args)}
-                   if _tail_split_enabled(args) else {}))
-        finally:
-            phase_owner.close()
+        return _run_pooled(set_runtime_selection=set_runtime_selection,
+            args=lambda: args, runtime_enabled=lambda: runtime_enabled, runtime_owner=lambda: runtime_owner, screen_confirmation=lambda: screen_confirmation, epoch=lambda: epoch,
+            current_anchor_commit=lambda: current_anchor_commit, measurement_epoch=lambda: measurement_epoch,
+            launch_actor_config=lambda: launch_actor_config, resume_carry=lambda: resume_carry, resume_bind=lambda: resume_bind, scratch_registry=lambda: scratch_registry,
+            runtime_arm_declaration=lambda: runtime_arm_declaration, author_plan=lambda: author_plan,
+            build_context=lambda: build_context, gate_for=lambda: gate_for, measure_for=lambda: measure_for, should_stop=lambda: should_stop, experimental=lambda: experimental,
+            direct_launch=lambda: direct_launch, cpu_launch=lambda: cpu_launch, cpu_window_ref=lambda: cpu_window_ref, critic_backend=lambda: critic_backend,
+            longctx_runtime_gate=lambda: longctx_runtime_gate, gpu_profile_observation=lambda: gpu_profile_observation,
+            record_runtime_adoption=lambda: record_runtime_adoption, keep_timer=lambda: keep_timer,
+            runtime_arm_events=lambda: runtime_arm_events, lane_binding=lambda: lane_binding, census=lambda: census, runtime_preparation=lambda: runtime_preparation,
+            full_cpu_target=lambda: full_cpu_target, ubatch=lambda: ubatch, original_source_keeps=lambda: original_source_keeps, live_tail=lambda: live_tail,
+            pending_view=lambda: pending_view, codegen_by_head=lambda: codegen_by_head, build_cpu_list=lambda: build_cpu_list, screen_state=lambda: screen_state,
+            runtime_store=lambda: runtime_store, planner_backend=lambda: planner_backend, cpu_measurement_window=lambda: cpu_measurement_window, feedback=lambda: feedback,
+            lane_actors=lambda: lane_actors, heldout_requests=lambda: heldout_requests, calibrated=lambda: calibrated, measured_serving_compare=lambda: measured_serving_compare,
+            anchor_build=lambda: anchor_build, build_jobs=lambda: build_jobs, selected_identity=lambda: selected_identity, local_op_correctness=lambda: local_op_correctness,
+            runtime_recipe_reference=lambda: runtime_recipe_reference, cpu_screen=lambda: cpu_screen, breaker=lambda: breaker, tg=lambda: tg, lane_targets=lambda: lane_targets,
+            keep_the_diff=lambda: keep_the_diff, report_runtime_progress=lambda: report_runtime_progress,
+            pp=lambda: pp, gfx_counter=lambda: gfx_counter, lane_backends=lambda: lane_backends, confirm_measure=lambda: confirm_measure, longctx_surface=lambda: longctx_surface,
+            confirm=lambda: confirm, frozen_requests=lambda: frozen_requests, publish=lambda: publish,
+            lane_actor_models=lambda: lane_actor_models, accumulate_after_keep=lambda: accumulate_after_keep, measured_source_comparisons=lambda: measured_source_comparisons,
+            feedback_anchor=lambda: feedback_anchor, promote_anchor=lambda: promote_anchor, screen_prepared=lambda: screen_prepared,
+            lineage_recorded_outcomes=lambda: lineage_recorded_outcomes, recipe=lambda: recipe,
+            lane_peer_serving=lambda: lane_peer_serving, resolved_campaign=lambda: resolved_campaign, keep_timing_by_head=lambda: keep_timing_by_head, keep_dims=lambda: keep_dims,
+            keep_dimension_measures=lambda: keep_dimension_measures, variance_keep_by_head=lambda: variance_keep_by_head,
+            runtime_keep_grade=lambda: runtime_keep_grade, source_instrument=lambda: source_instrument,
+            longctx_keep_gate=lambda: longctx_keep_gate, serving_recipe=lambda: serving_recipe,
+            latest=lambda: latest, keep_numerics=lambda: keep_numerics, cor_build=lambda: cor_build,
+            keep_stage=lambda: keep_stage, floor_request_digest=lambda: floor_request_digest, local_compiles=lambda: local_compiles, reprofile=lambda: reprofile,
+            invalidate_source_floor=lambda: invalidate_source_floor, hotspot_rows=lambda: hotspot_rows,
+            same_state=lambda: same_state)
 
     claim_started = None
     original_claims = []
@@ -7974,186 +8018,52 @@ def _main(argv: list[str] | None = None) -> int:
 
     def record_runtime_adoption(previous_recipe, selected, comparison, runtime_pair,
                                 previous_floor) -> None:
-        """The durable, auditable receipt of a loop-adopted runtime recipe.
-
-        Written after `RuntimeAdmission.retain` re-derived the admission from its
-        original records and before any further measurement. It names both recipes,
-        the admitted dimension, the admission/selection references, the epoch the
-        comparison was measured under and the epoch input the next launch folds in,
-        the floor it invalidated, and the accumulator it re-based. A receipt failure
-        is loud but never un-does the retained selection (the admission record is
-        the authority; this is its audit view)."""
-        from . import runtime_arms
-        rebased = None
-        try:
-            if serving_recipe is not None and bundle[0].champion_of_record != bundle[0].tip:
-                # COR vs tip was compounded under the previous recipe: that magnitude is
-                # cross-epoch now. It may no longer fire the threshold trigger; the next
-                # keep re-measures tip vs COR under the adopted recipe (both arms), and
-                # the serving gate spends only on that fresh reading.
-                rebased = {"champion_of_record": bundle[0].champion_of_record,
-                           "tip": bundle[0].tip, "keeps": list(bundle[0].keeps),
-                           "compounded_bench_pct_previous_recipe":
-                               bundle[0].compounded_bench_pct,
-                           "measurement_validity_before": bundle[0].measurement_validity,
-                           "measurement_validity_after":
-                               accumulate.MEASUREMENT_STALE_RUNTIME_RECIPE}
-                bundle[0].measurement_validity = accumulate.MEASUREMENT_STALE_RUNTIME_RECIPE
-                bundle[0].save(args.store)
-            body = runtime_arms.adoption_receipt(
-                campaign_id=(resolved_campaign.campaign_id if selected_target is not None
-                             else "ak-loop"),
-                previous=previous_recipe, adopted=selected,
-                admission=comparison.row.get("runtime_admission"),
-                selection_reference=runtime_recipe_reference[0],
-                runtime_pair=runtime_pair.to_dict(), comparison=comparison.row,
-                epoch=epoch, measurement_epoch=measurement_epoch,
-                anchor_commit=current_anchor_commit[0],
-                statistics_sha256=(None if runtime_statistical is None else
-                                   hashlib.sha256(json.dumps(runtime_statistical.to_dict(),
-                                       sort_keys=True, separators=(",", ":")).encode()).hexdigest()),
-                declaration=runtime_arm_declaration, invalidated_floor=previous_floor,
-                accumulator=rebased,
-                evidence="keep_grade" if runtime_keep_grade else "strict")
-            path = runtime_arms.write_adoption_receipt(args.store, body)
-            runtime_adoptions.append({"receipt": str(path),
-                                      "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                                      "adopted_surface_digest":
-                                          body["adopted_recipe"]["runtime_surface_digest"]})
-            runtime_preparation["adoptions"] = list(runtime_adoptions)
-            print(f"runtime   ADOPTED runtime recipe "
-                  f"{body['adopted_recipe']['runtime_surface_digest'][:12]} "
-                  f"(was {body['previous_recipe']['runtime_surface_digest'][:12]}): "
-                  f"{json.dumps(body['surface_change'], sort_keys=True)[:300]}; receipt {path}; "
-                  f"the next launch opens a new measurement epoch")
-        except Exception as exc:     # noqa: BLE001 -- loud, never un-select
-            print(f"runtime   WARNING adoption receipt failed: {type(exc).__name__}: {exc}",
-                  file=sys.stderr)
-            runtime_preparation["adoption_receipt_error"] = f"{type(exc).__name__}: {exc}"[:512]
+        return _record_runtime_adoption(serving_recipe, bundle, args, selected_target,
+            resolved_campaign, runtime_recipe_reference, epoch, measurement_epoch, current_anchor_commit, runtime_statistical, runtime_arm_declaration,
+            runtime_keep_grade, runtime_adoptions, runtime_preparation, previous_recipe,
+            selected, comparison, runtime_pair, previous_floor)
 
     def install_runtime_owner():
-        nonlocal direct_launch, cpu_launch, serving_recipe
-        from . import runtime_admission, runtime_calibration
-        from ..evaluator import controls
-        campaign_id = resolved_campaign.campaign_id if selected_target is not None else "ak-loop"
-        statistical = runtime_calibration.declare_statistics(store=runtime_store,
-            campaign_id=campaign_id, epoch=runtime_epoch, supplied=runtime_statistical)
-        escalation = None if args.runtime_control_escalation is None else controls.OperatorEscalation(
-            **_read_cpu_document(args.runtime_control_escalation))
-        original = _cpu_arm(direct_launch, anchor_build[0])
-        recovery = None
-        if args.runtime_recovery_reference is not None:
-            from . import runtime_recovery
-            try:
-                recovery = _read_cpu_document(args.runtime_recovery_reference)
-                runtime_recovery.reopen(recovery, current_argv=original_argv)
-            except (OSError, ValueError) as exc:
-                # Ordinary source work remains available; an interrupted runtime
-                # window will still refuse without a valid original teardown join.
-                print(f"runtime recovery unavailable: {exc}", file=sys.stderr)
-                recovery = None
-        runtime_owner[0] = runtime_admission.RuntimeAdmission(store=runtime_store,
-            held_claim=original_claims[0], campaign_id=campaign_id, epoch=runtime_epoch,
-            **({"gpu_claim": original_claims[-1]} if not cpu_launch else {}),
-            original=original, prompts=manifest, statistical=statistical,
-            host_state={**epoch_inputs, "nominal_khz": args.runtime_nominal_khz},
-            worktree=args.worktree, source_commit=current_anchor_commit[0], escalation=escalation,
-            deadline_monotonic_s=runtime_deadline, recovery_reference=recovery,
-            on_progress=report_runtime_progress)
-        selected = runtime_owner[0].selected()
-        feedback_anchor[0] = selected
-        if selected.to_dict() != original.to_dict():
-            direct_launch = selected
-            cpu_launch = selected if selected.backend == "cpu" else None
-            serving_recipe = selected.template
-            invalidate_source_floor()
-        runtime_preparation.update(status="original_frame_ready",
-            default_recipe=runtime_owner[0].default.to_dict(),
-            selected_recipe=runtime_owner[0].state["selected"],
-            statistics=statistical.to_dict(),
-            calibration_launches=runtime_calibration_launches,
-            historical_replay="original backend control owner supplies its separate declared frame")
-        runtime_recipe_reference[0] = runtime_owner[0].selection_reference(selected,
-            current_source_commit=current_anchor_commit[0], origin=runtime_recipe_reference[0])
-        report_runtime_progress()
-        print(f"runtime   optional first-treatment setup: {runtime_calibration_launches} "
-              "original calibration server launches plus controls; source proposals do not require it")
+        return _install_runtime_owner(set_runtime_selection=set_runtime_selection,
+            direct_launch=lambda: direct_launch, cpu_launch=lambda: cpu_launch, serving_recipe=lambda: serving_recipe, selected_target=lambda: selected_target,
+            resolved_campaign=lambda: resolved_campaign, runtime_store=lambda: runtime_store, runtime_epoch=lambda: runtime_epoch, runtime_statistical=lambda: runtime_statistical,
+            args=lambda: args, anchor_build=lambda: anchor_build, original_argv=lambda: original_argv, runtime_owner=lambda: runtime_owner, original_claims=lambda: original_claims,
+            manifest=lambda: manifest, epoch_inputs=lambda: epoch_inputs, current_anchor_commit=lambda: current_anchor_commit, runtime_deadline=lambda: runtime_deadline,
+            report_runtime_progress=lambda: report_runtime_progress, feedback_anchor=lambda: feedback_anchor, invalidate_source_floor=lambda: invalidate_source_floor,
+            runtime_preparation=lambda: runtime_preparation, runtime_calibration_launches=lambda: runtime_calibration_launches,
+            runtime_recipe_reference=lambda: runtime_recipe_reference)
     held_claim_evidence = None
     held_claim_error = None
     held_claim_attempted = False
-    cpu_native_acquired = False
+    cpu_native_acquired = [False]
     preclaim_failure_published = False
 
     def publish_preclaim_failure(error):
         nonlocal preclaim_failure_published
-        if scheduler_selection is None or original_claims or cpu_native_acquired:
-            return
-        _publish_preclaim_failure(args.out, scheduler_selection, selected_identity, error)
-        preclaim_failure_published = True
+        if _publish_preclaim_failure_once(args.out, scheduler_selection, selected_identity,
+                                          original_claims, cpu_native_acquired, error):
+            preclaim_failure_published = True
+
+    def set_held_attempted(value):
+        nonlocal held_claim_attempted
+        held_claim_attempted = value
+
+    def set_held_evidence(value):
+        nonlocal held_claim_evidence
+        held_claim_evidence = value
+
+    def set_held_error(value):
+        nonlocal held_claim_error
+        held_claim_error = value
 
     def publish_held_claims():
-        nonlocal held_claim_evidence, held_claim_error, held_claim_attempted
-        if scheduler_selection is None or held_claim_attempted or stage_client is not None:
-            return
-        held_claim_attempted = True
-        if (args.cpu_held_intervals_v2 == "on" and preclaim_failure_published
-                and not cpu_native_acquired and not original_claims):
-            return  # Proved before-native failure, never a post-acquire discount.
-        from .measurement_capture import ArtifactStore
-        original_store = None
-        try:
-            args.out.mkdir(parents=True, exist_ok=True)
-            original_store = ArtifactStore(args.out / "held-claim-artifacts")
-            artifact = claim.publish_intervals(
-                original_store, scheduler_selection, original_claims,
-                target=selected_identity,
-                phases=(gpu_local.closed_phases() if gpu_local is not None and gpu_local.quiet
-                        else None),
-                cpu_segments=args.cpu_held_intervals_v2 == "on").to_dict()
-            held_claim_evidence = {
-                "schema": "epyc.autokernel.direct_held_reference.v1",
-                "selection_digest": scheduler_selection.digest,
-                "evidence": artifact}
-            status.write_json(args.out, "loop-held-claims.json", held_claim_evidence,
-                              prefix=".held-claims-")
-            if runtime_owner[0] is not None:
-                interrupted = runtime_owner[0].interruption_reference()
-                if interrupted is not None:
-                    status.write_json(args.out, "loop-runtime-interruption.json", interrupted,
-                                      prefix=".runtime-interruption-")
-        except Exception as capture_error:
-            # Missing accounting remains visible; never relabel an already
-            # archived comparison or replace the original operational exception.
-            held_claim_error = f"{type(capture_error).__name__}: {capture_error}"
-            print(f"held-resource evidence unavailable: {held_claim_error}", file=sys.stderr)
-            if args.cpu_held_intervals_v2 == "on":
-                status.write_json(args.out, "loop-held-claims-refused.json", {
-                    "schema": "epyc.autokernel.cpu_segment_refusal.v1",
-                    "selection_digest": scheduler_selection.digest, "target": selected_identity,
-                    "error": held_claim_error},
-                    prefix=".held-claims-refused-")
-        finally:
-            if original_store is not None:
-                original_store.close()
+        return _publish_held_claims(set_attempted=set_held_attempted,
+            set_evidence=set_held_evidence, set_error=set_held_error, held_claim_attempted=lambda: held_claim_attempted,
+            scheduler_selection=lambda: scheduler_selection, stage_client=lambda: stage_client, args=lambda: args, preclaim_failure_published=lambda: preclaim_failure_published,
+            cpu_native_acquired=lambda: cpu_native_acquired, original_claims=lambda: original_claims, selected_identity=lambda: selected_identity, gpu_local=lambda: gpu_local,
+            runtime_owner=lambda: runtime_owner)
 
-    def publish_lineage(observed, run_artifact=None):
-        # The write side is retrospective to this run only. It is never an input
-        # to the planner, evaluator, promotion gate, or resource scheduler.
-        try:
-            source_root = Path(__file__).resolve().parents[4]
-            source_revision = subprocess.run(
-                ["git", "-C", str(source_root), "rev-parse", "HEAD"],
-                capture_output=True, text=True, check=True, timeout=5).stdout.strip()
-            lineage_beliefs.publish(
-                args.store, observed, epoch=epoch, anchor_commit=anchor_commit,
-                producer_commit=source_revision,
-                producer_file_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                run_artifact=run_artifact)
-        except Exception as exc:
-            print(f"warning: lineage belief export unavailable: {type(exc).__name__}: "
-                  f"{exc}", file=sys.stderr)
-            return
-        publish_lineage_taxonomy(args.store, source_revision)
+    publish_lineage = partial(_publish_lineage, args, epoch, anchor_commit)
 
     cpu_win = None
     if args.cpu_window_yield == "on" and not gpu_skip_cpu_claim and stage_client is None \
@@ -8194,18 +8104,10 @@ def _main(argv: list[str] | None = None) -> int:
                          "(--cpu-window-yield off): every call would wait on the loop's own "
                          "regions. Use --cpu-window-yield on or a GPU/hosted actor.")
 
-    @contextmanager
-    def graceful_calibration_stop():
+    def finish_stopped_calibration():
         nonlocal outcomes, pooled
-        try:
-            yield
-        except loop.ActorStopped:
-            if not calibration_stopped[0]:
-                raise
-            # ExitStack has released owned claims and reaped its children first.
-            outcomes = list(latest)
-            pooled = pool.PoolResult(outcomes=outcomes,
-                                     wall_seconds=time.time() - started)
+        outcomes = list(latest)
+        pooled = pool.PoolResult(outcomes=outcomes, wall_seconds=time.time() - started)
 
     if direct_launch:
         report_runtime_progress()
@@ -8215,7 +8117,8 @@ def _main(argv: list[str] | None = None) -> int:
         started = time.time()
         outcomes = []
         pooled = pool.PoolResult(outcomes=outcomes)
-        with graceful_calibration_stop(), ExitStack() as ownership:
+        with _graceful_calibration_stop(calibration_stopped, finish_stopped_calibration), \
+                ExitStack() as ownership:
             # Every scratch path this run creates is allocated under this run scope and
             # released when the stack unwinds (normal end, exception, or the SIGTERM
             # stop path, which returns through here). The sweep first collects what a
@@ -8233,12 +8136,7 @@ def _main(argv: list[str] | None = None) -> int:
             proc_guard = procguard.install(procguard.Guard(
                 store=args.store, scratch_roots=(scratch_registry[0].root,)))
 
-            def _end_proc_guard(guard=proc_guard):
-                try:
-                    guard.sweep_stale("run_end")
-                finally:
-                    procguard.uninstall(guard)
-            ownership.callback(_end_proc_guard)
+            ownership.callback(_end_proc_guard, proc_guard)
             proc_guard.sweep_stale("run_start")
             run_scope = ownership.enter_context(
                 scratch_registry[0].scope("run", name=scratch_run_id))
@@ -8260,17 +8158,11 @@ def _main(argv: list[str] | None = None) -> int:
             if args.cpu_held_intervals_v2 == "on":
                 if not cpu_launch or scheduler_selection is None:
                     raise ValueError("CPU interval v2 requires a selected scheduled CPU run")
-                def native_cpu_acquired():
-                    nonlocal cpu_native_acquired
-                    cpu_native_acquired = True
-                    _publish_cpu_native_acquired(args.out, scheduler_selection, selected_identity)
+                native_cpu_acquired = partial(_native_cpu_acquired, cpu_native_acquired,
+                                              args.out, scheduler_selection, selected_identity)
                 gpu_quiet_kw.update(capture_segments=True, on_acquired=native_cpu_acquired)
 
-            def hold_cpu_claim(cpu_list):
-                if cpu_win is None:
-                    return ownership.enter_context(claim.hold_cpu(cpu_list, **gpu_quiet_kw))
-                return cpu_win.acquire_initial(
-                    lambda: ownership.enter_context(claim.hold_cpu(cpu_list, **gpu_quiet_kw)))
+            hold_cpu_claim = partial(_hold_cpu_claim, cpu_win, ownership, gpu_quiet_kw)
 
             stage_scope = None
             if stage_client is not None:
@@ -8312,7 +8204,7 @@ def _main(argv: list[str] | None = None) -> int:
                     # serial_run window hold this re-enters the parent's flock.
                     window_verify = ((lambda: gpu_window.assert_window_active(
                                          args.gpu_window_path))
-                                     if getattr(args, "gpu_window", "off")
+                                     if args.gpu_window
                                      == "required" else None)
                     window_kwargs = {} if window_verify is None else {"verify": window_verify}
                     receipt = ownership.enter_context(claim.hold(
@@ -8349,12 +8241,7 @@ def _main(argv: list[str] | None = None) -> int:
                 gpu_local.child_dir.mkdir(parents=True, exist_ok=False)
                 prior_phase_dir = os.environ.get(CHILD_PHASE_DIR)
                 os.environ[CHILD_PHASE_DIR] = str(gpu_local.child_dir)
-                def restore_child_phase_environment():
-                    if prior_phase_dir is None:
-                        os.environ.pop(CHILD_PHASE_DIR, None)
-                    else:
-                        os.environ[CHILD_PHASE_DIR] = prior_phase_dir
-                ownership.callback(restore_child_phase_environment)
+                ownership.callback(_restore_child_phase_environment, CHILD_PHASE_DIR, prior_phase_dir)
             claim_started = time.monotonic()
             if selected_target is not None:
                 # Same original invocation bound used by serial scheduling. This
@@ -8377,14 +8264,9 @@ def _main(argv: list[str] | None = None) -> int:
             if bundle[0].measurement_validity == accumulate.MEASUREMENT_STALE_BASELINE:
                 harness = (direct_launch.snapshot_digest if direct_launch else
                            f"bench:{bench_surface}:{pp}:{tg}:{ubatch}:{args.pairs}:{args.model}")
-                def measure_rebaseline():
-                    return (cpu_compare(cor_build[0], anchor_build[0], rebind_feedback=False)
-                            if direct_launch else measured_bench_compare(
-                                bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
-                                bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
-                                args.model, pp=pp, tg=tg, pairs=args.pairs,
-                                noise_floor_pct=bench_floor, surface=bench_surface, ubatch=ubatch,
-                                calibrated=bench_floor is not None))
+                measure_rebaseline = partial(_measure_rebaseline, cpu_compare, cor_build,
+                    anchor_build, direct_launch, measured_bench_compare, args, pp, tg,
+                    bench_floor, bench_surface, ubatch)
                 _native_stale_rebaseline(args.store, args.worktree, bundle[0], harness,
                                          measure_rebaseline)
             # R23-44: snapshot the starting champion into the protected champion-of-record slot
@@ -8685,8 +8567,7 @@ def _main(argv: list[str] | None = None) -> int:
                         resolved_recipe=heldout_launch,
                         frozen_requests=heldout_requests, **source_instrument)
                     _write_new_source_floor(
-                        heldout_floor_store, serving_recipe, heldout_launch,
-                        heldout_calibration, frozen_requests=heldout_requests,
+                        heldout_floor_store, serving_recipe, heldout_launch, heldout_calibration, frozen_requests=heldout_requests,
                         instrument=args.serving_instrument, pairs=args.serving_pairs)
 
             if args.validate_source_continuation and direct_launch is not None:
@@ -8757,11 +8638,8 @@ def _main(argv: list[str] | None = None) -> int:
                             pairs=args.serving_pairs, floor_pct=serving_floor_pct,
                             floor_unit=serving_floor_unit,
                             port=direct_launch.port,
-                            anchor_resolved_recipe=original_launch,
-                            candidate_resolved_recipe=candidate_launch,
-                            frozen_requests=frozen_requests,
-                            floor_request_digest=floor_request_digest,
-                            floor_record=floor_record,
+                            anchor_resolved_recipe=original_launch, candidate_resolved_recipe=candidate_launch, frozen_requests=frozen_requests,
+                            floor_request_digest=floor_request_digest, floor_record=floor_record,
                             **({"instrument": args.serving_instrument}
                                if source_instrument else {}))
                     except (loop.MeasurementInvalid, serving.ServerDied) as exc:
@@ -8838,9 +8716,7 @@ def _main(argv: list[str] | None = None) -> int:
                             directory=args.out / "source-loo", store_root=args.store,
                             repo=source_checkout,
                             assembled_commit=source_resumed["current_anchor"]["commit"],
-                            assembled_tree=assembled_tree,
-                            keep_references=source_lineage_references,
-                            target=selected_identity,
+                            assembled_tree=assembled_tree, keep_references=source_lineage_references, target=selected_identity,
                             full_launch=_cpu_arm(direct_launch, validation_candidate_build),
                             baseline=(validation_original_commit,
                                       _cpu_arm(direct_launch, validation_anchor_build)),

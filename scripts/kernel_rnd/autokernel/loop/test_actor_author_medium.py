@@ -67,9 +67,10 @@ class Defaults(unittest.TestCase):
     def test_parser_wiring(self):
         from autokernel.loop import run
         source = Path(run.__file__).read_text(encoding="utf-8")
-        block = source[source.index('"--actor-author-action-rule"'):][:200]
+        parser_source = Path(run.__file__).with_name("run_args.py").read_text(encoding="utf-8")
+        block = parser_source[parser_source.index('"--actor-author-action-rule"'):][:200]
         self.assertIn('default="on"', block)
-        block = source[source.index('"--actor-author-thinking"'):][:300]
+        block = parser_source[parser_source.index('"--actor-author-thinking"'):][:300]
         self.assertIn("DEFAULT_AUTHOR_THINKING", block)
         # The critic's seat never takes the author knobs.
         critic = source[source.index("make_critic=lambda worker"):][:600]
