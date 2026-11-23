@@ -1,6 +1,7 @@
 """census_update.py: idempotency, threshold flagging, seed linking (fixture RESULT.json files, no GPU)."""
 import json
 import os
+import shutil
 import tempfile
 import unittest
 
@@ -284,6 +285,43 @@ class RealResultFixtures(Base):
         before = open(self.census).read()
         self.run_(p)
         self.assertEqual(open(self.census).read(), before)
+
+    def _diag(self, quiet_l2=True, ms=28.0):
+        unit = lambda q: {"guard": {"quiet": q}}
+        pf = {"MUL_MAT:gdn_proj": {"plain-greedy-d1k-L1": {"gbps": 92.85, "ms_per_step": 24.2},
+                                   "plain-greedy-d32k-L1": {"gbps": 80.0, "ms_per_step": ms},
+                                   "plain-greedy-d32k-L2": {"gbps": 95.0, "ms_per_step": ms - 4.4}}}
+        return {"id": "ak-q38fn-cpu-d32k-gemv-diag-fx", "status": "complete", "updated_utc": "2026-11-23T08:00:00Z",
+                "evidence": {"gemv_gbps_d1k": 87.4, "gemv_gbps_d32k_mean": 84.9}, "per_family_by_unit": pf,
+                "units": {"plain-greedy-d1k-L1": unit(True), "plain-greedy-d32k-L1": unit(True),
+                          "plain-greedy-d32k-L2": unit(quiet_l2)}}
+
+    def test_quiet_host_supersedes_contended_record_for_same_op_shape(self):
+        self.run_(os.path.join(FX, "q38fn", "RESULT.json"), row="census")  # unguarded: d32k gdn_proj 36.7 GB/s
+        k32, k1 = ("cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:gdn_proj|quarter-24t-d%s|n1" % d for d in ("32k", "1k"))
+        old = json.load(open(self.census))["records"]
+        p = self.res("diag.json", self._diag())
+        os.makedirs(os.path.join(self.d, "servers"))
+        shutil.copy(os.path.join(FX, "q38fn", "servers", "plain-greedy-d32k-L1.argv.json"), os.path.join(self.d, "servers"))
+        self.assertEqual([o["shape"] for o in cu.extract_cpu(self._diag(), p)], ["quarter-24t-d32k"])  # subject depth only
+        self.run_(p, row="diag")
+        recs = json.load(open(self.census))["records"]
+        self.assertTrue(recs[k32]["quiet_host"])
+        self.assertAlmostEqual(recs[k32]["us_per_call"], 25800.0, places=0)  # mean of the two replicate ms/step
+        self.assertEqual(recs[k32]["superseded"][0]["validity"], "contention_invalid")
+        self.assertEqual(recs[k32]["superseded"][0]["source_row"], old[k32]["source_row"])
+        self.assertEqual(recs[k32]["superseded"][0]["superseded_by"]["row"], "diag")
+        self.assertEqual(recs[k1], old[k1] | {"rank": recs[k1]["rank"]} | {x: recs[k1][x] for x in recs[k1] if x not in old[k1]})  # d1k untouched
+        self.assertIn("supersedes contention_invalid", open(self.prog).read())
+        c = json.load(open(self.census))  # a later unguarded observation of the same key never displaces the quiet one
+        cu.apply(c, [dict(cu.extract_cpu(self._diag(), p)[0], quiet_host=False, us_per_call=99999.0)], "late", "f" * 64, "z")
+        self.assertEqual(c["records"][k32]["source_row"], "diag")
+
+    def test_non_quiet_replicate_is_dropped(self):
+        p = self.res("diag.json", self._diag(quiet_l2=False))
+        os.makedirs(os.path.join(self.d, "servers"))
+        shutil.copy(os.path.join(FX, "q38fn", "servers", "plain-greedy-d32k-L1.argv.json"), os.path.join(self.d, "servers"))
+        self.assertEqual(cu.extract_cpu(self._diag(quiet_l2=False), p)[0]["replicates"], 1)
 
     def test_op_result_is_not_double_counted_by_trace_path(self):
         self.assertEqual(cu.extract_trace(q8_result(70.0)), [])

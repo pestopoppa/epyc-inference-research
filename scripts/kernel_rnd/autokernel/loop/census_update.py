@@ -164,10 +164,18 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str) -> lis
         if old:  # bytes are a property of the shape; keep the census value so only time moves GB/s
             o = dict(o, bytes_per_call=old["bytes_per_call"])
         new = gbps(o["bytes_per_call"], o["us_per_call"])
-        if old and abs(new - old["gbps"]) <= c["noise_frac"] * old["gbps"]:
+        quiet_over_contended = bool(old and o.get("quiet_host") and not old.get("quiet_host"))
+        if old and old.get("quiet_host") and not o.get("quiet_host"):
+            continue  # a contended/unguarded measurement never displaces a quiet-host one
+        if old and not quiet_over_contended and abs(new - old["gbps"]) <= c["noise_frac"] * old["gbps"]:
             continue
         rec = dict(old or {}, **o, source_row=row, result_sha256=sha, measured_at=measured_at)
         rec.pop("stale", None)
+        if quiet_over_contended:  # same op/shape: the guarded quiet-host value supersedes, the old one is kept as invalid
+            rec["superseded"] = list(old.get("superseded") or []) + [{
+                "validity": "contention_invalid", "source_row": old["source_row"], "result_sha256": old["result_sha256"],
+                "gbps": old["gbps"], "us_per_call": old["us_per_call"], "superseded_by": {"row": row, "sha256": sha},
+                "reason": "unguarded measurement superseded by a guarded quiet-host measurement of the same op/shape"}]
         hist = list((old or {}).get("history") or ([[old["source_row"], old["gbps"]]] if old else []))
         rec["history"] = (hist + [[row, new]])[-8:]  # trend for the dashboard: last 8 (row, GB/s)
         c["records"][k] = rec
@@ -178,6 +186,7 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str) -> lis
     for k in moved:
         r = c["records"][k]
         frm = f"{before[k][0]:.0f} GB/s rank {before[k][1]}" if k in before else "new"
+        frm += " [supersedes contention_invalid]" if k in before and r.get("superseded") and r["superseded"][-1]["superseded_by"]["sha256"] == sha else ""
         lines.append(f"- `{row}` ({sha[:12]}): {k} {frm} -> {r['gbps']:.0f} GB/s rank {r['rank']} "
                      f"[{r['status']}, {r['recoverable_ms_per_round']:.2f} ms/round recoverable at "
                      f"{tgt(c, r):.0f} GB/s]")

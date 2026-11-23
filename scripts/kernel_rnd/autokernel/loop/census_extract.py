@@ -117,6 +117,8 @@ def extract_cpu(res: dict, result_path: str | None = None) -> list[dict]:
     a row-dependent byte count and are skipped, deterministically)."""
     out = []
     rid_ = str(res.get("id") or res.get("row") or "")
+    if isinstance(res.get("per_family_by_unit"), dict):
+        return extract_cpu_diag(res, result_path)
     model = CPU_MODEL_ALIAS.get(str(res.get("model_key") or ""))
     model = model or next((m for tag, m in CPU_MODEL_BY_ID if tag in rid_), None)
     if model is None:  # unknown model: no bytes basis, so no record (never guess a census key)
@@ -137,4 +139,29 @@ def extract_cpu(res: dict, result_path: str | None = None) -> list[dict]:
                         "shape": conf + (f"-{dm.group(1)}" if dm else ""), "n": 1, "arm": cfg, "bytes_per_call": int(b), "us_per_call": round(ms * 1e3, 1),
                         "calls_per_round": 1, "share_of_round": round(float(f.get("share_pct", 0)) / 100, 4),
                         "config": conf})
+    return out
+
+
+def extract_cpu_diag(res: dict, result_path: str | None = None) -> list[dict]:
+    """Guarded quiet-host CPU diagnostic RESULT (`per_family_by_unit`, per-unit `guard.quiet`) -> quiet_host observations.
+    Only the depth(s) the RESULT names as its subject (`evidence.gemv_gbps_<depth>_mean`) are emitted; replicate units
+    (`<cfg>-L1`, `-L2`) of one config are averaged on ms/step; a unit whose own guard is not quiet is dropped."""
+    rid_, units = str(res.get("id") or ""), res.get("units") or {}
+    model = next((m for tag, m in CPU_MODEL_BY_ID if tag in rid_), None)
+    subject = {m.group(1) for k in (res.get("evidence") or {}) if (m := re.fullmatch(r"gemv_gbps_(d\d+k)_mean", k))}
+    if model is None or res.get("status") != "complete" or not subject:
+        return []
+    out = []
+    for fam, by_unit in sorted(res["per_family_by_unit"].items()):
+        cfgs = {}
+        for unit, v in sorted(by_unit.items()):
+            m = re.fullmatch(r"(.+-(d\d+k))-L\d+", unit)
+            if m and m.group(2) in subject and ((units.get(unit) or {}).get("guard") or {}).get("quiet") is True and v.get("ms_per_step", 0) > 0:
+                cfgs.setdefault((m.group(1), m.group(2)), []).append(v)
+        for (cfg, depth), vs in sorted(cfgs.items()):
+            ms = sum(v["ms_per_step"] for v in vs) / len(vs)
+            conf = cpu_config(result_path, cfg)
+            out.append({"device": "cpu", "model": model, "kernel_class": fam, "shape": f"{conf}-{depth}", "n": 1, "arm": cfg,
+                        "bytes_per_call": int(round(sum(v["gbps"] * v["ms_per_step"] for v in vs) / len(vs) * 1e6)), "us_per_call": round(ms * 1e3, 1),
+                        "calls_per_round": 1, "config": conf, "quiet_host": True, "replicates": len(vs)})
     return out
