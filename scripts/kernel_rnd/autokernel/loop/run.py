@@ -2832,11 +2832,11 @@ def _build_baseline(local_compiles, recipe, build_jobs, build_cpu_list, dest: Pa
                           jobs=build_jobs, cpu_list=build_cpu_list)
 
 
-def _hold_cpu_claim(cpu_win, ownership, gpu_quiet_kw, cpu_list):
-    if cpu_win is None:
-        return ownership.enter_context(claim.hold_cpu(cpu_list, **gpu_quiet_kw))
-    return cpu_win.acquire_initial(
-        lambda: ownership.enter_context(claim.hold_cpu(cpu_list, **gpu_quiet_kw)))
+def _hold_cpu_claim(cpu_win, ownership, gpu_quiet_kw, cpu_list, *, budget=None,
+                    cpu_arm_token=None, cpu_arm=False):
+    acquire = partial(run_budget.enter_claim, ownership, lambda: claim.hold_cpu(cpu_list, **gpu_quiet_kw),
+                      budget, "cpu" if cpu_arm else None, cpu_arm_token)
+    return acquire() if cpu_win is None else cpu_win.acquire_initial(acquire)
 
 
 def _build_champion(local_compiles, args, recipe, build_jobs, build_cpu_list, direct_launch,
@@ -3815,8 +3815,7 @@ def _ppl_contract_evict_culprit(tip_commit: str, quality=None, *, current_anchor
 
 
 def _reprofile(*,
-        cpu_launch, cpu_profile_observation, direct_launch, anchor_build, resumed, args,
-        current_anchor_commit, manifest, screen_state, node_reprofile, longctx_reprofile, publish, latest,
+        cpu_launch, cpu_profile_observation, direct_launch, anchor_build, resumed, args, current_anchor_commit, manifest, screen_state, node_reprofile, longctx_reprofile, publish, latest,
         cpu_measurement_window, selected_identity, resolved_campaign, gpu_profile_observation, frozen_requests, gpu_long_context_hook, hotspot_rows, pp,
         tg) -> None:
     """Re-derive the hotspots from the CURRENT champion.
@@ -3912,8 +3911,7 @@ def _reprofile(*,
 
 def _publish(state: str, outcomes=(), gpu=None, hotspot_rows=(),
              step: str | None = None, *,
-             uncovered_gap_state, scope_gap_publisher, scope_gap_error, accumulator_state, args,
-             resolved_campaign, epoch, current_anchor_commit, direct_launch, floor, selected_identity,
+             uncovered_gap_state, scope_gap_publisher, scope_gap_error, accumulator_state, args, resolved_campaign, epoch, current_anchor_commit, direct_launch, floor, selected_identity,
              experimental, runtime_status, anchor_guard_seen, pending_view, gpu_reading, live_tail, actor_health, history_view,
              scratch_registry) -> None:
     """A loop that only reports when it succeeds looks identical to a stuck one."""
@@ -3990,8 +3988,7 @@ def _publish(state: str, outcomes=(), gpu=None, hotspot_rows=(),
 
 def _gate_for(worker, *,
         recorded_gate, build_cpu_list, runtime_preparation, long_identity_targets, tg, local_op_correctness,
-        direct_launch, runtime_env_keys, cpu_screen, build_jobs, cpu_launch, local_compiles,
-        runtime_probe_enabled, screen_confirmation, recipe, lane_binding, screen_prepared, ubatch,
+        direct_launch, runtime_env_keys, cpu_screen, build_jobs, cpu_launch, local_compiles, runtime_probe_enabled, screen_confirmation, recipe, lane_binding, screen_prepared, ubatch,
         keep_numerics, keep_the_diff, args, screen_state, cpu_measurement_window, frozen_requests, lane_peer_serving, suite_preflight, anchor_build, anchor_gate, runtime_enabled,
         pp):
     def gate(hypothesis, paths):
@@ -4449,17 +4446,14 @@ def _measure_for(worker, *, disable_runtime,
 
 
 def _run_pooled(*, set_runtime_selection,
-        args, runtime_enabled, runtime_owner, screen_confirmation, epoch, current_anchor_commit,
-        measurement_epoch, launch_actor_config, resume_carry, resume_bind, scratch_registry,
+        args, runtime_enabled, runtime_owner, screen_confirmation, epoch, current_anchor_commit, measurement_epoch, launch_actor_config, resume_carry, resume_bind, scratch_registry,
         runtime_arm_declaration, author_plan, build_context, gate_for, measure_for, should_stop, experimental,
-        direct_launch, cpu_launch, cpu_window_ref, critic_backend, longctx_runtime_gate,
-        gpu_profile_observation, record_runtime_adoption, keep_timer, runtime_arm_events, lane_binding,
+        direct_launch, cpu_launch, cpu_window_ref, critic_backend, longctx_runtime_gate, gpu_profile_observation, record_runtime_adoption, keep_timer, runtime_arm_events, lane_binding,
         census, runtime_preparation, full_cpu_target, ubatch, original_source_keeps, live_tail, pending_view,
         codegen_by_head, build_cpu_list, screen_state, runtime_store, planner_backend, cpu_measurement_window,
         feedback, lane_actors, heldout_requests, calibrated, measured_serving_compare, anchor_build,
         build_jobs, selected_identity, local_op_correctness, runtime_recipe_reference, cpu_screen, breaker,
-        tg, lane_targets, keep_the_diff, report_runtime_progress, pp, gfx_counter, lane_backends,
-        confirm_measure, longctx_surface, confirm, frozen_requests, publish, lane_actor_models,
+        tg, lane_targets, keep_the_diff, report_runtime_progress, pp, gfx_counter, lane_backends, confirm_measure, longctx_surface, confirm, frozen_requests, publish, lane_actor_models,
         accumulate_after_keep, measured_source_comparisons, feedback_anchor, promote_anchor, screen_prepared,
         lineage_recorded_outcomes, recipe, lane_peer_serving, resolved_campaign, keep_timing_by_head,
         keep_dims, keep_dimension_measures, variance_keep_by_head, runtime_keep_grade, source_instrument,
@@ -6062,8 +6056,7 @@ def _ensure_source_floor(anchor_recipe, a_build, *, apply_source_floor,
 
 
 def _keep_grade_runtime_compare(pair, *,
-        direct_launch, anchor_build, ensure_source_floor, floor, floor_record, cpu_measurement_window,
-        runtime_store, runtime_arm_declaration, args, floor_request_digest, frozen_requests,
+        direct_launch, anchor_build, ensure_source_floor, floor, floor_record, cpu_measurement_window, runtime_store, runtime_arm_declaration, args, floor_request_digest, frozen_requests,
         serving_floor_unit):
     """A declared runtime arm at keep-grade evidence: the matched paired serving A/B
     against the CURRENT recipe's own matched floor, same instrument, pairs and order
@@ -6155,8 +6148,7 @@ def _cpu_compare(a_build, c_build, *, rebind_feedback=True,
 def _install_runtime_owner(*, set_runtime_selection,
         direct_launch, cpu_launch, serving_recipe, selected_target, resolved_campaign, runtime_store,
         runtime_epoch, runtime_statistical, args, anchor_build, original_argv, runtime_owner, original_claims,
-        manifest, epoch_inputs, current_anchor_commit, runtime_deadline, report_runtime_progress,
-        feedback_anchor, invalidate_source_floor, runtime_preparation, runtime_calibration_launches,
+        manifest, epoch_inputs, current_anchor_commit, runtime_deadline, report_runtime_progress, feedback_anchor, invalidate_source_floor, runtime_preparation, runtime_calibration_launches,
         runtime_recipe_reference):
     from . import runtime_admission, runtime_calibration
     from ..evaluator import controls
@@ -6337,7 +6329,7 @@ def _main(argv: list[str] | None = None) -> int:
     if budget_error:
         parser.error(budget_error)
     try:
-        run_budget.Ceilings(args.max_run_wall_s, args.max_run_gpu_s, args.max_run_decoded_tokens)
+        run_budget.Ceilings(args.max_run_wall_s, args.max_run_gpu_s, args.max_run_decoded_tokens, args.max_run_cpu_s)
     except ValueError as exc:
         parser.error(str(exc))
     from . import lane_actors
@@ -7312,8 +7304,7 @@ def _main(argv: list[str] | None = None) -> int:
         if direct_launch is not None:
             try:
                 _dry_run_accumulator_and_resume(
-                    args, anchor_commit=anchor_commit, experimental=experimental, epoch=epoch, measurement_epoch=measurement_epoch,
-                    actor_config=launch_actor_config, carry=resume_carry,
+                    args, anchor_commit=anchor_commit, experimental=experimental, epoch=epoch, measurement_epoch=measurement_epoch, actor_config=launch_actor_config, carry=resume_carry,
                     surface=args.bundle_surface)
             except champion.StartupRefused as exc:
                 _DRY_RUN_REFUSALS.append(str(exc))
@@ -7433,8 +7424,7 @@ def _main(argv: list[str] | None = None) -> int:
             local_op_correctness=local_op_correctness, direct_launch=lambda: direct_launch, runtime_env_keys=runtime_env_keys, cpu_screen=lambda: cpu_screen, build_jobs=build_jobs,
             cpu_launch=lambda: cpu_launch, local_compiles=local_compiles, runtime_probe_enabled=runtime_probe_enabled, screen_confirmation=screen_confirmation,
             recipe=recipe, lane_binding=lane_binding, screen_prepared=screen_prepared, ubatch=ubatch,
-            keep_numerics=keep_numerics, keep_the_diff=keep_the_diff, args=args, screen_state=screen_state,
-            cpu_measurement_window=cpu_measurement_window, frozen_requests=frozen_requests,
+            keep_numerics=keep_numerics, keep_the_diff=keep_the_diff, args=args, screen_state=screen_state, cpu_measurement_window=cpu_measurement_window, frozen_requests=frozen_requests,
             lane_peer_serving=lane_peer_serving, suite_preflight=suite_preflight, anchor_build=anchor_build, anchor_gate=anchor_gate, runtime_enabled=lambda: runtime_enabled,
             pp=pp)
 
@@ -7721,8 +7711,7 @@ def _main(argv: list[str] | None = None) -> int:
     @counter_phase("profile")
     def reprofile() -> None:
         return _reprofile(
-            cpu_launch=lambda: cpu_launch, cpu_profile_observation=cpu_profile_observation,
-            direct_launch=lambda: direct_launch, anchor_build=anchor_build, resumed=resumed, args=args,
+            cpu_launch=lambda: cpu_launch, cpu_profile_observation=cpu_profile_observation, direct_launch=lambda: direct_launch, anchor_build=anchor_build, resumed=resumed, args=args,
             current_anchor_commit=current_anchor_commit, manifest=lambda: manifest, screen_state=screen_state,
             node_reprofile=node_reprofile, longctx_reprofile=longctx_reprofile, publish=publish,
             latest=latest, cpu_measurement_window=cpu_measurement_window, selected_identity=selected_identity,
@@ -7761,7 +7750,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     budget = run_budget.RunBudget(run_budget.Ceilings(
         wall_s=args.max_run_wall_s, gpu_s=args.max_run_gpu_s,
-        decoded_tokens=args.max_run_decoded_tokens), args.worker_root)
+        decoded_tokens=args.max_run_decoded_tokens, cpu_s=args.max_run_cpu_s), args.worker_root)
     budget_debit[0] = lambda label, wall_s: budget.debit_stage(label, wall_s, gpu=not cpu_launch)
 
     should_stop = partial(_should_stop, stop_asked, breaker, same_state, deadline_guard, budget)
@@ -7843,8 +7832,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     def publish_headline() -> None:
         return _publish_headline(
-            experimental=experimental, args=args, current_anchor_commit=current_anchor_commit,
-            anchor_build=anchor_build, build_baseline=build_baseline, anchor_guard_seen=anchor_guard_seen,
+            experimental=experimental, args=args, current_anchor_commit=current_anchor_commit, anchor_build=anchor_build, build_baseline=build_baseline, anchor_guard_seen=anchor_guard_seen,
             headline_model=headline_model, bench_surface=bench_surface, epoch=epoch, feedback=feedback, measured_bench_compare=measured_bench_compare, tg=tg,
             measured_bench_measure=measured_bench_measure, publish=publish, latest=latest, pp=pp, headline_floor=headline_floor, ubatch=ubatch,
             hotspot_rows=hotspot_rows)
@@ -7873,8 +7861,7 @@ def _main(argv: list[str] | None = None) -> int:
             hotspot_rows=lambda: hotspot_rows, args=lambda: args, keep_stage=lambda: keep_stage,
             anchor_build=lambda: anchor_build, build_champion=lambda: build_champion, recipe=lambda: recipe,
             current_anchor_commit=lambda: current_anchor_commit, experimental=lambda: experimental, source_instrument=lambda: source_instrument, floor=lambda: floor,
-            feedback_anchor=lambda: feedback_anchor, invalidate_source_floor=lambda: invalidate_source_floor,
-            verify_anchor=lambda: verify_anchor, runtime_enabled=lambda: runtime_enabled,
+            feedback_anchor=lambda: feedback_anchor, invalidate_source_floor=lambda: invalidate_source_floor, verify_anchor=lambda: verify_anchor, runtime_enabled=lambda: runtime_enabled,
             install_runtime_owner=lambda: install_runtime_owner, publish_headline=lambda: publish_headline,
             reprofile=lambda: reprofile, runtime_recipe_reference=lambda: runtime_recipe_reference, runtime_owner=lambda: runtime_owner,
             cor_build=lambda: cor_build)
@@ -7885,15 +7872,12 @@ def _main(argv: list[str] | None = None) -> int:
     def _accumulate_after_keep(mechanism_id: str, phase_owner) -> None:
         return _accumulate_after_keep_impl(mechanism_id, phase_owner,
             args=lambda: args, bundle=lambda: bundle, accum_policy=lambda: accum_policy, accum_bench_forced=lambda: accum_bench_forced, serving_floor_pct=lambda: serving_floor_pct,
-            publish=lambda: publish, latest=lambda: latest, hotspot_rows=lambda: hotspot_rows,
-            original_source_keeps=lambda: original_source_keeps, promote_anchor=lambda: promote_anchor,
+            publish=lambda: publish, latest=lambda: latest, hotspot_rows=lambda: hotspot_rows, original_source_keeps=lambda: original_source_keeps, promote_anchor=lambda: promote_anchor,
             measured_serving_compare=lambda: measured_serving_compare, serving_recipe=lambda: serving_recipe, cor_build=lambda: cor_build, anchor_build=lambda: anchor_build,
-            serving_floor_unit=lambda: serving_floor_unit, direct_launch=lambda: direct_launch,
-            frozen_requests=lambda: frozen_requests, floor_request_digest=lambda: floor_request_digest,
+            serving_floor_unit=lambda: serving_floor_unit, direct_launch=lambda: direct_launch, frozen_requests=lambda: frozen_requests, floor_request_digest=lambda: floor_request_digest,
             floor_record=lambda: floor_record, source_instrument=lambda: source_instrument, ppl_contract_fold_check=lambda: ppl_contract_fold_check,
             ppl_contract_evict_culprit=lambda: ppl_contract_evict_culprit, last_gate=lambda: last_gate, serving_floor_provenance=lambda: serving_floor_provenance,
-            serving_floor_carry=lambda: serving_floor_carry, cor_commit=lambda: cor_commit,
-            epoch=lambda: epoch, feedback=lambda: feedback, publish_headline=lambda: publish_headline,
+            serving_floor_carry=lambda: serving_floor_carry, cor_commit=lambda: cor_commit, epoch=lambda: epoch, feedback=lambda: feedback, publish_headline=lambda: publish_headline,
             cpu_compare=lambda: cpu_compare, bench_floor=lambda: bench_floor, pp=lambda: pp, bench_surface=lambda: bench_surface, ubatch=lambda: ubatch, tg=lambda: tg,
             measured_bench_compare=lambda: measured_bench_compare)
 
@@ -8004,8 +7988,7 @@ def _main(argv: list[str] | None = None) -> int:
             lineage_recorded_outcomes=lambda: lineage_recorded_outcomes, recipe=lambda: recipe,
             lane_peer_serving=lambda: lane_peer_serving, resolved_campaign=lambda: resolved_campaign, keep_timing_by_head=lambda: keep_timing_by_head, keep_dims=lambda: keep_dims,
             keep_dimension_measures=lambda: keep_dimension_measures, variance_keep_by_head=lambda: variance_keep_by_head,
-            runtime_keep_grade=lambda: runtime_keep_grade, source_instrument=lambda: source_instrument,
-            longctx_keep_gate=lambda: longctx_keep_gate, serving_recipe=lambda: serving_recipe,
+            runtime_keep_grade=lambda: runtime_keep_grade, source_instrument=lambda: source_instrument, longctx_keep_gate=lambda: longctx_keep_gate, serving_recipe=lambda: serving_recipe,
             latest=lambda: latest, keep_numerics=lambda: keep_numerics, cor_build=lambda: cor_build,
             keep_stage=lambda: keep_stage, floor_request_digest=lambda: floor_request_digest, local_compiles=lambda: local_compiles, reprofile=lambda: reprofile,
             invalidate_source_floor=lambda: invalidate_source_floor, hotspot_rows=lambda: hotspot_rows,
@@ -8066,6 +8049,10 @@ def _main(argv: list[str] | None = None) -> int:
     publish_lineage = partial(_publish_lineage, args, epoch, anchor_commit)
 
     cpu_win = None
+    cpu_arm_token = [None]
+
+    cpu_arm_lease_change = partial(run_budget.lease_change, budget, cpu_arm_token)
+
     if args.cpu_window_yield == "on" and not gpu_skip_cpu_claim and stage_client is None \
             and (owned_cpu_list is not None or cpu_launch):
         cpu_win = cpu_window.CpuWindow(
@@ -8073,7 +8060,7 @@ def _main(argv: list[str] | None = None) -> int:
                       else "ak-loop"),
             path=args.cpu_window_path, campaign_path=args.store / cpu_window.CAMPAIGN_NAME,
             ledger_dir=args.out, wait_bound_s=args.cpu_window_wait_bound_s,
-            should_stop=should_stop,
+            should_stop=should_stop, on_lease_change=cpu_arm_lease_change,
             estimator=cpu_window.PhaseEstimator(
                 args.worker_root / actors.ACTOR_REPLY_DIR / actors.ACTOR_CALL_LOG,
                 planner_budget_s=args.actor_planner_budget_s or args.actor_timeout_s,
@@ -8162,7 +8149,8 @@ def _main(argv: list[str] | None = None) -> int:
                                               args.out, scheduler_selection, selected_identity)
                 gpu_quiet_kw.update(capture_segments=True, on_acquired=native_cpu_acquired)
 
-            hold_cpu_claim = partial(_hold_cpu_claim, cpu_win, ownership, gpu_quiet_kw)
+            hold_cpu_claim = partial(_hold_cpu_claim, cpu_win, ownership, gpu_quiet_kw,
+                                     budget=budget, cpu_arm_token=cpu_arm_token, cpu_arm=bool(cpu_launch))
 
             stage_scope = None
             if stage_client is not None:
@@ -8170,8 +8158,11 @@ def _main(argv: list[str] | None = None) -> int:
                     stage_client, args=args, target=selected_target, launch=direct_launch,
                     resources=(resolved_campaign.resources if selected_target is not None
                                else None),
-                    hold_cpu=lambda cpus: claim.hold_cpu(cpus, **gpu_quiet_kw),
-                    hold_device=None if cpu_launch else claim.hold,
+                    hold_cpu=lambda cpus: (run_budget.budgeted_claim(
+                        claim.hold_cpu(cpus, **gpu_quiet_kw), budget, "cpu") if cpu_launch
+                        else claim.hold_cpu(cpus, **gpu_quiet_kw)),
+                    hold_device=None if cpu_launch else lambda: run_budget.budgeted_claim(
+                        claim.hold(), budget, "gpu"),
                     runtime_enabled=runtime_enabled)
                 gate_for = stage_scope.wrap_factory("build", gate_for)
                 measure_for = stage_scope.wrap_factory("measure", measure_for)
@@ -8207,9 +8198,9 @@ def _main(argv: list[str] | None = None) -> int:
                                      if args.gpu_window
                                      == "required" else None)
                     window_kwargs = {} if window_verify is None else {"verify": window_verify}
-                    receipt = ownership.enter_context(claim.hold(
+                    receipt = ownership.enter_context(run_budget.budgeted_claim(claim.hold(
                         gpu_quiet_path=gpu_only_quiet_path if gpu_skip_cpu_claim else None,
-                        **window_kwargs))
+                        **window_kwargs), budget, "gpu"))
                     original_claims.append(receipt)
                     if gpu_only_quiet_path is not None and claim.gpu_quiet_exclusive_holder(
                             receipt.gpu_quiet_open()) is None:

@@ -836,3 +836,30 @@ def test_cpu_compare_retains_measuring_step_evidence(monkeypatch):
                   retain_measured_source_comparison=lambda: (lambda *args: seen.append(args) or result))
     assert run._cpu_compare('anchor', 'candidate', **values) is result
     assert seen == [(result, 'anchor', 'digest', 'model')]
+
+
+def test_parser_accepts_cpu_arm_seconds_limit():
+    parser = run_args.build_parser(['--planner-only'], description=run.__doc__, run_module=run)
+    args = parser.parse_args(['--planner-only', '--worktree', '/tmp/work', '--store', '/tmp/store',
+                              '--max-run-cpu-s', '12.5'])
+    assert args.max_run_cpu_s == 12.5
+
+
+def test_run_cpu_claim_hook_charges_claimed_interval(monkeypatch, tmp_path):
+    from contextlib import ExitStack, contextmanager
+    from ..controller import run_budget
+
+    now = [0.0]
+    budget = run_budget.RunBudget(run_budget.Ceilings(cpu_s=4), tmp_path,
+                                  clock=lambda: now[0], monotonic=lambda: now[0])
+    @contextmanager
+    def fake_claim(*args, **kwargs):
+        yield {'device_id': 'cpu'}
+    monkeypatch.setattr(run.claim, 'hold_cpu', fake_claim)
+    token = [None]
+    with ExitStack() as stack:
+        run._hold_cpu_claim(None, stack, {}, '0', budget=budget, cpu_arm=True, cpu_arm_token=token)
+        now[0] += 4
+        assert budget.tripped
+    assert token == [None]
+    assert budget.snapshot()['arm_seconds_claimed']['cpu'] == 4

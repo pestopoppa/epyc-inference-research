@@ -185,3 +185,29 @@ def test_source_loo_is_no_longer_refused_and_gets_the_stage_held_claims():
     c, clog = scope(connect(server, "C", 22), "C", ["q0"])
     with c.stage("build"):
         assert c.claims()[1] is None                 # CPU-only stage: no device claim
+
+
+@pytest.mark.parametrize('surface', ['cpu', 'gpu'])
+def test_budgeted_stage_counts_nested_lease_once(tmp_path, surface):
+    from ..controller import run_budget
+
+    now = [0.0]
+    budget = run_budget.RunBudget(run_budget.Ceilings(cpu_s=10, gpu_s=10), tmp_path,
+                                  clock=lambda: now[0], monotonic=lambda: now[0])
+    @contextmanager
+    def owned(*args):
+        yield object()
+    class Client:
+        @contextmanager
+        def admitted(self, footprint):
+            yield
+    cpu = lambda cpus: (run_budget.budgeted_claim(owned(), budget, 'cpu')
+                        if surface == 'cpu' else owned())
+    device = (lambda: run_budget.budgeted_claim(owned(), budget, 'gpu')) if surface == 'gpu' else None
+    target = fp('A', ['q0'], ['gpu'] if surface == 'gpu' else ())
+    stage = sc.StageScope(Client(), runtime=target, build=None, hold_cpu=cpu, hold_device=device)
+    with stage.stage('measure'):
+        now[0] += 2
+        with stage.stage('profile'):
+            now[0] += 3
+    assert budget.snapshot()['arm_seconds_claimed'][surface] == 5

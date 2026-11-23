@@ -117,3 +117,49 @@ def test_comparison_and_measurement_rows_carry_arm_utilisation():
     assert observed["utilisation"] == 0.25
     broken = bench._utilisation(40.0, lambda claimed: 1 / 0)
     assert broken["utilisation"] is None and "ZeroDivisionError" in broken["unavailable_reason"]
+
+
+def test_budgeted_claim_counts_release_and_never_starts_on_acquisition_failure(tmp_path):
+    from contextlib import contextmanager
+    from ..controller import run_budget
+
+    now = [0.0]
+    budget = run_budget.RunBudget(run_budget.Ceilings(gpu_s=100), tmp_path,
+                                  clock=lambda: now[0], monotonic=lambda: now[0])
+    @contextmanager
+    def claim():
+        yield 'held'
+        now[0] += 2  # The claim remains held until its context exits.
+    with run_budget.budgeted_claim(claim(), budget, 'gpu') as receipt:
+        assert receipt == 'held'
+        now[0] += 3
+    assert budget.snapshot()['arm_seconds_claimed']['gpu'] == 5
+
+    @contextmanager
+    def refused():
+        raise RuntimeError('refused')
+        yield
+    with pytest.raises(RuntimeError, match='refused'):
+        with run_budget.budgeted_claim(refused(), budget, 'gpu'):
+            pass
+    assert budget.snapshot()['arm_seconds_claimed']['gpu'] == 5
+
+
+def test_budgeted_claim_charges_when_work_raises(tmp_path):
+    from contextlib import contextmanager
+    from ..controller import run_budget
+
+    now = [0.0]
+    budget = run_budget.RunBudget(run_budget.Ceilings(gpu_s=10), tmp_path,
+                                  clock=lambda: now[0], monotonic=lambda: now[0])
+    @contextmanager
+    def claim():
+        try:
+            yield
+        finally:
+            now[0] += 1
+    with pytest.raises(ValueError, match='work failed'):
+        with run_budget.budgeted_claim(claim(), budget, 'gpu'):
+            now[0] += 3
+            raise ValueError('work failed')
+    assert budget.snapshot()['arm_seconds_claimed']['gpu'] == 4

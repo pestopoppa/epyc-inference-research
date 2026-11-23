@@ -121,7 +121,7 @@ class FakeBus:
 
 
 def _window(tmp_path, *, now=None, stop=None, bus=None, ttl_s=120.0, wait_bound_s=0.1,
-            ledger=True, log_rows=None):
+            ledger=True, log_rows=None, on_lease_change=None):
     clock = (lambda: now[0]) if now is not None else time.time
     (tmp_path / "root/scripts/vidya/adapters").mkdir(parents=True, exist_ok=True)
     publisher = cpu_window.BusPublisher("autokernel", root=tmp_path / "root",
@@ -139,7 +139,8 @@ def _window(tmp_path, *, now=None, stop=None, bus=None, ttl_s=120.0, wait_bound_
         wait_bound_s=wait_bound_s, poll_s=0.02, should_stop=stop or (lambda: False),
         bus=publisher, reserved={"cpus": "88-95", "compile": "92-95", "op_test": "88-95",
                                  "source": "affinity_tail"},
-        heartbeat_s=None, ttl_s=ttl_s, clock=clock, log=lambda _text: None)
+        heartbeat_s=None, ttl_s=ttl_s, clock=clock, log=lambda _text: None,
+        on_lease_change=on_lease_change)
 
 
 def _read(tmp_path):
@@ -604,3 +605,24 @@ def test_actual_main_measures_only_on_a_held_claim_and_off_is_the_batch_long_cla
               window_path.with_name("cpu-window.events.jsonl").read_text().splitlines()]
     assert "open" in {event["state"] for event in events}
     assert provider.events.count("enter") == lease.generation
+
+
+def test_cpu_arm_budget_counts_held_segments_not_yield_gaps(provider, tmp_path):
+    from ..controller import run_budget
+
+    now = [0.0]
+    budget = run_budget.RunBudget(run_budget.Ceilings(cpu_s=10), tmp_path,
+                                  clock=lambda: now[0], monotonic=lambda: now[0])
+    token = [None]
+    def lease_change(held):
+        run_budget.lease_change(budget, token, held)
+    window = _window(tmp_path, on_lease_change=lease_change)
+    with run_budget.budgeted_claim(claim.hold_cpu('0'), budget, 'cpu', token) as receipt:
+        window.bind(receipt)
+        now[0] += 3
+        window.note_step('lane0', 'proposing a hypothesis')
+        now[0] += 100
+        window.ensure_held(reason='measure')
+        now[0] += 2
+    assert budget.snapshot()['arm_seconds_claimed']['cpu'] == 5
+    assert not budget.tripped

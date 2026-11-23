@@ -522,7 +522,8 @@ def build_parser(original_argv, *, description, run_module):
     # phase holds no CPU measurement (the CPU window is open to peers), so the longer
     # wall costs only GPU time; 4500 s matches the thinking-on author's member budget.
     for flag, kind, what in (("--max-run-wall-s", float, "elapsed wall seconds"),
-                             ("--max-run-gpu-s", float, "GPU-seconds (measurement stages)"),
+                             ("--max-run-gpu-s", float, "GPU arm-seconds claimed"),
+                             ("--max-run-cpu-s", float, "CPU arm-seconds claimed"),
                              ("--max-run-decoded-tokens", int,
                               "decoded tokens; a seat that meters none fails this closed")):
         parser.add_argument(flag, type=kind, default=None,

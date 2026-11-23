@@ -20,7 +20,7 @@ def _budget(tmp_path, rows=(), **ceilings):
     log.mkdir(parents=True)
     (log / "actor-calls.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
     clock = [float(T0)]
-    return rb.RunBudget(rb.Ceilings(**ceilings), tmp_path, started_at=T0, clock=lambda: clock[0]), clock
+    return rb.RunBudget(rb.Ceilings(**ceilings), tmp_path, started_at=T0, clock=lambda: clock[0], monotonic=lambda: clock[0]), clock
 
 
 def test_inert_without_ceilings(tmp_path):
@@ -50,11 +50,13 @@ def test_unmetered_seat_is_fine_without_a_token_cap(tmp_path):
 
 def test_gpu_and_wall_ceilings_latch(tmp_path):
     budget, clock = _budget(tmp_path, gpu_s=100.0, wall_s=1000.0)
+    token = budget.begin_arm("gpu")
+    clock[0] += 60.0
     budget.debit_stage("benchmark", 60.0, gpu=True, lane="a")
-    budget.debit_stage("profile", 500.0, gpu=False, lane="a")
     assert budget.check(force=True) is None
-    budget.debit_stage("benchmark", 40.0, gpu=True, lane="a")
+    clock[0] += 40.0
     assert budget.check(force=True).startswith("gpu_s")
+    budget.end_arm(token)
     assert budget.tripped is True
 
     other, clock = _budget(tmp_path / "x", wall_s=1000.0)
@@ -69,3 +71,37 @@ def test_rows_from_before_the_run_and_a_torn_line_are_not_debited(tmp_path):
         stream.write('{"schema": "torn')
     assert budget.check(force=True) is None
     assert budget.snapshot()["decoded_tokens"] == 7
+
+
+def test_cpu_arm_budget_excludes_yielded_time_and_counts_idle(tmp_path):
+    budget, clock = _budget(tmp_path, cpu_s=10.0)
+    token = budget.begin_arm("cpu")
+    clock[0] += 4
+    budget.pause_arm(token)
+    clock[0] += 100
+    assert budget.check(force=True) is None
+    budget.resume_arm(token)
+    clock[0] += 6
+    assert budget.check(force=True).startswith("cpu_s")
+    budget.end_arm(token)
+    assert budget.snapshot()["arm_seconds_claimed"]["cpu"] == 10
+
+
+def test_overlapping_arm_claims_sum_and_stages_do_not_double_charge(tmp_path):
+    budget, clock = _budget(tmp_path, gpu_s=100)
+    first = budget.begin_arm("gpu")
+    clock[0] += 3
+    second = budget.begin_arm("gpu")
+    clock[0] += 4
+    budget.debit_stage("nested", 100, gpu=True)
+    budget.end_arm(first)
+    budget.end_arm(second)
+    snapshot = budget.snapshot()
+    assert snapshot["arm_seconds_claimed"]["gpu"] == 11
+    assert snapshot["arm_seconds_budget"]["surfaces"]["gpu"]["spent"] == 11
+
+
+@pytest.mark.parametrize('value', [0, -1, float('nan'), float('inf')])
+def test_arm_ceiling_requires_finite_positive_seconds(value):
+    with pytest.raises(ValueError, match='finite and positive'):
+        rb.Ceilings(cpu_s=value)

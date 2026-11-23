@@ -347,6 +347,7 @@ class CpuWindow:
                  clock: Callable[[], float] = time.time,
                  log: Callable[[str], None] | None = None,
                  on_change: Callable[[dict], None] | None = None,
+                 on_lease_change: Callable[[bool], None] | None = None,
                  lane_models: Mapping[str, Mapping[str, str]] | None = None) -> None:
         self.campaign = campaign
         self.path = Path(path)
@@ -363,6 +364,7 @@ class CpuWindow:
         self.clock = clock
         self._log = log or (lambda text: print(text, flush=True))
         self._on_change = on_change
+        self._on_lease_change = on_lease_change
         self.lease = None
         self.disabled: str | None = None
         self._lock = threading.RLock()
@@ -637,7 +639,11 @@ class CpuWindow:
                 closing = any(lane_phase == "critic2"
                               for _eta, lane_phase in actor_lanes.values())
             if self.lease.held:
-                self.lease.release(reason=f"actor:{phase}")
+                try:
+                    self.lease.release(reason=f"actor:{phase}")
+                finally:
+                    if not self.lease.held and self._on_lease_change is not None:
+                        self._on_lease_change(False)
                 opened_at = _iso(now)
             else:
                 opened_at = self._window["opened_at"] or _iso(now)
@@ -694,6 +700,9 @@ class CpuWindow:
             with self._lock:
                 self._reacquiring = False
             raise
+        finally:
+            if self.lease.held and self._on_lease_change is not None:
+                self._on_lease_change(True)
         with self._lock:
             self._reacquiring = False
             now = self.clock()
