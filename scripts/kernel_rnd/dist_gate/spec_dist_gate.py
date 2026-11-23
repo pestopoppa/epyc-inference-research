@@ -31,10 +31,15 @@ SPEC-ID-GATE-1 -- token-identity comparisons:
                                 same-run A/A pair), for configs where the identity floor is not zero.
 Protocol: /workspace/docs/guides/agent-workflows/spec-identity-gate-protocol.md (epyc-root).
 
-Record format used by the gate (one per emitted token):
+Record format used by the gate (one per emitted token), either
   {"probs": {token_id: target_prob, ...}, "token": token_id, "key": hashable (optional)}
 ``probs`` must already be the post-sampler target distribution (use ``post_sampler_probs`` on raw
-logits or pre-sampler probabilities). A request is a list of records.
+logits or pre-sampler probabilities), or, from a server that computed the masses itself (llama-server
+``pit_probs``, fork eea10be26):
+  {"pit_less": float, "pit_tie": float, "rank": int, "key": ... (optional)}
+where pit_less / pit_tie are the post-chain mass strictly below / tied with the sampled token over the
+full candidate set (-1 or absent = out of support) and rank is its 0-based rank (rank_cap = other).
+A request is a list of records.
 """
 from __future__ import annotations
 
@@ -129,6 +134,22 @@ def ks_uniform(u: Sequence[float]) -> Tuple[float, float]:
 
 
 # ----------------------------------------------------------------------------------------- rank chi-square
+def record_pit(r: Record, rng: random.Random) -> Optional[float]:
+    """PIT of one record: server-computed masses when present, else from the probs dict."""
+    if "pit_less" in r:
+        less, tie = r["pit_less"], r["pit_tie"]
+        if less is None or tie is None or less < 0 or not tie > 0:
+            return None
+        return min(1.0, less + rng.random() * tie)
+    return randomized_pit(r["probs"], r["token"], rng)
+
+
+def record_rank(r: Record, cap: int = THRESHOLDS["rank_cap"]) -> int:
+    if "rank" in r and "probs" not in r:
+        return min(int(r["rank"]), cap)
+    return token_rank(r["probs"], r["token"], cap)
+
+
 def token_rank(probs: Mapping[int, float], token: int, cap: int = THRESHOLDS["rank_cap"]) -> int:
     """0-based rank of token by descending prob (ties by token id); out of support or >= cap -> cap."""
     if token not in probs:
@@ -144,7 +165,7 @@ def rank_hist(requests: Iterable[Request], cap: int = THRESHOLDS["rank_cap"]) ->
     h = [0] * (cap + 1)
     for req in requests:
         for r in req:
-            h[token_rank(r["probs"], r["token"], cap)] += 1
+            h[record_rank(r, cap)] += 1
     return h
 
 
@@ -257,7 +278,7 @@ def pit_values(requests: Iterable[Request], seed: int = 12345) -> Tuple[List[flo
     u, oos = [], 0
     for q in requests:
         for r in q:
-            v = randomized_pit(r["probs"], r["token"], rng)
+            v = record_pit(r, rng)
             if v is None:
                 oos += 1
             else:

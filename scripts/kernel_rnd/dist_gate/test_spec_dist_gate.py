@@ -166,3 +166,30 @@ def test_paired_count_test():
     assert worse["p_one_sided"] < 0.01 and worse["ci95"][0] > 0
     big = g.paired_count_test([3] * 20, [1] * 20)
     assert big["p_one_sided"] < 0.001
+
+
+def _to_server_form(reqs):
+    """Project probs-dict records onto the llama-server pit_probs form (pit_less, pit_tie, rank)."""
+    out = []
+    for q in reqs:
+        o = []
+        for r in q:
+            p = r["probs"]
+            px = p.get(r["token"], 0.0)
+            z = sum(p.values())
+            less = sum(v for v in p.values() if v < px) / z if px > 0 else -1.0
+            tie = sum(v for v in p.values() if v == px) / z if px > 0 else -1.0
+            o.append({"pit_less": less, "pit_tie": tie, "rank": g.token_rank(p, r["token"])})
+        out.append(o)
+    return out
+
+
+def test_server_form_records():
+    exact = _to_server_form(corpus(seed=1, sampler={"temperature": 1.0, "top_p": 0.95}))
+    ref = _to_server_form(corpus(seed=2, sampler={"temperature": 1.0, "top_p": 0.95}))
+    assert g.gate(exact, ref)["verdict"] == "PASS"
+    biased = _to_server_form(corpus(seed=3, power=1.3))
+    assert g.gate(biased, _to_server_form(corpus(seed=4)))["verdict"] == "FAIL"
+    oos = _to_server_form(corpus(seed=5))
+    oos[0][0] = {"pit_less": -1.0, "pit_tie": -1.0, "rank": 20}
+    assert g.gate(oos)["verdict"] == "FAIL"
