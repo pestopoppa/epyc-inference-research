@@ -70,11 +70,14 @@ Q8_SHAPE_CLASS = {  # 27B Qwen3.8 Q8_0 tensor shapes -> (class name, calls per v
     "6144x5120": ("gdn_attn_gate", 48), "5120x6144": ("ssm_out+attn_output", 64), "12288x5120": ("attn_q", 16),
 }
 # CPU (EPYC 9655 Zen 5, NPS4). Ceiling = measured read-sum, NOT a guess. half-48t: 259.8 GB/s same-window read-sum
-# (q38p1-c13-20261117-r4, 2026-11-18). quarter-24t: half/2 (DERIVED; no fresh per-quarter read-sum row exists).
+# (q38p1-c13-20261117-r4, 2026-11-18). quarter-24t: 112.9 GB/s MEASURED (AK-CPU-QUARTER-READCEIL, filed 2026-11-23):
+# first valid pass of in-row unit ceil-pre of ak-a3b-cpu-mmid-gateup-ubench-20261122-r2 -- bench_readbw sha 9e379493,
+# q2 (cpus 48-71, membind 2), 5 runs 110.8-120.2, median 112.9, CV 3.24 %, SMT-probe p50 0.74 %, ceil-post 113.4
+# (post-drift 0.44 %). Replaces the derived 129.9 (= half-48t / 2), which overstated the quarter by 15 %.
 CPU_DEFAULTS = {"flag_frac": 0.75, "target_frac": 0.80,
-                "ceiling_gbps": {"half-48t": 259.8, "quarter-24t": 129.9},
+                "ceiling_gbps": {"half-48t": 259.8, "quarter-24t": 112.9},
                 "ceiling_source": {"half-48t": "measured: q38p1-c13-20261117-r4 same-window bench_readbw read-sum",
-                                   "quarter-24t": "derived: half-48t / 2 (pending a per-quarter read-sum row)"}}
+                                   "quarter-24t": "measured: AK-CPU-QUARTER-READCEIL ubench-r2 ceil-pre bench_readbw 9e379493 q2"}}
 # Static bytes per decode step (n=1 row) per family, Qwen3.6-35B-A3B-MTP-Q8_0.gguf tensor table (Q8_0 = 34 B/32 w).
 A3B_CPU_FAMILY_BYTES = {
     "MUL_MAT:gdn_proj": 1_069_000_000,          # 30 x (attn_qkv + attn_gate + ssm_out)
