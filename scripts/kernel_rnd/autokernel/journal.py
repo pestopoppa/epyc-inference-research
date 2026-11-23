@@ -298,6 +298,7 @@ KIND_PLANNED_SERVING_ARM_CAPTURED = "PLANNED_SERVING_ARM_CAPTURED"
 PLANNED_SERVING_ARM_CAPTURE_SCHEMA = "epyc.autokernel.unified_arm_capture.v1"
 PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2 = "epyc.autokernel.unified_arm_capture.v2"
 PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V3 = "epyc.autokernel.unified_arm_capture.v3"
+KIND_ENROLLMENT = "ENROLLMENT"
 KIND_WORKER_LIFECYCLE = "WORKER_LIFECYCLE"
 WORKER_LIFECYCLE_SCHEMA = "epyc.autokernel.worker_lifecycle_event.v1"
 KIND_WORKER_ACQUISITION = "WORKER_ACQUISITION"
@@ -359,6 +360,7 @@ NATIVE_KINDS = frozenset({
     KIND_CAMPAIGN_SUPERVISOR_EVENT,
     KIND_CANDIDATE_TRANSACTION,
     KIND_PLANNED_SERVING_ARM_CAPTURED,
+    KIND_ENROLLMENT,
     KIND_WORKER_LIFECYCLE,
     KIND_WORKER_ACQUISITION,
     KIND_ACTOR_PREPARATION,
@@ -1232,6 +1234,15 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
         else:
             from autokernel.lesson_admission import violations
         out.extend(violations(payload))
+    elif kind == KIND_ENROLLMENT:
+        if __package__:
+            from .loop import enrollment_journal
+        else:
+            from autokernel.loop import enrollment_journal
+        try:
+            enrollment_journal.validate_event(payload)
+        except enrollment_journal.EnrollmentRefused as exc:
+            out.append(f"enrollment event: {exc}")
     elif kind == KIND_A2_RUNTIME_EXECUTION and payload.get("schema") == A2_UNIT_RECORD_SCHEMA:
         # AKU-04f additive versioned branch: per-unit intent/permit records (v2). Digest and
         # field validation here; chain/permit validation happens in replay (project_unit).
@@ -4228,7 +4239,7 @@ __all__ = [
     "KIND_COMPOSITION_FAILED", "KIND_COMPOSITION_REJECTED",
     "KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED",
     "KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED",
-    "KIND_CAMPAIGN_SUPERVISOR_EVENT", "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA",
+    "KIND_ENROLLMENT", "KIND_CAMPAIGN_SUPERVISOR_EVENT", "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA",
     "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2",
     "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V3",
     "CAMPAIGN_SUPERVISOR_EVENTS", "KIND_CANDIDATE_TRANSACTION",

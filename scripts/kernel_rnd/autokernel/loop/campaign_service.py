@@ -255,7 +255,7 @@ def make_handler(controller: CampaignController, token: str,
                 return
             if not self._origin_allowed():
                 return
-            if self.path != "/commands":
+            if self.path not in {"/commands", "/enrollments"}:
                 self._json(404, {"error": "not found"})
                 return
             if not self._require_auth():
@@ -282,8 +282,31 @@ def make_handler(controller: CampaignController, token: str,
                 if len(raw) != length:
                     self._json(400, {"error": "incomplete request body"})
                     return
-                body = json.loads(raw)
-                self._json(200, controller.apply_command(body))
+                if self.path == "/enrollments":
+                    def unique_pairs(pairs):
+                        result = {}
+                        for key, value in pairs:
+                            if key in result:
+                                raise ValueError("duplicate enrollment JSON key")
+                            result[key] = value
+                        return result
+                    body = json.loads(raw, object_pairs_hook=unique_pairs,
+                                      parse_constant=lambda token: (_ for _ in ()).throw(
+                                          ValueError(f"non-finite JSON token {token}")))
+                else:
+                    body = json.loads(raw)
+                if self.path == "/enrollments":
+                    from .campaign import CampaignManifest
+                    if (not isinstance(body, dict)
+                            or set(body) != {"manifest", "registry", "resolve_missing"}
+                            or not isinstance(body["resolve_missing"], bool)):
+                        raise ValueError("invalid enrollment request")
+                    result = controller.enroll(
+                        CampaignManifest.from_dict(body["manifest"]), body["registry"],
+                        resolve_missing=body["resolve_missing"])
+                    self._json(200, result.to_dict())
+                else:
+                    self._json(200, controller.apply_command(body))
             except socket.timeout:
                 self._json(408, {"error": "request body timed out"})
             except (ValueError, ControlRefused) as exc:

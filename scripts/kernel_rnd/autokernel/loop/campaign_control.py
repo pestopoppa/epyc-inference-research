@@ -300,6 +300,7 @@ class CampaignController:
         self._command_requests: dict[str, dict[str, Any]] = {}
         self._shutdown_requested = False
         self._shutdown_drain_request_id: str | None = None
+        self._enrollment_events: list[dict[str, Any]] = []
         self._candidate_pending: tuple[str, str, str] | None = None
         self._candidate_pending_payload: Mapping[str, Any] | None = None
         self._candidate_prepared = False
@@ -480,6 +481,18 @@ class CampaignController:
             self._journal_cursor = entry.seq
             if entry.campaign_id not in (None, self.resolved.campaign_id):
                 raise ControlRefused("store contains another campaign identity")
+            if entry.kind == journal_module.KIND_ENROLLMENT:
+                if not saw_start:
+                    raise journal_module.JournalCorruption("enrollment precedes supervisor start")
+                from . import enrollment_journal
+                events = [*self._enrollment_events, copy.deepcopy(entry.payload)]
+                try:
+                    enrollment_journal.project(events, self.resolved.campaign_id, self.resolved)
+                except enrollment_journal.EnrollmentRefused as exc:
+                    raise journal_module.JournalCorruption(
+                        f"invalid enrollment history: {exc}") from exc
+                self._enrollment_events = events
+                continue
             if (entry.kind == journal_module.KIND_A2_RUNTIME_EXECUTION
                     and isinstance(entry.payload, Mapping)
                     and entry.payload.get("schema") == journal_module.A2_UNIT_RECORD_SCHEMA):
@@ -2568,6 +2581,58 @@ class CampaignController:
                                 f"journal critical file is unsafe: {child.name}")
         except OSError as exc:
             raise ControlRefused(f"cannot verify journal layout: {exc}") from exc
+
+    def enrollment_snapshot(self):
+        """Return the replayed enrollment projection without granting admission."""
+        from . import enrollment_journal
+        with self._mutex:
+            self._require_active_locked()
+            requests = enrollment_journal.project(
+                self._enrollment_events, self.resolved.campaign_id, self.resolved)
+            return {key: value["resolved"].to_dict() for key, value in requests.items()}
+
+    def enroll(self, manifest, registry_snapshot, *, resolve_missing=False):
+        """Persist a request or explicitly resolve its missing local artifacts.
+
+        Enrollment is a projection only; it never grants execution resources or
+        changes this controller's immutable resolved generation.
+        """
+        from . import enrollment_journal
+        from .campaign import CampaignManifest
+        with self._mutex:
+            self._require_active_locked()
+            if (not isinstance(manifest, CampaignManifest) or not isinstance(resolve_missing, bool)
+                    or not isinstance(registry_snapshot, Mapping)):
+                raise ControlRefused("enrollment requires a typed manifest, registry and resolution flag")
+            if manifest.campaign_id != self.resolved.campaign_id:
+                raise ControlRefused("enrollment campaign differs")
+            if (manifest.request_id == self.resolved.request_id
+                    and manifest.manifest_digest != self.resolved.manifest_digest):
+                raise ControlRefused("initial request identity differs: different manifest")
+            try:
+                requests = enrollment_journal.project(
+                    self._enrollment_events, self.resolved.campaign_id, self.resolved)
+                existing = requests.get(manifest.request_id)
+                if (existing is not None and resolve_missing
+                        and existing["event"] == "ARTIFACTS_RESOLVED"
+                        and existing["manifest"] == manifest.to_dict()
+                        and existing["registry"] == registry_snapshot):
+                    return existing["resolved"]
+                if existing is not None and not resolve_missing:
+                    if existing["manifest"] != manifest.to_dict():
+                        raise enrollment_journal.EnrollmentRefused(
+                            "request id reused with different manifest")
+                    return existing["resolved"]
+                event = enrollment_journal.make_event(
+                    "ARTIFACTS_RESOLVED" if resolve_missing else "ENROLLED",
+                    manifest, registry_snapshot, self._enrollment_events, self.resolved)
+            except (enrollment_journal.EnrollmentRefused, ValueError) as exc:
+                raise ControlRefused(f"enrollment refused: {exc}") from exc
+            self._append_durable(
+                journal_module.KIND_ENROLLMENT, event,
+                after=lambda: self._enrollment_events.append(copy.deepcopy(event)))
+            return enrollment_journal.project(
+                self._enrollment_events, self.resolved.campaign_id, self.resolved)[manifest.request_id]["resolved"]
 
     def _append_durable(self, kind: str, payload: Any, *,
                         after: "Callable[[], Any] | None" = None, **append_kw: Any):

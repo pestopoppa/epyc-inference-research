@@ -986,3 +986,25 @@ def test_sigterm_interrupts_restart_recovery_backoff(tmp_path, monkeypatch):
     assert len(seen) == 1 and runs == []
     assert not engine.export_state().receipts
     assert controller._entered is False
+
+
+def test_enrollment_endpoint_requires_auth_and_persists_request(running_service):
+    controller, base = running_service
+    body = {"manifest": _manifest(production=[_target("prod")]),
+            "registry": _registry(), "resolve_missing": False}
+    assert _request(base, "/enrollments", body=body)[0] == 401
+    status, resolved = _request(base, "/enrollments", token="secret-token", body=body)
+    assert status == 200 and resolved == controller.resolved.to_dict()
+    assert controller.enrollment_snapshot()[resolved["request_id"]] == resolved
+
+
+def test_enrollment_endpoint_rejects_duplicate_json_keys(running_service):
+    controller, base = running_service
+    raw = b'{"manifest":{},"manifest":{},"registry":{},"resolve_missing":false}'
+    request = Request(base + "/enrollments", data=raw, method="POST",
+                      headers={"Authorization": "Bearer secret-token",
+                               "Content-Type": "application/json"})
+    with pytest.raises(HTTPError) as error:
+        urlopen(request, timeout=3)
+    assert error.value.code == 400
+    assert controller.enrollment_snapshot() == {}
