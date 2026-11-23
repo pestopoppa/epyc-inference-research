@@ -9,11 +9,14 @@ Every completed stage persists a CONTENT-ADDRESSED receipt: the file name is the
 sha256 of the canonical receipt body, and the body binds the graph identity, the
 deployment identity, the stage, the digest of the stage input and the digest of the
 stage output. On restart against the SAME graph a completed stage is never executed
-again; its recorded output is replayed from the receipt.
+again; its recorded output is replayed from the receipt. A durable intent is
+created before calling an executor. If its owner exits without a receipt, replay
+is fenced until the owner reconciles the side effect; the runner never guesses.
 
 Stopping is a latch, not a kill: `StopLatch.request()` writes an atomic latch file,
 and the runner checks it only at stage boundaries, so a stage in flight finishes and
-receipts before the iteration exits as `stopped`.
+receipts before the iteration exits as `stopped`. The standalone composition installs
+this latch at `<controller.store>/stage-stop.json`; `clear()` permits later scheduling.
 
 A graph upgrade (a new stage-graph version) never silently copies state. The new
 graph refuses every old receipt unless a versioned CARRY-FORWARD receipt names the
@@ -25,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,6 +66,11 @@ def _atomic_write(path: Path, raw: bytes) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
@@ -103,7 +112,15 @@ class StopLatch:
     __call__ = is_set  # usable directly as a `stop_requested` callable
 
     def clear(self) -> None:
-        self.path.unlink(missing_ok=True)
+        try:
+            self.path.unlink()
+        except FileNotFoundError:
+            return
+        directory_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
 
 
 class ReceiptStore:
@@ -113,6 +130,30 @@ class ReceiptStore:
         self.root = Path(root)
         self.receipts = self.root / "receipts"
         self.carries = self.root / "carry"
+        self.intents = self.root / "intents"
+
+    def claim_intent(self, *, graph: StageGraph, iteration: str, stage: str,
+                     input_digest: str) -> None:
+        """Fence an ambiguous in-flight side effect; only a receipt permits replay."""
+        self.intents.mkdir(parents=True, exist_ok=True)
+        key = digest({"graph": graph.digest, "deployment_identity": graph.deployment_identity,
+                      "iteration": iteration, "stage": stage})
+        path = self.intents / f"{key}.json"
+        body = _canonical({"graph": graph.digest, "deployment_identity": graph.deployment_identity,
+                           "iteration": iteration, "stage": stage, "input_digest": input_digest})
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError as exc:
+            raise ReceiptRefused("stage intent has no receipt; reconcile its owner before retry") from exc
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(body)
+            handle.flush()
+            os.fsync(handle.fileno())
+        dirfd = os.open(self.intents, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(dirfd)
+        finally:
+            os.close(dirfd)
 
     # -- receipts ---------------------------------------------------------
     def put(self, body: Mapping[str, Any]) -> str:
@@ -125,11 +166,16 @@ class ReceiptStore:
         return name
 
     def get(self, name: str) -> dict:
+        if not isinstance(name, str) or re.fullmatch(r"[0-9a-f]{64}", name) is None:
+            raise ReceiptRefused("invalid receipt address")
         path = self.receipts / f"{name}.json"
         raw = path.read_bytes()
         body = json.loads(raw)
         if hashlib.sha256(_canonical(body)).hexdigest() != name:
             raise ReceiptRefused(f"receipt {name} content does not match its address")
+        if (body.get("schema") != RECEIPT_SCHEMA
+                or body.get("output_digest") != digest(body.get("output"))):
+            raise ReceiptRefused(f"receipt {name} output digest or schema differs")
         return body
 
     def all(self) -> list[tuple[str, dict]]:
@@ -154,6 +200,12 @@ class ReceiptStore:
             if digest(body) != path.stem:
                 raise ReceiptRefused(f"carry-forward {path.stem} content mismatch")
             if body.get("to_graph") == graph.digest:
+                if (body.get("schema") != CARRY_SCHEMA
+                        or body.get("to_version") != graph.version
+                        or type(body.get("from_version")) is not int
+                        or not 0 < body["from_version"] < graph.version
+                        or not isinstance(body.get("carried"), dict)):
+                    raise ReceiptRefused("carry-forward version or schema mismatch")
                 out.append(body)
         return out
 
@@ -168,9 +220,13 @@ def carry_forward(store: ReceiptStore, *, old: StageGraph, new: StageGraph,
     if not reason:
         raise ReceiptRefused("carry-forward requires a reason")
     carried = {}
-    by_stage = {body["stage"]: name for name, body in store.all()
-                if body["graph"] == old.digest and body["iteration"] == iteration
-                and body["deployment_identity"] == old.deployment_identity}
+    by_stage = {}
+    for name, body in store.all():
+        if (body["graph"] == old.digest and body["iteration"] == iteration
+                and body["deployment_identity"] == old.deployment_identity):
+            if body["stage"] in by_stage and by_stage[body["stage"]] != name:
+                raise ReceiptRefused("conflicting receipts for the same stage")
+            by_stage[body["stage"]] = name
     for stage in stages:
         if stage not in new.stages:
             raise ReceiptRefused(f"stage {stage!r} is not in the new graph")
@@ -210,6 +266,10 @@ class StageRunner:
             if body["deployment_identity"] != self.graph.deployment_identity:
                 raise ReceiptRefused("receipt from a foreign deployment identity")
             if body["graph"] == self.graph.digest:
+                if body.get("graph_version") != self.graph.version or body["stage"] not in self.graph.stages:
+                    raise ReceiptRefused("receipt graph version or stage mismatch")
+                if body["stage"] in done and done[body["stage"]] != body:
+                    raise ReceiptRefused("conflicting receipts for the same stage")
                 done[body["stage"]] = body
         for carry in self.store.carries_into(self.graph):
             if carry["iteration"] != iteration:
@@ -218,9 +278,14 @@ class StageRunner:
                 raise ReceiptRefused("carry-forward from a foreign deployment identity")
             for stage, name in carry["carried"].items():
                 body = self.store.get(name)
-                if body["graph"] != carry["from_graph"] or body["stage"] != stage:
+                if (body["graph"] != carry["from_graph"] or body["stage"] != stage
+                        or body.get("graph_version") != carry["from_version"]
+                        or stage not in self.graph.stages or body["iteration"] != iteration
+                        or body["deployment_identity"] != self.graph.deployment_identity):
                     raise ReceiptRefused("carry-forward names a mismatched receipt")
-                done.setdefault(stage, body)
+                if stage in done and done[stage] != body:
+                    raise ReceiptRefused("conflicting receipts for the same stage")
+                done[stage] = body
         return done
 
     def run(self, iteration: str, stage_fns: Mapping[str, StageFn],
@@ -245,6 +310,8 @@ class StageRunner:
             if self.latch.is_set():
                 return IterationOutcome("stopped", tuple(executed), tuple(replayed),
                                         outputs, f"stop latched before {stage}")
+            self.store.claim_intent(graph=self.graph, iteration=iteration, stage=stage,
+                                    input_digest=input_digest)
             result = stage_fns[stage](dict(outputs))
             self.store.put({
                 "schema": RECEIPT_SCHEMA, "graph": self.graph.digest,

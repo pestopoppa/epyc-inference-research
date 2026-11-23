@@ -1361,3 +1361,38 @@ def test_restart_after_durable_accept_with_bad_retained_artifact_stays_fenced(
     finally:
         current[0].close()
         current[1].close()
+
+
+def test_composed_driver_honors_persistent_stage_stop_latch(tmp_path, monkeypatch):
+    runtime, controller, _lifecycle, engine = _runtime(tmp_path, monkeypatch)
+    try:
+        assert runtime.recover().status == "recovered"
+        latch = runtime.driver.stop_latch
+        assert latch.path == controller.store / "stage-stop.json"
+        latch.request("operator requested graceful stop")
+        assert runtime.tick().status == "stopped"
+        assert not engine.export_state().issued_selection_digests
+        latch.clear()
+        assert runtime.tick().status != "stopped"
+        runtime.request_stop()
+        assert latch.is_set()
+    finally:
+        runtime.close()
+        controller.close()
+
+
+def test_runtime_stop_survives_controller_reopen(tmp_path, monkeypatch):
+    runtime, controller, _lifecycle, engine = _runtime(tmp_path, monkeypatch)
+    assert runtime.recover().status == "recovered"
+    runtime.request_stop()
+    reopened_runtime, reopened, _lifecycle, replay_engine = _reopen_runtime(
+        runtime, controller, engine, monkeypatch)
+    try:
+        assert reopened_runtime.recover().status == "recovered"
+        assert reopened_runtime.tick().status == "stopped"
+        assert not replay_engine.export_state().issued_selection_digests
+        reopened_runtime.driver.stop_latch.clear()
+        assert reopened_runtime.tick().status != "stopped"
+    finally:
+        reopened_runtime.close()
+        reopened.close()

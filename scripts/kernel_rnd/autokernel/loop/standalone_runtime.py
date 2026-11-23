@@ -372,6 +372,7 @@ class StandaloneRuntime:
         from .standalone_dispatch import InstalledActorDispatch
         if inputs.actor_dispatch is not None and type(inputs.actor_dispatch) is not InstalledActorDispatch:
             raise StandaloneRuntimeRefused("actor dispatch must be the installed concrete owner")
+        from .stage_receipts import StopLatch
         driver = unified_driver.UnifiedCampaignDriver(
             resolved_campaign=inputs.resolved_campaign,
             controller=controller,
@@ -392,6 +393,7 @@ class StandaloneRuntime:
                 | ({"actor_preparation"} if inputs.actor_dispatch is not None else set())),
             calibration_requests=inputs.calibration_requests,
             feed_owner=inputs.feed_owner,
+            stop_latch=StopLatch(controller.store / "stage-stop.json"),
         )
         driver.kfd_gpu_ids = inputs.kfd_gpu_ids
         executor = driver_execution.UnifiedDriverExecution(
@@ -762,6 +764,9 @@ class StandaloneRuntime:
         with self._condition:
             self._stop_requested = True
             self._condition.notify_all()
+            latch = getattr(self.driver, "stop_latch", None)
+            if latch is not None:
+                latch.request("runtime stop requested")
 
     def close(self, *, deadline: float | None = None) -> RuntimeShutdownResult:
         already_closed = False
