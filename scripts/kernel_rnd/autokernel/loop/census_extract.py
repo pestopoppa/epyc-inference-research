@@ -150,6 +150,19 @@ def extract_cpu(res: dict, result_path: str | None = None) -> list[dict]:
     return out
 
 
+def _idx_share(result_path: str | None, unit: str) -> float | None:
+    """Weight share of the indexer family's node wall time from the unit's own prof.json: bf16 MUL_MAT nodes = the two indexer
+    weight GEMVs, f32 src0 with ne0 == 128 = the pooled-K score GEMM. None when either side is absent (never guessed)."""
+    try:
+        nodes = json.load(open(os.path.join(os.path.dirname(result_path or ""), "servers", unit + ".prof.json")))["nodes"]
+    except (OSError, ValueError, KeyError):
+        return None
+    mm = [n for n in nodes if n.get("op") == "MUL_MAT"]
+    w = sum(n["wall_us"] for n in mm if n["src0_type"] == "bf16")
+    s = sum(n["wall_us"] for n in mm if n["src0_type"] == "f32" and n["src0_ne"][0] == 128)
+    return w / (w + s) if w > 0 and s > 0 else None
+
+
 def extract_cpu_diag(res: dict, result_path: str | None = None) -> list[dict]:
     """Guarded quiet-host CPU diagnostic RESULT (`per_family_by_unit`, per-unit `guard.quiet`) -> quiet_host observations.
     Only the depth(s) the RESULT names as its subject (`evidence.gemv_gbps_<depth>_mean`) are emitted; replicate units
@@ -165,13 +178,21 @@ def extract_cpu_diag(res: dict, result_path: str | None = None) -> list[dict]:
         for unit, v in sorted(by_unit.items()):
             m = re.fullmatch(r"(.+-(d\d+k))-L\d+", unit)
             if m and m.group(2) in subject and ((units.get(unit) or {}).get("guard") or {}).get("quiet") is True and v.get("ms_per_step", 0) > 0:
-                cfgs.setdefault((m.group(1), m.group(2)), []).append(v)
+                cfgs.setdefault((m.group(1), m.group(2)), []).append(dict(v, unit=unit))
         for (cfg, depth), vs in sorted(cfgs.items()):
             ms = sum(v["ms_per_step"] for v in vs) / len(vs)
             conf = cpu_config(result_path, cfg)
-            out.append({"device": "cpu", "model": model, "kernel_class": fam, "shape": f"{conf}-{depth}", "n": 1, "arm": cfg,
-                        "bytes_per_call": int(round(sum(v["gbps"] * v["ms_per_step"] for v in vs) / len(vs) * 1e6)), "us_per_call": round(ms * 1e3, 1),
-                        "calls_per_round": 1, "config": conf, "quiet_host": True, "replicates": len(vs)})
+            rec = {"device": "cpu", "model": model, "kernel_class": fam, "shape": f"{conf}-{depth}", "n": 1, "arm": cfg,
+                   "bytes_per_call": int(round(sum(v["gbps"] * v["ms_per_step"] for v in vs) / len(vs) * 1e6)), "us_per_call": round(ms * 1e3, 1),
+                   "calls_per_round": 1, "config": conf, "quiet_host": True, "replicates": len(vs)}
+            shares = [_idx_share(result_path, v["unit"]) for v in vs] if fam == "MUL_MAT:indexer" else [None]
+            if None in shares:
+                out.append(rec)
+                continue  # classifier split (weight GEMVs vs score GEMM): weight keeps the counted bytes, score is time-only and latency-bound
+            sh = sum(shares) / len(shares)
+            out.append(dict(rec, kernel_class=fam + "_weight", us_per_call=round(ms * sh * 1e3, 1), split_from=fam))
+            out.append(_t(model, fam + "_score", rec["shape"], 1, ms * (1 - sh) * 1e3, "pooled-K bytes not in the RESULT (prof node shape is stamped once)",
+                          arm=cfg, config=conf, quiet_host=True, bound="compute_latency", split_from=fam))
     return out
 
 

@@ -323,6 +323,53 @@ class RealResultFixtures(Base):
         shutil.copy(os.path.join(FX, "q38fn", "servers", "plain-greedy-d32k-L1.argv.json"), os.path.join(self.d, "servers"))
         self.assertEqual(cu.extract_cpu(self._diag(quiet_l2=False), p)[0]["replicates"], 1)
 
+    def _idx_diag(self, with_prof=True):
+        """d32k diag RESULT with an indexer family; servers/<unit>.prof.json carries 12 bf16 weight nodes (0.4 ms) and 12 f32 score nodes (0.6 ms)."""
+        res = self._diag()
+        res["per_family_by_unit"] = {"MUL_MAT:indexer": {u: {"gbps": 39.3216e6 / (1000 * 1e3) / 1.0, "ms_per_step": 1.0}
+                                                         for u in ("plain-greedy-d32k-L1", "plain-greedy-d32k-L2")}}
+        p = self.res("diag.json", res)
+        os.makedirs(os.path.join(self.d, "servers"))
+        shutil.copy(os.path.join(FX, "q38fn", "servers", "plain-greedy-d32k-L1.argv.json"), os.path.join(self.d, "servers"))
+        node = lambda t, ne, w: {"op": "MUL_MAT", "src0_type": t, "src0_ne": ne, "wall_us": w}
+        nodes = [node("bf16", [2560, 512, 1], 400 / 12)] * 12 + [node("f32", [128, 64, 1], 600 / 12)] * 12 + [node("f32", [2560, 512, 1], 9e3)]
+        for u in ("plain-greedy-d32k-L1", "plain-greedy-d32k-L2"):
+            if with_prof:
+                json.dump({"nodes": nodes}, open(os.path.join(self.d, "servers", u + ".prof.json"), "w"))
+        return res, p
+
+    def test_indexer_family_splits_into_weight_bandwidth_and_time_only_score(self):
+        res, p = self._idx_diag()
+        w, s = cu.extract_cpu(res, p)
+        self.assertEqual((w["kernel_class"], s["kernel_class"]), ("MUL_MAT:indexer_weight", "MUL_MAT:indexer_score"))
+        self.assertAlmostEqual(w["us_per_call"], 400.0, places=0)  # 40% weight share of 1.0 ms
+        self.assertEqual(w["bytes_per_call"], 39321600)  # weight bytes keep the counted basis
+        self.assertAlmostEqual(w["bytes_per_call"] / w["us_per_call"] / 1e3, 98.3, places=1)
+        self.assertIsNone(s["bytes_per_call"])  # score: time-only, never a bandwidth record
+        self.assertEqual((s["bound"], s["split_from"]), ("compute_latency", "MUL_MAT:indexer"))
+        self.assertAlmostEqual(s["us_per_call"], 600.0, places=0)
+
+    def test_indexer_without_prof_stays_lumped(self):
+        res, p = self._idx_diag(with_prof=False)
+        self.assertEqual([o["kernel_class"] for o in cu.extract_cpu(res, p)], ["MUL_MAT:indexer"])
+
+    def test_classifier_split_supersedes_lumped_record_and_score_never_ranks(self):
+        res, p = self._idx_diag()
+        lump = {"device": "cpu", "model": "q38fn-ud-iq4xs-cpu", "kernel_class": "MUL_MAT:indexer", "shape": "quarter-24t-d32k", "n": 1,
+                "bytes_per_call": 39321600, "us_per_call": 1206.5, "calls_per_round": 1, "config": "quarter-24t"}
+        c = cu.empty_census()
+        cu.apply(c, [lump], "census", "a" * 64, "t0")
+        cu.apply(c, cu.extract_cpu(res, p), "diag", "b" * 64, "t1")
+        recs = c["records"]
+        self.assertNotIn(cu.rid(lump), recs)  # the lumped record leaves the ranked set
+        wk = cu.rid(dict(lump, kernel_class="MUL_MAT:indexer_weight"))
+        sup = recs[wk]["superseded"][0]
+        self.assertEqual((sup["validity"], sup["source_row"], sup["superseded_by"]["row"]), ("classifier_split", "census", "diag"))
+        self.assertEqual(sup["gbps"], 32.6)
+        self.assertFalse([k for k in recs if "indexer_score" in k])  # score lives only under time_only
+        self.assertTrue([k for k in c["time_only"] if "indexer_score" in k])
+
+
     def test_op_result_is_not_double_counted_by_trace_path(self):
         self.assertEqual(cu.extract_trace(q8_result(70.0)), [])
 

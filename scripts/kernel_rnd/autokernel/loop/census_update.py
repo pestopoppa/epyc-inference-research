@@ -174,6 +174,11 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str) -> lis
         if errs := validate_unit(o):
             raise ValueError(f"census unit violation for {rid(o)}: {'; '.join(errs)}")
         k = rid(o)
+        if o.get("split_from") and (lump := c["records"].pop(rid(dict(o, kernel_class=o["split_from"])), None)):  # lumped record -> classifier_split
+            o = dict(o, superseded=list(lump.get("superseded") or []) + [{
+                "validity": "classifier_split", "source_row": lump["source_row"], "result_sha256": lump["result_sha256"],
+                "gbps": lump["gbps"], "us_per_call": lump["us_per_call"], "superseded_by": {"row": row, "sha256": sha},
+                "reason": f"{o['split_from']} lumped the indexer score GEMM (no counted bytes) with the weight GEMVs; split by node"}])
         old = c["records"].get(k)
         if old:  # bytes are a property of the shape; keep the census value so only time moves GB/s
             o = dict(o, bytes_per_call=old["bytes_per_call"])
