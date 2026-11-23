@@ -981,6 +981,7 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "serving_shares.py:main:write_text": (1, "evidence: explicit CLI --out serving-shares profile document"),
     "stage_receipts.py:_atomic_write:mkdir": (1, "evidence: parent of a durable stage receipt"),
     "stage_receipts.py:_atomic_write:mkstemp": (1, "evidence: same-dir temp for atomic stage receipt publish"),
+    "temperature_rescore.py:main:write_text": (1, "evidence: explicit CLI --out temperature re-score record (AK-TEMP-AXIS-5)"),
     "variance_keep.py:keep_record_fields:mkdir": (1, "evidence: parent of the retained variance-keep Pareto points file"),
     "variance_keep.py:keep_record_fields:write_text": (1, "evidence: variance-keep points file, sibling .tmp then atomic replace"),
     # -- deliberately NOT migrated (lifecycle owned elsewhere, documented) ---------------
