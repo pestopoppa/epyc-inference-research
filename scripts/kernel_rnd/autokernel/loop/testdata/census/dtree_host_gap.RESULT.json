@@ -1,0 +1,18 @@
+{
+ "at": "2026-11-23T05:20:26Z",
+ "row": "ak-dtree-host-gap-gpu-20261123",
+ "summary": {
+  "ms_per_round_by_arm": {
+   "L": {
+    "post": 0.4448,
+    "pre": 0.3344,
+    "window": 38.3955
+   },
+   "T12": {
+    "post": 2.6885,
+    "pre": 0.3987,
+    "window": 43.9389
+   }
+  }
+ }
+}

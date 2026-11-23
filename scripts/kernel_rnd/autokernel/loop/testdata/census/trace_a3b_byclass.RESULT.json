@@ -1,0 +1,46 @@
+{
+ "at": "2026-11-22T23:10:47Z",
+ "row": "ak-c18-a3b-mtp-trace-gpu-20261122",
+ "summary": {
+  "trace": {
+   "tr-OFF-r0": {
+    "arm": "OFF",
+    "by_class": {
+     "draft": {
+      "cat_ms_per_seg": {
+       "fa": 0.06900794039735099,
+       "mmvq_ids": 0.34530282119205374
+      },
+      "gpu_ms_per_seg": 0.80687429139073
+     },
+     "verify": {
+      "cat_ms_per_seg": {
+       "fa": 0.6695862631578944
+      },
+      "gpu_ms_per_seg": 23.351352289474182
+     }
+    },
+    "verify_dense_ms": 5.040373789473823
+   },
+   "tr-OFF-r1": {
+    "arm": "OFF",
+    "by_class": {
+     "draft": {
+      "cat_ms_per_seg": {
+       "fa": 0.06900794039735099,
+       "mmvq_ids": 0.34530282119205374
+      },
+      "gpu_ms_per_seg": 0.80687429139073
+     },
+     "verify": {
+      "cat_ms_per_seg": {
+       "fa": 0.6695862631578944
+      },
+      "gpu_ms_per_seg": 23.351352289474182
+     }
+    },
+    "verify_dense_ms": 5.240373789473823
+   }
+  }
+ }
+}

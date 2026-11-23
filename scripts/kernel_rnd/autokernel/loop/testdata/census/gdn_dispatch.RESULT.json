@@ -1,0 +1,19 @@
+{
+ "at": "2026-11-23T07:47:15Z",
+ "cells": {
+  "sv128:ns1:nt8:K8:f32": {
+   "aa_ratio": 0.9952,
+   "ratio": 1.1598,
+   "us_disp": 27.89,
+   "us_r3": 32.35
+  },
+  "sv128:ns4:nt12:K12:f32": {
+   "aa_ratio": 1.0012,
+   "ratio": 2.2873,
+   "us_disp": 168.32,
+   "us_r3": 385.0
+  }
+ },
+ "row": "ak-gdn-dispatch-gpu-20261123",
+ "task": "handoffs/active/autokernel-loop.md:GDN-COLWIDTH-DISPATCH"
+}

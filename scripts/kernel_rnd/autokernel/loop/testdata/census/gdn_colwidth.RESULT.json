@@ -1,0 +1,15 @@
+{
+ "at": "2026-11-23T07:20:17Z",
+ "cells": {
+  "sv128:ns1:nt12:K12:bf16": {
+   "aa_ratio": 0.9843,
+   "ratio_c2": 0.7694,
+   "ratio_c4": 0.4594,
+   "us_c1": 32.17,
+   "us_c2": 41.81,
+   "us_c4": 70.02
+  }
+ },
+ "row": "ak-gdn-colwidth-gpu-20261123",
+ "task": "handoffs/active/autokernel-loop.md:GDN-COLWIDTH-R3"
+}

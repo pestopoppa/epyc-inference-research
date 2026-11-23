@@ -1,0 +1,35 @@
+{
+ "at": "2026-11-23T06:47:30Z",
+ "row": "ak-c18-q8ip-getrows-gpu-20261123-r2",
+ "summary": {
+  "OFF": {
+   "draft_ms": 2.4559822500000665,
+   "verify_ms": 40.149362026316524
+  },
+  "ON": {
+   "draft_ms": 2.0134210166666544,
+   "verify_ms": 40.097369736843
+  },
+  "trace": {
+   "tr-ON-r0": {
+    "arm": "ON",
+    "by_class": {
+     "draft": {
+      "cat_ms_per_seg": {
+       "fa": 0.0882191833333334
+      },
+      "gpu_ms_per_seg": 2.007261266666654
+     },
+     "verify": {
+      "cat_ms_per_seg": {
+       "fa": 2.5548716315789473
+      },
+      "gpu_ms_per_seg": 39.979858368421965
+     }
+    },
+    "verify_dense_ms": 26.924489473684343
+   }
+  }
+ },
+ "task": "handoffs/active/autokernel-loop.md:AK-BW-27B-DRAFT-Q8IP-PERMUTE"
+}

@@ -1,0 +1,31 @@
+{
+ "at": "2026-11-23T06:28:53Z",
+ "cells": {
+  "sv128:ns1:nt12:K12:bf16": {
+   "aa_ratio": 1.0006,
+   "speedup_on": 1.9994,
+   "speedup_onplain_info": 1.9881,
+   "us_off": 63.7,
+   "us_on": 31.86,
+   "us_onplain_info": 32.04
+  },
+  "sv128:ns1:nt12:K12:f32": {
+   "aa_ratio": 1.0195,
+   "speedup_on": 1.5464,
+   "speedup_onplain_info": 1.5129,
+   "us_off": 69.13,
+   "us_on": 44.7,
+   "us_onplain_info": 45.7
+  },
+  "sv128:ns1:nt1:K1:f32": {
+   "aa_ratio": 0.994,
+   "speedup_on": 1.3887,
+   "speedup_onplain_info": 1.3839,
+   "us_off": 9.38,
+   "us_on": 6.75,
+   "us_onplain_info": 6.78
+  }
+ },
+ "row": "ak-gdn-fused-gpu-20261123-r3",
+ "task": "handoffs/active/autokernel-loop.md:GDN-FUSED-VARIANT-R3"
+}

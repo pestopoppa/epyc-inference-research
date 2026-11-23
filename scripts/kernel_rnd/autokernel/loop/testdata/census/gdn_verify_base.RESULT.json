@@ -1,0 +1,20 @@
+{
+ "at": "2026-11-23T02:16:21Z",
+ "cells": {
+  "sv128:ns1:nt16:K16:bf16": {
+   "aa_ratio": 0.9992,
+   "passes_us": [
+    86.11,
+    86.22,
+    86.15,
+    85.94,
+    86.32,
+    86.08
+   ],
+   "share_of_verify": 0.09046,
+   "us_per_layer": 86.13
+  }
+ },
+ "row": "ak-gdn-verify-base-gpu-20261122",
+ "task": "handoffs/active/autokernel-loop.md:GDN-VERIFY-BASE"
+}

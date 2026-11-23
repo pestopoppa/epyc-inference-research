@@ -1,0 +1,86 @@
+{
+ "arm_invalid": [
+  "mmid|iqkq8",
+  "shexp|iqkq8"
+ ],
+ "ceiling": {
+  "passes": [
+   {
+    "probe_p50": 0.74,
+    "valid": true
+   }
+  ],
+  "post": {
+   "drift": 0.0044
+  }
+ },
+ "id": "ak-a3b-cpu-mmid-gateup-ubench-20261122-r2",
+ "quarter": "q2",
+ "status": "complete",
+ "table": {
+  "mmid|base|N1": {
+   "N": 1,
+   "arm": "base",
+   "bytes_per_layer": 17825792,
+   "ci95": [
+    90.51,
+    110.48
+   ],
+   "gbs_mean": 100.5,
+   "mode": "mmid",
+   "op_over_ref_median": 0.9534,
+   "pct_of_ceiling": 89.0,
+   "ref_gbs_median": 108.05,
+   "rounds": 5,
+   "us_per_layer_median": 175.41
+  },
+  "mmid|base|N3": {
+   "N": 3,
+   "arm": "base",
+   "bytes_per_layer": 51883577,
+   "ci95": [
+    94.83,
+    111.17
+   ],
+   "gbs_mean": 103.0,
+   "mode": "mmid",
+   "op_over_ref_median": 0.9436,
+   "pct_of_ceiling": 91.2,
+   "ref_gbs_median": 110.36,
+   "rounds": 5,
+   "us_per_layer_median": 499.92
+  },
+  "mmid|iqk0|N1": {
+   "N": 1,
+   "arm": "iqk0",
+   "bytes_per_layer": 17825792,
+   "ci95": [
+    94.58,
+    111.49
+   ],
+   "gbs_mean": 103.03,
+   "mode": "mmid",
+   "op_over_ref_median": 0.9624,
+   "pct_of_ceiling": 91.3,
+   "ref_gbs_median": 108.55,
+   "rounds": 5,
+   "us_per_layer_median": 170.65
+  },
+  "shexp|base|N1": {
+   "N": 1,
+   "arm": "base",
+   "bytes_per_layer": 3342336,
+   "ci95": [
+    85.52,
+    88.32
+   ],
+   "gbs_mean": 86.92,
+   "mode": "shexp",
+   "op_over_ref_median": 0.8116,
+   "pct_of_ceiling": 77.0,
+   "ref_gbs_median": 107.72,
+   "rounds": 5,
+   "us_per_layer_median": 38.23
+  }
+ }
+}

@@ -1,0 +1,64 @@
+{
+ "arm_invalid": [],
+ "ceiling": {
+  "passes": [
+   {
+    "probe_p50": 12.61,
+    "valid": true
+   }
+  ],
+  "post": {
+   "drift": 0.1096
+  }
+ },
+ "id": "ak-a3b-cpu-shexp-verify-gap-20261123-r2",
+ "quarter": "q2",
+ "status": "complete",
+ "table": {
+  "base|N2": {
+   "N": 2,
+   "arm": "base",
+   "bytes_per_layer": 3342336,
+   "ci95": [
+    67.25,
+    77.23
+   ],
+   "gbs_mean": 72.24,
+   "op_over_ref_median": 0.6175,
+   "pct_of_ceiling": 65.4,
+   "ref_gbs_median": 119.13,
+   "rounds": 5,
+   "us_per_layer_median": 45.32
+  },
+  "down|N2": {
+   "N": 2,
+   "arm": "down",
+   "bytes_per_layer": 1114112,
+   "ci95": [
+    62.76,
+    66.97
+   ],
+   "gbs_mean": 64.86,
+   "op_over_ref_median": 0.5507,
+   "pct_of_ceiling": 58.8,
+   "ref_gbs_median": 118.78,
+   "rounds": 5,
+   "us_per_layer_median": 17.03
+  },
+  "sn8|N2": {
+   "N": 2,
+   "arm": "sn8",
+   "bytes_per_layer": 3342336,
+   "ci95": [
+    74.04,
+    75.41
+   ],
+   "gbs_mean": 74.72,
+   "op_over_ref_median": 0.629,
+   "pct_of_ceiling": 67.7,
+   "ref_gbs_median": 119.05,
+   "rounds": 5,
+   "us_per_layer_median": 44.91
+  }
+ }
+}

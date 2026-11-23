@@ -34,7 +34,7 @@ import sys
 
 from .census_extract import (  # noqa: F401  re-exported: callers/tests address these via census_update
     A3B_CPU_FAMILY_BYTES, CPU_MODEL_ALIAS, CPU_MODEL_BY_ID, MMID_CLASS, Q8_SHAPE_CLASS, SERVED_N, TRACE_DENSE_BYTES,
-    TRACE_Q8_CLASS, cpu_config, extract, extract_cpu, extract_trace)
+    TRACE_Q8_CLASS, UBENCH_CLASS, cpu_config, extract, extract_cpu, extract_time_only, extract_trace)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CENSUS = os.path.join(HERE, "census", "mi210_bandwidth_census.json")
@@ -148,14 +148,28 @@ def link_seeds(c: dict) -> list[str]:
     return notes
 
 
+def apply_time_only(c: dict, o: dict, row: str, sha: str, at: str) -> bool:
+    """Observation with NO derivable byte basis (bytes_per_call None): kept under c['time_only'] (time, no GB/s, no rank, no seed).
+    Same noise rule as bandwidth records; returns True when it moved."""
+    k, old = rid(o), c.setdefault("time_only", {}).get(rid(o))
+    if old and abs(o["us_per_call"] - old["us_per_call"]) <= c["noise_frac"] * abs(old["us_per_call"]):
+        return False
+    hist = list((old or {}).get("history") or ([[old["source_row"], old["us_per_call"]]] if old else []))
+    c["time_only"][k] = dict(o, source_row=row, result_sha256=sha, measured_at=at, history=(hist + [[row, o["us_per_call"]]])[-8:])
+    return True
+
+
 def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str) -> list[str]:
     """Pure-ish: mutate census c, return journal lines. No-op when sha already applied."""
     if any(a["sha256"] == sha for a in c["applied"]):
         return []
     rerank(c)
     before = {k: (r["gbps"], r["rank"]) for k, r in c["records"].items()}
-    moved = []
+    moved, tmoved = [], 0
     for o in obs:
+        if o.get("bytes_per_call") is None:
+            tmoved += apply_time_only(c, o, row, sha, measured_at)
+            continue
         o = dict(o, unit=o.get("unit") or "GB/s")  # every census extractor emits bytes/us => GB/s; flops rows set unit
         if errs := validate_unit(o):
             raise ValueError(f"census unit violation for {rid(o)}: {'; '.join(errs)}")
@@ -191,7 +205,7 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str) -> lis
                      f"[{r['status']}, {r['recoverable_ms_per_round']:.2f} ms/round recoverable at "
                      f"{tgt(c, r):.0f} GB/s]")
     lines += [f"- `{row}` ({sha[:12]}): {n}" for n in link_seeds(c)]
-    return lines
+    return lines + ([f"- `{row}` ({sha[:12]}): {tmoved} time-only records (bytes unknown) stored under census time_only"] if tmoved else [])
 
 
 def tgt(c: dict, r: dict) -> float:

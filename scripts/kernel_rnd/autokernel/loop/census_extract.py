@@ -29,6 +29,12 @@ A3B_CPU_FAMILY_BYTES = {
     "MUL_MAT:shared_expert": 138_000_000,       # 41 x 3 x 2048x512
 }
 MMID_CLASS = {"gate_up": ("mmid_gate_up", 40), "down": ("mmid_down", 40)}  # A3B, 40 MoE layers
+GDN_CELL = re.compile(r"sv(\d+):ns(\d+):nt(\d+):K(\d+):(bf16|f32)")
+# CPU standalone-op harness (quarter, one op x one layer, DRAM-streaming pools): (class suffix, calls per round).
+# calls: 40 MoE layers (MMID_CLASS), 41 shared-expert calls (A3B_CPU_FAMILY_BYTES). Class names carry `@ubench` so they
+# never collide with the in-graph per-step census rows (different time basis: per layer call vs per decode step).
+UBENCH_CLASS = {("mmid", "base"): ("MUL_MAT_ID:exps_gate_up@ubench", 40), ("shexp", "base"): ("MUL_MAT:shared_expert@ubench", 41),
+                ("shexp", "down"): ("MUL_MAT:shexp_down@ubench", 41)}
 
 
 
@@ -64,7 +70,7 @@ def extract(res: dict) -> list[dict]:
         cls, calls = MMID_CLASS.get(m.group(1), ("mmid_" + m.group(1), 1))
         out.append({"model": "a3b-q8_0", "kernel_class": cls, "shape": m.group(1), "n": int(m.group(2)), "arm": "ON",
                     "bytes_per_call": int(round(g * us * 1e3)), "us_per_call": float(us), "calls_per_round": calls})
-    return out + extract_trace(res)
+    return out + extract_trace(res) + extract_time_only(res)
 
 
 def extract_trace(res: dict) -> list[dict]:
@@ -117,6 +123,8 @@ def extract_cpu(res: dict, result_path: str | None = None) -> list[dict]:
     a row-dependent byte count and are skipped, deterministically)."""
     out = []
     rid_ = str(res.get("id") or res.get("row") or "")
+    if isinstance(res.get("table"), dict) and res.get("quarter"):
+        return extract_ubench(res)
     if isinstance(res.get("per_family_by_unit"), dict):
         return extract_cpu_diag(res, result_path)
     model = CPU_MODEL_ALIAS.get(str(res.get("model_key") or ""))
@@ -164,4 +172,118 @@ def extract_cpu_diag(res: dict, result_path: str | None = None) -> list[dict]:
             out.append({"device": "cpu", "model": model, "kernel_class": fam, "shape": f"{conf}-{depth}", "n": 1, "arm": cfg,
                         "bytes_per_call": int(round(sum(v["gbps"] * v["ms_per_step"] for v in vs) / len(vs) * 1e6)), "us_per_call": round(ms * 1e3, 1),
                         "calls_per_round": 1, "config": conf, "quiet_host": True, "replicates": len(vs)})
+    return out
+
+
+def _t(model: str, cls: str, shape: str, n: int, us: float, basis: str, calls: int = 1, **extra) -> dict:
+    """Time-only observation: bytes_per_call is None (the RESULT gives no byte basis; never invented)."""
+    return dict({"model": model, "kernel_class": cls, "shape": shape, "n": n, "bytes_per_call": None, "us_per_call": round(float(us), 3),
+                 "calls_per_round": calls, "bytes_basis": "unknown: " + basis}, **extra)
+
+
+def _num(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _model_of(res: dict) -> str | None:
+    """Census model key from the RESULT's own row/task text only (27b / a3b); None = unattributable, never guessed."""
+    txt = f"{res.get('row') or ''} {res.get('task') or ''}".lower()
+    return "a3b-q8_0" if "a3b" in txt else "27b-q8_0" if "27b" in txt else None
+
+
+def extract_gdn(res: dict) -> list[dict]:
+    """GDN op microbench `cells["svS:nsN:ntT:KK:dtype"]{us_<arm>: us}` (fused OFF/ON, dispatch r3/disp, colwidth c1/c2/c4) or
+    verify-base `{us_per_layer}`. Time only: the cell key carries no head count, so the state bytes are not derivable."""
+    out = []
+    cells = res.get("cells")
+    for key in sorted(cells) if isinstance(cells, dict) else []:
+        m, c = GDN_CELL.fullmatch(key), cells[key]
+        if not m or not isinstance(c, dict):
+            continue
+        arms = {k[3:]: v for k, v in c.items() if k.startswith("us_") and k != "us_per_layer" and not k.endswith("_info")}
+        if _num(c.get("us_per_layer")):
+            arms["verify_base"] = c["us_per_layer"]
+        for arm, us in sorted(arms.items()):
+            if _num(us) and us > 0:
+                out.append(_t("gdn-op", f"gdn_core:{arm}", key, int(m.group(3)), us, "GDN op cell key has no head count (state bytes underivable)"))
+    return out
+
+
+def extract_dtree(res: dict) -> list[dict]:
+    """DTREE rowcost (`summary.ms_per_verify_by_T[T][class]` ms per verify, `slopes_ms_per_row["a->b"][class].median` ms per extra
+    row) and host-gap (`summary.ms_per_round_by_arm[arm][field]` ms per round). Times only; the model is not stated -> `unattributed`."""
+    out, s = [], res.get("summary") or {}
+    for t, row in sorted((s.get("ms_per_verify_by_T") or {}).items(), key=lambda kv: int(kv[0])):
+        out += [_t("unattributed", f"verify_ms:{c}", f"T{t}", int(t), ms * 1e3, "per-class verify wall time, no per-class byte basis")
+                for c, ms in sorted(row.items()) if _num(ms)]
+    for span, row in sorted((s.get("slopes_ms_per_row") or {}).items()):
+        m = re.fullmatch(r"(\d+)->(\d+)", span)
+        out += [_t("unattributed", f"rowslope:{c}", f"T{span}", int(m.group(2)), v["median"] * 1e3,
+                   "us per extra verify row (median of reps; may be negative)") for c, v in sorted(row.items())
+                if m and isinstance(v, dict) and _num(v.get("median"))]
+    for arm, row in sorted((s.get("ms_per_round_by_arm") or {}).items()):
+        out += [_t("unattributed", f"hostgap:{f}", arm, 1, ms * 1e3, "host-gap phase per round, no byte basis")
+                for f, ms in sorted(row.items()) if _num(ms)]
+    return out
+
+
+def extract_trace_time(res: dict) -> list[dict]:
+    """rocprof trace RESULT (`summary.trace[tr-<arm>-rN].by_class[phase].cat_ms_per_seg`, `verify_dense_ms`; getrows A/B
+    `summary.<arm>.draft_ms|verify_ms`). Times per decode segment (n=0 means per segment, not a batch width) averaged over the
+    reps of an arm. Kernel byte bases are hand-calibrated per RESULT, so bytes stay unknown. Needs a model from row/task text."""
+    s, model = res.get("summary") or {}, _model_of(res)
+    if model is None or not isinstance(s, dict):
+        return []
+    acc: dict[tuple, list] = {}
+    for t in (s.get("trace") or {}).values():
+        if not isinstance(t, dict):
+            continue
+        arm = str(t.get("arm"))
+        if _num(t.get("verify_dense_ms")):
+            acc.setdefault(("trace_verify:dense_mm", arm), []).append(t["verify_dense_ms"])
+        for ph, c in (t.get("by_class") or {}).items():
+            if _num((c or {}).get("gpu_ms_per_seg")):
+                acc.setdefault((f"trace_{ph}:gpu_total", arm), []).append(c["gpu_ms_per_seg"])
+            for cat, ms in ((c or {}).get("cat_ms_per_seg") or {}).items():
+                if _num(ms):
+                    acc.setdefault((f"trace_{ph}:{cat}", arm), []).append(ms)
+    for arm in ("OFF", "ON"):
+        for f in ("draft_ms", "verify_ms"):
+            if _num((s.get(arm) or {}).get(f)) if isinstance(s.get(arm), dict) else False:
+                acc.setdefault((f"e2e_{f}", arm), []).append(s[arm][f])
+    return [_t(model, cls, arm, 0, sum(v) / len(v) * 1e3, "rocprof trace time per segment; kernel byte basis not in RESULT", reps=len(v))
+            for (cls, arm), v in sorted(acc.items())]
+
+
+def extract_time_only(res: dict) -> list[dict]:
+    """All time-only extractors (GDN cells, DTREE rowcost/host-gap, trace by-class). Pure op/table RESULTs yield nothing."""
+    return extract_gdn(res) + extract_dtree(res) + extract_trace_time(res)
+
+
+def extract_ubench(res: dict) -> list[dict]:
+    """CPU standalone-op harness RESULT (`table["[<mode>|]<arm>|N<n>"]{us_per_layer_median, bytes_per_layer}`, top-level `quarter`).
+    Only arms in UBENCH_CLASS (production-default `base`, shexp `down`) are emitted; knob arms are experiments, invalid arms
+    (`arm_invalid`) are dropped. Bytes are the row's own `bytes_per_layer` (N>1 mmid: uniform-random expert ids -> an upper bound).
+    quiet_host only when the ceil-pre pass is valid with SMT-probe p50 <= 1% and post-drift <= 5%."""
+    if not isinstance(res.get("table"), dict) or not res.get("quarter") or res.get("status") != "complete":
+        return []
+    rid_ = str(res.get("id") or "")
+    model = next((m for tag, m in CPU_MODEL_BY_ID if tag in rid_), None)
+    cc = res.get("ceiling") or {}
+    pre = next(iter(cc.get("passes") or []), {})
+    quiet = bool(pre.get("valid") and _num(pre.get("probe_p50")) and pre["probe_p50"] <= 1.0
+                 and abs((cc.get("post") or {}).get("drift", 1.0)) <= 0.05)
+    default_mode = "shexp" if "shexp" in rid_ else "mmid"
+    out = []
+    for key, v in sorted(res["table"].items()):
+        parts = key.split("|")
+        mode, arm, n = (parts if len(parts) == 3 else [default_mode, *parts])
+        cls = UBENCH_CLASS.get((mode, arm))
+        us, b = v.get("us_per_layer_median"), v.get("bytes_per_layer")
+        if model is None or cls is None or not (_num(us) and _num(b) and us > 0 and b > 0) or f"{mode}|{arm}" in (res.get("arm_invalid") or []):
+            continue
+        o = {"device": "cpu", "model": model, "kernel_class": cls[0], "shape": "quarter-24t-ubench", "n": int(n[1:]), "arm": arm,
+             "bytes_per_call": int(b), "us_per_call": float(us), "calls_per_round": cls[1], "config": "quarter-24t",
+             "bytes_basis": "row bytes_per_layer (standalone op harness)"}
+        out.append(dict(o, quiet_host=True) if quiet else o)
     return out
