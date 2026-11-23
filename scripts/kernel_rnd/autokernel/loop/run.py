@@ -126,7 +126,7 @@ from . import residency
 from . import resume as resume_mod
 from . import bestof
 from . import gpu_serving_profile as gpu_serving_profile_mod
-from . import gpu_counter
+from . import gpu_counter, arm_accounting
 # re-exported: moved verbatim to run_author_plan.py
 from .run_author_plan import (  # noqa: F401
     AuthorPlan, DEFAULT_ACTOR_AUTHORS, SINGLE_AUTHOR, _author_plan, _shared_pool_lanes,
@@ -6595,9 +6595,11 @@ def _main(argv: list[str] | None = None) -> int:
         Comparison.device_seconds includes spawn, model loading and CPU gaps. It is
         retained as wall time only and cannot support a physical idle fraction.
         """
-        if claim_started is None or cpu_launch:
+        if claim_started is None:
             return {}
         held = time.monotonic() - claim_started
+        if cpu_launch:  # AKU-23: the CPU arm row carries utilisation, observed or None + reason
+            return {"claim_held_s": round(held, 1), "arm_accounting": arm_accounting.from_cpu_work(held)}
         walls = ([] if direct_launch else
                  [(o.comparison.to_dict() or {}).get("device_seconds")
                   for o in outcomes if o.comparison is not None])
@@ -6618,12 +6620,14 @@ def _main(argv: list[str] | None = None) -> int:
         counter = gfx_counter[0].snapshot() if gfx_counter[0] is not None else None
         counter_view = ({key: value for key, value in counter.items() if key != "samples"}
                         if counter is not None else None)
+        acct = arm_accounting.from_gfx_trace(held, counter)  # observed counter only, never wall time
         return {"claim_held_s": round(held, 1),
                 "gfx_counter": counter_view,
                 "comparison_wall_seconds": wall_total,
                 "device_seconds_under_load": None,
-                "gpu_seconds_idle_while_claimed": None,
-                "idle_fraction_while_claimed": None}
+                "arm_accounting": acct,
+                "gpu_seconds_idle_while_claimed": acct["arm_seconds_idle_while_claimed"],
+                "idle_fraction_while_claimed": acct["idle_fraction_while_claimed"]}
 
     def accumulator_state() -> dict | None:
         """Project the two-tier bundle without upgrading a stale measurement.

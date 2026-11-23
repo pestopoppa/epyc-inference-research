@@ -90,6 +90,25 @@ def from_gfx_trace(claimed_s, trace: Mapping | None) -> dict:
     return account(claimed_s, seconds, source="gfx_counter_weighted")
 
 
+def from_cpu_work(claimed_s, intervals: Iterable[tuple[float, float]] | None = None,
+                  claim_start: float | None = None) -> dict:
+    """CPU arm: held = union of the arm's OBSERVED work intervals inside the claim.
+
+    No interval source on the path (None) records `None` plus a reason, never wall time.
+    """
+    if intervals is None or claim_start is None:
+        return account(claimed_s, None, source="cpu_work_intervals",
+                       unavailable_reason="no observed CPU work-interval source on this path")
+    return from_intervals(claim_start, claim_start + _nonneg(claimed_s, "claimed_s"), intervals,
+                          source="cpu_work_intervals")
+
+
+def wall_only(wall_s, source: str = "comparison_wall_only") -> dict:
+    """A comparison row whose caller supplied no observed held-time source."""
+    return account(wall_s, None, source=source, unavailable_reason=(
+        "no held-time source observed for this comparison; device_seconds is wall time"))
+
+
 def total(rows: Iterable[Mapping]) -> dict:
     """Roll arms up. Utilisation covers only arms whose held time was observed."""
     rows = list(rows)

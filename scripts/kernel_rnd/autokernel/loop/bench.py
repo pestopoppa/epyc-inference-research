@@ -32,7 +32,7 @@ from typing import Callable, Sequence
 from ..controller import host_idle
 from .. import path_counters
 from ..execution import microbench
-from . import integrity, residency
+from . import arm_accounting, integrity, residency
 from .floor_units import FLOOR_UNITS, UNIT_PROCESS
 
 #: The unit EVERY number in this module is measured in, floors and effects alike: a
@@ -143,6 +143,8 @@ class Comparison:
     #: leg is meaningless without it, and utilization is the number that would have
     #: caught 1.4 hours of GPU held against 29.0 hours of compiling.
     device_seconds: float = 0.0
+    #: AKU-23 utilisation row (arm_accounting); None = built from wall time as UNOBSERVED.
+    arm_utilisation: dict | None = None
     #: Signed within-arm drift, anchor and candidate. A run whose arms are still
     #: warming is not measuring steady-state throughput.
     anchor_drift_pct: float = 0.0
@@ -244,6 +246,7 @@ class Comparison:
             "effect_unit": FLOOR_UNIT,
             "floor_unit": None if self.noise_floor_pct is None else FLOOR_UNIT,
             "decisive": self.decisive, "device_seconds": self.device_seconds,
+            "arm_utilisation": self.arm_utilisation or arm_accounting.wall_only(self.device_seconds),
             "drifting": self.drifting, "calibrated": self.calibrated,
             "anchor_drift_pct": self.anchor_drift_pct,
             "candidate_drift_pct": self.candidate_drift_pct,
@@ -428,13 +431,27 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
     return float(row.avg_ts), {**sampler.proof, "host_idle": idle, "path_counters": counters}
 
 
+def _utilisation(wall: float, source) -> dict:
+    """Row from a caller-owned OBSERVED source (claimed_s -> arm_accounting row); a source
+    that is absent or raises records None plus a reason, never wall time as held time."""
+    if source is None:
+        return arm_accounting.wall_only(wall)
+    try:
+        row = source(wall)
+    except Exception as exc:  # noqa: BLE001 -- accounting never costs a measurement
+        return arm_accounting.account(wall, None, source="utilisation_source",
+                                      unavailable_reason=f"source raised {type(exc).__name__}")
+    return row if isinstance(row, dict) else arm_accounting.wall_only(wall)
+
+
 def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
             pairs: int = MIN_PAIRS, reps: int = 9,
             noise_floor_pct: float | None = None,
             warmup_pairs: int = WARMUP_PAIRS, surface: str | None = None,
             ubatch: int | None = None, calibrated: bool = True,
             fresh_check: Callable[[Arm, int, int], dict] | None = None,
-            kv_type: str | None = None, recipe_kv_type: str | None = None) -> Comparison:
+            kv_type: str | None = None, recipe_kv_type: str | None = None,
+            utilisation_source: Callable[[float], dict | None] | None = None) -> Comparison:
     """Alternating paired A/B. The arms swap every pair, never run as two blocks.
 
     `warmup_pairs` are run and DISCARDED first. Without them the first measured pair
@@ -533,7 +550,8 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
                    "sclk_min_mhz": min((p.get("sclk_min_mhz") or 0) for p in proofs),
                    "sclk_max_mhz": max((p.get("sclk_max_mhz") or 0) for p in proofs),
                    "clock_stable": all(p.get("clock_stable") for p in proofs)},
-        device_seconds=time.monotonic() - started,
+        device_seconds=(wall := time.monotonic() - started),
+        arm_utilisation=_utilisation(wall, utilisation_source),
         anchor_drift_pct=drift_pct(anchor_samples),
         candidate_drift_pct=drift_pct(candidate_samples),
         fresh_correctness=tuple(fresh_summaries),
@@ -561,6 +579,7 @@ class Measurement:
     device_seconds: float = 0.0
     drift_pct: float = 0.0
     kv_type: str = KV_DEFAULT
+    arm_utilisation: dict | None = None
 
     def to_dict(self) -> dict:
         return {"surface": self.surface, "model": self.model, "launches": self.launches,
@@ -568,12 +587,14 @@ class Measurement:
                 "samples": self.samples, "sample_unit": FLOOR_UNIT,
                 "estimator": "median", "median": st.median(self.samples),
                 "drift_pct": self.drift_pct, "trend_rho": trend_rho(self.samples),
-                "device_seconds": self.device_seconds, "residency": self.residency}
+                "device_seconds": self.device_seconds, "residency": self.residency,
+                "arm_utilisation": self.arm_utilisation or arm_accounting.wall_only(self.device_seconds)}
 
 
 def measure(arm: Arm, model: Path, *, pp: int, tg: int, launches: int = MIN_PAIRS,
             reps: int = 9, warmup: int = WARMUP_PAIRS, surface: str | None = None,
-            ubatch: int | None = None, kv_type: str | None = None) -> Measurement:
+            ubatch: int | None = None, kv_type: str | None = None,
+            utilisation_source: Callable[[float], dict | None] | None = None) -> Measurement:
     """Single-arm measurement under the SAME argv and warmup discipline as `compare`.
 
     Each launch is its own process (the floor unit), `warmup` launches are run and
@@ -609,8 +630,8 @@ def measure(arm: Arm, model: Path, *, pp: int, tg: int, launches: int = MIN_PAIR
                    "sclk_min_mhz": min((p.get("sclk_min_mhz") or 0) for p in proofs),
                    "sclk_max_mhz": max((p.get("sclk_max_mhz") or 0) for p in proofs),
                    "clock_stable": all(p.get("clock_stable") for p in proofs)},
-        device_seconds=time.monotonic() - started, drift_pct=drift_pct(samples),
-        kv_type=kv_type or KV_DEFAULT)
+        device_seconds=(wall := time.monotonic() - started), drift_pct=drift_pct(samples),
+        arm_utilisation=_utilisation(wall, utilisation_source), kv_type=kv_type or KV_DEFAULT)
 
 
 #: |rho| for a two-tailed Spearman test at alpha=0.05, by sample count. Distribution-

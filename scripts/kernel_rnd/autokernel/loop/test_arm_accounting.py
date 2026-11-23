@@ -62,3 +62,58 @@ def test_budget_unknown_surface_and_empty_refused():
         A.ArmSecondsBudget({})
     with pytest.raises(KeyError):
         A.ArmSecondsBudget({"gpu": 1}).charge("cpu", A.account(1, 1, source="x"))
+
+
+# --- AKU-23 wiring: every row records utilisation (observed, or None + reason) -----------
+import ast
+import math
+import time
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
+
+
+def _gpu_reading(cpu_launch, counter):
+    node = next(n for n in ast.walk(ast.parse((Path(__file__).parent / "run.py").read_text()))
+                if isinstance(n, ast.FunctionDef) and n.name == "gpu_reading")
+    snap = SimpleNamespace(sample=lambda *_: None, snapshot=lambda: counter)
+    scope = {"time": time, "math": math, "claim_started": 100.0, "cpu_launch": cpu_launch,
+             "direct_launch": False, "gfx_counter": [snap if counter is not None else None],
+             "arm_accounting": A}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[])), "run.py", "exec"), scope)
+    with mock.patch.object(time, "monotonic", return_value=200.0):
+        return scope["gpu_reading"]()
+
+
+def test_gpu_reading_uses_the_observed_gfx_counter():
+    row = _gpu_reading(False, {"approx_gfx_activity_weighted_seconds": 25.0, "samples": []})
+    assert row["arm_accounting"]["utilisation"] == 0.25
+    assert row["idle_fraction_while_claimed"] == 0.75 and row["gpu_seconds_idle_while_claimed"] == 75.0
+
+
+def test_gpu_reading_without_a_counter_is_none_with_reason_never_wall_time():
+    row = _gpu_reading(False, None)
+    assert row["idle_fraction_while_claimed"] is None and row["gpu_seconds_idle_while_claimed"] is None
+    assert row["arm_accounting"]["unavailable_reason"] and row["claim_held_s"] == 100.0
+
+
+def test_cpu_arm_row_records_utilisation_field_unobserved_with_reason():
+    acct = _gpu_reading(True, None)["arm_accounting"]
+    assert acct["utilisation"] is None and acct["source"] == "cpu_work_intervals"
+    assert acct["arm_seconds_claimed"] == 100.0 and acct["unavailable_reason"]
+    seen = A.from_cpu_work(100.0, [(110, 150)], claim_start=100.0)
+    assert seen["arm_seconds_held"] == 40.0 and seen["utilisation"] == 0.4
+
+
+def test_comparison_and_measurement_rows_carry_arm_utilisation():
+    from . import bench
+    c = bench.Comparison(surface="tg128", anchor_samples=[1.0], candidate_samples=[1.0], effect=0.0,
+                         estimator="m", pairs=1, noise_floor_pct=None, residency={}, device_seconds=30.0)
+    row = c.to_dict()["arm_utilisation"]
+    assert row["utilisation"] is None and row["arm_seconds_claimed"] == 30.0 and row["unavailable_reason"]
+    m = bench.Measurement(surface="tg128", samples=[1.0], model="m", launches=1, residency={}, device_seconds=9.0)
+    assert m.to_dict()["arm_utilisation"]["arm_seconds_claimed"] == 9.0
+    observed = bench._utilisation(40.0, lambda claimed: A.account(claimed, 10.0, source="obs"))
+    assert observed["utilisation"] == 0.25
+    broken = bench._utilisation(40.0, lambda claimed: 1 / 0)
+    assert broken["utilisation"] is None and "ZeroDivisionError" in broken["unavailable_reason"]

@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from autokernel.loop import gates, pipeline, pool, status
+from autokernel.loop import arm_accounting, gates, pipeline, pool, status
 
 
 class GateElapsed(unittest.TestCase):
@@ -72,7 +72,7 @@ class UnknownDeviceUtilization(unittest.TestCase):
         node = next(n for n in ast.walk(tree)
                     if isinstance(n, ast.FunctionDef) and n.name == "gpu_reading")
         module = ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[]))
-        scope = {"time": time, "math": math, "claim_started": 100.0, "cpu_launch": False, "direct_launch": False, "gfx_counter": [None]}
+        scope = {"time": time, "math": math, "claim_started": 100.0, "cpu_launch": False, "direct_launch": False, "gfx_counter": [None], "arm_accounting": arm_accounting}
         exec(compile(module, "run.py", "exec"), scope)
         comparison = SimpleNamespace(to_dict=lambda: {"device_seconds": 17.0})
         with mock.patch.object(time, "monotonic", return_value=120.0):
@@ -88,7 +88,7 @@ class UnknownDeviceUtilization(unittest.TestCase):
         node = next(n for n in ast.walk(ast.parse(source))
                     if isinstance(n, ast.FunctionDef) and n.name == "gpu_reading")
         scope = {"time": time, "math": math, "claim_started": 100.0,
-                 "cpu_launch": False, "direct_launch": False, "gfx_counter": [None]}
+                 "cpu_launch": False, "direct_launch": False, "gfx_counter": [None], "arm_accounting": arm_accounting}
         exec(compile(ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[])),
                      "run.py", "exec"), scope)
         def outcome(value):
