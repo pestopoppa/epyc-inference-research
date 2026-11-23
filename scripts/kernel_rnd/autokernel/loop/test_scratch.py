@@ -743,6 +743,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "run.py:_retain_fold_before_reset:open-write": (1, "evidence: durable fold-reset disposition naming exact retained patches"),
     "actors.py:_record_call:mkdir": (1, "evidence: VB-AK-SEAT call record log"),
     "actors.py:_record_metrics:mkdir": (2, "evidence: actor_call_metrics log and session exports"),
+    "authoring_chain.py:AuthoringChainJournal._append:os-open-create": (1, "evidence: durable advice->patch->commit->build chain journal (O_APPEND, fsynced)"),
+    "comparison_receipt_journal.py:ComparisonReceiptJournal._append:os-open-create": (1, "evidence: durable comparison receipt journal (O_APPEND, fsynced)"),
     "belief_context.py:_append:mkdir": (1, "evidence: belief receipt / degraded-mode logs"),
     "belief_context.py:_append:open-write": (1, "evidence: belief receipt / degraded-mode logs (append)"),
     "belief_context.py:DegradedWork._locked:mkdir": (1, "evidence: degraded-mode log dir (flock)"),

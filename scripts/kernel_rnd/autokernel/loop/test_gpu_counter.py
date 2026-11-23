@@ -92,7 +92,7 @@ class ClaimLifecycle(unittest.TestCase):
     def test_real_run_claim_block_owns_sampling_and_release_order(self):
         tree = ast.parse((Path(__file__).parent / "run.py").read_text())
         candidates = [node for node in ast.walk(tree) if isinstance(node, ast.If)
-                      and ast.unparse(node.test) == "not cpu_launch"
+                      and ast.unparse(node.test) == "not cpu_launch and stage_scope is None"
                       and "gpu_counter.attach" in ast.unparse(node)
                       and "claim.hold" in ast.unparse(node)]
         self.assertEqual(len(candidates), 1)
@@ -115,7 +115,7 @@ class ClaimLifecycle(unittest.TestCase):
             retained.append(trace)
             events.append("persist")
         with ExitStack() as ownership:
-            scope = {"cpu_launch": False, "ownership": ownership,
+            scope = {"cpu_launch": False, "stage_scope": None, "ownership": ownership,
                      "claim": SimpleNamespace(hold=hold), "original_claims": [],
                      "gpu_skip_cpu_claim": False, "gpu_only_quiet_path": None,
                      "gpu_counter": SimpleNamespace(attach=attach), "gfx_counter": [None],
