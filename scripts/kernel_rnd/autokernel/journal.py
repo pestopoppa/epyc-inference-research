@@ -280,6 +280,7 @@ KIND_PREFLIGHT_ATTESTATION = "PREFLIGHT_ATTESTATION"
 # Operational accumulator state, not a §7 evidence record.  Persisting or
 # importing this snapshot grants no measurement or claim eligibility.
 KIND_LOOP_BUNDLE_SAVED = "LOOP_BUNDLE_SAVED"
+KIND_LOOP_PHASE = "LOOP_PHASE"
 KIND_CAMPAIGN_SUPERVISOR_EVENT = "CAMPAIGN_SUPERVISOR_EVENT"
 CAMPAIGN_SUPERVISOR_EVENT_SCHEMA = "epyc.autokernel.campaign_supervisor_event.v1"
 CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2 = "epyc.autokernel.campaign_supervisor_event.v2"
@@ -337,6 +338,7 @@ LOOP_BUNDLE_PROVENANCES = frozenset({
 LOOP_BUNDLE_MEASUREMENT_VALIDITIES = frozenset({
     "current_snapshot", "unknown_legacy", "stale_external_tip_advance",
     "stale_runtime_recipe_epoch", "stale_deferred_accumulate_bench",
+    "stale_restored_regression",
 })
 
 # §19.4 bootstrap-knowledge event types. Their payloads are campaign-specific
@@ -357,6 +359,7 @@ NATIVE_KINDS = frozenset({
     KIND_TORN_APPEND_DISCARDED, KIND_OPERATOR_CONTROL_ACK, KIND_VIEW_REBASED,
     KIND_PROPOSAL_SKIPPED, KIND_STOP_STATE, KIND_PREFLIGHT_ATTESTATION,
     KIND_LOOP_BUNDLE_SAVED,
+    KIND_LOOP_PHASE,
     KIND_CAMPAIGN_SUPERVISOR_EVENT,
     KIND_CANDIDATE_TRANSACTION,
     KIND_PLANNED_SERVING_ARM_CAPTURED,
@@ -1243,6 +1246,15 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             enrollment_journal.validate_event(payload)
         except enrollment_journal.EnrollmentRefused as exc:
             out.append(f"enrollment event: {exc}")
+    elif kind == KIND_LOOP_PHASE:
+        if __package__:
+            from .loop import phase_journal
+        else:
+            from autokernel.loop import phase_journal
+        try:
+            phase_journal.validate(payload)
+        except phase_journal.PhaseJournalError as exc:
+            out.append(f"phase event: {exc}")
     elif kind == KIND_A2_RUNTIME_EXECUTION and payload.get("schema") == A2_UNIT_RECORD_SCHEMA:
         # AKU-04f additive versioned branch: per-unit intent/permit records (v2). Digest and
         # field validation here; chain/permit validation happens in replay (project_unit).
@@ -4239,7 +4251,7 @@ __all__ = [
     "KIND_COMPOSITION_FAILED", "KIND_COMPOSITION_REJECTED",
     "KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED",
     "KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED",
-    "KIND_ENROLLMENT", "KIND_CAMPAIGN_SUPERVISOR_EVENT", "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA",
+    "KIND_ENROLLMENT", "KIND_LOOP_PHASE", "KIND_CAMPAIGN_SUPERVISOR_EVENT", "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA",
     "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2",
     "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V3",
     "CAMPAIGN_SUPERVISOR_EVENTS", "KIND_CANDIDATE_TRANSACTION",

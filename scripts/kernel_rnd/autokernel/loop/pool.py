@@ -369,7 +369,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           author_sandbox: bool = False,
           cpu_window=None, tail_priority=None, on_tail_ready=None,
           gate_wrappers=None,
-          make_emitting_tail=None) -> PoolResult:
+          make_emitting_tail=None, phase_journal=None) -> PoolResult:
     """Run `iterations` iterations across `workers` lanes and report the accounting.
 
     Everything device-shaped is still injected; this only binds the git side and the
@@ -438,6 +438,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
             **({"finish_author_custody": finish_author_custody}
                if finish_author_custody is not None else {}),
             **({"gate_wrappers": gate_wrappers} if gate_wrappers is not None else {}),
+            **({"phase_journal": phase_journal} if phase_journal is not None else {}),
             # AKPL-P3: lanes hand candidates to their row chain (None: legacy tail).
             **({"make_emitting_tail": make_emitting_tail}
                if make_emitting_tail is not None else {}))

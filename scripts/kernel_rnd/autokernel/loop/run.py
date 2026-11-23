@@ -6067,7 +6067,7 @@ def _main(argv: list[str] | None = None) -> int:
             print("anchor    cleanup skipped (retention_unknown): "
                   + "; ".join(cleanup.retention_unknown), file=sys.stderr)
 
-    def accumulate_after_keep(mechanism_id: str) -> None:
+    def accumulate_after_keep(mechanism_id: str, phase_owner) -> None:
         """R23-44 compound-then-gate. The accumulator just advanced on a bench keep; batch it
         and, only when the bundle's compounded bench gain over the champion of record clears
         `fire_multiple` x the serving floor, spend the serving gate ONCE on the whole bundle.
@@ -6081,7 +6081,7 @@ def _main(argv: list[str] | None = None) -> int:
         if serving_recipe is None:
             return
         try:
-            _accumulate_after_keep(mechanism_id)
+            _accumulate_after_keep(mechanism_id, phase_owner)
         except loop.InteractionRegression:
             # This is a scientific disposition after a completed rollback, not a
             # bookkeeping failure. Let iterate record it instead of returning the
@@ -6095,8 +6095,10 @@ def _main(argv: list[str] | None = None) -> int:
             status.write_json(args.store / "serving", f"accum-error-{mechanism_id}.json",
                               {"mechanism_id": mechanism_id, "error": str(exc)},
                               prefix=".sv-")
+            raise loop.RunAborted(
+                "committed keep has unresolved accumulator bookkeeping") from exc
 
-    def _accumulate_after_keep(mechanism_id: str) -> None:
+    def _accumulate_after_keep(mechanism_id: str, phase_owner) -> None:
         head = _git(args.worktree, "rev-parse", "HEAD")
         previous_tip = bundle[0].tip
 
@@ -6136,6 +6138,7 @@ def _main(argv: list[str] | None = None) -> int:
                 "champion_of_record": bundle[0].champion_of_record,
                 "prior_tip": previous_tip,
                 "candidate_tip": head,
+                "candidate_tree": phase_owner.mutation_binding()["candidate_tree"],
                 "first": first_ref,
                 "repeat": second_ref,
                 **({"restored_tip_recheck": restored_ref} if restored_ref else {}),
@@ -6212,6 +6215,10 @@ def _main(argv: list[str] | None = None) -> int:
                     # regression may predate the reverted keep, so the next keep must
                     # re-measure the whole bundle rather than wait for its cadence.
                     accum_bench_forced[0] = True
+                    bundle[0].measurement_validity = accumulate.MEASUREMENT_STALE_RESTORED_REGRESSION
+                    bundle[0].comparison_evidence = restored_ref
+                    bundle[0].save(args.store)
+                phase_owner.mark_rollback(resolution_ref)
                 raise loop.InteractionRegression(
                     f"whole bundle regressed beyond floor twice; restored prior tip "
                     f"{previous_tip[:12]}; evidence {resolution_ref['path']}")
@@ -7184,9 +7191,18 @@ def _main(argv: list[str] | None = None) -> int:
                             != _cpu_arm(direct_launch, anchor_build[0]).execution_digest):
                         raise loop.TailRefused("runtime keep lacks keep-grade evidence for the "
                                                "current recipe")
+                    phase_owner.mark_integration({"kind": "runtime",
+                        "anchor_snapshot": pair.anchor.snapshot_digest,
+                        "candidate_snapshot": pair.candidate.snapshot_digest})
                     selected = pair.candidate
                 else:
+                    pair = hypothesis.runtime_pair
+                    phase_owner.mark_integration({"kind": "runtime",
+                        "anchor_snapshot": pair.anchor.snapshot_digest,
+                        "candidate_snapshot": pair.candidate.snapshot_digest})
                     selected = runtime_owner[0].retain(comparison.row, feedback_anchor[0])
+                if selected.snapshot_digest != hypothesis.runtime_pair.candidate.snapshot_digest:
+                    raise loop.RunAborted("retained runtime recipe differs from integration intent")
                 direct_launch = selected
                 cpu_launch = selected if selected.backend == "cpu" else None
                 serving_recipe = selected.template
@@ -7209,6 +7225,14 @@ def _main(argv: list[str] | None = None) -> int:
                 else:
                     runtime_recipe_reference[0] = runtime_owner[0].selection_reference(
                         selected, current_source_commit=current_anchor_commit[0])
+                reference = runtime_recipe_reference[0]
+                if (not isinstance(reference, Mapping) or reference.get("verified") is not True
+                        or not isinstance(reference.get("locator"), str)
+                        or Path(reference["locator"]).name != reference["locator"]):
+                    raise loop.RunAborted("runtime integration lacks a durable selection receipt")
+                phase_owner.bind_runtime_completion({
+                    "path": str((Path(args.store) / "runtime-preparation" / reference["locator"]).resolve()),
+                    "sha256": reference.get("sha256")})
                 record_runtime_adoption(previous_recipe, selected, comparison,
                                         hypothesis.runtime_pair, previous_floor)
                 report_runtime_progress()
@@ -7482,6 +7506,8 @@ def _main(argv: list[str] | None = None) -> int:
                 except (OSError, ValueError) as exc:
                     print(f"warning: bit-exact record not written ({exc}); this keep "
                           "will require the quality gate at fold", file=sys.stderr)
+            phase_owner.mark_integration({"kind": "source", "repo": str(args.worktree.resolve()),
+                "branch": args.champion_branch, "candidate_tree": checked.tree})
             head = pool.advance_champion(worker, hypothesis, paths, comparison,
                                          champion_tree=args.worktree,
                                          branch=args.champion_branch,
@@ -7553,7 +7579,7 @@ def _main(argv: list[str] | None = None) -> int:
             # The accumulator advanced; batch this keep and, if the bundle now clears the
             # serving floor, spend the one serving gate that can advance the champion of record.
             with keep_stage("accumulate_after_keep"):
-                accumulate_after_keep(hypothesis.mechanism_id)
+                accumulate_after_keep(hypothesis.mechanism_id, phase_owner)
             with keep_stage("akx_keep_screen"):  # AKX-P1e; no census -> all UNKNOWN
                 blast_radius.record_keep_best_effort(
                     args.store, args.worktree, keep_id=hypothesis.mechanism_id, child=head,
@@ -7830,67 +7856,75 @@ def _main(argv: list[str] | None = None) -> int:
                 retain=lambda **patch: archive.retain_patch_bytes(args.store, **patch),
                 should_stop=should_stop, walls=author_plan.walls)
 
-        pooled_lanes = pool.provision(args.workers, champion_tree=args.worktree,
-                                      champion_branch=args.champion_branch,
-                                      root=args.worker_root,
-                                      build_root=args.worker_build_root,
-                                      execute=True)
-        lanes_by_name.update({lane.name: lane for lane in pooled_lanes})
-        return pool.drive(
-            # A best-of panel's winner check runs ak-check even with the author sandbox
-            # off; beside ANOTHER lane's tail (--workers > 1, `--lane-actor-models`)
-            # that is a compile during a measurement unless the tail takes the fence.
-            author_sandbox=(sandbox_seat["author_sandbox"]
-                            or (author_plan.panel and int(args.workers) > 1)),
-            commit=commit_pooled,
-            reset=reset_retained,
-            workers=pooled_lanes,
-            make_planner=make_planner,
-            make_critic=lambda worker: (
-                cpu_screen.RetainedCritic(screen_confirmation)
-                if screen_confirmation else actors.AgentCritic(
-                    workspace=worker.worktree, backend=critic_backend,
-                    timeout_s=args.actor_timeout_s, should_stop=should_stop,
-                    default_budgets=True,
-                    seat=actors.ActorSeat(bounded=False, **_actor_knobs(args),
-                                          **_actor_limits(args), **sandbox_seat,
-                                          serving_f1=_actor_serving(args)["serving_f1"]))),
-            build_context=build_context, make_gate=gate_for,
-            make_measure=measure_for, record=record_pooled,
-            iterations=(args.iterations or None), should_stop=should_stop,
-            # Reduced positives remain KEEP_CANDIDATE until original full-target
-            # confirmation; full-confirmed sub-floor positives may then enter the
-            # same working accumulator as unscreened experimental source keeps.
-            accumulate_valid_positive=experimental,
-            # Per accepted hypothesis, across iterations (loop.HYPOTHESIS_AUTHOR_ATTEMPTS).
-            author_attempts=args.hypothesis_author_attempts,
-            validate_candidate=validate_pooled,
-            formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
-                hypothesis, {**context, "epoch_sha256": epoch,
-                             "retired_mechanisms_path": Path(args.store) / "retired-mechanisms.jsonl",
-                             "measurement_epoch_sha256": measurement_epoch}),
-            reserve_candidate=reserve_pooled,
-            record_abandoned=record_abandoned_pooled,
-            begin_author_custody=lambda worker, h, checkpoint:
-                _begin_author_custody(worker, h, checkpoint, store=args.store),
-            finish_author_custody=lambda worker, ticket, h, failure:
-                _finish_author_custody(worker, ticket, h, failure, store=args.store),
-            next_resume=(resume_queue[0].take if resume_queue[0] is not None else None),
-            **({"make_author_panel": make_author_panel} if author_plan.panel else {}),
-            champion_tree=args.worktree, branch=args.champion_branch,
-            on_step=step_pooled,
-            on_tail_ready=lambda tail: live_tail.__setitem__(0, tail),
-            # AKX-ALL-29.2a: a GPU serving run times waiting candidates in descending
-            # launch-weighted order of the anchor profile's kernel they target.
-            **({"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(
-                    gpu_profile_observation, getattr(hypothesis, "target_symbol", None))}
-               if direct_launch and not cpu_launch else {}),
-            **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}),
-            gate_wrappers=_gate_wrappers(args, cpu_launch),
-            # AKPL-P3 (AK-TAIL-SPLIT via rowflow): lanes emit candidate records unless
-            # --legacy-tail or --workers 1 keeps the in-process serialized tail.
-            **({"make_emitting_tail": _emitting_tail_factory(args)}
-               if _tail_split_enabled(args) else {}))
+        from . import phase_journal as phase_journal_module
+        _, phase_journal_dir = accumulate._surface_paths(args.store, args.bundle_surface)
+        phase_book = accumulate.journal.Journal(str(Path(args.store) / phase_journal_dir))
+        phase_owner = phase_journal_module.PhaseJournal(phase_book)
+        try:
+            pooled_lanes = pool.provision(args.workers, champion_tree=args.worktree,
+                                          champion_branch=args.champion_branch,
+                                          root=args.worker_root,
+                                          build_root=args.worker_build_root,
+                                          execute=True)
+            lanes_by_name.update({lane.name: lane for lane in pooled_lanes})
+            return pool.drive(
+                phase_journal=phase_owner,
+                # A best-of panel's winner check runs ak-check even with the author sandbox
+                # off; beside ANOTHER lane's tail (--workers > 1, `--lane-actor-models`)
+                # that is a compile during a measurement unless the tail takes the fence.
+                author_sandbox=(sandbox_seat["author_sandbox"]
+                                or (author_plan.panel and int(args.workers) > 1)),
+                commit=commit_pooled,
+                reset=reset_retained,
+                workers=pooled_lanes,
+                make_planner=make_planner,
+                make_critic=lambda worker: (
+                    cpu_screen.RetainedCritic(screen_confirmation)
+                    if screen_confirmation else actors.AgentCritic(
+                        workspace=worker.worktree, backend=critic_backend,
+                        timeout_s=args.actor_timeout_s, should_stop=should_stop,
+                        default_budgets=True,
+                        seat=actors.ActorSeat(bounded=False, **_actor_knobs(args),
+                                              **_actor_limits(args), **sandbox_seat,
+                                              serving_f1=_actor_serving(args)["serving_f1"]))),
+                build_context=build_context, make_gate=gate_for,
+                make_measure=measure_for, record=record_pooled,
+                iterations=(args.iterations or None), should_stop=should_stop,
+                # Reduced positives remain KEEP_CANDIDATE until original full-target
+                # confirmation; full-confirmed sub-floor positives may then enter the
+                # same working accumulator as unscreened experimental source keeps.
+                accumulate_valid_positive=experimental,
+                # Per accepted hypothesis, across iterations (loop.HYPOTHESIS_AUTHOR_ATTEMPTS).
+                author_attempts=args.hypothesis_author_attempts,
+                validate_candidate=validate_pooled,
+                formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
+                    hypothesis, {**context, "epoch_sha256": epoch,
+                                 "retired_mechanisms_path": Path(args.store) / "retired-mechanisms.jsonl",
+                                 "measurement_epoch_sha256": measurement_epoch}),
+                reserve_candidate=reserve_pooled,
+                record_abandoned=record_abandoned_pooled,
+                begin_author_custody=lambda worker, h, checkpoint:
+                    _begin_author_custody(worker, h, checkpoint, store=args.store),
+                finish_author_custody=lambda worker, ticket, h, failure:
+                    _finish_author_custody(worker, ticket, h, failure, store=args.store),
+                next_resume=(resume_queue[0].take if resume_queue[0] is not None else None),
+                **({"make_author_panel": make_author_panel} if author_plan.panel else {}),
+                champion_tree=args.worktree, branch=args.champion_branch,
+                on_step=step_pooled,
+                on_tail_ready=lambda tail: live_tail.__setitem__(0, tail),
+                # AKX-ALL-29.2a: a GPU serving run times waiting candidates in descending
+                # launch-weighted order of the anchor profile's kernel they target.
+                **({"tail_priority": lambda hypothesis: gpu_serving_profile_mod.kernel_weight(
+                        gpu_profile_observation, getattr(hypothesis, "target_symbol", None))}
+                   if direct_launch and not cpu_launch else {}),
+                **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}),
+                gate_wrappers=_gate_wrappers(args, cpu_launch),
+                # AKPL-P3 (AK-TAIL-SPLIT via rowflow): lanes emit candidate records unless
+                # --legacy-tail or --workers 1 keeps the in-process serialized tail.
+                **({"make_emitting_tail": _emitting_tail_factory(args)}
+                   if _tail_split_enabled(args) else {}))
+        finally:
+            phase_owner.close()
 
     claim_started = None
     original_claims = []

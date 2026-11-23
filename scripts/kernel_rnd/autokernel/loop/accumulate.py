@@ -99,6 +99,7 @@ MEASUREMENT_STALE_RUNTIME_RECIPE = "stale_runtime_recipe_epoch"
 #: earlier tip; like the other stale states it never fires the threshold trigger,
 #: and the next scheduled accumulate bench restores MEASUREMENT_CURRENT.
 MEASUREMENT_DEFERRED_BENCH = "stale_deferred_accumulate_bench"
+MEASUREMENT_STALE_RESTORED_REGRESSION = "stale_restored_regression"
 #: DS41 duty cycle (2026-10-03): after EVERY keep the champion-of-record-vs-tip
 #: bench held the measurement slot for ~13% of loop wall (and the slot was the
 #: bottleneck: 80.6% busy, lanes waited on it 82% of the time). The number it
@@ -532,6 +533,17 @@ def _saved_payload(snapshot: dict, *, provenance: str) -> dict:
     }
 
 
+def _require_resolved_integration(entries: list, store: Path) -> None:
+    """Never let bundle recovery hide a pending integration mutation."""
+    from . import phase_journal
+    try:
+        phases = phase_journal.project(entries, store=store)
+    except phase_journal.PhaseJournalError as exc:
+        raise BundleRecoveryRequired(f"invalid loop phase history: {exc}") from exc
+    if any(item["recovery_state"] == "unresolved_integration" for item in phases.values()):
+        raise BundleRecoveryRequired("unresolved integration requires reconciliation")
+
+
 def _last_saved_snapshot(entries: list) -> tuple[dict, str] | None:
     saved = []
     for entry in entries:
@@ -769,6 +781,7 @@ def _load_bundle_locked(store: Path, *, anchor_commit: str, is_ancestor,
     lock = _existing_shared_lock(book) if read_only else book.write_lock()
     with lock:
         entries = _read_entries(book)
+        _require_resolved_integration(entries, store)
         saved = _last_saved_snapshot(entries)
         provenance = "current_snapshot"
         if saved is None:
@@ -973,6 +986,7 @@ def peek_refusal(store: Path, *, anchor_commit: str,
         if journal_exists:
             book = journal.Journal(str(journal_root))
             entries = _read_entries(book)
+            _require_resolved_integration(entries, store)
             saved = _last_saved_snapshot(entries)
             if saved is not None:
                 snapshot, _provenance = saved
@@ -1133,6 +1147,6 @@ def resolve(bundle: Bundle, serving_row: dict, policy: AccumulatorPolicy,
 
 
 __all__ = ["SERVING_GATE_EVERY_KEEPS", "ACCUMULATE_BENCH_EVERY_KEEPS",
-           "MEASUREMENT_DEFERRED_BENCH", "Decision", "Outcome", "DivergenceAction",
+           "MEASUREMENT_DEFERRED_BENCH", "MEASUREMENT_STALE_RESTORED_REGRESSION", "Decision", "Outcome", "DivergenceAction",
            "AccumulatorPolicy", "Bundle", "gate_trigger", "bench_due", "decide_after_keep",
            "classify_serving", "resolve"]

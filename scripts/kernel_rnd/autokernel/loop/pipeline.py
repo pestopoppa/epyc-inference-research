@@ -42,9 +42,10 @@ a failure of the science and must never be recorded as one.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 import traceback
+import secrets
 from pathlib import Path
 import threading
 import time
@@ -303,7 +304,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              next_resume: Callable[[Worker, str], Any] | None = None,
              begin_author_custody=None, finish_author_custody=None,
              gate_wrappers: GateWrappers | None = None,
-             make_emitting_tail: Callable[[Worker, str], Any] | None = None
+             make_emitting_tail: Callable[[Worker, str], Any] | None = None,
+             phase_journal=None
              ) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
@@ -431,14 +433,30 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             # All three run INSIDE one `tail.session`, so they need no lock of their
             # own: the session is the atomic unit and the staleness check happens once,
             # at its start, while the lock is held.
+            draw_id = secrets.token_hex(16) if phase_journal is not None else ""
+
+            def phase_call(phase, hypothesis, operation):
+                if phase_journal is None:
+                    return operation()
+                with phase_journal.phase(phase, worker.name, base,
+                                         hypothesis.mechanism_id, draw_id,
+                                         hypothesis.to_dict()) as receipt:
+                    result = operation()
+                    if phase == "integration":
+                        receipt["value"] = result
+                    return result
+
             def gate(hypothesis, paths, _w=worker, _t=timer):
-                return _t.timed("gate", make_gate(_w), hypothesis, paths)
+                return phase_call("gate", hypothesis,
+                                  lambda: _t.timed("gate", make_gate(_w), hypothesis, paths))
 
             def measure(hypothesis, paths, _w=worker, _t=timer):
-                return _t.timed("measure", make_measure(_w), hypothesis, paths)
+                return phase_call("measurement", hypothesis,
+                                  lambda: _t.timed("measure", make_measure(_w), hypothesis, paths))
 
             def commit_one(hypothesis, paths, comparison, _w=worker, _t=timer):
-                return _t.timed("commit", commit, _w, hypothesis, paths, comparison)
+                return phase_call("integration", hypothesis,
+                                  lambda: _t.timed("commit", commit, _w, hypothesis, paths, comparison))
 
             def step(label, _w=worker, _t=timer):
                 _t.step(label)
@@ -501,39 +519,43 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     return point
 
                 resumed = next_resume(worker, base) if next_resume is not None else None
-                outcome = loop_mod.iterate(
-                    planner=planner, critic=critic, context=build_context(),
-                    measure=measure, gate=gate, commit=commit_one, on_step=step,
-                    tail_session=(make_emitting_tail(worker, base)
-                                  if make_emitting_tail is not None
-                                  else _TailSession(tail, base, timer)),
-                    should_abandon=should_stop, record_reschedule=record_reschedule,
-                    accumulate_valid_positive=accumulate_valid_positive,
-                    # Per-hypothesis authoring budget across iterations (loop.py).
-                    author_attempts=author_attempts,
-                    validate_candidate=(
-                        (lambda hypothesis, paths, _w=worker, _b=base:
-                         (setattr(_w, "reset_base", _b),
-                          validate_candidate(_w, hypothesis, paths))[1])
-                        if validate_candidate is not None else None),
-                    formation_guard=formation_guard,
-                    reserve_candidate=reserve if reserve_candidate is not None else None,
-                    record_abandoned=abandoned, resume=resumed,
-                    next_resume=draw_resume if next_resume is not None else None,
-                    **({"author_panel": author_panel} if author_panel is not None else {}),
-                    # The lane and the commit reset_to_champion put it on for THIS
-                    # draw: the only lane an empty author report may be derived from.
-                    author_lane=(worker.worktree, base),
-                    **({"begin_author_custody": lambda h, checkpoint:
-                        begin_author_custody(worker, h, checkpoint)}
-                       if begin_author_custody is not None else {}),
-                    **({"finish_author_custody": lambda ticket, h, failure:
-                        finish_author_custody(worker, ticket, h, failure)}
-                       if finish_author_custody is not None else {}),
-                    iteration_scope=iteration_scope,
-                    # Gate features (exact lane, ISA claims): one list, see gate_wrappers.
-                    **({"extra_gates": gate_wrappers.layers(worker)}
-                       if gate_wrappers is not None else {}))
+                iteration_record = (phase_journal.phase(
+                    "iteration", worker.name, base, "unknown", draw_id,
+                    {"mechanism_id": "unknown"}) if phase_journal is not None else nullcontext(None))
+                with iteration_record:
+                    outcome = loop_mod.iterate(
+                        planner=planner, critic=critic, context=build_context(),
+                        measure=measure, gate=gate, commit=commit_one, on_step=step,
+                        tail_session=(make_emitting_tail(worker, base)
+                                      if make_emitting_tail is not None
+                                      else _TailSession(tail, base, timer)),
+                        should_abandon=should_stop, record_reschedule=record_reschedule,
+                        accumulate_valid_positive=accumulate_valid_positive,
+                        # Per-hypothesis authoring budget across iterations (loop.py).
+                        author_attempts=author_attempts,
+                        validate_candidate=(
+                            (lambda hypothesis, paths, _w=worker, _b=base:
+                             (setattr(_w, "reset_base", _b),
+                              validate_candidate(_w, hypothesis, paths))[1])
+                            if validate_candidate is not None else None),
+                        formation_guard=formation_guard,
+                        reserve_candidate=reserve if reserve_candidate is not None else None,
+                        record_abandoned=abandoned, resume=resumed,
+                        next_resume=draw_resume if next_resume is not None else None,
+                        **({"author_panel": author_panel} if author_panel is not None else {}),
+                        # The lane and the commit reset_to_champion put it on for THIS
+                        # draw: the only lane an empty author report may be derived from.
+                        author_lane=(worker.worktree, base),
+                        **({"begin_author_custody": lambda h, checkpoint:
+                            begin_author_custody(worker, h, checkpoint)}
+                           if begin_author_custody is not None else {}),
+                        **({"finish_author_custody": lambda ticket, h, failure:
+                            finish_author_custody(worker, ticket, h, failure)}
+                           if finish_author_custody is not None else {}),
+                        iteration_scope=iteration_scope,
+                        # Gate features (exact lane, ISA claims): one list, see gate_wrappers.
+                        **({"extra_gates": gate_wrappers.layers(worker)}
+                           if gate_wrappers is not None else {}))
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.
