@@ -54,6 +54,21 @@ def _launch(recipe, build, backend):
             "instance_mode": "full", "source:fixture": "tiny-not-production"})
 
 
+
+def _measured_comparison(store, native):
+    artifact = {"schema": "epyc.autokernel.measured_comparison.v1", "comparison": native,
+                "measured_value": native["candidate_samples"][0],
+                "baseline_value": native["anchor_samples"][0], "baseline_path": "/fixture/baseline", "measured_under": "a" * 64}
+    raw = surface_fold.canonical_bytes(artifact)
+    digest = hashlib.sha256(raw).hexdigest()
+    path = store / "measured-comparisons" / (digest + ".json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(raw)
+    return {**native, "measured_value": native["candidate_samples"][0],
+            "baseline_value": native["anchor_samples"][0], "baseline_path": artifact["baseline_path"],
+            "measured_under": artifact["measured_under"],
+            "measurement_ref": {"path": str(path), "sha256": digest}}
+
 def _inputs(tmp_path, backend="cpu"):
     cpu = min(os.sched_getaffinity(0))
     repo, store = tmp_path / "repo", tmp_path / "store"
@@ -69,7 +84,9 @@ def _inputs(tmp_path, backend="cpu"):
     patch = archive.retain_patch(store, repo, lane="fixture", mechanism_id="first-keep")
     _git(repo, "commit", "-qam", "keep")
     kept = _git(repo, "rev-parse", "HEAD")
-    original = {"fixture": "original retained source receipt, not hardware qualification"}
+    native = {"surface": "serving:fixture", "model": "fixture", "pairs": 1,
+              "anchor_samples": [100.0], "candidate_samples": [101.0]}
+    original = _measured_comparison(store, native)
     receipt = surface_fold.ExperimentalKeepReceipt(
         "serving", "first-keep", "request", str(repo), "experimental", parent, kept,
         str(patch), hashlib.sha256(patch.read_bytes()).hexdigest(), str(patch.with_suffix(".json")),
@@ -106,7 +123,10 @@ def _inputs(tmp_path, backend="cpu"):
 def test_keep_receipt_allows_embedded_lifecycle_telemetry_over_metadata_bound(tmp_path):
     _, inputs = _inputs(tmp_path)
     original = surface_fold.reopen_reference(inputs["keep_references"][0]).to_dict()
-    original["comparison"] = {"lifecycle_telemetry": "x" * (surface_fold.MAX_RECEIPT_BYTES + 1)}
+    native = {"surface": "serving:fixture", "model": "fixture", "pairs": 1,
+              "anchor_samples": [100.0], "candidate_samples": [101.0],
+              "lifecycle_telemetry": "x" * (surface_fold.MAX_RECEIPT_BYTES + 1)}
+    original["comparison"] = _measured_comparison(inputs["store_root"], native)
     original["comparison_digest"] = surface_fold._digest(original["comparison"])
     receipt = surface_fold.ExperimentalKeepReceipt.from_dict(original)
 
@@ -253,3 +273,55 @@ def test_touched_scope_skips_inert_keep_and_refuses_unplanned(tmp_path, monkeypa
         with pytest.raises(Exception, match="absent from the TOUCHED-scoped LOO plan"):
             source_loo.execute_surface(**inputs, held_cpu=owner, loo_plan={},
                                        surface_id="decode")
+
+
+def test_receipt_rejects_missing_arms_partial_provenance_and_handwritten_perf(tmp_path):
+    _, inputs = _inputs(tmp_path)
+    original = surface_fold.reopen_reference(inputs["keep_references"][0]).to_dict()
+    for mutation in (lambda row: row.pop("candidate_samples"),
+                     lambda row: row.pop("baseline_path"),
+                     lambda row: row.update(effect=999.0),
+                     lambda row: row.update(candidate_samples=[999.0], measured_value=999.0)):
+        import copy
+        bad = copy.deepcopy(original)
+        mutation(bad["comparison"])
+        bad["comparison_digest"] = surface_fold._digest(bad["comparison"])
+        with pytest.raises(surface_fold.FoldRefused):
+            surface_fold.ExperimentalKeepReceipt.from_dict(bad)
+
+
+@pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf")])
+def test_receipt_refuses_invalid_arm_samples(tmp_path, value):
+    _, inputs = _inputs(tmp_path)
+    original = surface_fold.reopen_reference(inputs["keep_references"][0]).to_dict()
+    original["comparison"]["candidate_samples"][0] = value
+    original["comparison_digest"] = surface_fold._digest(original["comparison"])
+    with pytest.raises(surface_fold.FoldRefused):
+        surface_fold.ExperimentalKeepReceipt.from_dict(original)
+
+
+def test_serving_measurement_continuation_records_completed_result():
+    from . import run
+    events = []
+    invalid = MeasurementInvalid("retry", {})
+    invalid.reschedule = lambda: {"recipe": "fixture"}
+
+    def first():
+        raise invalid
+
+    def record(result):
+        events.append(result.to_dict())
+        return result
+
+    with pytest.raises(MeasurementInvalid) as caught:
+        run._serving_comparison(first, "fixture", on_complete=record)
+    completed = caught.value.reschedule()
+    assert events == [completed.to_dict()]
+
+
+def test_receipt_rejects_measurement_from_another_store(tmp_path):
+    _, inputs = _inputs(tmp_path)
+    reference = inputs["keep_references"][0]
+    receipt = surface_fold.reopen_reference(reference)
+    with pytest.raises(surface_fold.FoldRefused, match="share a retained store"):
+        surface_fold.retain_receipt(tmp_path / "other-store", receipt)

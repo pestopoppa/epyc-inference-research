@@ -21,14 +21,16 @@ from dataclasses import dataclass, replace
 from functools import wraps
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import signal
+import statistics
 import subprocess
 import sys
 import threading
 import time
-import math
+import weakref
 from typing import Any
 
 from ..controller import (anchor_integrity, build_recipe, experiments, inbox, rung_confirm,
@@ -183,16 +185,18 @@ def _stacked(outer, inner):
             yield
 
 
-def _serving_comparison(invoke, baseline_scope, *, measurement_window=nullcontext):
+def _serving_comparison(invoke, baseline_scope, *, measurement_window=nullcontext, on_complete=None):
     """Keep native original-arm continuations behind the same existing view."""
     try:
         with measurement_window():
-            return ServingComparison(invoke(), baseline_scope)
+            result = ServingComparison(invoke(), baseline_scope)
+            return result if on_complete is None else on_complete(result)
     except loop.MeasurementInvalid as exc:
         if exc.reschedule is not None:
             original = exc.reschedule
             exc.reschedule = lambda: _serving_comparison(
-                original, baseline_scope, measurement_window=measurement_window)
+                original, baseline_scope, measurement_window=measurement_window,
+                on_complete=on_complete)
         raise
 
 
@@ -2313,12 +2317,8 @@ def _native_stale_rebaseline(store: Path, worktree: Path, bundle, harness: str,
         if not isinstance(comparison, (bench.Comparison, ServingComparison)):
             raise ValueError("native comparison did not return its completed result type")
         row = comparison.to_dict()
-        pairs = row.get("pairs")
-        if (not isinstance(pairs, int) or isinstance(pairs, bool) or pairs < 1 or
-                not isinstance(row.get("anchor_samples"), list) or
-                not isinstance(row.get("candidate_samples"), list) or
-                len(row["anchor_samples"]) != pairs or len(row["candidate_samples"]) != pairs):
-            raise ValueError("native comparison did not complete both arm sample vectors")
+        from .comparison_validation import validate_comparison
+        validate_comparison(row, require_provenance=False)
         if (isinstance(comparison, ServingComparison) and row.get("schema") not in
                 ("epyc.autokernel.serving_ab.v1", "epyc.autokernel.serving_ab.v2")):
             raise ValueError("native serving comparison did not return a completed serving record")
@@ -5210,6 +5210,8 @@ def _main(argv: list[str] | None = None) -> int:
                   file=sys.stderr)
         return comparison
 
+    measured_source_comparisons = {}
+
     @counter_phase("serving_with_warmup")
     def cpu_compare(a_build, c_build, *, rebind_feedback=True):
         anchor_recipe = _cpu_arm(direct_launch, a_build)
@@ -5222,7 +5224,7 @@ def _main(argv: list[str] | None = None) -> int:
         if rebind_feedback:
             feedback_anchor[0] = anchor_recipe
         ensure_source_floor(anchor_recipe, a_build)
-        return _serving_comparison(lambda: serving.compare(
+        result = _serving_comparison(lambda: serving.compare(
             serving_recipe, a_build, c_build, pairs=args.serving_pairs,
             floor_pct=floor, floor_unit=serving_floor_unit, port=direct_launch.port,
             anchor_resolved_recipe=anchor_recipe,
@@ -5232,18 +5234,50 @@ def _main(argv: list[str] | None = None) -> int:
             **({"instrument": args.serving_instrument} if source_instrument else {})),
             "experimental_candidate_not_champion" if experimental
             else "canonical_candidate_vs_current_anchor",
-            measurement_window=cpu_measurement_window)
+            measurement_window=cpu_measurement_window,
+            on_complete=lambda completed: retain_measured_source_comparison(
+                completed, a_build, anchor_recipe.execution_digest, serving_recipe.model))
+        return result
+
+    def retain_measured_source_comparison(result, baseline_build, measured_under, model):
+        if not (experimental and cpu_launch and selected_identity is not None):
+            return result
+        # The measuring step, not the later keep writer, seals the native result.
+        result.row["model"] = str(model)
+        native = result.to_dict()
+        from .comparison_validation import validate_comparison
+        validate_comparison(native, require_provenance=False)
+        measured_fields = {
+            "measured_value": statistics.median(native["candidate_samples"]),
+            "baseline_value": statistics.median(native["anchor_samples"]),
+            "baseline_path": str(Path(baseline_build).resolve()), "measured_under": measured_under}
+        raw = surface_fold.canonical_bytes({
+            "schema": "epyc.autokernel.measured_comparison.v1", "comparison": native,
+            **measured_fields})
+        digest = hashlib.sha256(raw).hexdigest()
+        path = args.store.resolve() / "measured-comparisons" / (digest + ".json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        archive._retain_bytes(path, raw)
+        key = id(result)
+        reference = weakref.ref(result, lambda _ref, key=key: measured_source_comparisons.pop(key, None))
+        measured_source_comparisons[key] = (
+            reference, {"path": str(path), "sha256": digest}, measured_fields)
+        return result
 
     def longctx_compare(c_build):
         """The current anchor vs `c_build` on the opt-in long-context surface (longctx.py):
         slot restored, decode at depth as the scalar, prefill at depth in `row['longctx']`."""
         long_launch = longctx_surface.launch_for(direct_launch)
-        return _serving_comparison(lambda: longctx_surface.compare(
-            _cpu_arm(long_launch, anchor_build[0]), _cpu_arm(long_launch, c_build),
+        anchor_arm = _cpu_arm(long_launch, anchor_build[0])
+        result = _serving_comparison(lambda: longctx_surface.compare(
+            anchor_arm, _cpu_arm(long_launch, c_build),
             pairs=args.serving_pairs),
             "experimental_candidate_not_champion" if experimental
             else "canonical_candidate_vs_current_anchor",
-            measurement_window=cpu_measurement_window)
+            measurement_window=cpu_measurement_window,
+            on_complete=lambda completed: retain_measured_source_comparison(
+                completed, anchor_build[0], anchor_arm.execution_digest, anchor_arm.template.model))
+        return result
 
     def longctx_keep_gate(worker, hypothesis, comparison, *, measured_row=None) -> dict:
         """Every keep of an opted-in target must not regress either surface: a long-primary
@@ -7478,6 +7512,10 @@ def _main(argv: list[str] | None = None) -> int:
             accepted_floor_request_digest = floor_request_digest
             accepted_launch_snapshot_digest = (direct_launch.snapshot_digest
                                                 if direct_launch is not None else None)
+            measured_comparison = getattr(comparison, "original", comparison)
+            if source_fold_candidate and (id(measured_comparison) not in measured_source_comparisons
+                    or measured_source_comparisons[id(measured_comparison)][0]() is not measured_comparison):
+                raise loop.TailRefused("source keep lacks measuring-step comparison evidence")
             patch_path = keep_the_diff(worker, hypothesis) if source_fold_candidate else None
             parent = (_git(worker.worktree, "rev-parse", "HEAD")
                       if source_fold_candidate else None)
@@ -7564,6 +7602,9 @@ def _main(argv: list[str] | None = None) -> int:
             with keep_stage("promote_anchor"):
                 promote_anchor()
             if source_fold_candidate and patch_path is not None and parent is not None:
+                _, measurement_ref, measured_fields = measured_source_comparisons[id(measured_comparison)]
+                native = measured_comparison.to_dict()
+                comparison_block = {**native, **measured_fields, "measurement_ref": measurement_ref}
                 original_source_keeps.append({
                     "surface": args.surface, "mechanism_id": hypothesis.mechanism_id,
                     "request_id": selected_identity["request_id"],
@@ -7574,7 +7615,7 @@ def _main(argv: list[str] | None = None) -> int:
                     "selected_target": selected_identity,
                     "launch_snapshot_digest": accepted_launch_snapshot_digest,
                     "floor_request_digest": accepted_floor_request_digest,
-                    "floor_unit": "process", "comparison": comparison.to_dict(),
+                    "floor_unit": "process", "comparison": comparison_block,
                 })
             # The accumulator advanced; batch this keep and, if the bundle now clears the
             # serving floor, spend the one serving gate that can advance the champion of record.

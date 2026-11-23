@@ -213,14 +213,16 @@ class CandidateTarget:
     drafter_digest: str | None
     workload_digest: str
     production_required: bool
+    authorising_act: str | None = None
 
     @classmethod
     def from_dict(cls, value: Any) -> "CandidateTarget":
         row = _object(value, "candidate target")
+        row.setdefault("authorising_act", None)
         _keys(row, {"schema", "target_id", "target_revision_digest", "backend",
                     "build_execution_digest",
                     "resolved_recipe_execution_digest", "resolved_recipe_snapshot_digest",
-                    "model_digest", "drafter_digest", "workload_digest", "production_required"},
+                    "model_digest", "drafter_digest", "workload_digest", "production_required", "authorising_act"},
               "candidate target")
         if row["schema"] != TARGET_SCHEMA:
             raise CandidateError(f"candidate target: unsupported schema {row['schema']!r}")
@@ -237,7 +239,8 @@ class CandidateTarget:
                    _sha(row["resolved_recipe_snapshot_digest"], "recipe snapshot digest"),
                    _sha(row["model_digest"], "model digest"),
                    None if drafter is None else _sha(drafter, "drafter digest"),
-                   _sha(row["workload_digest"], "workload digest"), row["production_required"])
+                   _sha(row["workload_digest"], "workload digest"), row["production_required"],
+                   None if row["authorising_act"] is None else _text(row["authorising_act"], "authorising act"))
 
     def to_dict(self) -> dict[str, Any]:
         return {"schema": TARGET_SCHEMA,
@@ -249,7 +252,8 @@ class CandidateTarget:
                 "resolved_recipe_snapshot_digest": self.resolved_recipe_snapshot_digest,
                 "model_digest": self.model_digest, "drafter_digest": self.drafter_digest,
                 "workload_digest": self.workload_digest,
-                "production_required": self.production_required}
+                "production_required": self.production_required,
+                **({"authorising_act": self.authorising_act} if self.authorising_act is not None else {})}
 
 
 @dataclass(frozen=True)

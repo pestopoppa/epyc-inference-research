@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 from typing import Any, Mapping
 
-from . import archive
+from . import archive, comparison_validation
 
 
 KEEP_RECEIPT_SCHEMA = "epyc.autokernel.experimental_source_keep.v1"
@@ -176,6 +176,30 @@ class ExperimentalKeepReceipt:
             raise FoldRefused("keep target and comparison must be objects")
         if _digest(comparison) != _sha(value["comparison_digest"], "comparison digest"):
             raise FoldRefused("comparison digest differs")
+        try:
+            comparison_validation.validate_comparison(comparison)
+            ref = comparison["measurement_ref"]
+            if set(ref) != {"path", "sha256"}:
+                raise FoldRefused("measurement reference field set differs")
+            measurement_path = Path(_text(ref["path"], "measurement path"))
+            measurement_sha = _sha(ref["sha256"], "measurement digest")
+            if (measurement_path.parent.name != "measured-comparisons"
+                    or measurement_path.name != measurement_sha + ".json"):
+                raise FoldRefused("measurement artifact is not in the retained measurement store")
+            raw = bounded_regular_bytes(measurement_path, MAX_KEEP_RECEIPT_BYTES)
+            if hashlib.sha256(raw).hexdigest() != measurement_sha:
+                raise FoldRefused("measurement artifact digest differs")
+            artifact = json.loads(raw)
+            keys = {"measured_value", "baseline_value", "baseline_path", "measured_under", "measurement_ref"}
+            if artifact != {"schema": "epyc.autokernel.measured_comparison.v1",
+                            "comparison": {k: v for k, v in comparison.items() if k not in keys},
+                            "measured_value": comparison["measured_value"],
+                            "baseline_value": comparison["baseline_value"],
+                            "baseline_path": comparison["baseline_path"],
+                            "measured_under": comparison["measured_under"]}:
+                raise FoldRefused("performance fields differ from measuring-step artifact")
+        except (comparison_validation.ComparisonRefused, OSError, ValueError, TypeError) as exc:
+            raise FoldRefused(f"comparison refused: {exc}") from exc
         unit = _text(value["floor_unit"], "floor unit")
         if unit not in {"arm", "session", "process"}:
             raise FoldRefused("floor unit is unknown")
@@ -303,7 +327,9 @@ def validate_original(receipt: ExperimentalKeepReceipt) -> ExperimentalKeepRecei
 
 def retain_receipt(root: Path, receipt: ExperimentalKeepReceipt) -> Path:
     receipt = validate_original(receipt)
-    path = Path(root) / "fold-receipts" / f"{receipt.keep_id}.json"
+    if Path(receipt.comparison["measurement_ref"]["path"]).parent.parent != Path(root).resolve():
+        raise FoldRefused("measurement and keep receipt must share a retained store")
+    path = Path(root).resolve() / "fold-receipts" / f"{receipt.keep_id}.json"
     raw = canonical_bytes(receipt.to_dict()) + b"\n"
     path.parent.mkdir(parents=True, exist_ok=True)
     archive._retain_bytes(path, raw)
@@ -326,9 +352,13 @@ def reopen_reference(value: Any) -> ExperimentalKeepReceipt:
     if hashlib.sha256(raw).hexdigest() != _sha(value["sha256"], "keep reference digest"):
         raise FoldRefused("keep reference digest differs")
     try:
-        return ExperimentalKeepReceipt.from_dict(json.loads(raw))
+        receipt = ExperimentalKeepReceipt.from_dict(json.loads(raw))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise FoldRefused("keep reference is invalid JSON") from exc
+    measurement_path = Path(receipt.comparison["measurement_ref"]["path"])
+    if path.parent.name != "fold-receipts" or measurement_path.parent.parent != path.parent.parent:
+        raise FoldRefused("measurement and keep receipt must share a retained store")
+    return receipt
 
 
 __all__ = ["ExperimentalKeepReceipt", "FoldRefused", "KEEP_RECEIPT_SCHEMA",

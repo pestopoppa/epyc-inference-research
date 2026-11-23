@@ -665,3 +665,12 @@ def test_failed_loo_build_is_explicit_debt_not_a_neutral_result():
     plan = cm.plan_loo(candidate, "k0", treatment_resolver=build_failed)
     assert plan.status == "unsupported" and plan.derived_manifest_digest is None
     assert plan.reason.startswith("build_failed:")
+
+
+def test_target_authorising_act_roundtrip():
+    target = _manifest()["targets"][0]
+    target["authorising_act"] = "ratification:example"
+    assert cm.CandidateTarget.from_dict(target).to_dict()["authorising_act"] == "ratification:example"
+    target["authorising_act"] = ""
+    with pytest.raises(cm.CandidateError):
+        cm.CandidateTarget.from_dict(target)
