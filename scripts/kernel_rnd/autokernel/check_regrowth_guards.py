@@ -17,120 +17,24 @@ Two mechanisms made that possible, and both are checkable:
     where deleting costs more than adding only grows.
   * **Nothing bounded the size.** There was no number anyone could point at.
 
-These guards are deliberately blunt. The LOC budget is arbitrary, and that is the
-point: it forces the conversation at 2x rather than at 50x.
+These guards are deliberately blunt. The loop budget is ONE number -- the measured
+code-line total of loop/ against `total_ceiling` -- that cannot drift up silently and
+that makes deleting cheaper than adding. History, friction measurements and the
+total-budget redesign (operator-approved 2026-11-23): epyc-root audit
+/mnt/raid0/llm/tmp/code-budget-audit-20261123/REPORT.md §5.
 
 Run: python3 -m scripts.kernel_rnd.autokernel.check_regrowth_guards (requires a reviewed baseline)
-Exit 0 clean, 1 on a violation.
+Exit 0 clean, 1 on a violation (or a refused --tighten/--tighten-total).
 """
 from __future__ import annotations
 
 import argparse
+import math
+import subprocess
 import json
 from pathlib import Path, PurePosixPath
 import re
 import sys
-
-#: The rebuilt loop's budget. Arbitrary by design -- see the module docstring.
-#: Raised 3000 -> 3400 on 2026-08-29 and 3400 -> 3450 on 2026-08-31, each deliberately
-#: and each with its reason recorded here rather than in a commit nobody re-reads.
-#:
-#: THE 2026-08-31 RAISE, and why it is not the regrowth this guard exists to stop.
-#: The package sat at EXACTLY 3400, so no functional change of any size could land --
-#: a three-line bug fix (publish the anchor commit that candidates are actually
-#: measured against, not the one the run started from; run 19 advanced the champion
-#: twice while the dashboard reported it stuck) did not fit even after every comment
-#: was stripped from it. A budget that blocks a three-line correctness fix is not
-#: bounding regrowth, it is bounding maintenance. Raised by 50 -- enough that the next
-#: few honest fixes land, small enough that the conversation returns soon. Operator
-#: decision, 2026-08-31, asked for explicitly after the alternatives were put to them.
-#:
-#: The 3000 was set for a SEQUENTIAL loop of ~830 LOC. Concurrency -- seven lanes, a
-#: serialized tail, champion arbitration, provisioning and pruning -- is `pipeline.py`
-#: plus `pool.py`, ~640 lines, and it bought 5.6x throughput (run 13: 10 iterations in
-#: 118.6 min; run 14: 14 in 29.8). That is a capability, not regrowth.
-#:
-#: The prose share is NOT written here any more -- `composition()` computes it and the
-#: guard prints it on every run. Three hand measurements of this one number, three
-#: different answers: 34% (2026-08-29, never re-derived as the package grew), 23.8%
-#: (2026-08-31, under-counted -- it missed full-line `#` comments), and the computed
-#: 30.8%. A stale prose share is exactly the number a future "just bump it, most of it
-#: is comments" argument leans on, so it may not live in a comment. That prose is the
-#: incident record, and it is load
-#: bearing: every guard here exists because something specific went wrong, and a guard
-#: whose reason has been deleted gets removed by the next person who finds it
-#: inconvenient. The budget counts it, which means the budget is partly a documentation
-#: budget. Stated so the next reader does not mistake 3,400 for 3,400 lines of logic.
-#:
-#: Against the 153,865 LOC this replaces, the point of the guard stands: it forces this
-#: conversation at 2x, not at 50x.
-LOOP_LOC_BUDGET = 3450
-
-
-#: HISTORICAL RECORD: retain the 2026-08-31–09-04 budget rationale below verbatim.
-#: LOOP_CODE_BUDGET is historical only; per-file manifest enforcement is defined below.
-#: There is deliberately no aggregate --code-budget override.
-#: THE ENFORCED BUDGET, 2026-08-31. `LOOP_LOC_BUDGET` above is still printed, because a
-#: total-line number is the review burden a reader wants to see -- but it no longer
-#: FAILS anything, and this does.
-#:
-#: Counting every line put the guard and its own doctrine in opposition. The note above
-#: says the package's prose is the incident record and is load bearing; a total-line
-#: budget makes deleting that prose the cheapest way to land a fix. That is not
-#: hypothetical: on 2026-08-31 the package sat at exactly its budget and a three-line
-#: correctness fix did not fit even after every comment was stripped from it, and the
-#: budget was raised rather than the record deleted. The next person will not be as
-#: scrupulous. A guard whose cheapest satisfaction is the thing it forbids is a guard
-#: that will eventually be satisfied that way.
-#:
-#: Code-only, so a comment buys nothing and only deleting CODE fits. 2,100 against
-#: today's 1,848 is 252 lines -- one more subsystem the size of pool.py's driver, or
-#: thirty small fixes, before the conversation returns. Against the 153,865 LOC this
-#: replaces the ratio the module docstring defends is unchanged: it still forces the
-#: argument at 2x, not at 50x.
-#:
-#: 2,100 -> 2,160 on 2026-09-01: the operator-approved D1-D6 production-shaped rung
-#: (docs/design/autokernel-production-shaped-rung.md §5.1-§5.3). +60 lines of loop
-#: code, all wiring: the (surface, workload)-keyed floor lookup in bench.py, the
-#: Comparison/status/headline records carrying their rung, the three --confirm-*
-#: flags, one closure and one guarded gate call at commit_pooled, and the
-#: ConfirmVetoed catch at the keep gate. The gate's decision arithmetic, the parity
-#: checks and the census-based family live in `controller/` (rung_confirm.py,
-#: workload_contract.py) -- the uncounted library -- on purpose. Raised by the
-#: minimum that lands the approved work with 3 lines to spare, because a budget the
-#: package sits EXACTLY on blocks the next three-line correctness fix (the
-#: 2026-08-31 lesson above).
-#:
-#: 2,160 -> 2,210 on 2026-09-03: the operator-directed per-role model split (the roles
-#: have since been swapped -- as of 2026-09-07 the planner is gpt-5.6-sol at high via
-#: `codex exec` and the critic is Claude Fable 5.1 at medium via the `claude` CLI; the
-#: line count is unchanged by that, only the two default constants moved).
-#: +44 lines of loop code, all wiring: the `Backend`
-#: dataclass whose `argv` is the whole per-CLI contract (TOML-quoted codex effort;
-#: claude headless flags plus the sandbox note the freeze overlay makes necessary),
-#: `backend_for`, the two role defaults, four `--planner-*`/`--critic-*` flags and
-#: the `actors` banner line that records which models drove a run -- provenance
-#: the R23-19 headline incident showed is not optional. Raised by the minimum that
-#: lands it with 6 lines to spare, for the same reason as the raise above.
-#:
-#: 2,210 -> 2,400 on 2026-09-04: R23-43, the serving-throughput measurement core (operator
-#: directive: keeps are demonstrated on llama-server under the champion's canonical recipe,
-#: not a llama-bench proxy -- proven necessary when +35% of dec-b4 bench moved DFlash2 serving
-#: ~0%). `loop/serving.py` (+~140 code: the general recipe, the np-concurrent aggregate-tok/s
-#: measurement, the paired A/B, the A/A floor) plus headroom for the keep-gate wiring in
-#: loop.py/run.py. This is a NEW capability the loop did not have, not regrowth of removed prose.
-#: 2,400 -> 2,500 on 2026-09-04: R23-44 compound-then-gate policy core (operator directive:
-#: "collect llama-bench keeps until they compound to 2x-3x noise floor before the
-#: llama-server final champion advancement gate"). `loop/accumulate.py` (+~90 code: a
-#: two-tier champion -- an accumulator that advances on cheap bench keeps, a
-#: champion-of-record that advances only when a bundle compounds past the serving floor
-#: AND the one serving gate confirms it). A per-keep serving gate vetoes every 1-3% keep
-#: against the ~3.5% floor; batching makes the serving gate resolvable. NEW capability.
-#: 2,500 -> 2,560 on 2026-09-04: R23-44 observability — `accumulator_state()` in run.py
-#: exposes the two-tier bundle (keeps, compounded %, fire threshold, progress fraction) in the
-#: loop status so the dashboard can render keeps accumulating toward the serving gate; the
-#: operator asked to watch the bundle build. NEW observability surface, not regrowth.
-LOOP_CODE_BUDGET = 2560
 
 #: Documentation whose CONTENTS no test may assert. Asserting a doc's text makes
 #: every deletion cost a regeneration, which is how 92 deletions happen in 5 weeks.
@@ -201,9 +105,8 @@ def composition_by_file(root: Path) -> dict[str, int]:
 def composition(root: Path) -> tuple[int, int, int]:
     """`(code, prose, blank)` for the loop package, computed rather than remembered.
 
-    Every hand measurement of this number has been wrong -- see the note at
-    LOOP_LOC_BUDGET. The budget counts all three, so the split is what tells a reader
-    whether a raise is buying capability or documentation.
+    Every hand measurement of this number has been wrong, so it is computed. Only
+    code counts against the budget; the split tells a reader what a raise would buy.
     """
     code = prose = blank = 0
     if not root.is_dir():
@@ -243,15 +146,29 @@ def manifest_for(files: dict[str, int], *, status: str = "GENERATED") -> dict[st
             "files": dict(sorted(files.items())), "exceptions": {}}
 
 
-def check_code_baseline(baseline_path: Path, current: dict[str, int]) -> list[str]:
-    """Fail closed on invalid, ungenerated, drifting, or exceeded baselines."""
+_REQUIRED_KEYS = {"schema_version", "status", "source_revision", "scope", "metric", "files"}
+_OPTIONAL_KEYS = {"exceptions", "total_ceiling", "total_ceiling_approval"}
+#: The only commit trailer that lets total_ceiling go UP (the ratify scripts write it).
+RATIFY_TRAILER = "Operator-Ratified: yes"
+
+
+def warn_band(ceiling: int) -> int:
+    """Per-file slack before a file is listed as a trim-or-split candidate."""
+    return max(10, math.ceil(ceiling * 0.05))
+
+
+def _load_baseline(baseline_path: Path) -> tuple[dict | None, list[str]]:
     try:
         raw = json.loads(baseline_path.read_text(encoding="utf-8"),
                          object_pairs_hook=_unique_object)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
-        return [f"cannot read valid baseline {baseline_path}: {exc}"]
-    if not isinstance(raw, dict) or set(raw) != {
-            "schema_version", "status", "source_revision", "scope", "metric", "files", "exceptions"}:
+        return None, [f"cannot read valid baseline {baseline_path}: {exc}"]
+    return raw, validate_baseline(raw)
+
+
+def validate_baseline(raw: object) -> list[str]:
+    """Schema check. `exceptions` is optional (retired by the total-budget ratify)."""
+    if not isinstance(raw, dict) or not _REQUIRED_KEYS <= set(raw) <= _REQUIRED_KEYS | _OPTIONAL_KEYS:
         return ["baseline fields do not match the required schema"]
     if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
         return ["baseline schema_version must be integer 1"]
@@ -263,10 +180,17 @@ def check_code_baseline(baseline_path: Path, current: dict[str, int]) -> list[st
         return [f"baseline scope must be {LOOP_CODE_SCOPE!r}"]
     if raw["metric"] != LOOP_CODE_METRIC:
         return [f"baseline metric must be {LOOP_CODE_METRIC!r}"]
+    if ("total_ceiling" in raw) != ("total_ceiling_approval" in raw):
+        return ["total_ceiling and total_ceiling_approval must be present together"]
+    if "total_ceiling" in raw:
+        if type(raw["total_ceiling"]) is not int or raw["total_ceiling"] < 0:
+            return ["total_ceiling must be a nonnegative integer (not bool)"]
+        if not isinstance(raw["total_ceiling_approval"], str) or not raw["total_ceiling_approval"].strip():
+            return ["total_ceiling_approval must name the operator ratification"]
     files = raw["files"]
     if not isinstance(files, dict) or not files:
         return ["baseline files must be a non-empty object"]
-    exceptions = raw["exceptions"]
+    exceptions = raw.get("exceptions", {})
     if not isinstance(exceptions, dict):
         return ["exceptions must be an object"]
     for name, entry in exceptions.items():
@@ -274,7 +198,6 @@ def check_code_baseline(baseline_path: Path, current: dict[str, int]) -> list[st
                 or type(entry["ceiling"]) is not int or entry["ceiling"] < 0
                 or not isinstance(entry["approval"], str) or not entry["approval"].strip()):
             return [f"invalid exception for {name!r}: require ceiling and operator approval reference"]
-
     errors: list[str] = []
     for name, ceiling in files.items():
         if (not isinstance(name, str) or not name or "\\" in name
@@ -284,23 +207,150 @@ def check_code_baseline(baseline_path: Path, current: dict[str, int]) -> list[st
             errors.append(f"invalid relative POSIX source path: {name!r}")
         if type(ceiling) is not int or ceiling < 0:
             errors.append(f"ceiling for {name!r} must be a nonnegative integer (not bool)")
-    if errors:
-        return errors
-
-    expected, recorded = set(current), set(files)
-    for name in sorted(set(exceptions) - expected):
-        errors.append(f"stale exception path: {name}")
-    for name in sorted(expected - recorded):
-        if name not in exceptions:
-            errors.append(f"new in-scope source has no baseline entry: {name}")
-    for name in sorted(recorded - expected):
-        errors.append(f"stale baseline path is outside current scope: {name}")
-    for name in sorted(expected & (recorded | set(exceptions))):
-        ceiling = exceptions[name]["ceiling"] if name in exceptions else files[name]
-        if current[name] > ceiling:
-            errors.append(f"{name}: {current[name]} code lines exceeds ceiling "
-                          f"{ceiling} by {current[name] - ceiling}")
     return errors
+
+
+def per_file_ceilings(raw: dict) -> dict[str, int]:
+    """Advisory per-file ceilings; an exception overrides its files entry."""
+    ceilings = dict(raw["files"])
+    ceilings.update({name: entry["ceiling"] for name, entry in raw.get("exceptions", {}).items()})
+    return ceilings
+
+
+def effective_total_ceiling(raw: dict) -> tuple[int, str]:
+    """`(ceiling, source)`. Before the operator signs total_ceiling in, the bound is the
+    sum of the per-file ceilings -- no tighter and no looser than the per-file regime."""
+    if "total_ceiling" in raw:
+        return raw["total_ceiling"], f"total_ceiling ({raw['total_ceiling_approval']})"
+    return sum(per_file_ceilings(raw).values()), "fallback: sum of per-file ceilings (total_ceiling not signed yet)"
+
+
+def evaluate(baseline_path: Path, current: dict[str, int]) -> dict[str, object]:
+    """FAIL only on an invalid baseline or on the measured total over the ceiling.
+    New files are auto-admitted (they count against the total); per-file overruns and
+    stale paths are warnings."""
+    raw, errors = _load_baseline(baseline_path)
+    report: dict[str, object] = {"errors": errors, "warnings": [], "candidates": [],
+                                 "total": sum(current.values()), "ceiling": None,
+                                 "source": None, "raw": raw}
+    if errors:
+        return report
+    ceilings = per_file_ceilings(raw)
+    ceiling, source = effective_total_ceiling(raw)
+    report["ceiling"], report["source"] = ceiling, source
+    total = report["total"]
+    if total > ceiling:
+        errors.append(f"loop/ total {total} code lines exceeds {source} {ceiling} by {total - ceiling}")
+    warnings: list[str] = report["warnings"]
+    for name in sorted(set(ceilings) - set(current)):
+        warnings.append(f"stale baseline path (deleted or moved; its lines are freed): {name}")
+    for name in sorted(set(current) - set(ceilings)):
+        warnings.append(f"new module auto-admitted under the total: {name} ({current[name]} code lines)")
+    for name in sorted(set(current) & set(ceilings)):
+        over = current[name] - ceilings[name]
+        if over > warn_band(ceilings[name]):
+            report["candidates"].append(
+                f"{name}: {current[name]} code lines, {over} over its advisory ceiling "
+                f"{ceilings[name]} (band {warn_band(ceilings[name])})")
+    return report
+
+
+def check_code_baseline(baseline_path: Path, current: dict[str, int]) -> list[str]:
+    """The failing subset of `evaluate`: invalid baseline or total over the ceiling."""
+    return list(evaluate(baseline_path, current)["errors"])
+
+
+def check_total_raise(previous: dict | None, new: dict, message: str | None) -> list[str]:
+    """Raising the total bound is human-only: it needs the ratify trailer on the commit
+    AND a RATIFY-* approval. `message=None` means uncommitted, which can never raise."""
+    if (previous is None or "total_ceiling" not in new
+            or validate_baseline(previous) or validate_baseline(new)):
+        return []  # before sign-in the per-file regime's own review applies, unchanged
+    before, _ = effective_total_ceiling(previous)
+    after, _ = effective_total_ceiling(new)
+    if after <= before:
+        return []
+    signed = (message is not None and RATIFY_TRAILER in message
+              and str(new.get("total_ceiling_approval", "")).startswith("RATIFY-"))
+    if signed:
+        return []
+    where = "an uncommitted edit" if message is None else "a commit without the operator ratify trailer"
+    return [f"total ceiling raised {before} -> {after} by {where}; raising is human-only "
+            f"(an operator ratify script under epyc-root scripts/operator/)"]
+
+
+def _git(cwd: Path, *args: str) -> str | None:
+    try:
+        out = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True,
+                             text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout if out.returncode == 0 else None
+
+
+def _parse(text: str | None) -> dict | None:
+    try:
+        return json.loads(text) if text else None
+    except json.JSONDecodeError:
+        return None
+
+
+def raise_check_from_git(baseline_path: Path) -> tuple[list[str], str]:
+    """Run check_total_raise on (HEAD vs working copy) and on the last commit that
+    touched the baseline vs its parent. Returns `(errors, note)`."""
+    cwd = baseline_path.resolve().parent
+    top = _git(cwd, "rev-parse", "--show-toplevel")
+    if top is None:
+        return [], "raise check skipped: baseline is not in a git checkout"
+    cwd = Path(top.strip()).resolve()
+    rel = baseline_path.resolve().relative_to(cwd).as_posix()
+    working = _parse(baseline_path.read_text(encoding="utf-8"))
+    errors = check_total_raise(_parse(_git(cwd, "show", f"HEAD:{rel}")), working, None) if working else []
+    last = (_git(cwd, "log", "-1", "--format=%H", "--", rel) or "").strip()
+    if not last:
+        return errors, "raise check: no committed history for the baseline"
+    parent = _parse(_git(cwd, "show", f"{last}^:{rel}"))
+    if parent is None and _git(cwd, "rev-parse", "--verify", "-q", f"{last}^") is None:
+        return errors, f"raise check incomplete: parent of {last[:12]} not fetched (shallow clone?)"
+    errors += check_total_raise(parent, _parse(_git(cwd, "show", f"{last}:{rel}")) or {},
+                                _git(cwd, "log", "-1", "--format=%B", last) or "")
+    return errors, f"raise check: last baseline commit {last[:12]} and working copy"
+
+
+def _write_baseline(baseline_path: Path, raw: dict) -> None:
+    baseline_path.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def tighten(baseline_path: Path, current: dict[str, int], *, per_file: bool,
+            total: bool) -> list[str]:
+    """Ratchet DOWN only, and only on a green run with total_ceiling signed in.
+    Returns refusals (empty on success). No number may ever go up."""
+    report = evaluate(baseline_path, current)
+    if report["errors"]:
+        return ["refusing to tighten a red baseline"]
+    raw = report["raw"]
+    if "total_ceiling" not in raw:
+        return ["refusing to tighten before total_ceiling is signed in: lowering per-file "
+                "ceilings would lower the fallback total, and writing total_ceiling is the "
+                "operator's migration signature"]
+    new = json.loads(json.dumps(raw))
+    if per_file:
+        new["files"] = {name: min(ceiling, current[name])
+                        for name, ceiling in raw["files"].items() if name in current}
+        if "exceptions" in raw:
+            new["exceptions"] = {name: {**entry, "ceiling": min(entry["ceiling"], current[name])}
+                                 for name, entry in raw["exceptions"].items() if name in current}
+        if not new["files"]:
+            return ["refusing to tighten: no baseline file is still in scope"]
+    if total:
+        old, measured = raw["total_ceiling"], report["total"]
+        new["total_ceiling"] = max(measured, old - (old - measured) // 2)
+    ceilings_before, ceilings_after = per_file_ceilings(raw), per_file_ceilings(new)
+    if (new["total_ceiling"] > raw["total_ceiling"]
+            or any(ceilings_after[n] > ceilings_before[n] for n in ceilings_after)):
+        return ["internal error: tighten would raise a number; nothing written"]
+    _write_baseline(baseline_path, new)
+    return []
 
 
 def generated_manifest_json(files: dict[str, int]) -> str:
@@ -335,53 +385,81 @@ def main(argv: list[str] | None = None) -> int:
                         default=Path(__file__).resolve().parent)
     parser.add_argument("--loop-package", type=Path, default=None,
                         help="the rebuilt loop package (default <package>/loop)")
-    parser.add_argument("--baseline", type=Path, default=DEFAULT_CODE_BASELINE,
-                        help="versioned per-file source ceiling manifest")
+    parser.add_argument("--baseline", type=Path, default=None,
+                        help="versioned loop code-budget baseline")
     parser.add_argument("--emit-baseline-json", action="store_true",
-                        help="print current per-file ceilings for owner review; never writes a file")
-    parser.add_argument("--budget", type=int, default=LOOP_LOC_BUDGET,
-                        help="informational total-LOC comparison only")
+                        help="print current per-file counts for owner review; never writes a file")
+    parser.add_argument("--tighten", action="store_true",
+                        help="on a green run, lower per-file ceilings to current size and drop stale paths")
+    parser.add_argument("--tighten-total", action="store_true",
+                        help="on a green run, total_ceiling = max(current, total - deleted/2)")
+    parser.add_argument("--no-raise-check", action="store_true",
+                        help="skip the git-history check that total_ceiling was not raised unsigned")
     parser.add_argument("--check-doc-assertions", action="store_true",
                         help="also fail on tests that pin documentation prose. Off by "
                              "default while the superseded suites still exist; the "
                              "strip (P5) is what makes this enforceable.")
     args = parser.parse_args(argv)
+    baseline = args.baseline or DEFAULT_CODE_BASELINE
 
     loop_root = args.loop_package or (args.package / "loop")
     problems = 0
     total, rows = loop_package_loc(loop_root)
+    current = composition_by_file(loop_root)
     if args.emit_baseline_json:
-        files = composition_by_file(loop_root)
-        if not files:
+        if not current:
             print(f"cannot generate baseline: no in-scope Python source at {loop_root}",
                   file=sys.stderr)
             return 1
-        print(generated_manifest_json(files), end="")
+        print(generated_manifest_json(current), end="")
         return 0
+    if args.tighten or args.tighten_total:
+        refusals = tighten(baseline, current, per_file=args.tighten, total=args.tighten_total)
+        for refusal in refusals:
+            print(f"REFUSED: {refusal}", file=sys.stderr)
+        if refusals:
+            return 1
+        print(f"tightened {baseline} (lowered only)")
 
     if not rows:
-        print(f"loop package not present yet at {loop_root} — LOC budget not applicable")
+        print(f"loop package not present yet at {loop_root} — code budget not applicable")
     else:
         code, prose, blank = composition(loop_root)
         print(f"loop package composition: {code} code / {prose} prose / {blank} blank "
               f"({100.0 * prose / max(1, code + prose + blank):.1f}% prose)")
-        print(f"loop package: {total} LOC across {len(rows)} files "
-              f"(informational budget {args.budget})")
+        print(f"loop package: {total} LOC across {len(rows)} files (informational)")
         for name, count in sorted(rows, key=lambda item: -item[1])[:10]:
             print(f"    {count:>6}  {name}")
-        if total > args.budget:
-            print(f"\nNOTE: the loop package is {total} LOC, over the informational "
-                  f"{args.budget}; this is not a violation.")
+    for label, extra in (("controller/", args.package / "controller"),
+                         ("scripts/benchmark/autokernel_*", args.package.resolve().parents[1] / "benchmark")):
+        if extra.is_dir():
+            paths = [p for p in _source_files(extra)
+                     if label.startswith("controller") or p.name.startswith("autokernel_")]
+            if paths:
+                print(f"informational, not budgeted: {label} {sum(file_composition(p)[0] for p in paths)} "
+                      f"code lines across {len(paths)} files")
 
-    current = composition_by_file(loop_root)
-    baseline_errors = check_code_baseline(args.baseline, current)
-    if baseline_errors:
-        print("\nCODE BASELINE VIOLATION:", file=sys.stderr)
-        for error in baseline_errors:
+    report = evaluate(baseline, current)
+    errors = list(report["errors"])
+    if not args.no_raise_check and not errors:
+        raise_errors, note = raise_check_from_git(baseline)
+        errors += raise_errors
+        print(note)
+    if errors:
+        print("\nCODE BUDGET VIOLATION:", file=sys.stderr)
+        for error in errors:
             print(f"  - {error}", file=sys.stderr)
         problems += 1
     else:
-        print(f"per-file code baseline: {len(current)} files within reviewed ceilings")
+        print(f"loop code budget: {report['total']} / {report['ceiling']} code lines "
+              f"[{report['source']}], {report['ceiling'] - report['total']} headroom")
+    for warning in report["warnings"]:
+        print(f"WARN: {warning}")
+    if report["candidates"]:
+        print(f"WARN: {len(report['candidates'])} trim-or-split candidate(s) over the per-file "
+              f"band max(+10, +5%) (advisory, never fails):")
+        for row in report["candidates"]:
+            print(f"    {row}")
 
     hits = doc_coupled_tests(args.package)
     if hits:
