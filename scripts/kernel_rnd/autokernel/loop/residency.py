@@ -261,6 +261,9 @@ class Sampler:
         self.own_pid_rss_reads = 0
         self._cpu_observer = None
         self._cpu_observer_error = None
+        self._foreign = None
+        self._foreign_error = None
+        self._foreign_bound_pct = None
         self._entered = False
 
     def abort_above(self, ceiling_bytes: int, terminate) -> None:
@@ -316,6 +319,17 @@ class Sampler:
                 observer.start("load")
         except Exception as exc:
             self._cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
+        try:  # AKU-22: shared SMT-correct foreign-load sampler, observation only
+            from .foreign_residency import ForeignLoadObserver
+            self._foreign = ForeignLoadObserver(int(pid), bound_pct=self._foreign_bound_pct)
+            if self._entered:
+                self._foreign.start()
+        except Exception as exc:
+            self._foreign_error = f"{type(exc).__name__}: {exc}"[:256]
+
+    def set_foreign_bound(self, bound_pct: float | None) -> None:
+        """Declare the foreign-load bound (call before `watch_pid`)."""
+        self._foreign_bound_pct = bound_pct
 
     def _watch_once(self) -> int | None:
         pid = self._watched_pid
@@ -371,6 +385,8 @@ class Sampler:
                 self._cpu_observer.start("load")
             except Exception as exc:
                 self._cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
+        if self._foreign is not None:
+            self._foreign.start()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
         return self
@@ -379,6 +395,8 @@ class Sampler:
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=5)
+        if self._foreign is not None:
+            self._foreign.stop()
         if self._cpu_observer is not None:
             try:
                 self._cpu_observer.finish()
@@ -401,6 +419,10 @@ class Sampler:
                 watched["cpu_affinity_observation"] = self._cpu_observer.observation
             except Exception as exc:
                 self._cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
+        if self._foreign is not None:
+            watched["foreign_load"] = self._foreign.summary
+        if self._foreign_error is not None:
+            watched["foreign_load_error"] = self._foreign_error
         if self._cpu_observer_error is not None:
             watched["cpu_affinity_observation_error"] = self._cpu_observer_error
         breach = {} if self.ceiling_breach is None else {
