@@ -1,0 +1,29 @@
+{
+  "champion_of_record": "eee3da838e3c8306a856f2c72c4b04048fded698",
+  "compounded_bench_pct": 2.7986958198166656,
+  "keeps": [
+    {
+      "contention_label": "unproven",
+      "effect_pct": 0.6271945173250026,
+      "floor_pct": 0.652,
+      "floor_unit": "process",
+      "keep_id": "akm-cpu-q8-proportional-stream-placement@2dd322c96f5e",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 2.157966653952381,
+      "floor_pct": 0.652,
+      "floor_unit": "process",
+      "keep_id": "akm-cpu-solo-verify-five-rows@f37aef58793b",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    }
+  ],
+  "recipe": "q38fn-b0ba1d427-cpu-t48-mtp-d4.fe68657a",
+  "recipe_hash": "fe68657ad739ff6582fb896ebfa8d12db245365626badf04675d350cccb62e91",
+  "schema": "epyc.autokernel.cpu_accumulator_bundle.v1",
+  "surface": "cpu",
+  "tip": "eee3da838e3c8306a856f2c72c4b04048fded698"
+}

@@ -1,5 +1,5 @@
 {
-  "champion_of_record": "053c3bd82d00c1be41cc2b7d502a715b8b820410",
+  "champion_of_record": "eee3da838e3c8306a856f2c72c4b04048fded698",
   "compounded_bench_pct": 15.503868173016656,
   "keeps": [
     {
@@ -43,5 +43,5 @@
   "recipe_hash": "f29a817a878300af3b497153950b469cecbd37b9b9dbc674de41e237c1e4f8dd",
   "schema": "epyc.autokernel.cpu_accumulator_bundle.v1",
   "surface": "cpu",
-  "tip": "dd3d9721ca37321ad9159520bbd9616e3d0d6228"
+  "tip": "eee3da838e3c8306a856f2c72c4b04048fded698"
 }

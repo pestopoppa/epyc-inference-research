@@ -1,6 +1,6 @@
 {
-  "champion_of_record": "053c3bd82d00c1be41cc2b7d502a715b8b820410",
-  "compounded_bench_pct": 13.519635589969026,
+  "champion_of_record": "eee3da838e3c8306a856f2c72c4b04048fded698",
+  "compounded_bench_pct": 18.404022322918067,
   "keeps": [
     {
       "contention_label": "unproven",
@@ -13,10 +13,46 @@
     },
     {
       "contention_label": "unproven",
+      "effect_pct": 0.34962305988535114,
+      "floor_pct": 3.412,
+      "floor_unit": "process",
+      "keep_id": "akm-ds41-small-sumrows-solo@7cc59249a674",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 2.67314742826561,
+      "floor_pct": 3.412,
+      "floor_unit": "process",
+      "keep_id": "akm-ds41-solo-small-three-row-runs@891f499a67d2",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 1.1118664559548908,
+      "floor_pct": 3.412,
+      "floor_unit": "process",
+      "keep_id": "akm-ds41-small-concat-solo-runs@896fb681ca5f",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
       "effect_pct": 0.3948393632757563,
       "floor_pct": 1.876,
       "floor_unit": "process",
       "keep_id": "akm-ds41-gemm4xn-4x-unroll@c4303a50cdd9",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 0.11997203113678356,
+      "floor_pct": 3.412,
+      "floor_unit": "process",
+      "keep_id": "akm-ds41-verify-bounded-flat-expert-slabs@c9beda60656e",
       "magnitude": "provisional",
       "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
     },
@@ -34,5 +70,5 @@
   "recipe_hash": "fe8ee8f377dbee464891bbf23a35f091dfd1402136ef4062d96a171e24b0612b",
   "schema": "epyc.autokernel.cpu_accumulator_bundle.v1",
   "surface": "cpu",
-  "tip": "dd3d9721ca37321ad9159520bbd9616e3d0d6228"
+  "tip": "eee3da838e3c8306a856f2c72c4b04048fded698"
 }

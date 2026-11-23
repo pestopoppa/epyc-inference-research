@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, Sequence
 
 from . import cpu_keep_bundle as ckb
 
@@ -41,19 +42,19 @@ def _keep_from_row(attempt_id: str, mechanism: str, payload: Mapping) -> tuple[s
     return cmp["recipe"], cmp["recipe_hash"], keep
 
 
-def derive(db: Path | str, prefixes: Iterable[str], *, champion_of_record: str,
+def derive(db: Path | str | Sequence[Path | str], prefixes: Iterable[str], *, champion_of_record: str,
            tip: str, skipped: list | None = None) -> list[dict]:
     """One validated bundle per recipe for the kept rows whose attempt id starts with a prefix.
 
-    A prefix that matches no kept row refuses, unless the caller passes ``skipped`` (a list that
+    ``db`` may be several stores (one fold cites keeps from several campaigns); a prefix matching
+    kept rows in two stores refuses as ambiguous. A prefix that matches no kept row refuses, unless the caller passes ``skipped`` (a list that
     then collects them): a fold manifest cites keeps from several campaign stores, and the ones
     this store lacks are reported, never silently dropped."""
-    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    try:
-        rows = con.execute("select attempt_id, mechanism_id, payload from experiments "
-                           "where status='kept' order by recorded_at").fetchall()
-    finally:
-        con.close()
+    rows = []
+    for one in ([db] if isinstance(db, (str, Path)) else db):
+        with closing(sqlite3.connect(f"file:{one}?mode=ro", uri=True)) as con:
+            rows += con.execute("select attempt_id, mechanism_id, payload from experiments "
+                                "where status='kept' order by recorded_at").fetchall()
     groups: dict[tuple[str, str], list[dict]] = {}
     for prefix in sorted(set(prefixes)):
         hit = [r for r in rows if r[0].startswith(prefix)]
@@ -71,7 +72,7 @@ def derive(db: Path | str, prefixes: Iterable[str], *, champion_of_record: str,
                       keeps=keeps) for (r, h), keeps in sorted(groups.items())]
 
 
-def record(db: Path | str, prefixes: Iterable[str], out_dir: Path | str, *,
+def record(db: Path | str | Sequence[Path | str], prefixes: Iterable[str], out_dir: Path | str, *,
            champion_of_record: str, tip: str, skipped: list | None = None) -> list[Path]:
     return [ckb.write(Path(out_dir), b) for b in
             derive(db, prefixes, champion_of_record=champion_of_record, tip=tip, skipped=skipped)]
@@ -80,7 +81,7 @@ def record(db: Path | str, prefixes: Iterable[str], out_dir: Path | str, *,
 def main(argv: list[str] | None = None) -> int:
     import argparse
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--db", required=True)
+    ap.add_argument("--db", required=True, action="append", help="experiments.db; repeat for several stores")
     ap.add_argument("--manifest", required=True, help="kernel manifest whose cited keeps are the fold")
     ap.add_argument("--out", required=True)
     ap.add_argument("--champion-of-record", required=True)

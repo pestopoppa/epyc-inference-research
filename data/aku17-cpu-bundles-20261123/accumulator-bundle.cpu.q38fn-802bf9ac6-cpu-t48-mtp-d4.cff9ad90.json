@@ -1,0 +1,74 @@
+{
+  "champion_of_record": "eee3da838e3c8306a856f2c72c4b04048fded698",
+  "compounded_bench_pct": 13.059506638787145,
+  "keeps": [
+    {
+      "contention_label": "unproven",
+      "effect_pct": 3.9324196473554895,
+      "floor_pct": 6.528,
+      "floor_unit": "process",
+      "keep_id": "akm-cpu-q8-verify-five-single-pass@058e94dc35b4",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 0.05393791039824958,
+      "floor_pct": 8.419,
+      "floor_unit": "process",
+      "keep_id": "akm-cpu-q8-next-tile-prefetch@06553c1f6408",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 1.6112405178828615,
+      "floor_pct": 2.483,
+      "floor_unit": "process",
+      "keep_id": "akm-cpu-solo-concat-verify-five@0ea8abaf6edb",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 2.047731239781858,
+      "floor_pct": 6.528,
+      "floor_unit": "process",
+      "keep_id": "akm-cpu-mmid-flat-activation-blocks@1b87266c11df",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 0.5932164016749786,
+      "floor_pct": 2.483,
+      "floor_unit": "process",
+      "keep_id": "akm-cpu-iq3s-grid-gather@80233abd6d9d",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 0.8483695274238201,
+      "floor_pct": 2.483,
+      "floor_unit": "process",
+      "keep_id": "akm-cpu-dense-verify-flat-quant-blocks@9327ee931009",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    },
+    {
+      "contention_label": "unproven",
+      "effect_pct": 3.3568294533127485,
+      "floor_pct": 6.528,
+      "floor_unit": "process",
+      "keep_id": "akm-cpu-float-narrow-m-column-jobs@e0b79b8a44b9",
+      "magnitude": "provisional",
+      "statistic": "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+    }
+  ],
+  "recipe": "q38fn-802bf9ac6-cpu-t48-mtp-d4.cff9ad90",
+  "recipe_hash": "cff9ad900700c8057a2783946e5e5dc5ed718818728dd1bdbdfb9e0199b16fb8",
+  "schema": "epyc.autokernel.cpu_accumulator_bundle.v1",
+  "surface": "cpu",
+  "tip": "eee3da838e3c8306a856f2c72c4b04048fded698"
+}

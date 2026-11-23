@@ -80,3 +80,15 @@ def test_same_recipe_name_with_two_hashes_does_not_collide(tmp_path):
     paths = fr.record(db, ["aaaaaaaaaaaa", "bbbbbbbbbbbb"], tmp_path / "o",
                       champion_of_record="c" * 40, tip="t" * 40)
     assert len({p.name for p in paths}) == 2 and len(list((tmp_path / "o").glob("*.json"))) == 2
+
+
+def test_several_stores_are_one_fold(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    d1 = mkdb(tmp_path / "a", [("a" * 64, "m1", "kept", CMP)])
+    d2 = mkdb(tmp_path / "b", [("b" * 64, "m2", "kept", CMP)])
+    (b,) = fr.derive([d1, d2], ["aaaaaaaaaaaa", "bbbbbbbbbbbb"], champion_of_record="c" * 40,
+                     tip="t" * 40)
+    assert len(b["keeps"]) == 2
+    with pytest.raises(ckb.CpuBundleError):                     # same attempt in both stores
+        fr.derive([d1, d1], ["aaaaaaaaaaaa"], champion_of_record="c" * 40, tip="t" * 40)
