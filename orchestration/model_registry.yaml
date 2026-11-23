@@ -1067,6 +1067,12 @@ server_mode:
       # is the production recipe (was `draft-mtp` alone until 2026-07-31).
       spec_type: draft-mtp
       draft_max: 4
+      # 2026-11-23 CAFE-1-SERVED-T (RATIFY-A3B-PMIN05-20261123): --draft-p-min 0.5 (== --spec-draft-p-min).
+      # A3B CPU MTP decode +22.1 % (T0.3) / +27.9 % (T1.0) vs A/A floors 0.8 / 2.9 %; SPEC-PIT.1
+      # distribution gate PASS at both T. 0.75 REJECTED (chi2 1.6e-16 at T1.0). Measured on a
+      # 24t quarter, -np 1; served-shape A/B is a KEEP condition of the bring-up (see package).
+      # Applies to EVERY role on this process (shared_with list below).
+      draft_p_min: 0.5
       lookup: false
       corpus_retrieval: false
     throughput: 40.22  # category=OPTIMUM t/s, full instance canonical placement, draft-mtp, short ctx.
@@ -1234,6 +1240,7 @@ server_mode:
       spec_type: draft-mtp        # the INHERITED recipe, stated so a reader of this row alone
                                   # does not conclude the role serves without speculation
       draft_max: 4
+      draft_p_min: 0.5            # INHERITED from server_mode.frontdoor (CAFE-1-SERVED-T, 2026-11-23); documentation only
       lookup: false
       corpus_retrieval: false
       # numa_instances/numa_ports DELETED 2026-09-22. They were retained as explicit
@@ -2906,6 +2913,7 @@ roles:
       # is the production recipe (was `draft-mtp` alone until 2026-07-31).
       spec_type: draft-mtp
       draft_max: 4
+      draft_p_min: 0.5  # CAFE-1-SERVED-T KEEP P05 (2026-11-23, row ak-cafe1-served-t-cpu-20261123-r2): parity with server_mode.frontdoor
       draft_model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
       lookup: false
       corpus_retrieval: false
