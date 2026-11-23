@@ -156,7 +156,6 @@ def test_default_mode_has_no_client_and_popen_is_unchanged():
 def test_run_long_claim_owners_and_window_modes_are_refused():
     base = dict(validate_source_loo=False, cpu_held_intervals_v2="off", gpu_window="off")
     for override, runtime, match in (({}, True, "runtime admission"),
-                                     ({"validate_source_loo": True}, False, "source LOO"),
                                      ({"cpu_held_intervals_v2": "on"}, False, "CTC-4"),
                                      ({"gpu_window": "required"}, False, "window"),
                                      ({}, False, "enrolled target")):
@@ -164,3 +163,25 @@ def test_run_long_claim_owners_and_window_modes_are_refused():
             sc.install(None, args=SimpleNamespace(**{**base, **override}), target=None,
                        launch=None, resources=None, hold_cpu=None, hold_device=None,
                        runtime_enabled=runtime)
+
+
+def test_source_loo_is_no_longer_refused_and_gets_the_stage_held_claims():
+    args = SimpleNamespace(validate_source_loo=True, cpu_held_intervals_v2="off", gpu_window="off")
+    with pytest.raises(sc.CoordinationRefused, match="enrolled target"):   # passes the LOO check, stops later
+        sc.install(None, args=args, target=None, launch=None, resources=None, hold_cpu=None,
+                   hold_device=None, runtime_enabled=False)
+    server = sc.ParentServer()
+    s, log = scope(connect(server, "G", 21), "G", ["q3"], ["mi210_0"])
+    with pytest.raises(sc.CoordinationRefused, match="no stage"):
+        s.claims()
+    with s.stage("build"):
+        cpu, gpu = s.claims()
+        assert cpu == ("cpu", "0") and gpu == ("dev",)
+        with s.stage("build"):                       # nested reuses the same lease
+            assert s.claims() == (cpu, gpu)
+    assert ("cpu-", "G") in log and ("dev-", "G") in log
+    with pytest.raises(sc.CoordinationRefused):      # released claims are never handed out afterwards
+        s.claims()
+    c, clog = scope(connect(server, "C", 22), "C", ["q0"])
+    with c.stage("build"):
+        assert c.claims()[1] is None                 # CPU-only stage: no device claim

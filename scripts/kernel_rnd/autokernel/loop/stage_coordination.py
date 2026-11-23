@@ -14,9 +14,10 @@ claims in order CPU regions -> device through the existing claim owners, and
 releases them after the callback returns. Nested callbacks on the same thread
 reuse the current lease instead of re-flocking through a second descriptor.
 
-Paths whose owners retain a run-long claim object (runtime admission/restore,
-source LOO validation) are refused in coordinated mode rather than handed a
-released claim; they keep running in the default single-target mode.
+Source LOO validation (CTC-2b) runs inside an admitted stage and receives that
+stage's held claim objects (`StageScope.claims()`), so nothing retains a released
+claim. Runtime admission/restore keeps a run-long owner and is still refused in
+coordinated mode rather than handed a released claim (rest of CTC-2b).
 
 Default mode (no fd) is byte-for-byte the previous behaviour: `from_env()`
 returns None and run.py takes its original whole-batch claims.
@@ -189,6 +190,16 @@ class StageScope:
         """The claim objects currently held on this thread (empty outside a stage)."""
         return list(getattr(self._local, "held", ()))
 
+    def claims(self) -> tuple:
+        """(cpu_claim, gpu_claim | None) held NOW on this thread; refuses outside a stage.
+
+        Execution-time consumers (source LOO) take these instead of a run-long
+        `original_claims[0]`/`[-1]`; the objects are released when the stage ends."""
+        held = self.held()
+        if not held:
+            raise CoordinationRefused("no stage is held on this thread; claims exist only inside a stage")
+        return held[0], (held[-1] if len(held) > 1 else None)
+
     def _footprint(self, kind: str) -> sf.StageFootprint:
         base = self.runtime
         if kind == "build" and self.build is not None:
@@ -247,20 +258,16 @@ def client_from_env(environ=None) -> Optional[ChildClient]:
     return ChildClient(socket.socket(fileno=int(value)))
 
 
-def refuse_run_long_claim_owners(*, runtime_enabled: bool, source_loo: bool) -> None:
+def refuse_run_long_claim_owners(*, runtime_enabled: bool) -> None:
     if runtime_enabled:
         raise CoordinationRefused("runtime admission retains a run-long claim; "
-                                  "not available under --max-active-targets > 1")
-    if source_loo:
-        raise CoordinationRefused("source LOO validation retains a run-long claim; "
                                   "not available under --max-active-targets > 1")
 
 
 def install(client: ChildClient, *, args, target, launch, resources, hold_cpu, hold_device,
             runtime_enabled: bool) -> StageScope:
     """Build run.py's StageScope from CTC-1 footprints, refusing unsupported paths."""
-    refuse_run_long_claim_owners(runtime_enabled=runtime_enabled,
-                                 source_loo=bool(getattr(args, "validate_source_loo", False)))
+    refuse_run_long_claim_owners(runtime_enabled=runtime_enabled)
     if getattr(args, "cpu_held_intervals_v2", "off") == "on":
         raise CoordinationRefused("interval v2 accounting of stage windows is CTC-4")
     if getattr(args, "gpu_window", "off") == "required":

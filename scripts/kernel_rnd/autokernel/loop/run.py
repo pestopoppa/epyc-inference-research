@@ -8751,23 +8751,27 @@ def _main(argv: list[str] | None = None) -> int:
                     _source_repo, assembled_tree = surface_validation.shared_git_commit(
                         args.worktree, source_checkout,
                         source_resumed["current_anchor"]["commit"])
-                    source_loo_result = source_loo.execute_surface(
-                        directory=args.out / "source-loo", store_root=args.store,
-                        repo=source_checkout,
-                        assembled_commit=source_resumed["current_anchor"]["commit"],
-                        assembled_tree=assembled_tree,
-                        keep_references=source_lineage_references,
-                        target=selected_identity,
-                        full_launch=_cpu_arm(direct_launch, validation_candidate_build),
-                        baseline=(validation_original_commit,
-                                  _cpu_arm(direct_launch, validation_anchor_build)),
-                        frozen_requests=frozen_requests, instrument=args.serving_instrument,
-                        pairs=args.serving_pairs, cmake_defines=recipe.cmake_defines(),
-                        jobs=build_jobs, build_cpu_list=build_cpu_list,
-                        held_cpu=original_claims[0],
-                        held_gpu=None if cpu_launch else original_claims[-1],
-                        epoch=epoch, campaign_id="ak-loop", should_stop=should_stop,
-                        on_serving_export=feedback.exported)
+                    with (stage_scope.stage("build") if stage_scope is not None else nullcontext()):
+                        # CTC-2b: LOO takes the claims held at execution time (this stage's
+                        # in coordinated mode), never a released run-long object.
+                        loo_cpu, loo_gpu = (stage_scope.claims() if stage_scope is not None
+                                            else (original_claims[0], original_claims[-1]))
+                        source_loo_result = source_loo.execute_surface(
+                            directory=args.out / "source-loo", store_root=args.store,
+                            repo=source_checkout,
+                            assembled_commit=source_resumed["current_anchor"]["commit"],
+                            assembled_tree=assembled_tree,
+                            keep_references=source_lineage_references,
+                            target=selected_identity,
+                            full_launch=_cpu_arm(direct_launch, validation_candidate_build),
+                            baseline=(validation_original_commit,
+                                      _cpu_arm(direct_launch, validation_anchor_build)),
+                            frozen_requests=frozen_requests, instrument=args.serving_instrument,
+                            pairs=args.serving_pairs, cmake_defines=recipe.cmake_defines(),
+                            jobs=build_jobs, build_cpu_list=build_cpu_list,
+                            held_cpu=loo_cpu, held_gpu=None if cpu_launch else loo_gpu,
+                            epoch=epoch, campaign_id="ak-loop", should_stop=should_stop,
+                            on_serving_export=feedback.exported)
                 validation_status = "source_validation_" + validation_body["disposition"]
                 validation_comparison_view = (ServingComparison(
                     validation_body["comparison"], "whole_source_regression_guard")
