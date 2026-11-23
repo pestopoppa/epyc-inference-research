@@ -716,8 +716,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "actor_wire_test.py:run_seat:write_text": (2, _SELF_CLEANING + " (inside-lane and external fixture sentinels)"),
     # -- actor call scratch (migrated): bundle, seat config, orchestrator inputs --------
     "actor_context.py:Bundle.seal:write_text": (1, _IN_SCOPE + " (bundle manifest)"),
-    "actor_context.py:explode:mkdir": (1, _IN_SCOPE + " (bundle json tree)"),
-    "actor_context.py:explode:write_text": (2, _IN_SCOPE + " (bundle json tree)"),
+    "actor_context_json.py:explode:mkdir": (1, _IN_SCOPE + " (bundle json tree)"),
+    "actor_context_json.py:explode:write_text": (2, _IN_SCOPE + " (bundle json tree)"),
     "actor_context.py:materialize:mkdir": (1, _IN_SCOPE + " (bundle sections/)"),
     "actor_context.py:materialize:write_text": (2, _IN_SCOPE + " (bundle sections, INDEX)"),
     "actor_opencode_config.py:_atomic_write:mkstemp": (1, "atomic temp+rename beside a caller-given target (the call-scope seat dir)"),
