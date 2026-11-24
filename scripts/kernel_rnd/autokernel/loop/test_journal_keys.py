@@ -76,12 +76,14 @@ class SeedInstall(unittest.TestCase):
             self.assertEqual(len(r["unkeyed"]["negatives"]), len(recs) - len(keyed))
             self.assertIn("akm-hist-graph-opt", r["unkeyed"]["negatives"])
 
-    def test_shipped_hypotheses_all_install_today(self):  # none carries a key yet: no suppression, all reported unkeyed
+    def test_shipped_hypotheses_all_install_today(self):  # no shipped hypothesis is suppressed; unkeyed ones are reported
         with tempfile.TemporaryDirectory() as tmp:
             r = seed.install(Path(tmp))
         self.assertEqual(r["suppressed"], {})
         md = [n for n in r["inbox_files"] if not n.endswith(".serving-knob.md")]  # serving-knob seeds are not journal-keyed
-        self.assertEqual(sorted(r["unkeyed"]["hypotheses"]), sorted(md))
+        keyed = sorted(n for n in md if jk.parse_key((seed.SEEDS / "hypotheses" / n).read_text(encoding="utf-8")))
+        self.assertIn("27-ak-27b-tail-fusion-groups-20261124.md", keyed)  # keyed and NOT suppressed by any shipped negative
+        self.assertEqual(sorted(r["unkeyed"]["hypotheses"]), sorted(set(md) - set(keyed)))
 
     def test_key_entry_keys_a_later_journal_entry(self):
         with tempfile.TemporaryDirectory() as tmp:
