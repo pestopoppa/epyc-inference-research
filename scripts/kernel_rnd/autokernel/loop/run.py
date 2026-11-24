@@ -6196,8 +6196,9 @@ def _futility_rule(args, floor_pct, *, on_bench=False, record=None):
     """AK-EVAL-FUT: the run's pre-registered futility rule, or None (fixed_pairs).
 
     sigma_pair from the surface's own A/A: the matched serving floor record's samples,
-    or the bench k=1 floor row. Off unless --futility-looks on; never on an uncalibrated bar."""
-    if getattr(args, "futility_looks", "off") != "on" or floor_pct is None:
+    or the bench k=1 floor row. On by default (--futility-looks off = fixed_pairs); never on an
+    uncalibrated bar."""
+    if getattr(args, "futility_looks", "on") != "on" or floor_pct is None:
         return None
     from . import futility
     if on_bench:

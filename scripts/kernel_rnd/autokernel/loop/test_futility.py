@@ -124,9 +124,14 @@ def test_serving_futile_stop_records_plan_and_matches_instrument(monkeypatch):
             frozen_requests=requests, futility=rule)
 
 
-def test_run_rule_is_off_by_default_and_never_on_an_uncalibrated_bar():
+def test_run_rule_is_on_by_default_and_never_on_an_uncalibrated_bar():
+    from . import run_args
+    parser = run_args.build_parser([], description="t", run_module=run)
+    assert parser.get_default("futility_looks") == "on"
     args = SimpleNamespace(futility_looks="off", futility_z=None, futility_min_pairs=2)
     assert run._futility_rule(args, 1.0, record={}) is None
+    del args.futility_looks   # absent attribute resolves to the default (on): still no rule without a bar
+    assert run._futility_rule(args, None, on_bench=True) is None
     args.futility_looks = "on"
     assert run._futility_rule(args, None, on_bench=True) is None
     args.serving_instrument = serving.MATCHED_INSTRUMENT
@@ -134,3 +139,13 @@ def test_run_rule_is_off_by_default_and_never_on_an_uncalibrated_bar():
     rule = run._futility_rule(args, 1.5, record=record)
     assert rule.z == futility.Z_SERVING and rule.bar_pct == 1.5
     assert rule.sigma_source == "matched_serving_floor_aa_samples"
+
+
+def test_retained_comparison_accepts_a_futile_stop_but_not_a_short_fixed_run():
+    from .comparison_validation import ComparisonRefused, validate_comparison
+    base = {"pairs": 5, "anchor_samples": [10.0, 10.1], "candidate_samples": [9.0, 9.1]}
+    validate_comparison({**base, "stop_reason": "futility", "pairs_run": 2}, require_provenance=False)
+    with pytest.raises(ComparisonRefused):
+        validate_comparison(base, require_provenance=False)
+    with pytest.raises(ComparisonRefused):
+        validate_comparison({**base, "stop_reason": "futility", "pairs_run": 3}, require_provenance=False)

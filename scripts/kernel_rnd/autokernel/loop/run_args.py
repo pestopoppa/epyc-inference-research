@@ -135,9 +135,10 @@ def build_parser(original_argv, *, description, run_module):
                         help="operator-attention warning window in measured candidates; "
                              "observe-only, default %(default)s")
     parser.add_argument("--pairs", type=int, default=bench.MIN_PAIRS)
-    parser.add_argument("--futility-looks", choices=("off", "on"), default="off",
+    parser.add_argument("--futility-looks", choices=("off", "on"), default="on",
                         help="AK-EVAL-FUT: futility-only interim looks on the candidate A/B "
-                             "(bench and matched serving); a futile stop is a null, never a keep")
+                             "(bench and matched serving; default on, 'off' = fixed_pairs); "
+                             "a futile stop is a null (measured_null), never a keep")
     parser.add_argument("--futility-z", type=float, default=None,
                         help="override the pre-registered z (default: 3.5 bench, 2.5 serving)")
     parser.add_argument("--futility-min-pairs", type=int, default=2)

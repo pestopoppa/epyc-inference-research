@@ -23,9 +23,12 @@ def validate_comparison(row, *, require_provenance=True):
     pairs = row.get("pairs")
     if type(pairs) is not int or pairs < 1:
         raise ComparisonRefused("comparison requires a positive pair count")
+    # AK-EVAL-FUT: a futile interim stop retains the pairs it ran (pairs stays the declared max).
+    run = row.get("pairs_run")
+    expected = run if row.get("stop_reason") == "futility" and type(run) is int and 1 <= run <= pairs else pairs
     for arm in ("anchor_samples", "candidate_samples"):
         values = row.get(arm)
-        if not isinstance(values, list) or len(values) != pairs:
+        if not isinstance(values, list) or len(values) != expected:
             raise ComparisonRefused(f"{arm} must contain every paired measurement")
         if any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0 for v in values):
             raise ComparisonRefused(f"{arm} must be finite and positive")

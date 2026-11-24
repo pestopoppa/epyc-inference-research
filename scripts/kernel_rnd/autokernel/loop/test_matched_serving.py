@@ -231,7 +231,8 @@ def test_actual_run_startup_compare_then_floor_reuse(monkeypatch, allow_syntheti
             comparisons.append(comparison)
             return pool.PoolResult()
         def invoke(argv):
-            argv += options + ["--serving-pairs", "5", "--serving-instrument", serving.MATCHED_INSTRUMENT]
+            argv += options + ["--serving-pairs", "5", "--serving-instrument", serving.MATCHED_INSTRUMENT,
+                               "--futility-looks", "off"]   # asserts the fixed-pair call count
             if allow_synthetic_actors:
                 argv += ["--allow-untested-actor-seats", actor_reason]
             with mock.patch.object(run.claim, "hold_cpu", hold), \
