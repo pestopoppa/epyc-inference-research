@@ -88,6 +88,13 @@ def _seal_digest(record, field: str, label: str) -> None:
     object.__setattr__(record, field, expected)
 
 
+def _receipt_fields(cls, value: Mapping[str, Any], label: str) -> Mapping[str, Any]:
+    fields = set(cls.__dataclass_fields__)
+    if not isinstance(value, Mapping) or set(value) != fields:
+        raise MaintenanceExecutionRefused(f"{label} has missing/unknown fields")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class ExclusionToken:
     token_id: str
@@ -147,9 +154,7 @@ class ExclusionToken:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "ExclusionToken":
-        fields = set(cls.__dataclass_fields__)
-        if not isinstance(value, Mapping) or set(value) != fields:
-            raise MaintenanceExecutionRefused("exclusion token has missing/unknown fields")
+        value = _receipt_fields(cls, value, "exclusion token")
         row = dict(value)
         row["selected_artifact_ids"] = tuple(row["selected_artifact_ids"])
         return cls(**row)
@@ -197,9 +202,7 @@ class HoldReceipt:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "HoldReceipt":
-        fields = set(cls.__dataclass_fields__)
-        if not isinstance(value, Mapping) or set(value) != fields:
-            raise MaintenanceExecutionRefused("hold receipt has missing/unknown fields")
+        value = _receipt_fields(cls, value, "hold receipt")
         return cls(**dict(value))
 
 
@@ -237,9 +240,7 @@ class NoHoldReceipt:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "NoHoldReceipt":
-        fields = set(cls.__dataclass_fields__)
-        if not isinstance(value, Mapping) or set(value) != fields:
-            raise MaintenanceExecutionRefused("no-hold receipt has missing/unknown fields")
+        value = _receipt_fields(cls, value, "no-hold receipt")
         return cls(**dict(value))
 
 
@@ -262,9 +263,7 @@ class MaintenanceCost:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "MaintenanceCost":
-        fields = set(cls.__dataclass_fields__)
-        if not isinstance(value, Mapping) or set(value) != fields:
-            raise MaintenanceExecutionRefused("maintenance cost has missing/unknown fields")
+        value = _receipt_fields(cls, value, "maintenance cost")
         result = cls(**dict(value))
         if any(isinstance(item, bool) or not isinstance(item, int) or item < 0
                for item in result.to_dict().values()):
@@ -309,10 +308,7 @@ class AccountingReceipt:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "AccountingReceipt":
-        fields = set(cls.__dataclass_fields__)
-        if not isinstance(value, Mapping) or set(value) != fields:
-            raise MaintenanceExecutionRefused(
-                "accounting receipt has missing/unknown fields")
+        value = _receipt_fields(cls, value, "accounting receipt")
         row = dict(value)
         row["cost"] = MaintenanceCost.from_dict(row["cost"])
         return cls(**row)
