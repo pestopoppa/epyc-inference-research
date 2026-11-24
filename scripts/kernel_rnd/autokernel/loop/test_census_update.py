@@ -555,3 +555,10 @@ class Surfaces(unittest.TestCase):
         c = self.committed()
         for k in ("records", "parity", "seeds", "time_only", "surfaces", "target_pct"):
             self.assertIn(k, c)
+
+    def test_every_extractor_class_maps(self):
+        """Every kernel class an extractor can emit for a served model resolves (live census holds rows the committed one lacks)."""
+        want = [("27b-q8_0", c) for c, _ in cu.Q8_SHAPE_CLASS.values()] + [("27b-q8_0", c + "_v5i") for c, _ in cu.Q8_SHAPE_CLASS.values()]
+        want += [("27b-q8_0", c) for c, _ in cu.TRACE_Q8_CLASS.values()] + [("a3b-q8_0", c) for c, _ in cu.MMID_CLASS.values()]
+        want += [("a3b-q8_0-cpu", f) for f in cu.A3B_CPU_FAMILY_BYTES] + [("a3b-q8_0-cpu", c) for c, _ in cu.UBENCH_CLASS.values()]
+        self.assertEqual([w for w in want if w not in cu.OP_MAP], [])

@@ -369,7 +369,8 @@ def write_stubs(d: str, c: dict) -> int:
 OP_MAP = {
     **{("27b-q8_0", k): ("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)") for k in (
         "ffn_gate_up_v5i", "ffn_down_v5i", "gdn_attn_qkv_v5i", "gdn_attn_gate_v5i", "ssm_out+attn_output_v5i",
-        "attn_q_v5i", "dense_verify_aggregate_v5i")},
+        "attn_q_v5i", "dense_verify_aggregate_v5i", "ffn_gate_up", "ffn_down", "gdn_attn_qkv", "gdn_attn_gate",
+        "ssm_out+attn_output", "attn_q")},
     ("27b-q8_0", "attn_kv_v5i"): ("27b-df2-mi210", "attn_k/v 1024x5120 (q8sk)"),
     ("27b-q8_0", "attn_kv_trace_q8sk"): ("27b-df2-mi210", "attn_k/v 1024x5120 (q8sk)"),
     ("27b-q8_0", "gv_fattn_f16kv"): ("27b-df2-mi210", "gv_fattn + merge (verify FA)"),
@@ -379,6 +380,8 @@ OP_MAP = {
         "dense_verify_aggregate", "dense_verify_aggregate_v5i", "lm_head")},
     ("a3b-q8_0", "mmid_gate_up_trace"): ("a3b-mtp-mi210", "MUL_MAT_ID experts n=3"),
     ("a3b-q8_0", "mmid_down_trace"): ("a3b-mtp-mi210", "MUL_MAT_ID experts n=3"),
+    ("a3b-q8_0", "mmid_gate_up"): ("a3b-mtp-mi210", "MUL_MAT_ID experts n=3"),  # op.table MMID rows (split16)
+    ("a3b-q8_0", "mmid_down"): ("a3b-mtp-mi210", "MUL_MAT_ID experts n=3"),
     ("a3b-q8_0", "router_mul_mat_f32"): ("a3b-mtp-mi210", "router mul_mat_f F32 [2048,256]"),
     ("a3b-q8_0-cpu", "MUL_MAT:fullattn_proj"): ("a3b-mtp-cpu", "fullattn_proj"),
     ("a3b-q8_0-cpu", "MUL_MAT:gdn_proj"): ("a3b-mtp-cpu", "gdn_proj"),
@@ -406,7 +409,10 @@ DERIVED_REF = "cpu-avx512-gemv"
 
 
 def op_of(r: dict):
-    return OP_MAP.get((r.get("model"), r.get("kernel_class")))
+    m = OP_MAP.get((r.get("model"), r.get("kernel_class")))
+    if m is None and r.get("model") == "27b-q8_0" and str(r.get("kernel_class", "")).startswith("dense_q8_"):
+        m = OP_MAP[("27b-q8_0", "ffn_down_v5i")]  # extract_trace fallback class for an unlisted 27B dense Q8 shape
+    return m
 
 
 def device_of(path: str) -> str:
