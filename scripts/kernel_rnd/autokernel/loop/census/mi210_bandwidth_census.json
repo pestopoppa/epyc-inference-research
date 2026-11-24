@@ -81,6 +81,37 @@
  "floor_gbps": 1000.0,
  "noise_frac": 0.03,
  "parity": {
+  "batch_dependence": {
+   "note": "Reference %-of-peak is batch-dependent: compare our nb=1 / nb=8 attention cells against batch-appropriate references, not the batched ceilings above.",
+   "rows": [
+    {
+     "batch": ">=8",
+     "kernel": "FA4 FP8 decode attention",
+     "pct": "85-89"
+    },
+    {
+     "batch": "1",
+     "kernel": "best 4-bit KV kernel",
+     "pct": "18-38"
+    },
+    {
+     "batch": "32-128",
+     "kernel": "best 4-bit KV kernel",
+     "pct": "67-75"
+    },
+    {
+     "batch": "any (ceiling)",
+     "kernel": "plain device copy (same bytes)",
+     "pct": "87-89"
+    },
+    {
+     "batch": "n/a",
+     "kernel": "deployed vLLM NVFP4",
+     "pct": "10-20"
+    }
+   ],
+   "source": "intake-2866 (arXiv 2611.30027), H200, operator-approved"
+  },
   "note": "GPU roofline = MI210 HBM nameplate 1638 GB/s; CPU roofline = measured quarter-24t 112.9 GB/s. Shares: 27B per 45.7 ms round (C18 trace), A3B GPU per 34 ms busy step (C14), CPU per census step. Operator 2026-11-24: A3B GPU tracked as served (second GPU).",
   "ops": [
    {
@@ -370,38 +401,67 @@
     "served": true,
     "share_of_step": null,
     "source": "not in census: needs a row"
+   },
+   {
+    "covered_by": "ak-gvfattn-q4kv-gpu-20261124",
+    "op": "q4_0 KV attention (gv_fattn, q4_0 KV)",
+    "ours_gbps": null,
+    "path": "27b-df2-mi210",
+    "ref": "cuda-flashdecode-q4kv",
+    "refresh_c21": false,
+    "roofline_gbps": 1638.4,
+    "served": false,
+    "share_of_step": null,
+    "source": "not yet measured; row ak-gvfattn-q4kv-gpu-20261124 supplies ours; compare at batch 32-128"
    }
   ],
   "refs": {
    "cpu-avx512-gemv": {
     "basis": "% of measured STREAM",
     "cite": "llama.cpp/ik_llama.cpp Zen4/5 AVX-512 Q8_0 token generation reported near STREAM; Intel neural-speed (Shen et al., arXiv:2311.00502). Approximate.",
-    "pct": 88
+    "pct": 88,
+    "status": "recalled, not re-verified"
    },
    "cuda-flashdecode": {
-    "basis": "% of HBM peak",
-    "cite": "FlashInfer (Ye et al., arXiv:2501.01005) decode attention; FlashDecoding (Dao et al., 2023 blog). Recalled, not re-verified.",
-    "pct": 85
+    "basis": "% of HBM peak (H200 measured; upper bracket H100/B200)",
+    "cite": "MEASURED, intake-2866 (arXiv 2611.30027): FA4 FP8 decode attention 85-89% of peak at batch>=8 on H200; plain device copy of the same bytes 87-89% on H200 (copy ceiling); ref = 88% midpoint of FA4 FP8 and the copy ceiling. Upper bracket: FlashInfer BF16 decode >90% on H100/B200 (intake-2875). Operator-approved figures.",
+    "pct": 88,
+    "status": "measured",
+    "upper_bracket_pct": 90
+   },
+   "cuda-flashdecode-q4kv": {
+    "basis": "% of HBM peak (H200 measured, batched)",
+    "cite": "MEASURED, intake-2866 (arXiv 2611.30027): best 4-bit KV attention kernel 67-75% of peak at batch 32-128 on H200; ref = 71% midpoint of 67-75%. Deployed vLLM NVFP4 only 10-20% on H200. Operator-approved figures. Benchmarks row ak-gvfattn-q4kv-gpu-20261124.",
+    "pct": 71,
+    "range_pct": [
+     67,
+     75
+    ],
+    "status": "measured"
    },
    "cuda-fused-tail": {
     "basis": "launch-efficiency proxy",
     "cite": "TensorRT-LLM fused norm/act-quant prologues + CUDA graphs. Proxy: ours fixed at 35 for launch-bound classes.",
-    "pct": 85
+    "pct": 85,
+    "status": "recalled, not re-verified"
    },
    "cuda-gemv": {
     "basis": "% of HBM peak",
     "cite": "Marlin (Frantar et al., arXiv:2408.11743): near-ideal weight-stream speedup to batch 16-32 on A10/A100; TensorRT-LLM decode GEMV. Recalled, not re-verified.",
-    "pct": 85
+    "pct": 85,
+    "status": "recalled, not re-verified"
    },
    "cuda-moe": {
     "basis": "% of HBM peak",
     "cite": "vLLM/SGLang fused_moe Triton decode and MegaBlocks (Gale et al., arXiv:2211.15841). Approximate; no single published %-of-peak.",
-    "pct": 70
+    "pct": 70,
+    "status": "recalled, not re-verified"
    },
    "cuda-scan": {
     "basis": "% of HBM peak, estimate",
     "cite": "Mamba/Mamba2 selective scan (arXiv:2312.00752, 2405.21060) and flash-linear-attention GDN kernels publish speedups, not %-of-peak. Estimate.",
-    "pct": 60
+    "pct": 60,
+    "status": "recalled, not re-verified"
    }
   }
  },

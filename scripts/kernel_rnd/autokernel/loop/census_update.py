@@ -251,7 +251,13 @@ def parity_md(c: dict) -> list[str]:
     top = [r for r in rows if r["served"] and not r["covered_by"] and r["score"]][:5]
     out += ["", "Top unworked gaps (served, no box or row): " + "; ".join(
         f"{r['path']} {r['op']} ({r['score']:.1f})" for r in top), "", "References:", ""]
-    out += [f"- `{k}` {v['pct']}% ({v['basis']}): {v['cite']}" for k, v in sorted(c["parity"].get("refs", {}).items())]
+    out += [f"- `{k}` {v['pct']}% [{v.get('status', 'recalled, not re-verified')}] ({v['basis']}): {v['cite']}"
+            for k, v in sorted(c["parity"].get("refs", {}).items())]
+    bd = c["parity"].get("batch_dependence")
+    if bd:
+        out += ["", "Batch dependence of reference %-of-peak: " + bd["note"] + f" Source: {bd['source']}.", "",
+                "| Kernel | % of peak | Batch |", "|---|---|---|"]
+        out += [f"| {x['kernel']} | {x['pct']} | {x['batch']} |" for x in bd["rows"]]
     return out
 
 

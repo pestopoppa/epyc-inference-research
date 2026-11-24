@@ -176,6 +176,19 @@ class Parity(unittest.TestCase):
         md = "\n".join(cu.parity_md(c))
         self.assertIn("Top unworked gaps (served, no box or row): p a (3.5)", md)
 
+    def test_status_label_and_batch_table_render(self):
+        c = cu.empty_census()
+        c["parity"] = {"refs": {"m": {"pct": 88, "basis": "b", "cite": "x", "status": "measured"},
+                                "o": {"pct": 85, "basis": "b", "cite": "x"}}, "ops": [],
+                       "batch_dependence": {"note": "n", "source": "src",
+                                            "rows": [{"kernel": "k4", "pct": "18-38", "batch": "1"}]}}
+        c["parity"]["ops"] = [{"path": "p", "op": "a", "ours_pct": 10, "roofline_gbps": 1, "ref": "m", "share_of_step": 0.1,
+                               "covered_by": "", "refresh_c21": False, "source": "s", "served": True}]
+        md = "\n".join(cu.parity_md(c))
+        self.assertIn("`m` 88% [measured]", md)
+        self.assertIn("`o` 85% [recalled, not re-verified]", md)
+        self.assertIn("| k4 | 18-38 | 1 |", md)
+
 if __name__ == "__main__":
     unittest.main()
 
