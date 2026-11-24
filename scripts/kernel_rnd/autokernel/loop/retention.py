@@ -6,6 +6,8 @@ in :mod:`autokernel.storage` and its tombstone-first policy.
 """
 from __future__ import annotations
 
+from .field_validation import require_sha256 as _require_sha256
+
 import hashlib
 import json
 import math
@@ -77,10 +79,7 @@ def _texts(value: Any, label: str) -> tuple[str, ...]:
 
 
 def _sha(value: Any, label: str) -> str:
-    value = _text(value, label)
-    if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
-        raise RetentionRefused(f"{label} must be a lowercase SHA-256")
-    return value
+    return _require_sha256(_text(value, label), label, RetentionRefused, article="a ")
 
 
 def _canonical(value: Any) -> bytes:

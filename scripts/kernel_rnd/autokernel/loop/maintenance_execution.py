@@ -9,6 +9,8 @@ controller transactions; ``BoundedHoldProvider`` adds per-call deadlines.
 """
 from __future__ import annotations
 
+from .field_validation import require_sha256 as _require_sha256
+
 from dataclasses import dataclass, replace
 from datetime import datetime
 import hashlib
@@ -67,10 +69,7 @@ def _text(value: Any, label: str) -> str:
 
 
 def _sha(value: Any, label: str) -> str:
-    value = _text(value, label)
-    if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
-        raise MaintenanceExecutionRefused(f"{label} must be lowercase SHA-256")
-    return value
+    return _require_sha256(_text(value, label), label, MaintenanceExecutionRefused)
 
 
 def _canonical(value: Any) -> bytes:

@@ -1,6 +1,8 @@
 """Closed native state machine for selected actor-preparation accounting."""
 from __future__ import annotations
 
+from .field_validation import require_sha256 as _require_sha256
+
 from .field_validation import canonical_json as _canonical_json
 
 from dataclasses import dataclass, field
@@ -43,10 +45,7 @@ def _text(value: Any, label: str) -> str:
 
 
 def _sha(value: Any, label: str) -> str:
-    value = _text(value, label)
-    if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
-        raise ActorStateRefused(f"{label} must be lowercase SHA-256")
-    return value
+    return _require_sha256(_text(value, label), label, ActorStateRefused)
 
 
 def _finite(value: Any, label: str, *, minimum: float = 0.0) -> float:

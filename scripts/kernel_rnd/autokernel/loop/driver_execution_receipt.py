@@ -1,5 +1,7 @@
 """Driver execution receipt record, split verbatim from driver_execution.py (code-budget split)."""
 from __future__ import annotations
+
+from .field_validation import require_sha256 as _require_sha256
 import copy
 import json
 from dataclasses import dataclass
@@ -28,10 +30,7 @@ def _text(value: Any, label: str) -> str:
 
 
 def _sha(value: Any, label: str) -> str:
-    value = _text(value, label)
-    if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
-        raise DriverExecutionRefused(f"{label} must be lowercase SHA-256")
-    return value
+    return _require_sha256(_text(value, label), label, DriverExecutionRefused)
 
 
 @dataclass(frozen=True)
