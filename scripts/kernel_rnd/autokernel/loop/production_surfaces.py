@@ -155,9 +155,11 @@ def gate_enabled() -> bool:
 
 
 def keep_assessment(serving_row: Mapping) -> Optional[Assessment]:
-    """The label for a serving A/B row of the 27B GPU family (row["recipe"] names the recipe), from its
-    `production_surfaces` {surface_id: effect_pct}; None for any other recipe family."""
-    if not str(serving_row.get("recipe") or "").startswith(FAMILY):
+    """The label for a serving A/B row of the 27B GPU family (row["recipe"] names the recipe, e.g. the
+    served `qwen3.8-27b-q8-gpu-dflash2-np4`), from its `production_surfaces` {surface_id: effect_pct};
+    None for any other recipe family."""
+    name = str(serving_row.get("recipe") or "").lower()
+    if not (name.startswith(FAMILY) or ("27b" in name and "gpu-dflash2" in name)):
         return None
     floor = serving_row.get("noise_floor_pct")
     return assess(serving_row.get("production_surfaces") or {}, floor_pct=abs(float(floor or 0.0)))
