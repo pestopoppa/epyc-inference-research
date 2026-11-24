@@ -45,8 +45,8 @@ class SeedInstall(unittest.TestCase):
     def _seeds(self, d: Path, hyp: dict) -> Path:
         s = d / "seeds"
         shutil.copytree(seed.SEEDS, s)
-        for f in (s / "hypotheses").glob("*.md"):
-            f.unlink()
+        for f in [*(s / "hypotheses").glob("*.md"), *(s / "hypotheses").glob("*.serving-knob.json")]:
+            f.unlink()  # serving-knob seeds (AK-SURFACE-SERVING-1) are a separate kind, not journal-keyed hypotheses
         for name, text in hyp.items():
             (s / "hypotheses" / name).write_text(text, encoding="utf-8")
         return s
@@ -80,7 +80,8 @@ class SeedInstall(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             r = seed.install(Path(tmp))
         self.assertEqual(r["suppressed"], {})
-        self.assertEqual(sorted(r["unkeyed"]["hypotheses"]), sorted(r["inbox_files"]))
+        md = [n for n in r["inbox_files"] if not n.endswith(".serving-knob.md")]  # serving-knob seeds are not journal-keyed
+        self.assertEqual(sorted(r["unkeyed"]["hypotheses"]), sorted(md))
 
     def test_key_entry_keys_a_later_journal_entry(self):
         with tempfile.TemporaryDirectory() as tmp:

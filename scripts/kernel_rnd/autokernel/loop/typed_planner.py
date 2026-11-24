@@ -29,6 +29,10 @@ CONTROLS = (EXPLORE, EXHAUSTED)
 EXPLORE_RESERVE = 0.25
 MAX_OPTIONS = 255
 CHOSEN_TEXT_FIELDS = ("statement", "falsifier", "target_surface", "target_symbol")
+#: AK-SURFACE-SERVING-1: a row of this kind carries a closed `serving_knob` delta (built from a
+#: seed by `serving_knobs.portfolio_rows`); the planner picks the arm, never writes an argv.
+SERVING_KNOB = "serving-knob"
+SERVING_KNOB_TEXT_FIELDS = ("statement", "falsifier")
 
 
 class TypedPlannerRefused(ValueError):
@@ -49,8 +53,13 @@ def build_options(portfolio: Iterable[Mapping[str, Any]],
             if mid in seen:
                 continue
             seen.add(mid)
-            options.append({"option": mid, "kind": "row", "premise_superseded": superseded,
-                            "summary": str(row.get("summary") or row.get("statement") or "")[:300]})
+            opt = {"option": mid, "kind": "row", "premise_superseded": superseded,
+                   "summary": str(row.get("summary") or row.get("statement") or "")[:300]}
+            if row.get("kind") == SERVING_KNOB:
+                if not isinstance(row.get("serving_knob"), Mapping):
+                    raise TypedPlannerRefused(f"serving-knob row {mid!r} lacks its serving_knob delta")
+                opt.update(kind=SERVING_KNOB, serving_knob=dict(row["serving_knob"]))
+            options.append(opt)
     options += [{"option": EXPLORE, "kind": "control", "premise_superseded": False,
                  "summary": "none of these rows: explore source for a new mechanism"},
                 {"option": EXHAUSTED, "kind": "control", "premise_superseded": False,
@@ -101,7 +110,9 @@ def parse_choice(reply: str | Mapping[str, Any], options: Sequence[Mapping[str, 
         raise TypedPlannerRefused(f"choice {choice!r} is not an offered option")
     if must_explore and choice != EXPLORE:
         raise TypedPlannerRefused("reserved explore share is due; only explore is admissible")
-    text = {k: body.get(k) for k in CHOSEN_TEXT_FIELDS if body.get(k) is not None}
+    knob = by_id[choice].get("kind") == SERVING_KNOB
+    fields = SERVING_KNOB_TEXT_FIELDS if knob else CHOSEN_TEXT_FIELDS
+    text = {k: body.get(k) for k in fields if body.get(k) is not None}
     if choice == EXHAUSTED:
         if text:
             raise TypedPlannerRefused("exhausted carries no proposal free text")
@@ -110,12 +121,15 @@ def parse_choice(reply: str | Mapping[str, Any], options: Sequence[Mapping[str, 
             raise TypedPlannerRefused("exhausted must name the spent rows")
         text = {"reason": reason}
     else:
-        missing = [k for k in CHOSEN_TEXT_FIELDS if not str(body.get(k) or "").strip()]
+        missing = [k for k in fields if not str(body.get(k) or "").strip()]
         if missing:
             raise TypedPlannerRefused(f"chosen option lacks {missing}")
     opt = by_id[choice]
-    return {"schema": SCHEMA, "choice": choice, "kind": opt["kind"],
-            "premise_superseded": bool(opt.get("premise_superseded")), "text": text}
+    out = {"schema": SCHEMA, "choice": choice, "kind": opt["kind"],
+           "premise_superseded": bool(opt.get("premise_superseded")), "text": text}
+    if knob:
+        out["serving_knob"] = dict(opt["serving_knob"])
+    return out
 
 
 def replay_yield(calls: Sequence[Mapping[str, Any]], keeps: Sequence[Mapping[str, Any]], *,
@@ -164,6 +178,6 @@ def replay_yield(calls: Sequence[Mapping[str, Any]], keeps: Sequence[Mapping[str
             "reachable_fraction": (reach / len(uniq)) if uniq else None}
 
 
-__all__ = ["CONTROLS", "EXHAUSTED", "EXPLORE", "EXPLORE_RESERVE", "SCHEMA", "TypedPlannerRefused",
+__all__ = ["SERVING_KNOB", "CONTROLS", "EXHAUSTED", "EXPLORE", "EXPLORE_RESERVE", "SCHEMA", "TypedPlannerRefused",
            "build_options", "explore_required", "parse_choice", "render_choice_prompt",
            "replay_yield"]

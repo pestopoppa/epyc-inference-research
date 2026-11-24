@@ -38,7 +38,7 @@ import json
 from pathlib import Path
 import shutil
 
-from . import archive
+from . import archive, serving_knobs
 from . import journal_keys
 
 SEEDS = Path(__file__).resolve().parent / "seeds"
@@ -66,6 +66,15 @@ def install(store_root: Path, *, seeds: Path = SEEDS) -> dict:
             continue
         shutil.copyfile(source, inbox / source.name)
         installed.append(source.name)
+    # `serving-knob` seeds (AK-SURFACE-SERVING-1): validated structurally, kept as JSON for the
+    # planner portfolio (`serving_knobs.portfolio_rows`), and rendered to .md because the inbox
+    # reader only reads *.md. A malformed seed raises here rather than reaching the planner.
+    for source in sorted((seeds / "hypotheses").glob("*" + serving_knobs.SEED_SUFFIX)):
+        seed_body = serving_knobs.load_seed(source)
+        shutil.copyfile(source, inbox / source.name)
+        rendered = inbox / (source.name[:-len(serving_knobs.SEED_SUFFIX)] + ".serving-knob.md")
+        rendered.write_text(serving_knobs.render_seed_markdown(seed_body), encoding="utf-8")
+        installed.append(rendered.name)
     epoch = archive.epoch_for(anchor_commit=body["epoch_anchor_commit"],
                               build_recipe=body["epoch_build_recipe"])
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
