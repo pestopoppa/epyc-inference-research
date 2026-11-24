@@ -190,6 +190,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="read-only source topology for Bundle ancestry checks")
     parser.add_argument("--pairs", type=int, default=5)
     parser.add_argument("--fire-multiple", type=float, default=2.5)
+    parser.add_argument("--production-surfaces", type=Path,
+                        help="AKX-ALL-LB2.1: JSON {surface_id: effect_pct} measured at the production "
+                             "shapes (n16, n32, ragged_1_8_8_8); labels a 27B PROMOTE")
     instruments.add_posture_args(
         parser, apply_help="on PROMOTE, advance the bundle's champion of record and save "
                            "a fresh bundle.")
@@ -260,6 +263,8 @@ def main(argv: list[str] | None = None) -> int:
         # "no reading" from "a bad reading".
         print(f"REFUSED: {refusal}", file=sys.stderr)
         return instruments.REFUSED
+    if args.production_surfaces:
+        row["production_surfaces"] = json.loads(args.production_surfaces.read_text())
     try:
         plan = accumulate.resolve(bundle, row, policy, store=Path(args.store))
     except accumulate.BundleRecoveryRequired as refusal:
@@ -268,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
     record = {"outcome": plan["outcome"].value, "reason": plan["reason"],
               "bundled_keeps": list(bundle.keeps),
               "planner_evidence": plan.get("planner_evidence"),
+              "production_surfaces": plan.get("production_surfaces"),
               "hand_run": "autokernel.loop.serving_gate",
               # The provenance of the bar travels with the verdict: a reader cannot
               # otherwise tell a checked floor from an assumed one (run.py does the same).

@@ -142,5 +142,28 @@ def promotion_refusal(assessment: Assessment) -> Optional[str]:
     return f"keep regresses on production surface(s) {', '.join(assessment.regressed)}"
 
 
-__all__ = ["FAMILY", "Surface", "SURFACES", "BY_ID", "Assessment", "assess", "promotion_refusal",
+#: AKX-ALL-LB2.1: whether a non-transferable assessment REFUSES a 27B PROMOTE. Default OFF until the operator
+#: ratifies the flip (the AKX-ALL-31 NUMERICS_GATES path); off, the label is still recorded on every plan.
+GATE_ENV = "AK_PRODUCTION_SURFACES_GATE"
+GATE_DEFAULT = False
+
+
+def gate_enabled() -> bool:
+    import os
+    value = os.environ.get(GATE_ENV)
+    return GATE_DEFAULT if value is None else value == "1"
+
+
+def keep_assessment(serving_row: Mapping) -> Optional[Assessment]:
+    """The label for a serving A/B row of the 27B GPU family (row["recipe"] names the recipe, e.g. the
+    served `qwen3.8-27b-q8-gpu-dflash2-np4`), from its `production_surfaces` {surface_id: effect_pct};
+    None for any other recipe family."""
+    name = str(serving_row.get("recipe") or "").lower()
+    if not (name.startswith(FAMILY) or ("27b" in name and "gpu-dflash2" in name)):
+        return None
+    floor = serving_row.get("noise_floor_pct")
+    return assess(serving_row.get("production_surfaces") or {}, floor_pct=abs(float(floor or 0.0)))
+
+
+__all__ = ["GATE_ENV", "gate_enabled", "keep_assessment", "FAMILY", "Surface", "SURFACES", "BY_ID", "Assessment", "assess", "promotion_refusal",
            "production_surfaces", "served_temperatures", "census_keys", "assess_by_temperature", "T8083", "SERVED_MODEL", "NOT_YET_TRANSFERABLE", "REGRESSES", "TRANSFERABLE"]
