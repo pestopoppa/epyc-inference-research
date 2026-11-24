@@ -31,7 +31,7 @@ import subprocess
 
 import pytest
 
-from .loop import belief_context, claim, gpu_window, kernel_coverage, loop as loop_module
+from .loop import belief_context, claim, gpu_window, kernel_coverage, loop as loop_module, tailsplit
 
 # Current hub view first (the /workspace shared clone can lag origin/main), then /workspace.
 _REAL_ROOT_CANDIDATES = (Path("/mnt/raid0/llm/views/epyc-root-main"), Path("/workspace"))
@@ -78,6 +78,11 @@ def _isolate_host_claims(tmp_path_factory):
         absent_journal = root / "ak-bw-census" / "journal.md"
         patch.setenv("AK_BW_CENSUS_JOURNAL", str(absent_journal))
         patch.setattr(loop_module, "BW_CENSUS_JOURNAL", absent_journal)
+        # The AKPL-P3 candidate spool is LIVE shared state (flow_status.py counts its cand-*.json as
+        # real candidates); a pooled run in a test hands its records to a per-test spool instead.
+        test_spool = root / "akchain-spool"
+        patch.setenv("AKCHAIN_SPOOL", str(test_spool))
+        patch.setattr(tailsplit, "SPOOL", test_spool)
         # run.main turns the process-global launch-stderr capture on for its store; a test
         # that ran main must not leave it on for the next one (it would swallow stderr).
         patch.setattr(kernel_coverage, "_CAPTURE", dict(kernel_coverage._CAPTURE, root=None))

@@ -171,3 +171,12 @@ def test_one_failed_handoff_does_not_lose_the_others():
     outcomes, _ = _pool(_workers(1), 4, handoff, lambda *a: next(snaps), gate_calls=[])
     assert [o.status for o in outcomes].count(loop.HANDED_OFF) == 3
     assert [o.status for o in outcomes].count("lane_error") == 1 and len(handed) == 3
+
+
+def test_tests_never_spool_into_the_live_candidate_spool():
+    # The live spool is counted by epyc-root flow_status.py as real candidates; the conftest
+    # host-isolation fixture must redirect it (in-process and for subprocesses).
+    import os
+    live = Path("/mnt/raid0/llm/tmp/akchain-spool")
+    assert tailsplit.SPOOL != live
+    assert os.environ.get("AKCHAIN_SPOOL") and Path(os.environ["AKCHAIN_SPOOL"]) != live

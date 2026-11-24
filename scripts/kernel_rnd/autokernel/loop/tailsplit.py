@@ -38,7 +38,9 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from . import loop as loop_mod
 
 CANDIDATE_SCHEMA = "epyc.akloop.candidate.v1"   # == epyc-root akloop/chain.py CANDIDATE_SCHEMA
-SPOOL = Path("/mnt/raid0/llm/tmp/akchain-spool")
+#: The LIVE candidate spool the row chain and flow_status.py read. `AKCHAIN_SPOOL` overrides it (the test
+#: conftest points it at a per-test temp dir, so no fixture candidate ever lands in the live spool).
+SPOOL = Path(os.environ.get("AKCHAIN_SPOOL") or "/mnt/raid0/llm/tmp/akchain-spool")
 EPYC_ROOT = Path(os.environ.get("EPYC_ROOT", "/workspace"))
 CHAIN_PY = "scripts/coordination/akloop/chain.py"
 HANDED_OFF = loop_mod.HANDED_OFF
