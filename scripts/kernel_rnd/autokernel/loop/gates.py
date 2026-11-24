@@ -2893,7 +2893,12 @@ def _launch_argv(launch: "dict | None", cpu_list: str, threads: int, *, batch_ok
     the unit-seam default. `batch_ok=False` drops `-b` (llama-perplexity sizes its own
     batch to the context; the served ubatch, threads and placement still apply)."""
     if launch is None:
-        return ["taskset", "-c", cpu_list, "numactl", "--interleave=all"], threads, []
+        # AK-EVAL-QUARTERS: a single-quarter cpu list binds to its own NPS4 node.
+        from ..execution.cpu_region_claim import cpu_list_to_regions
+        from .cpu_screen import numa_policy
+        prefix, _policy = numa_policy(["taskset", "-c", cpu_list, "numactl", "--interleave=all"],
+                                      cpu_list_to_regions(cpu_list))
+        return prefix, threads, []
     args = list(launch["args"])
     if not batch_ok and "-b" in args:
         i = args.index("-b")

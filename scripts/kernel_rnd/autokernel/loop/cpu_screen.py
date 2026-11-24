@@ -20,8 +20,30 @@ class ScreenRefused(ValueError):
     pass
 
 
-def prepare_launch(full: rr.CanonicalResolvedRecipe, scope: str, owned_cpus) -> dict:
-    """Pure prospective preparation using the installed region owner's geometry."""
+#: NPS4 on the EPYC 9655: quarter q<i> is NUMA node i (cores 24i..24i+23 + SMT siblings).
+QUARTER_NODE = {"q0": 0, "q1": 1, "q2": 2, "q3": 3}
+
+
+def numa_policy(prefix: list, regions) -> tuple[list, str]:
+    """AK-EVAL-QUARTERS validity fix: a quarter-scoped screen binds its pages to its
+    own node. `--interleave=all` on 24 cores spreads pages over all four NPS4 nodes, a
+    bandwidth/compute ratio that matches neither the full recipe nor a local quarter."""
+    prefix = list(prefix)
+    if len(regions) != 1 or "--interleave=all" not in prefix:
+        return prefix, ("interleave_all" if "--interleave=all" in prefix else "inherited")
+    node = QUARTER_NODE[regions[0]]
+    at = prefix.index("--interleave=all")
+    # taskset already pins the quarter's cores; the resolver grammar takes one policy.
+    prefix[at] = f"--membind={node}"
+    return prefix, f"membind_node{node}"
+
+
+def prepare_launch(full: rr.CanonicalResolvedRecipe, scope: str, owned_cpus,
+                   region: str | None = None) -> dict:
+    """Pure prospective preparation using the installed region owner's geometry.
+
+    `region` names the quarter a quarter screen runs on (default: the first occupied,
+    q0 on a full recipe); concurrent screens on separate quarters each pass their own."""
     from ..execution.cpu_region_claim import ATOMIC_REGIONS, REGION_CORE_RANGE, cpu_list_to_regions
 
     if type(full) is not rr.CanonicalResolvedRecipe or full.backend != "cpu":
@@ -41,7 +63,12 @@ def prepare_launch(full: rr.CanonicalResolvedRecipe, scope: str, owned_cpus) -> 
     available = [name for name in ATOMIC_REGIONS if name in occupied]
     if len(available) < count:
         raise ScreenRefused("requested screen has insufficient original physical regions")
-    regions = available[:count]
+    if region is not None:
+        if scope != "quarter" or region not in available:
+            raise ScreenRefused("an explicit screen region must be an occupied quarter")
+        regions = [region]
+    else:
+        regions = available[:count]
     cpus = sorted(cpu for cpu in original if any(
         REGION_CORE_RANGE[name][0] <= cpu <= REGION_CORE_RANGE[name][1] for name in regions))
     if not cpus or set(cpus) == original:
@@ -51,9 +78,12 @@ def prepare_launch(full: rr.CanonicalResolvedRecipe, scope: str, owned_cpus) -> 
     # Existing floor files are name/request keyed and validate recipe_hash inside.
     # Give this distinct common condition its own stable name; never overwrite the
     # original full target's floor or change the legacy filename contract.
-    template = replace(full.template, cpu_list=cpu_list, threads=threads,
-                       name=f"{full.template.name}.cpu-{scope}-{full.template.recipe_hash[:16]}")
     command, prefix = list(full.command_argv), list(full.topology_prefix)
+    prefix, policy = numa_policy(prefix, regions)
+    # The node-bound condition is a NEW condition: its name (and so its floor) is its own.
+    condition = f"{scope}-{regions[0]}-{policy}" if policy.startswith("membind") else scope
+    template = replace(full.template, cpu_list=cpu_list, threads=threads,
+                       name=f"{full.template.name}.cpu-{condition}-{full.template.recipe_hash[:16]}")
     if prefix.count("taskset") != 1:
         raise ScreenRefused("original CPU topology does not expose one taskset")
     position = prefix.index("taskset")
@@ -77,6 +107,7 @@ def prepare_launch(full: rr.CanonicalResolvedRecipe, scope: str, owned_cpus) -> 
         provenance={**dict(full.provenance), "cpu_screen_full_target": full.snapshot_digest})
     return {"scope": scope, "full": full, "launch": reduced, "cpu_list": cpu_list,
             "regions": tuple(regions), "region_fraction": len(regions) / len(ATOMIC_REGIONS),
+            "numa_policy": policy,
             "limitation": "both arms share reduced threads/affinity; not a measured gain from "
                           "changing those conditions, not NUMA-local equivalence, and no full-target transfer"}
 
@@ -229,6 +260,8 @@ def confirmation_from(path, *, full_target, selected_target, request_digest, ori
         raise ScreenRefused("retained candidate differs from original base/target/request/full recipe")
     candidate["reference"] = reference
     candidate["scope"] = screen["scope"]
+    if screen.get("region"):
+        candidate["region"] = screen["region"]
     return candidate
 
 

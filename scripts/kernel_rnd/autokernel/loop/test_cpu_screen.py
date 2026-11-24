@@ -105,7 +105,8 @@ def test_original_glm_common_scope_preserves_request_and_full_target(scope, thre
     assert reduced.template.spec_decode == full.template.spec_decode
     assert reduced.model == full.model and reduced.executable == full.executable
     assert reduced.dsos == full.dsos and reduced.launch_env == full.launch_env
-    assert reduced.topology_prefix[:3] == full.topology_prefix[:3]
+    assert reduced.topology_prefix[0] == full.topology_prefix[0]
+    assert reduced.topology_prefix[1] == ("--membind=0" if scope == "quarter" else "--interleave=all")
     prompts = _manifest(_request())
     assert prompts.requests(("glm-fixed2029",), reduced.template) == prompts.requests(
         ("glm-fixed2029",), template)
