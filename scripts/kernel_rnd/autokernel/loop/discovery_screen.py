@@ -5,6 +5,8 @@ creates keep, validation, release, or production authority.
 """
 from __future__ import annotations
 
+from .immutable_values import thaw as _plain
+
 import hashlib
 import json
 import math
@@ -56,12 +58,6 @@ def _freeze(value: Any) -> Any:
     return value
 
 
-def _plain(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {key: _plain(item) for key, item in value.items()}
-    if isinstance(value, tuple):
-        return [_plain(item) for item in value]
-    return value
 
 
 def _text(value: Any, label: str) -> str:

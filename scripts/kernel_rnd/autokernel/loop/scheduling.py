@@ -6,6 +6,8 @@ supplied by a future trusted consumer can account actual held service.
 """
 from __future__ import annotations
 
+from .immutable_values import thaw as _plain
+
 import hashlib
 import heapq
 import json
@@ -149,12 +151,6 @@ def _deep_freeze(value: Any) -> Any:
     return value
 
 
-def _plain(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {key: _plain(item) for key, item in value.items()}
-    if isinstance(value, tuple):
-        return [_plain(item) for item in value]
-    return value
 
 
 def digest(value: Mapping[str, Any]) -> str:
