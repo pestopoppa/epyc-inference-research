@@ -46,7 +46,7 @@ _FAMILY = {  # (path, op) -> family. Every cu.OP_MAP value MUST be here (test_ev
     ("a3b-mtp-mi210", "router chain softmax/argsort/get_rows"): "moe-router",
     ("a3b-mtp-cpu", "router (CPU)"): "moe-router",
     ("flash-next-cpu", "moe_router"): "moe-router",
-    # parity ops with no census class yet (OP_MAP has no entry): still families, so their share is not lost
+    # parity ops whose census classes come from the verify-kernel roofline census (OP_MAP vk_* entries) or have none yet: all families
     ("27b-df2-mi210", "GDN recurrence (fused tree GDN)"): "gdn-recurrence",
     ("27b-df2-mi210", "drafter BF16 hipBLAS (not served; training deferred)"): "drafter-gemm",
     ("27b-df2-mi210", "actquant (q8mf_pre_i8 + q8sk_quantize)"): "act-quantize",

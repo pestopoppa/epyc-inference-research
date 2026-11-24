@@ -167,5 +167,77 @@ class VattnIpb(unittest.TestCase):
         self.assertIn(("27b-q8_0", "gv_fattn_q8kv"), cu.OP_MAP)
 
 
+class VerifyRoofline(unittest.TestCase):
+    """27B verify-kernel roofline census (trimmed real RESULT: ctx 8192 at width 1 and 8) -> one observation per
+    (kernel class, ctx, width); bytes/us/calls are the row's own."""
+    res = load("verify_roofline.RESULT.json")
+
+    def obs(self):
+        from autokernel.loop.census_extract import extract_verify_roofline
+        return extract_verify_roofline(self.res)
+
+    def test_per_class_ctx_width_with_the_rows_own_bytes_us_calls(self):
+        o = self.obs()
+        keys = [(x["kernel_class"], x["shape"], x["n"]) for x in o]
+        self.assertEqual(len(keys), len(set(keys)))                       # rid-unique: no observation overwrites another
+        self.assertEqual({x["n"] for x in o}, {1, 8})
+        k = {(x["kernel_class"], x["shape"], x["n"]): x for x in o}
+        lm = k[("vk_lm_head", "ctx8192", 1)]                              # the one full-vocab GEMV: 1352 MB, 1.065 ms, 1 call
+        self.assertEqual(lm["calls_per_round"], 1)
+        self.assertAlmostEqual(lm["bytes_per_call"], 1351.98e6, delta=0.1e6)
+        self.assertAlmostEqual(lm["us_per_call"], 1065.0, delta=1.0)
+        fa = k[("gv_fattn_q8kv", "ctx8192", 1)]                           # 315.9 MB / 16 calls, 1.9385 ms / 16 calls
+        self.assertEqual(fa["calls_per_round"], 16)
+        self.assertAlmostEqual(fa["us_per_call"], 1938.5 / 16, places=2)
+        self.assertAlmostEqual(fa["bytes_per_call"], 315.9e6 / 16, delta=0.1e6)
+        dense = [x for x in o if x["kernel_class"] == "vk_dense_mmvq" and x["n"] == 1]
+        self.assertEqual(sum(x["calls_per_round"] for x in dense), 64 + 80 + 48 * 3 + 96 + 16 + 32)   # every mmvq launch but the lm_head
+        self.assertTrue(any(x["kernel_class"] == "vk_dense_q8wv" and x["n"] == 8 for x in o))
+        for x in o:                                                       # bytes known, never invented; GB/s derivable
+            self.assertGreater(x["bytes_per_call"], 0)
+            self.assertGreater(x["us_per_call"], 0)
+
+    def test_tail_and_actquant_are_one_pooled_observation_per_shape(self):
+        o = self.obs()
+        for cls in ("vk_launch_tail", "vk_actquant"):
+            rows = [x for x in o if x["kernel_class"] == cls]
+            self.assertEqual(sorted((x["shape"], x["n"]) for x in rows), [("ctx8192", 1), ("ctx8192", 8)])
+        tail1 = next(x for x in o if x["kernel_class"] == "vk_launch_tail" and x["n"] == 1)
+        shape1 = next(s for s in self.res["shapes"] if s["w"] == 1)
+        calls = sum(k["calls"] for k in shape1["kernels"] if k["short"] not in (
+            "mul_mat_vec_q", "gv_fattn_kernel", "gv_merge_kernel", "gated_delta_net_cuda", "q8sk_mul_mat", "quantize_q8_1_1d", "quantize_q8_1"))
+        self.assertEqual(tail1["calls_per_round"], calls)
+
+    def test_gv_fattn_calls_come_from_one_constant_the_row_fills(self):
+        from autokernel.loop.census_extract import GV_FATTN_CALLS_PER_STEP, extract
+        fa = [x for x in self.obs() if x["kernel_class"] == "gv_fattn_q8kv"]
+        self.assertTrue(fa)
+        self.assertEqual({x["calls_per_round"] for x in fa}, {GV_FATTN_CALLS_PER_STEP})   # the row's own count == the constant
+        res = {"row": "ak-rka-ipb-census-gpu-20261124-r2", "complete": True, "shapes": [
+            {"kv": 8192, "nq": 1, "kv_bytes": 17825792.0, "dur_us": 118.07}]}
+        rka = [x for x in extract(res) if x["kernel_class"] == "gv_fattn_q8kv"]
+        self.assertEqual([x["calls_per_round"] for x in rka], [16])                        # was 1: one launch per full-attention layer
+
+    def test_every_kernel_class_maps_to_an_op_with_a_family(self):
+        from autokernel.loop import census_families as cf
+        for cls in {x["kernel_class"] for x in self.obs()}:
+            m = cu.OP_MAP.get(("27b-q8_0", cls))
+            self.assertIsNotNone(m, cls)
+            self.assertNotEqual(cf.op_family(*m), cf.UNFAMILIED, (cls, m))
+
+    def test_unrelated_or_incomplete_results_yield_nothing(self):
+        from autokernel.loop.census_extract import extract_verify_roofline
+        self.assertEqual(extract_verify_roofline(dict(self.res, complete=False)), [])
+        self.assertEqual(extract_verify_roofline(dict(self.res, row="ak-rka-ipb-census-gpu-20261124-r2")), [])
+        self.assertEqual(extract_verify_roofline({"shapes": []}), [])
+
+    def test_applies_to_a_census_copy_with_all_records_resolving(self):
+        c = cu.empty_census()
+        lines = cu.apply(c, self.obs(), self.res["row"], "a" * 64, "2026-11-24T23:17:39Z", "at")
+        self.assertTrue(lines)
+        self.assertEqual(len(c["records"]), len(self.obs()))
+        self.assertTrue(all(cu.op_of(r) is not None for r in c["records"].values()))
+
+
 if __name__ == "__main__":
     unittest.main()

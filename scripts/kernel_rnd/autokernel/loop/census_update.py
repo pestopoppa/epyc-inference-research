@@ -416,6 +416,15 @@ OP_MAP = {
     ("27b-q8_0", "gv_fattn_f16kv"): ("27b-df2-mi210", "gv_fattn + merge (verify FA)"),
     ("27b-q8_0", "gv_fattn_q8kv"): ("27b-df2-mi210", "gv_fattn + merge (verify FA)"),
     ("27b-q8_0", "lm_head_v5i"): ("27b-df2-mi210", "lm_head 248320x5120"),
+    # 27B verify-kernel roofline census (rocprof, per launch geometry; census_extract.extract_verify_roofline). gv_fattn_q8kv above.
+    ("27b-q8_0", "vk_dense_mmvq"): ("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)"),
+    ("27b-q8_0", "vk_dense_q8wv"): ("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)"),
+    ("27b-q8_0", "vk_lm_head"): ("27b-df2-mi210", "lm_head 248320x5120"),
+    ("27b-q8_0", "vk_q8sk_mul_mat"): ("27b-df2-mi210", "attn_k/v 1024x5120 (q8sk)"),
+    ("27b-q8_0", "gv_merge_q8kv"): ("27b-df2-mi210", "gv_fattn + merge (verify FA)"),
+    ("27b-q8_0", "vk_gated_delta_net"): ("27b-df2-mi210", "GDN recurrence (fused tree GDN)"),
+    ("27b-q8_0", "vk_actquant"): ("27b-df2-mi210", "actquant (q8mf_pre_i8 + q8sk_quantize)"),
+    ("27b-q8_0", "vk_launch_tail"): ("27b-df2-mi210", "launch-bound tail (eltwise/norm/copy/rope/conv)"),
     **{("a3b-q8_0", k): ("a3b-mtp-mi210", "dense MMVQ (attn, GDN proj, shexp, lm_head)") for k in (
         "dense_mmvq_32row", "dense_mmvq_512row", "dense_mmvq_4096row", "dense_mmvq_8192row",
         "dense_verify_aggregate", "dense_verify_aggregate_v5i", "lm_head")},

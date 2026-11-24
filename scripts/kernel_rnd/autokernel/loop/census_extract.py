@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import zlib
 
 from .census_coverage import FALLBACK_N, served_n
 
@@ -38,6 +39,13 @@ GDN_CELL = re.compile(r"sv(\d+):ns(\d+):nt(\d+):K(\d+):(bf16|f32)")
 UBENCH_CLASS = {("mmid", "base"): ("MUL_MAT_ID:exps_gate_up@ubench", 40), ("shexp", "base"): ("MUL_MAT:shared_expert@ubench", 41),
                 ("shexp", "down"): ("MUL_MAT:shexp_down@ubench", 41)}
 
+
+
+# gv_fattn launches per 27B verify step: one per full-attention layer (16 of 64). FILLED BY the row
+# ak-27b-verify-kernel-roofline-census-gpu-20261124-r2 (its gv_fattn_kernel entry: `calls` 16.0 at all 9 ctx x width shapes,
+# pooled mean_calls 16.0). Every extractor that turns one gv_fattn call into a per-round figure reads THIS constant, so
+# the per-call rows of the rka-ipb census (extract_vattn_ipb) and the per-step rows of the roofline census agree.
+GV_FATTN_CALLS_PER_STEP = 16
 
 
 def _n_ok(model: str, n: int, rep: dict | None) -> bool:
@@ -80,7 +88,7 @@ def extract(res: dict, rep: dict | None = None) -> list[dict]:
         cls, calls = MMID_CLASS.get(m.group(1), ("mmid_" + m.group(1), 1))
         out.append({"model": "a3b-q8_0", "kernel_class": cls, "shape": m.group(1), "n": int(m.group(2)), "arm": "ON",
                     "bytes_per_call": int(round(g * us * 1e3)), "us_per_call": float(us), "calls_per_round": calls})
-    return out + extract_trace(res, rep) + extract_time_only(res) + extract_vattn_ipb(res)
+    return out + extract_trace(res, rep) + extract_time_only(res) + extract_vattn_ipb(res) + extract_verify_roofline(res, rep)
 
 
 def extract_trace(res: dict, rep: dict | None = None) -> list[dict]:
@@ -325,7 +333,8 @@ def extract_ubench(res: dict) -> list[dict]:
 def extract_vattn_ipb(res: dict) -> list[dict]:
     """GPU verify-attention profiler census RESULT (`shapes[]{kv, nq, kv_bytes, dur_us, achieved_gbps, valu_util, counters}`,
     e.g. ak-rka-ipb-census-gpu-20261124-r2): 27B verify FA over q8_0 KV (GQA). Bytes are the row's own kv_bytes; one
-    observation per (kv, nq). calls_per_round = 1: the RESULT is per-kernel-call and states no layer count (never invented)."""
+    observation per (kv, nq). The RESULT is per-kernel-call and states no layer count; calls_per_round is the verify-step count
+    GV_FATTN_CALLS_PER_STEP, measured by the roofline census row (not guessed here)."""
     shapes = res.get("shapes")
     if not isinstance(shapes, list) or res.get("complete") is not True or "ipb" not in str(res.get("row") or ""):
         return []
@@ -340,8 +349,89 @@ def extract_vattn_ipb(res: dict) -> list[dict]:
             continue
         c = sh.get("counters") or {}
         out.append({"model": model, "kernel_class": "gv_fattn_q8kv", "shape": f"kv{int(kv)}", "n": int(nq), "arm": "C21",
-                    "bytes_per_call": int(b), "us_per_call": float(us), "calls_per_round": 1,
+                    "bytes_per_call": int(b), "us_per_call": float(us), "calls_per_round": GV_FATTN_CALLS_PER_STEP,
                     "bytes_basis": "row kv_bytes (q8_0 K+V read per verify-attention call)",
-                    "calls_basis": "per call; the RESULT states no per-round layer count",
+                    "calls_basis": "16 gv_fattn launches per verify step (one per full-attention layer), "
+                                   "from ak-27b-verify-kernel-roofline-census-gpu-20261124-r2",
                     "valu_util": sh.get("valu_util"), "waves": c.get("SQ_WAVES")})
+    return out
+
+
+# 27B verify-step kernel roofline census (rocprof, MI210): kernel short name -> census class. A class is one census ROLE; the
+# kernel's launch geometry goes in the record's `shape`, so OP_MAP stays a handful of entries, not one per launch geometry.
+VK_DENSE = {"mul_mat_vec_q": "vk_dense_mmvq", "q8wv_mul_mat": "vk_dense_q8wv"}   # a call-count of 1 is the lm_head (below)
+VK_SINGLE = {"gv_fattn_kernel": "gv_fattn_q8kv", "gv_merge_kernel": "gv_merge_q8kv", "gated_delta_net_cuda": "vk_gated_delta_net"}
+VK_PER_GEOMETRY = {"q8sk_mul_mat": "vk_q8sk_mul_mat"}
+VK_ACTQUANT = {"quantize_q8_1", "quantize_q8_1_1d", "q8wv_quantize", "q8sk_quantize", "q8sk_zero"}
+# Everything else (rms_norm, bin_bcast, unary, cpy, rope, concat, ssm_conv, fwht, l2_norm, get/set_rows, argmax) is the
+# launch-bound tail: GB/s is meaningless per kernel, so each (ctx, width) is ONE pooled observation (calls = launches per step).
+VK_AGGREGATED = {"vk_actquant", "vk_launch_tail"}
+_VK_LIT = re.compile(r"L(?:\d+ggml_type|[a-z])(\d+)E")   # template literals: ILi1024E, ILb1E, IL9ggml_type8E
+_VK_OP = re.compile(r"op_([a-z0-9]+?)f{1,2}E")           # ggml op functor: op_add, op_sigmoid, op_silu ...
+
+
+def _vk_tmpl_tag(name: str) -> str:
+    """Template-literal fingerprint of a mangled HIP kernel name ("t8.1.1.1.0.0.0.1" for mul_mat_vec_q<Q8_0,1,...>): tells apart
+    instances of one kernel that share a launch geometry. Not a decoder -- a collision is still caught by the caller."""
+    head = name[:name.find("Ev")] if "Ev" in name else name
+    return ".".join(_VK_LIT.findall(head) + ["op_" + o for o in _VK_OP.findall(head)])
+
+
+def extract_verify_roofline(res: dict, rep: dict | None = None) -> list[dict]:
+    """27B verify-kernel roofline census RESULT (`shapes[]{ctx, w, kernels[]}`, e.g. ak-27b-verify-kernel-roofline-census-gpu-20261124-r2).
+    One observation per (kernel class, ctx, width): model 27b-q8_0, shape `ctx<ctx>[:<kernel>[<tmpl>]:g<grid>x<wg>]`, n = width.
+    A kernel entry is one launch geometry; the row's `calls` is its launches PER VERIFY STEP and `bytes` / `time_ms` are
+    totals over them, so bytes_per_call = bytes / calls, us_per_call = time_ms * 1e3 / calls, calls_per_round = calls (never
+    a constant). Bytes are the row's own rocprof FETCH_SIZE + WRITE_SIZE (HBM side). The launch-bound tail and the activation
+    quantizers are pooled per (ctx, width) -- one observation, mean per-launch bytes/us, calls = their summed launches."""
+    shapes, row = res.get("shapes"), str(res.get("row") or "")
+    if not isinstance(shapes, list) or res.get("complete") is not True or "verify-kernel-roofline" not in row:
+        return []
+    model = _model_of(res)
+    if model is None:
+        return []
+    out = []
+    for sh in shapes:
+        ctx, w, ks = sh.get("ctx"), sh.get("w"), sh.get("kernels")
+        if not (_num(ctx) and _num(w) and isinstance(ks, list)) or not _n_ok(model, int(w), rep):
+            continue
+        base, pooled, seen = f"ctx{int(ctx)}", {}, set()
+        for k in ks:
+            calls, ms, b, short = k.get("calls"), k.get("time_ms"), k.get("bytes"), str(k.get("short") or "")
+            if not (_num(calls) and calls > 0 and _num(ms) and ms > 0 and _num(b) and b >= 0):
+                continue
+            if short in VK_DENSE:
+                cls = "vk_lm_head" if calls == 1 else VK_DENSE[short]   # the single full-vocab GEMV per step
+            else:
+                cls = VK_SINGLE.get(short) or VK_PER_GEOMETRY.get(short) or ("vk_actquant" if short in VK_ACTQUANT else "vk_launch_tail")
+            if cls in VK_AGGREGATED:
+                p = pooled.setdefault(cls, {"calls": 0.0, "ms": 0.0, "b": 0.0, "kernels": 0})
+                p["calls"] += calls
+                p["ms"] += ms
+                p["b"] += b
+                p["kernels"] += 1
+                continue
+            if not b > 0:
+                continue
+            tag = _vk_tmpl_tag(str(k.get("name") or ""))
+            geom = f"{short}{f'[{tag}]' if tag else ''}:g{int(k.get('grid') or 0)}x{int(k.get('wg') or 0)}"
+            shape = base if cls in ("vk_lm_head", *VK_SINGLE.values()) else f"{base}:{geom}"
+            if (cls, shape) in seen:                      # a second instance of a single-instance class, or a template-tag collision
+                shape = f"{base}:{geom}"
+                if (cls, shape) in seen:
+                    shape += f"#{zlib.crc32(str(k.get('name')).encode()):08x}"
+            seen.add((cls, shape))
+            out.append({"model": model, "kernel_class": cls, "shape": shape, "n": int(w), "arm": "C21",
+                        "bytes_per_call": int(round(b / calls)), "us_per_call": round(ms * 1e3 / calls, 3),
+                        "calls_per_round": int(round(calls)),
+                        "bytes_basis": "row bytes (rocprof FETCH_SIZE+WRITE_SIZE, HBM side) / row calls per verify step",
+                        "calls_basis": "row `calls` = launches per verify step at this ctx x width",
+                        "kernel": short, "valu_util": k.get("valu_util"), "waves_per_cu": k.get("waves_per_cu")})
+        for cls, p in sorted(pooled.items()):
+            if p["b"] > 0:
+                out.append({"model": model, "kernel_class": cls, "shape": base, "n": int(w), "arm": "C21",
+                            "bytes_per_call": int(round(p["b"] / p["calls"])), "us_per_call": round(p["ms"] * 1e3 / p["calls"], 3),
+                            "calls_per_round": int(round(p["calls"])),
+                            "bytes_basis": "row bytes (rocprof FETCH_SIZE+WRITE_SIZE, HBM side), pooled over the class's launches",
+                            "calls_basis": f"summed row `calls` of {p['kernels']} kernel entries per verify step"})
     return out
