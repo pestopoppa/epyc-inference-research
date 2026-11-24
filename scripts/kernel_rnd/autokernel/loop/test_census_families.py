@@ -69,8 +69,16 @@ class Families(unittest.TestCase):
         for n in ("np4", "ub512", "no-path"):  # no screened pct, or no step to price it against
             self.assertIsNone(r["serving-knob:" + n]["saving_ms_per_step"])
             self.assertEqual(r["serving-knob:" + n]["status"], "unpriced")
-        self.assertAlmostEqual(r["serving-knob:fa-off"]["saving_ms_per_step"], 4.0)  # 40 ms x 10 %
+        self.assertAlmostEqual(r["serving-knob:fa-off"]["saving_ms_per_step"], 40 * (1 - 1 / 1.1), places=3)  # throughput +10 %
         self.assertEqual(cf.rank([DENSE27], knob_arms=arms)[-1]["status"], "unpriced")  # unpriced sort last
+
+    def test_knob_pct_is_a_throughput_gain(self):
+        r = {x["family"]: x for x in cf.rank([], knob_arms=[
+            {"name": "up", "step_ms": 100.0, "vs_control_pct": 25.0},
+            {"name": "down", "step_ms": 100.0, "vs_control_pct": -8.0}])}
+        self.assertAlmostEqual(r["serving-knob:up"]["saving_ms_per_step"], 20.0)  # +25 % tok/s on 100 ms saves 20 ms, not 25
+        self.assertEqual(r["serving-knob:down"]["saving_ms_per_step"], 0.0)  # negative clamps to 0 ...
+        self.assertEqual(r["serving-knob:down"]["status"], "priced")  # ... and stays priced
 
     def test_live_census_copy(self):
         if not os.path.exists(LIVE):

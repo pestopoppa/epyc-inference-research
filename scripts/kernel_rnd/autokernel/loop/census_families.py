@@ -5,7 +5,8 @@ the CPU). score(family) = sum over surfaces of w x saving_ms_per_step, where w c
 the weight is looked up by PATH first (e.g. "a3b-mtp-mi210" -- how a campaign separates "served today" from "served on the
 next GPU"), then by the path's MODEL (e.g. "a3b-q8_0"), then 1. Surfaces whose saving is None add nothing and are counted.
 Serving-knob arms ({"name", "path"?, "step_ms"?, "vs_control_pct"?}) are listed beside the families: priced only when they
-carry a screened vs_control_pct (positive = step time saved vs the control arm, in percent), else saving=None, 'unpriced'.
+carry a screened vs_control_pct (a THROUGHPUT gain vs control, 100*(tok_s_arm-tok_s_ctrl)/tok_s_ctrl, serving_knobs.py), else
+saving=None, 'unpriced'. Step saving = step_ms x (1 - 1/(1 + pct/100)); a negative pct clamps to 0 and stays priced at 0.
 Read-only on census_update; this module owns the family table, census_update.OP_MAP stays the (model, class)->(path, op) map.
 """
 from . import census_update as cu
@@ -79,7 +80,7 @@ def weight_of(path: str, model_weights: dict | None, path_model: dict | None = N
 def _knob_row(a: dict, steps: dict, mw, pm) -> dict:
     pct, path = a.get("vs_control_pct"), a.get("path")
     step = a.get("step_ms") or steps.get(path)
-    saving = None if pct is None or step is None else round(step * max(0.0, pct) / 100.0, 3)
+    saving = None if pct is None or step is None else round(step * (1 - 1 / (1 + max(0.0, pct) / 100.0)), 3)
     w = weight_of(path, mw, pm) if path else 1.0
     return {"family": f"{KNOB}:{a.get('name')}", "kind": "knob", "path": path, "vs_control_pct": pct,
             "saving_ms_per_step": saving, "score": None if saving is None else round(w * saving, 3),
