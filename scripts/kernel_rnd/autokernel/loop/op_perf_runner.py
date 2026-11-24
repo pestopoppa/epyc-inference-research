@@ -19,7 +19,6 @@ import hashlib
 import json
 import os
 import re
-import statistics
 import subprocess
 import sys
 from pathlib import Path
@@ -106,8 +105,9 @@ def load_floors(store: Path, spec: Mapping, backend: str, pairs: int) -> dict[st
 
 
 def weights(cells: Sequence[Mapping], spec: Mapping, census: Mapping | None = None) -> tuple[dict, dict]:
-    """weight = census calls_per_round x share_of_round for the cell's (m x k, n) on THIS path's census model; an n with
-    no row falls back to the shape's median over n (basis `shape-median`); no row at all -> no weight (unmeasured)."""
+    """weight = census calls_per_round x share_of_round for the cell's (m x k, n) on THIS path's census model. An n with no
+    census row gets NO weight: the cell is UNMEASURED and non-deciding (op_perf_screen.decide), never a shape-median guess
+    (a width nobody measured is not evidence for the width next to it; a median needs a ratified rule to exist)."""
     ck = cc.CENSUS_KEY.get((spec["model_role"], spec["device"]))
     recs = (census or json.loads(CENSUS.read_text()))["records"].values()
     by: dict[tuple, list[float]] = {}
@@ -116,11 +116,10 @@ def weights(cells: Sequence[Mapping], spec: Mapping, census: Mapping | None = No
             by.setdefault((r["shape"], int(r["n"])), []).append(r["calls_per_round"] * r["share_of_round"])
     out, basis = {}, {}
     for c in cells:
-        shp = f"{c['dims']['m']}x{c['dims']['k']}"
-        if (v := by.get((shp, c["n"]))):
+        if (v := by.get((f"{c['dims']['m']}x{c['dims']['k']}", c["n"]))):
             out[c["key"]], basis[c["key"]] = max(v), "exact"
-        elif (v := [x for (s, _), xs in by.items() if s == shp for x in xs]):
-            out[c["key"]], basis[c["key"]] = statistics.median(v), "shape-median"
+        else:
+            basis[c["key"]] = "unmeasured"
     return out, basis
 
 

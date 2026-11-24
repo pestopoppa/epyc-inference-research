@@ -124,15 +124,18 @@ def test_calibrate_writes_floor_file_and_run_reads_it(tmp_path):
     assert opr.load_floors(tmp_path, SPEC27, "ROCm0", 5) == {}        # an under-sampled floor never gates
 
 
-def test_weights_exact_shape_median_and_none():
+def test_weights_exact_only_an_unmeasured_n_is_unmeasured_and_non_deciding():
     rec = lambda shape, n, calls, share: {"model": "27b-q8_0", "shape": shape, "n": n, "calls_per_round": calls, "share_of_round": share}
     census = {"records": {"a": rec("1024x5120", 1, 32, 0.01), "b": rec("1024x5120", 4, 32, 0.02), "c": rec("1024x5120", 8, 32, 0.04)}}
     cells = cells27(k=[5120], m=[1024, 6144])
     w, basis = opr.weights(cells, SPEC27, census)
     k = lambda n: next(c["key"] for c in cells if c["n"] == n and c["dims"]["m"] == 1024)
     assert w[k(1)] == pytest.approx(0.32) and basis[k(1)] == "exact"
-    assert w[k(3)] == pytest.approx(0.64) and basis[k(3)] == "shape-median"   # median of 0.32, 0.64, 1.28
+    assert k(3) not in w and basis[k(3)] == "unmeasured"                       # n=3 has no row: NO shape-median weight
     assert not any(c["key"] in w for c in cells if c["dims"]["m"] == 6144)    # no census row: unweighted -> unmeasured
+    cell = {"key": k(3), "anchor": [100.0] * 5, "candidate": [90.0] * 5, "floor_pct": 1.0}
+    d = ops.decide([cell], {})                                                # a faster, floored cell with no weight still cannot decide
+    assert d["screen"] == ops.UNMEASURED and d["unmeasured"] == [k(3)] and "polar" not in ops.polar_result(d)
 
 
 def test_cli_test_mode_runs_no_binary(tmp_path, capsys):

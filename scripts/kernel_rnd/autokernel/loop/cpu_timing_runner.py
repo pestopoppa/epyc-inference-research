@@ -1,9 +1,13 @@
 """RSL-R6 live CPU timing runner: llama-bench tg128 for a CPU path on that host's SERVED topology.
 
-Placement is never typed here: cpus, threads, numactl policy and the instance list come from the registry path spec
-(`spec["serving"]["numa_instances"|"numa_ports"]`, host name) joined with `stack_numa` (`NUMA_CONFIG`, `_numa_prefix`).
-Q38FN :8074 is one NUMA_FULL instance; A3B :8070 is two NUMA-half instances, launched CONCURRENTLY (the served
-condition); a sample is the AGGREGATE tok/s over the instances, one process (pair) per sample.
+Placement is never typed here: cpus, threads, numactl policy, mlock and the instance list come from the registry path
+spec (`spec["serving"]["numa_instances"|"numa_ports"|"no_mmap"|"recipe"]`, host name) joined with `stack_numa`
+(`NUMA_CONFIG`, `_numa_prefix`). Q38FN :8074 is one NUMA_FULL instance: one cell. The A3B frontdoor serves three instances
+(topology: NUMA_FULL :8070, NUMA_HALF_A :8080, NUMA_HALF_B :8180) and its path has TWO timing cells (operator 2026-11-24):
+`solo` = :8070 NUMA_FULL alone, `burst` = the two halves :8080+:8180 launched CONCURRENTLY (placement_policy
+burst_prefer_split). A sample is the AGGREGATE tok/s over the cell's instances, one process (pair) per sample. Each cell has
+its own A/A floor file key and a candidate must regress neither; a cell with no floor is ungated, not borrowed.
+The recipe env comes from the registry recipe block; a path with none is refused (MISSING_INPUT), never hand-typed.
 
 Floors: a `cpu_aa_calibration` record keyed per model AND topology, never borrowed from the GPU `bench.floor_rows` file
 (the same GGUF has a different floor on a different device). `calibrate` writes it from an A/A run (a row runs it).
@@ -11,6 +15,7 @@ Floors: a `cpu_aa_calibration` record keyed per model AND topology, never borrow
 from __future__ import annotations
 
 import concurrent.futures as cf
+import functools
 import hashlib
 import json
 import os
@@ -34,8 +39,14 @@ def _stack_numa():
     return __import__("stack_numa")
 
 
+def _inst(sn: Any, host: str, i: int) -> dict:
+    cfg = sn.NUMA_CONFIG[host]
+    cpus, port, threads = cfg["instances"][i]
+    return {"idx": i, "port": port, "cpus": cpus, "threads": threads, "prefix": sn._numa_prefix(host, i), "mlock": bool(cfg.get("mlock"))}
+
+
 def topology(spec: Mapping, sn: Any = None) -> list[dict]:
-    """One dict per served instance of the path's host: idx, port, cpus, threads, numactl+taskset prefix."""
+    """One dict per registry-listed instance of the path's host (A3B: the two halves): idx, port, cpus, threads, prefix, mlock."""
     serving_ = spec.get("serving")
     if not serving_ or not spec.get("host"):
         raise RunnerRefused("FUTILITY_HARNESS_MISSING_INPUT", f"{spec.get('key')} has no served host (planned path): no topology")
@@ -45,33 +56,58 @@ def topology(spec: Mapping, sn: Any = None) -> list[dict]:
     idx = [next((i for i, x in enumerate(insts) if x[1] == p), None) for p in ports]
     if None in idx or len(ports) != int(serving_.get("numa_instances") or len(ports)):
         raise RunnerRefused("FUTILITY_HARNESS_MISSING_INPUT", f"{spec['host']}: registry ports {ports} not all in stack_numa instances")
-    return [{"idx": i, "port": insts[i][1], "cpus": insts[i][0], "threads": insts[i][2], "prefix": sn._numa_prefix(spec["host"], i)}
-            for i in idx]
+    return [_inst(sn, spec["host"], i) for i in idx]
+
+
+def timing_cells(spec: Mapping, sn: Any = None) -> dict[str, list[dict]]:
+    """{cell name: instances}. A host that declares a NUMA_FULL instance beside its halves (stack_numa `full_instance_idx`,
+    and that instance is the registry's own `port`) has `solo` (the full instance) and `burst` (the halves, concurrently);
+    any other host has one `served` cell."""
+    burst = topology(spec, sn)
+    sn = sn or _stack_numa()
+    cfg = sn.NUMA_CONFIG.get(spec["host"]) or {}
+    full = cfg.get("full_instance_idx")
+    if full is None or len(burst) < 2:
+        return {"served": burst}
+    if cfg["instances"][full][1] != spec["serving"].get("port"):
+        raise RunnerRefused("FUTILITY_HARNESS_MISSING_INPUT", f"{spec['host']}: full instance {cfg['instances'][full][1]} is not registry port {spec['serving'].get('port')}")
+    return {"solo": [_inst(sn, spec["host"], full)], "burst": burst}
 
 
 def recipe_env(spec: Mapping) -> dict[str, str]:
-    """The recipe's env: the registry recipe block, else the two-instance recipe for this GGUF; empty is stated, not guessed."""
-    env = ((spec.get("serving") or {}).get("recipe") or {}).get("env")
-    if env is None:
-        from . import two_instance_floor as tif
-        env = next((dict(r.env) for r in tif.RECIPES.values() if r.model == spec["gguf"]), {})
-    return {str(k): str(v) for k, v in env.items()}
+    """The registry recipe's env (`serving.recipe.env`; a recipe with no env states an empty one). No recipe block: refused."""
+    rec = (spec.get("serving") or {}).get("recipe")
+    if not isinstance(rec, Mapping):
+        raise RunnerRefused("FUTILITY_HARNESS_MISSING_INPUT", f"{spec.get('key')}: the registry carries no serving recipe; env is never hand-typed")
+    return {str(k): str(v) for k, v in (rec.get("env") or {}).items()}
+
+
+@functools.lru_cache(maxsize=8)
+def _has_flag(binary: str, flag: str) -> bool:
+    """Content proof that a binary knows `flag` (llama-bench has no --mlock in every tree); unreadable -> False."""
+    try:
+        return flag.encode() in Path(binary).read_bytes()
+    except OSError:
+        return False
 
 
 def bench_argv(binary: Path, spec: Mapping, inst: Mapping, *, reps: int, seed: int) -> list[str]:
     kv = (((spec["serving"].get("serving_shape") or {}).get("kv_quant") or {}).get("k")) or bench.KV_DEFAULT
+    served = spec["serving"]   # as served: no_mmap -> `-mmp 0`; the registry's mlock -> `--mlock` where the binary has it
     return [*inst["prefix"], str(binary), "-m", spec["gguf"], "-p", "0", "-n", "128", "-r", str(reps), "-t", str(inst["threads"]),
-            "-ngl", "0", "-fa", "1", "-o", "json", "--autokernel-harden", str(seed), "-ctk", kv, "-ctv", kv]
+            "-ngl", "0", "-fa", "1", "-o", "json", "--autokernel-harden", str(seed), "-ctk", kv, "-ctv", kv,
+            *(["-mmp", "0"] if served.get("no_mmap") else []), *(["--mlock"] if inst.get("mlock") and _has_flag(str(binary), "--mlock") else [])]
 
 
 def recipe_name(spec: Mapping, topo: Sequence[Mapping]) -> str:
     return f"cpu-tg128.{Path(spec['gguf']).stem}.{len(topo)}inst-" + "-".join(f"{t['threads']}t" for t in topo)
 
 
-def floor_pct(spec: Mapping, store: Path, pairs: int) -> float | None:
-    """The quiet A/A floor (percent) at `pairs` for this model+topology, or None (ungated). Never borrowed."""
+def floor_pct(spec: Mapping, store: Path, pairs: int, topo: Sequence[Mapping] | None = None) -> float | None:
+    """The quiet A/A floor (percent) at `pairs` for this model + cell topology (`topo`, default the registry halves), or None
+    (ungated). Never borrowed; each cell's recipe name is its own floor file key."""
     try:
-        rec = json.loads((Path(store) / "calibration" / f"cpu-aa-calibration.{serving.floor_key(recipe_name(spec, topology(spec)))}.quiet.json").read_text())
+        rec = json.loads((Path(store) / "calibration" / f"cpu-aa-calibration.{serving.floor_key(recipe_name(spec, topo or topology(spec)))}.quiet.json").read_text())
         s = rec["surfaces"][SURFACE]
         hit = [f["floor_pct"] for f in (s["screen_floor"], s["serving_floor"]) if f["pairs"] == pairs]
         ok = rec["schema"] == aa.SCHEMA and rec["unit"] == UNIT_PROCESS and s["n"] >= aa.MIN_PAIRS and s["gating"]
@@ -113,22 +149,51 @@ def collect(a_bin: Path, c_bin: Path, spec, topo, *, pairs: int, reps: int = 9, 
     return out
 
 
-def time_path(cand: Mapping, a_build: Path, c_build: Path, spec: Mapping, *, store: Path = STORE, runner=subprocess.run,
-              live=True, floor: float | None = None) -> dict:
-    """The `Primitives.timing` result for a CPU path (effect in PERCENT, higher tok/s = positive)."""
-    pairs = max(int(cand.get("pairs") or bench.MIN_PAIRS), bench.MIN_PAIRS)
-    topo = topology(spec) if live else cand["test_topology"]
-    nf = floor_pct(spec, store, pairs) if floor is None else floor
-    if nf is None:
-        raise RunnerRefused("FUTILITY_HARNESS_INSTRUMENT", f"no quiet A/A floor at {pairs} pairs for {recipe_name(spec, topo)}")
-    s = collect(Path(a_build) / "bin" / "llama-bench", Path(c_build) / "bin" / "llama-bench", spec, topo, pairs=pairs,
-                reps=int(cand.get("reps") or 9), runner=runner, live=live)
+def gated_cells(spec: Mapping, store: Path, pairs: int) -> dict[str, float]:
+    """{cell name: A/A floor pct} for the path's cells that HAVE a floor (empty: the whole path is ungated)."""
+    try:
+        cells = timing_cells(spec)
+    except RunnerRefused:
+        return {}
+    return {n: f for n, t in cells.items() if (f := floor_pct(spec, store, pairs, t)) is not None}
+
+
+def _time_cell(cand: Mapping, a_build: Path, c_build: Path, spec: Mapping, topo, nf: float, pairs: int, runner, live) -> dict:
+    a_bin, c_bin = Path(a_build) / "bin" / "llama-bench", Path(c_build) / "bin" / "llama-bench"
+    s = collect(a_bin, c_bin, spec, topo, pairs=pairs, reps=int(cand.get("reps") or 9), runner=runner, live=live)
     c = bench.Comparison(surface=spec["surface"], anchor_samples=s["anchor"], candidate_samples=s["candidate"],
                          effect=st.median(s["candidate"]) / st.median(s["anchor"]) - 1.0, estimator="median_over_median",
                          pairs=pairs, noise_floor_pct=nf, residency={}, model=spec["gguf"])
     return {"effect_pct": c.effect * 100.0, "pairs": pairs, "decisive": c.decisive, "noise_floor_pct": nf, "device_seconds": 0.0,
             "anchor_samples": s["anchor"], "candidate_samples": s["candidate"], "model": spec["gguf"],
-            "topology": recipe_name(spec, topo), "foreign_busy_pct_max": max(b or 0.0 for b in s["busy"])}
+            "topology": recipe_name(spec, topo), "foreign_busy_pct_max": max(b or 0.0 for b in s["busy"]),
+            "no_mmap": bool(spec["serving"].get("no_mmap")),
+            "mlock": {"registry": any(t.get("mlock") for t in topo), "applied": _has_flag(str(a_bin), "--mlock") and _has_flag(str(c_bin), "--mlock")}}
+
+
+def time_path(cand: Mapping, a_build: Path, c_build: Path, spec: Mapping, *, store: Path = STORE, runner=subprocess.run,
+              live=True, floor: float | Mapping[str, float] | None = None) -> dict:
+    """The `Primitives.timing` result for a CPU path (effect in PERCENT, higher tok/s = positive). Every cell of the path is
+    timed (A3B: solo and burst); a cell with no floor is `ungated` (not timed, not borrowed). The path result is the
+    worst decisive regression if any cell regressed, else the best decisive win, else the best (non-decisive) effect:
+    `stage_timing` passes only when no cell regressed. `floor`: one float for every cell, a {cell: float}, or None (floor files)."""
+    pairs = max(int(cand.get("pairs") or bench.MIN_PAIRS), bench.MIN_PAIRS)
+    cells = timing_cells(spec) if live else (cand.get("test_cells") or {"served": cand["test_topology"]})
+    cell: dict[str, dict] = {}
+    for name, topo in cells.items():
+        nf = (floor_pct(spec, store, pairs, topo) if floor is None else floor.get(name) if isinstance(floor, Mapping) else floor)
+        cell[name] = ({"status": "ungated", "topology": recipe_name(spec, topo), "reason": "no quiet A/A floor for this cell"} if nf is None
+                      else {"status": "timed", **_time_cell(cand, a_build, c_build, spec, topo, nf, pairs, runner, live)})
+    timed = {n: c for n, c in cell.items() if c["status"] == "timed"}
+    if not timed:
+        raise RunnerRefused("FUTILITY_HARNESS_INSTRUMENT", "no quiet A/A floor at %d pairs for any cell: %s" % (pairs, ", ".join(c["topology"] for c in cell.values())))
+    regressed = [n for n, c in timed.items() if c["decisive"] and c["effect_pct"] < 0]
+    wins = [n for n, c in timed.items() if c["decisive"] and c["effect_pct"] > 0]
+    pick = (min(regressed, key=lambda n: timed[n]["effect_pct"]) if regressed else
+            max(wins, key=lambda n: timed[n]["effect_pct"]) if wins else max(timed, key=lambda n: timed[n]["effect_pct"]))
+    return {**timed[pick], "cells": cell, "picked_cell": pick, "regressed_cells": regressed,
+            "ungated_cells": [n for n, c in cell.items() if c["status"] == "ungated"],
+            "foreign_busy_pct_max": max(c["foreign_busy_pct_max"] for c in timed.values())}
 
 
 def calibrate(build: Path, spec: Mapping, *, source_row: str, pairs: int = aa.MIN_PAIRS, store: Path = STORE, runner=subprocess.run,
@@ -154,7 +219,7 @@ def calibrate(build: Path, spec: Mapping, *, source_row: str, pairs: int = aa.MI
 
 def synth_runner(outcome: str = "pass", base: float = 20.0):
     """--test-mode: the RECORDED real llama-bench receipt (execution/testdata, hardened fields as test_microbench adds them),
-    avg_ts rescaled; NO binary runs. The candidate arm's path must contain `cand`. outcome: pass | flat | harness | bad-rc."""
+    avg_ts rescaled; NO binary runs. The candidate arm's path must contain `cand`. outcome: pass | regress | flat | harness | bad-rc."""
     from ..execution.test_microbench import CANONICAL, read_fixture
     calls = [0]
 
@@ -162,21 +227,26 @@ def synth_runner(outcome: str = "pass", base: float = 20.0):
         calls[0] += 1
         cand = "cand" in str(next(a for a in argv if a.endswith("llama-bench")))
         rows = json.loads(read_fixture(CANONICAL))
-        rows[0]["avg_ts"] = base * (1.0 + 0.004 * ((calls[0] * 7) % 5 - 2)) * (1.05 if cand and outcome == "pass" else 1.0)
+        rows[0]["avg_ts"] = base * (1.0 + 0.004 * ((calls[0] * 7) % 5 - 2)) * (1.05 if cand and outcome == "pass" else 0.90 if cand and outcome == "regress" else 1.0)
         return subprocess.CompletedProcess(argv, 3 if outcome == "bad-rc" else 0, "{}" if outcome == "harness" else json.dumps(rows), "boom")
     return runner
 
 
 def main(argv: list[str] | None = None) -> int:
-    a = base_parser(__doc__, 'served CPU path key, e.g. "q38fn-ud-iq4xs-cpu|cpu"').parse_args(argv)
+    ap = base_parser(__doc__, 'served CPU path key, e.g. "q38fn-ud-iq4xs-cpu|cpu"')
+    ap.add_argument("--cell", help="timing cell to calibrate (A3B: solo | burst); one floor file per cell")
+    a = ap.parse_args(argv)
     from . import census_coverage as cc, stage_bodies as sb
     spec = sb.path_specs(cc.load_registry() or {})[a.path]
     runner, live = (synth_runner(a.outcome), False) if a.test_mode else (subprocess.run, True)
     fake = [{"idx": 0, "port": 0, "cpus": "0-95", "threads": 96, "prefix": ["numactl", "--interleave=all", "--", "taskset", "-c", "0-95"]}]
     try:
         if a.calibrate:
+            cells = timing_cells(spec) if live else {"served": fake}
+            if (a.cell or ("served" if len(cells) == 1 else None)) not in cells:
+                raise RunnerRefused("FUTILITY_HARNESS_INPUT", f"calibrate one cell per row: --cell {'|'.join(cells)}")
             return emit(a, {"floor_file": str(calibrate(a.anchor_build, spec, source_row=a.row or "", pairs=a.pairs or aa.MIN_PAIRS, store=a.store,
-                                                        runner=runner, live=live, topo=None if live else fake, reps=9 if live else 10))})
+                                                        runner=runner, live=live, topo=cells[a.cell or "served"], reps=9 if live else 10))})
         return emit(a, time_path({"pairs": a.pairs, "reps": 9 if live else 10, "test_topology": fake}, a.anchor_build, a.candidate_build or a.anchor_build,
                                  spec, store=a.store, runner=runner, live=live, floor=None if live else 1.0))
     except RunnerRefused as e:

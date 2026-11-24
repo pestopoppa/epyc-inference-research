@@ -338,12 +338,13 @@ def resolve_path(cand: Mapping[str, Any]) -> dict:
 
 
 def timing_floor(spec: Mapping[str, Any], cand: Mapping[str, Any]) -> bool:
-    """True iff this path has its OWN A/A floor (bench.floor_rows keys floors by surface AND model, never borrowed)."""
+    """True iff this path has its OWN A/A floor (bench.floor_rows keys floors by surface AND model, never borrowed); a CPU
+    path with several timing cells (A3B solo/burst) is timed when ANY cell has a floor, and the others stay ungated."""
     if cand.get("test_registry"):   # fixture mode: the candidate names the paths that have a floor cell
         return spec["key"] in (cand.get("test_floor_paths") or [])
     from . import bench, cpu_timing_runner as ctr
     if spec["lane"] == "cpu":   # keyed per model AND topology (cpu_aa_calibration), never the GPU floor file
-        return ctr.floor_pct(spec, Path(cand.get("store") or LOOP_STORE), max(int(cand.get("pairs") or bench.MIN_PAIRS), bench.MIN_PAIRS)) is not None
+        return bool(ctr.gated_cells(spec, Path(cand.get("store") or LOOP_STORE), max(int(cand.get("pairs") or bench.MIN_PAIRS), bench.MIN_PAIRS)))
     return bench.floor_rows(spec["surface"], spec["gguf"], Path(cand.get("store") or LOOP_STORE)) is not None
 
 
@@ -422,10 +423,22 @@ def _require_built(cand) -> dict:
 
 
 def stage_oracle(cand, prim: Primitives, *, test_mode: bool) -> dict:
-    """The 27B-anchored gate decides a FAIL as before; a PASS on a path with no policy floor is non-deciding (RSL-R8)."""
+    """The 27B-anchored gate decides a FAIL as before; a PASS on a path with no policy floor is non-deciding (RSL-R8).
+    The result's backend is the PATH's lane, and `gated` is claimed only for clauses that actually RAN: `_live_oracle` runs
+    the GPU clauses (ROCm0, -ngl 999), so a CPU path reports quality-ungated and never claims them (a CPU-clause run needs a
+    cpu-lane oracle stage); a gpu path is `gated` only when its model's graph_kld block is in the result."""
+    spec = resolve_path(cand)
+    if spec["lane"] != "gpu":
+        _require_built(cand)
+        r = {**_base("oracle-kld", cand), "backend": spec["lane"]}
+        q = {**quality_status(spec["key"], _policy()), "status": QUALITY_UNGATED}
+        q["reason"] = q.get("reason") or "cpu-clauses-not-run"
+        r.update(quality=q, verdict=f"FUTILITY_QUALITY_UNGATED ({q['path']} {q['reason']}; the cpu clauses were not run by this stage)")
+        return r
     r = _stage_oracle(cand, prim, test_mode=test_mode)
-    from . import gate_eval
-    q = quality_status(resolve_path(cand)["key"], gate_eval.load_policy())
+    q = quality_status(spec["key"], _policy())
+    if q["status"] == "gated" and q.get("model") not in (r.get("graph_kld") or {}):   # never "gated" on a clause that did not run
+        q = {**q, "status": QUALITY_UNGATED, "reason": "clause-not-run"}
     r["quality"] = q
     if q["status"] == QUALITY_UNGATED and r.get("polar") == "PASS":   # another model's clauses never keep this path
         r.pop("polar")
@@ -433,12 +446,17 @@ def stage_oracle(cand, prim: Primitives, *, test_mode: bool) -> dict:
     return r
 
 
+def _policy() -> dict:
+    from . import gate_eval
+    return gate_eval.load_policy()
+
+
 def _stage_oracle(cand, prim: Primitives, *, test_mode: bool) -> dict:
     r = _base("oracle-kld", cand)
     b = _require_built(cand)
     anchor = Path(cand.get("anchor_build") or _build_dir(cand, "anchor"))
     o = prim.oracle(cand, anchor, Path(b["build_dir"]))
-    r.update(backend="gpu", op_oracle=o.get("op_oracle"))
+    r.update(backend="gpu", op_oracle=o.get("op_oracle"))   # gpu-lane paths only (stage_oracle)
     if not o.get("op_passed"):
         r.update(verdict="FAIL_CORRECTNESS (op oracle)", polar="FAIL")
         return r
@@ -502,11 +520,14 @@ def stage_timing(cand, prim: Primitives, *, test_mode: bool) -> dict:
         return r
     eff = float(t["effect_pct"])
     gmin = float(cand.get("geomean_min") or 1.0)
-    r.update(backend="gpu", speed={"surface": spec["surface"], "effect_pct": eff, "pairs": int(t["pairs"]),
+    r.update(backend=spec["lane"], speed={"surface": spec["surface"], "effect_pct": eff, "pairs": int(t["pairs"]),
                                    "model": str(t.get("model") or spec["gguf"])},
              geomean=round(1.0 + eff / 100.0, 6), rule={"geomean_min": gmin}, timing=t)
-    win = eff > 0 and bool(t.get("decisive", True))
-    r.update(verdict="PASS_FASTER" if win else f"FAIL_NO_GAIN (effect {eff:+.3f}%)", polar="PASS" if win else "FAIL")
+    win = eff > 0 and bool(t.get("decisive", True)) and not t.get("regressed_cells")
+    why = f" [cell {t['picked_cell']}; regressed {t['regressed_cells']}]" if t.get("regressed_cells") else ""
+    if t.get("ungated_cells"):
+        r["ungated_cells"] = t["ungated_cells"]   # a cell with no floor: not timed, not borrowed
+    r.update(verdict="PASS_FASTER" if win else f"FAIL_NO_GAIN (effect {eff:+.3f}%{why})", polar="PASS" if win else "FAIL")
     return r
 
 

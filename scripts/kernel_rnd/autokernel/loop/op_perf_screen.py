@@ -99,7 +99,7 @@ def _cell_row(cell: Mapping[str, Any], w: float | None) -> dict:
         return {**row, "status": UNMEASURED, "reason": reason, "effect_pct": None, "floor_pct": None}
 
     if w is None or not math.isfinite(w) or w <= 0:
-        return bad("no positive weight")
+        return bad("no positive census weight (unmeasured n is non-deciding)")
     a, c = _samples(cell.get("anchor")), _samples(cell.get("candidate"))
     if a is None or c is None:
         return bad("anchor/candidate samples missing, non-finite or non-positive")

@@ -249,3 +249,44 @@ def test_quality_ungated_candidate_cannot_fold(tmp_path, path):
     assert out["ab-timing"][0]["polar"] == "PASS" and "polar" not in out["oracle-kld"][0]
     fc = out["fold-check"][0]
     assert "MISSING_INPUT" in fc["verdict"] and "oracle-kld" in fc["verdict"] and "polar" not in fc
+
+
+def _timed_stage(tmp_path, t):
+    c = cand(tmp_path, path=A3B, floors=(A3B,))
+    prim = sb.test_primitives(c)
+    prim.timing = lambda *_a: t
+    r = sb.run_stage("build", c, lane="cpu", prim=prim, test_mode=True, env={}, cpus={0})
+    (tmp_path / "build.json").write_text(json.dumps(r))
+    c["stage_results"]["build"] = str(tmp_path / "build.json")
+    return sb.run_stage("ab-timing", c, lane="cpu", prim=prim, test_mode=True, env={})
+
+
+def test_ab_timing_backend_follows_the_path_lane_and_a3b_needs_both_cells(tmp_path):
+    t = {"effect_pct": 3.0, "pairs": 5, "decisive": True, "regressed_cells": [], "ungated_cells": ["burst"], "picked_cell": "solo"}
+    r = _timed_stage(tmp_path, t)
+    assert r["backend"] == "cpu" and r["polar"] == "PASS" and r["ungated_cells"] == ["burst"]
+    r = _timed_stage(tmp_path, {**t, "effect_pct": -2.0, "regressed_cells": ["burst"], "picked_cell": "burst", "ungated_cells": []})
+    assert r["polar"] == "FAIL" and "regressed ['burst']" in r["verdict"]
+    r = _timed_stage(tmp_path, {**t, "regressed_cells": ["burst"]})   # even a positive pick cannot pass over a regressed cell
+    assert r["polar"] == "FAIL"
+    g = run(cand(tmp_path), tmp_path, ("build", "ab-timing"))["ab-timing"][0]
+    assert g["backend"] == "gpu"
+
+
+@pytest.mark.parametrize("path", [FN, A3B])
+def test_cpu_path_oracle_never_claims_gated_on_clauses_it_did_not_run(tmp_path, path):
+    out = run(cand(tmp_path, path=path), tmp_path, ("build", "oracle-kld"))["oracle-kld"][0]
+    assert out["backend"] == "cpu" and out["quality"]["status"] == "quality-ungated" and "polar" not in out
+    assert "graph_kld" not in out and out["verdict"].startswith("FUTILITY_QUALITY_UNGATED")
+
+
+def test_gpu_path_is_gated_only_when_its_model_block_is_in_the_result(tmp_path):
+    c = cand(tmp_path)
+    prim = sb.test_primitives(c)
+    real = prim.oracle
+    prim.oracle = lambda *a: {**real(*a), "graph_kld": {"q38fn": {"same_top_p_pct": 97.0}}}   # the 27B clause did not run
+    r = sb.run_stage("build", c, lane="cpu", prim=prim, test_mode=True, env={}, cpus={0})
+    (tmp_path / "build.json").write_text(json.dumps(r))
+    c["stage_results"]["build"] = str(tmp_path / "build.json")
+    o = sb.run_stage("oracle-kld", c, lane="gpu", prim=prim, test_mode=True, env={})
+    assert o["quality"] == {**o["quality"], "status": "quality-ungated", "reason": "clause-not-run"} and "polar" not in o
