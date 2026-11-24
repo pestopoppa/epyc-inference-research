@@ -25,8 +25,8 @@
   ],
   "cpu_list": "184-191",
   "n_predict": 384,
-  "temperature": 0.0,
-  "top_p": 0.95,
-  "top_k": 1,
+  "temperature": 0.7,
+  "top_p": 0.8,
+  "top_k": 20,
   "metric": "aggregate_tok_s"
 }
