@@ -25,6 +25,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -373,16 +374,20 @@ def portfolio_rows(seed: Mapping[str, Any]) -> list[dict]:
 
 
 def emit_candidate(choice: Mapping[str, Any], base: ServingBase, recipe_argv: Sequence[str], *,
-                   base_recipe_hash: str) -> dict:
+                   base_recipe_hash: str, champion_sha: str | None = None) -> dict:
     """Turn a typed_planner serving-knob choice into a candidate: the delta, its rendered argv and
-    the base recipe identity it rides beside. Pure; nothing is launched."""
+    the base recipe identity it rides beside. Pure; nothing is launched. A knob screen has no patch, so `base_sha` and
+    `patch_sha` both equal the champion sha the CALLER names (`champion_sha`, 40 hex); omitted, neither is emitted."""
     if choice.get("kind") != SEED_KIND or "serving_knob" not in choice:
         raise KnobError("not a serving-knob choice")
     if not isinstance(base_recipe_hash, str) or len(base_recipe_hash) != 64:
         raise KnobError("base_recipe_hash must be the base Recipe.recipe_hash")
+    if champion_sha is not None and not re.fullmatch(r"[0-9a-f]{40}", str(champion_sha)):
+        raise KnobError("champion_sha must be the champion's 40-hex commit sha")
     delta = KnobDelta.from_dict(choice["serving_knob"])
     out = render(recipe_argv, base, delta)
-    return {"schema": CANDIDATE_SCHEMA, "kind": SEED_KIND, "mechanism_id": choice["choice"],
+    shas = {"base_sha": champion_sha, "patch_sha": champion_sha} if champion_sha else {}
+    return {**shas, "schema": CANDIDATE_SCHEMA, "kind": SEED_KIND, "mechanism_id": choice["choice"],
             "server": delta.server, "delta": delta.to_dict(), "delta_digest": out.delta_digest,
             "base_recipe_hash": base_recipe_hash, "registry_base_digest": base.digest(),
             "argv": list(out.argv), "argv_delta": [list(t) for t in out.argv_delta],

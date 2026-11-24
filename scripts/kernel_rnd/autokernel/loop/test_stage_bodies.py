@@ -23,7 +23,10 @@ def cand(tmp_path, **kw):
     return c
 
 
-def run_all(c, tmp_path, stages=sb.STAGES, lineage=None):
+CHAIN = tuple(x for x in sb.STAGES if x != "serving-screen")   # serving-screen is a serving-knob stage, not a chain link
+
+
+def run_all(c, tmp_path, stages=CHAIN, lineage=None):
     prim = sb.test_primitives(c, lineage_log=lineage)
     out = {}
     for st in stages:
@@ -45,7 +48,7 @@ def test_happy_chain_files_zero_llm_and_lands_keep(tmp_path):
     c = cand(tmp_path)
     log = []
     out, prim = run_all(c, tmp_path, lineage=log)
-    gated = [s for s in sb.STAGES if s != "op-perf"]   # op-perf is a screen: it never carries a polar PASS (RSL-R3)
+    gated = [s for s in CHAIN if s != "op-perf"]   # op-perf is a screen: it never carries a polar PASS (RSL-R3)
     assert [out[s]["polar"] for s in gated] == ["PASS"] * 4 and "polar" not in out["op-perf"]
     for st, r in {s: out[s] for s in gated}.items():
         verdict, decided = filed(r, f"akc-ak-x-{st}-20261121")
@@ -58,7 +61,7 @@ def test_happy_chain_files_zero_llm_and_lands_keep(tmp_path):
 @pytest.mark.parametrize("stage,expect", [("build", "FAIL"), ("oracle-kld", "FAIL"), ("ab-timing", "FAIL")])
 def test_candidate_failures_are_policy_decided_fail(tmp_path, stage, expect):
     c = cand(tmp_path, test_outcomes={stage: "fail"})
-    stages = sb.STAGES[:sb.STAGES.index(stage) + 1]
+    stages = CHAIN[:CHAIN.index(stage) + 1]
     out, _ = run_all(c, tmp_path, stages)
     verdict, decided = filed(out[stage], f"akc-ak-x-{stage}-20261121")
     assert verdict == expect and decided
@@ -164,7 +167,7 @@ def test_fixture_repo_cas_is_real_compare_and_swap(tmp_path):
     c = cand(tmp_path, base_sha=base, patch_sha=patch)
     c.pop("test_refs"); c.pop("test_parents")
     prim = sb.test_primitives(c, fixture_repo=repo)
-    for st in sb.STAGES:
+    for st in CHAIN:
         r = sb.run_stage(st, c, lane="cpu" if st == "build" else "gpu", prim=prim, test_mode=True, env={}, cpus={0})
         p = tmp_path / f"{st}.json"
         p.write_text(json.dumps(r))

@@ -266,7 +266,7 @@ def test_quality_ungated_candidate_cannot_fold(tmp_path, path):
     """oracle-kld would PASS on the 27B/Q38FN clauses, ab-timing has a cell and passes: fold-check still refuses."""
     c = cand(tmp_path, path=path, floors=(path,))
     out = run(c, tmp_path, ("build", "oracle-kld", "ab-timing", "fold-check"),
-              lane_of=lambda st, spec: "cpu" if st == "build" else "gpu" if st != "ab-timing" else spec["lane"])
+              lane_of=lambda st, spec: "cpu" if st == "build" else "gpu" if st == "fold-check" else spec["lane"])
     assert out["ab-timing"][0]["polar"] == "PASS" and "polar" not in out["oracle-kld"][0]
     fc = out["fold-check"][0]
     assert "MISSING_INPUT" in fc["verdict"] and "oracle-kld" in fc["verdict"] and "polar" not in fc
@@ -294,11 +294,81 @@ def test_ab_timing_backend_follows_the_path_lane_and_a3b_needs_both_cells(tmp_pa
     assert g["backend"] == "gpu"
 
 
-@pytest.mark.parametrize("path", [FN, A3B])
-def test_cpu_path_oracle_never_claims_gated_on_clauses_it_did_not_run(tmp_path, path):
-    out = run(cand(tmp_path, path=path), tmp_path, ("build", "oracle-kld"))["oracle-kld"][0]
+def test_a3b_cpu_oracle_runs_nothing_and_stays_quality_ungated(tmp_path):
+    prim = sb.test_primitives(cand(tmp_path, path=A3B))
+    prim.oracle = lambda *a: pytest.fail("an ungated path must not run the oracle")
+    c = cand(tmp_path, path=A3B)
+    run(c, tmp_path, ("build",))
+    out = sb.run_stage("oracle-kld", c, lane="cpu", prim=prim, test_mode=True, env={})
     assert out["backend"] == "cpu" and out["quality"]["status"] == "quality-ungated" and "polar" not in out
     assert "graph_kld" not in out and out["verdict"].startswith("FUTILITY_QUALITY_UNGATED")
+
+
+def test_cpu_oracle_row_is_not_refused_and_q38fn_runs_the_cpu_clauses(tmp_path):
+    c = cand(tmp_path, path=FN)
+    o = run(c, tmp_path, ("build", "oracle-kld"))["oracle-kld"]
+    out, env = o
+    assert "WRONG_GRANT" not in out["verdict"] and out["backend"] == "cpu" and env["HIP_VISIBLE_DEVICES"] == "-1"
+    assert out["quality"]["status"] == "gated" and out["quality"]["model"] == "q38fn" and set(out["graph_kld"]) >= {"q38fn"}
+    assert out["polar"] == "PASS" and out["verdict"] == "PASS_ORACLE"
+    r = sb.run_stage("oracle-kld", c, lane="gpu", prim=sb.test_primitives(c), test_mode=True, env={})   # the wrong lane
+    assert "WRONG_GRANT" in r["verdict"] and "cpu stage on the gpu lane" in r["verdict"]
+
+
+def test_cpu_oracle_decides_on_the_cpu_clause_not_the_gpu_one(tmp_path):
+    """Q38FN's CPU clause carries |dPPL| <= 0.5% (the GPU clause does not): a 0.9% dPPL fails on the cpu lane only."""
+    c = cand(tmp_path, path=FN)
+    prim = sb.test_primitives(c)
+    real = prim.oracle
+    prim.oracle = lambda *a: {**real(*a), "graph_kld": {"q38_27b": {"kld_mean": 0.001, "dppl_pct": 0.1},
+                                                       "q38fn": {"same_top_p_pct": 97.0, "dppl_pct": 0.9}}}
+    r = sb.run_stage("build", c, lane="cpu", prim=prim, test_mode=True, env={}, cpus={0})
+    (tmp_path / "build.json").write_text(json.dumps(r))
+    c["stage_results"]["build"] = str(tmp_path / "build.json")
+    o = sb.run_stage("oracle-kld", c, lane="cpu", prim=prim, test_mode=True, env={})
+    assert o["polar"] == "FAIL" and "graph_kld.cpu.q38fn" in o["verdict"] and "abs_dppl_pct" in o["verdict"]
+
+
+# ---- serving-screen --------------------------------------------------------------------------------------------
+
+def _screen_cand(tmp_path, k4, *, oom=None):
+    from .test_serving_knob_measure import burst_unit, runs
+    steady = [*runs("A", 100, 160), *runs("B", 100, k4, oom=oom)]
+    burst_file = tmp_path / "burst.jsonl"
+    burst_file.write_text("\n".join(json.dumps(burst_unit(agg=30.0 + i * 0.1)) for i in range(3)) + "\n")
+    floor = {"verdict": "ok", "floor": {"sd_ln_ratio": 0.08, "screen_floor_pct": 15.6, "serving_floor_pct": 3.4, "n_pairs": 24,
+                                       "unit": "process"}}
+    return cand(tmp_path, kind="serving-knob", server="s", steady_results=steady, arm_map={"A": "control", "B": "x"},
+                burst_results={"control": str(burst_file), "x": str(burst_file)}, floor_result=floor,
+                test_registry={**REG, "roles": {}, "server_mode": {**REG["server_mode"], "s": {"model_role": "r", "device": "ROCm0"}}})
+
+
+def _screen(c):
+    return sb.run_stage("serving-screen", c, lane="gpu", test_mode=True, env={})
+
+
+def test_serving_screen_qualify_is_no_keep_never_pass_and_never_a_fold_input(tmp_path):
+    out = _screen(_screen_cand(tmp_path, 200))
+    assert out["verdict"].startswith("FUTILITY_SCREEN_ONLY_NO_KEEP") and "polar" not in out and out["screen"]["best_arm"] == "x"
+    assert out["backend"] == "gpu" and out["screening_only"] is True
+    v = ge.evaluate(out, ended={"rc": "0", "reason": "complete"}, row="akc-ak-x-serving-screen-20261124")
+    assert v["verdict"] == "FUTILITY" and not ge.policy_decided(v)
+
+
+def test_serving_screen_no_qualifier_and_guard_failure_are_polar_fail(tmp_path):
+    out = _screen(_screen_cand(tmp_path, 161))   # +0.6% against a 15.6% floor
+    assert out["polar"] == "FAIL" and "below-screen-floor" in out["verdict"] and out["screen"]["best_arm"] is None
+    out = _screen(_screen_cand(tmp_path, 200, oom="CUDA out of memory"))   # the only arm fails a guard
+    assert out["polar"] == "FAIL" and "guard failures" in out["verdict"] and out["screen"]["rejected"]
+
+
+def test_serving_screen_refuses_missing_inputs_and_follows_the_path_lane(tmp_path):
+    c = _screen_cand(tmp_path, 200)
+    c.pop("burst_results")
+    assert "FUTILITY_HARNESS_MISSING_INPUT" in _screen(c)["verdict"]
+    r = sb.run_stage("serving-screen", _screen_cand(tmp_path, 200, ), lane="cpu", test_mode=True, env={})
+    assert "WRONG_GRANT" in r["verdict"]   # the default path is the 27B on the MI210
+    assert "serving-screen" in sb.BODIES and "serving-screen" in sb.STAGES
 
 
 def test_gpu_path_is_gated_only_when_its_model_block_is_in_the_result(tmp_path):

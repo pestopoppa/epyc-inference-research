@@ -253,6 +253,17 @@ def test_planner_emits_a_serving_knob_candidate_with_a_rendered_argv(base, recip
     assert {f for f, _, _ in map(tuple, cand["argv_delta"])} == {"-b", "-ub"}
 
 
+def test_emit_candidate_carries_base_sha_and_patch_sha_from_the_caller(base, recipe):
+    s = {"seed_id": "s", "server": "srv", "summary": "x", "falsifier": "y", "arms": [{"arm_id": "ub", "knobs": {"batch": 1024}}]}
+    options = typed_planner.build_options(sk.portfolio_rows(s))
+    choice = typed_planner.parse_choice({"choice": "serving-knob:s:ub", "statement": "a", "falsifier": "b"}, options)
+    sha = "ab" * 20
+    cand = sk.emit_candidate(choice, base, argv_of(recipe), base_recipe_hash=recipe.recipe_hash, champion_sha=sha)
+    assert cand["base_sha"] == cand["patch_sha"] == sha   # a knob screen has no patch: both are the champion
+    with pytest.raises(sk.KnobError, match="champion_sha"):
+        sk.emit_candidate(choice, base, argv_of(recipe), base_recipe_hash=recipe.recipe_hash, champion_sha="HEAD")
+
+
 def test_planner_still_requires_free_text_for_plain_rows_and_rejects_bad_serving_rows():
     options = typed_planner.build_options([{"mechanism_id": "m1", "summary": "src"}])
     with pytest.raises(typed_planner.TypedPlannerRefused, match="lacks"):

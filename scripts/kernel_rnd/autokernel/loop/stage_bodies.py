@@ -18,6 +18,7 @@ check_complete.py contract):
     op-perf     SCREEN ONLY (RSL-R3): FAIL_OP_PERF_* polar FAIL | FUTILITY_SCREEN_ONLY_NO_KEEP, never a polar PASS
     ab-timing   verdict PASS_FASTER / FAIL_NO_GAIN + speed{surface,effect_pct,pairs,model}     polar PASS|FAIL (L2 decides)
     fold-check  verdict KEEP_LANDED / FUTILITY_HARNESS_STALE_BASE / FAIL_*            polar PASS|FAIL
+    serving-screen  serving-knob candidates only; SCREEN ONLY: FAIL_SCREEN polar FAIL | FUTILITY_SCREEN_ONLY_NO_KEEP, never PASS
 
 HARD RULES enforced here, not only in briefs (a violation is a FUTILITY_HARNESS_* RESULT, never an action):
   * production FROZEN: never build in, commit to, or move a ref of production-consolidated-* or the canonical tree
@@ -52,15 +53,16 @@ from . import sampling_axis
 from . import served_shape_cases as ssc
 
 SCHEMA = "epyc.autokernel.stage_result.v1"
-STAGES = ("build", "oracle-kld", "op-perf", "ab-timing", "fold-check")
+STAGES = ("build", "oracle-kld", "op-perf", "ab-timing", "fold-check", "serving-screen")
 CANONICAL_TREE = Path("/mnt/raid0/llm/llama.cpp")
 PRODUCTION_BRANCH_RX = re.compile(r"(^|/)production-consolidated-v\d+")
 ALLOWED_REF_RX = re.compile(r"^(refs/heads/)?(ak/champion/|llama\.cpp-experimental)")
 GPU_HOST_CPUS = frozenset(range(72, 96)) | frozenset(range(168, 192))  # q3 cores + siblings (MI210 host threads)
 GPU_STAGES = frozenset({"oracle-kld", "op-perf", "ab-timing", "fold-check"})
 #: Stages whose device is the candidate PATH's (RSL-R6): a cpu path runs them on the cpu lane (the served host's own
-#: topology), never in a GPU grant; the legacy default path is the 27B on the MI210.
-PATH_STAGES = frozenset({"op-perf", "ab-timing"})
+#: topology), never in a GPU grant; the legacy default path is the 27B on the MI210. oracle-kld is one (a cpu path runs
+#: the CPU KLD clauses); serving-screen is a pure parse that still books on its path's lane.
+PATH_STAGES = frozenset({"oracle-kld", "op-perf", "ab-timing", "serving-screen"})
 DEFAULT_PATH = "27b-q8_0|mi210"
 LOOP_STORE = Path("/mnt/raid0/llm/autokernel/loop-memory")
 QUALITY_UNGATED = "quality-ungated"
@@ -199,25 +201,30 @@ def _expand(cpu_list: str) -> set[int]:
 
 
 def _live_oracle(cand: Mapping[str, Any], anchor_build: Path, cand_build: Path) -> dict:
-    """Op oracle (test-backend-ops on the touched op) + the 27B-anchored graph KLD (graph_kld_policy.json)."""
+    """Op oracle (test-backend-ops on the touched op) + the 27B-anchored graph KLD (graph_kld_policy.json) on the PATH's
+    backend: gpu = ROCm0 / -ngl 999 (+ --n-cpu-moe where a clause carries it); cpu = CPU / -ngl 0, its own base logits."""
     from . import gates
+    lane = resolve_path(cand)["lane"]
     op = str(cand.get("op") or "MUL_MAT")
-    v = gates.op_correctness(cand_build, op=op, backend="ROCm0")
+    v = gates.op_correctness(cand_build, op=op, backend="CPU" if lane == "cpu" else "ROCm0")
     out: dict[str, Any] = {"op_oracle": v.to_dict(), "op_passed": bool(v.passed), "graph_kld": {}}
     if not v.passed:
         return out
-    policy = gates.load_graph_kld_policy("gpu")
+    policy = gates.load_graph_kld_policy(lane)
     if policy is None:
         out["kld_unavailable"] = "graph_kld_policy.json unreadable (threshold_unset)"
         return out
     ncm = {c.model: c.n_cpu_moe for c in policy.clauses if c.n_cpu_moe is not None}
-    base_dir = WORK_ROOT / "kld-base" / str(cand["base_sha"])
+    base_dir = WORK_ROOT / ("kld-base" if lane == "gpu" else "kld-base-cpu") / str(cand["base_sha"])
     base_dir.mkdir(parents=True, exist_ok=True)
     for key in dict.fromkeys(c.model for c in policy.clauses):
-        extra = ("-ngl", "999") + (("--n-cpu-moe", str(ncm[key])) if key in ncm else ())
+        extra = ("-ngl", "0") if lane == "cpu" else ("-ngl", "999") + (("--n-cpu-moe", str(ncm[key])) if key in ncm else ())
         text = gates.graph_kld_run(anchor_build, cand_build, model=policy.models[key], corpus=policy.corpus,
                                    base_logits=str(base_dir / f"{key}.kld-base"), chunks=policy.chunks, extra=extra)
-        out["graph_kld"][key] = gates.parse_graph_kld(text)
+        blk = gates.parse_graph_kld(text)
+        if "ln_ratio" in blk:   # gate_eval's |dPPL| clause reads dppl_pct, never the raw ln ratio
+            blk["dppl_pct"] = gates.abs_dppl_pct(blk["ln_ratio"])
+        out["graph_kld"][key] = blk
     return out
 
 
@@ -425,19 +432,17 @@ def _require_built(cand) -> dict:
 
 def stage_oracle(cand, prim: Primitives, *, test_mode: bool) -> dict:
     """The 27B-anchored gate decides a FAIL as before; a PASS on a path with no policy floor is non-deciding (RSL-R8).
-    The result's backend is the PATH's lane, and `gated` is claimed only for clauses that actually RAN: `_live_oracle` runs
-    the GPU clauses (ROCm0, -ngl 999), so a CPU path reports quality-ungated and never claims them (a CPU-clause run needs a
-    cpu-lane oracle stage); a gpu path is `gated` only when its model's graph_kld block is in the result."""
+    The result's backend is the PATH's lane. A path whose model has a decisive clause for its backend (gpu 27B, cpu Q38FN)
+    RUNS that backend's clauses (`_live_oracle`: ROCm0 -ngl 999 on gpu, CPU -ngl 0 on cpu) and is `gated` only when its
+    model's graph_kld block is in the result; a path with no clause (A3B, floor null) runs nothing and stays quality-ungated."""
     spec = resolve_path(cand)
-    if spec["lane"] != "gpu":
-        _require_built(cand)
-        r = {**_base("oracle-kld", cand), "backend": spec["lane"]}
-        q = {**quality_status(spec["key"], _policy()), "status": QUALITY_UNGATED}
-        q["reason"] = q.get("reason") or "cpu-clauses-not-run"
-        r.update(quality=q, verdict=f"FUTILITY_QUALITY_UNGATED ({q['path']} {q['reason']}; the cpu clauses were not run by this stage)")
-        return r
-    r = _stage_oracle(cand, prim, test_mode=test_mode)
     q = quality_status(spec["key"], _policy())
+    if spec["lane"] != "gpu" and q["status"] != "gated":
+        _require_built(cand)
+        r = {**_base("oracle-kld", cand), "backend": spec["lane"], "quality": q}
+        r["verdict"] = f"FUTILITY_QUALITY_UNGATED ({q['path']} {q['reason']}; no decisive clause for this path's model, nothing was run)"
+        return r
+    r = _stage_oracle(cand, prim, test_mode=test_mode, backend=spec["lane"])
     if q["status"] == "gated" and q.get("model") not in (r.get("graph_kld") or {}):   # never "gated" on a clause that did not run
         q = {**q, "status": QUALITY_UNGATED, "reason": "clause-not-run"}
     r["quality"] = q
@@ -452,12 +457,12 @@ def _policy() -> dict:
     return gate_eval.load_policy()
 
 
-def _stage_oracle(cand, prim: Primitives, *, test_mode: bool) -> dict:
+def _stage_oracle(cand, prim: Primitives, *, test_mode: bool, backend: str = "gpu") -> dict:
     r = _base("oracle-kld", cand)
     b = _require_built(cand)
     anchor = Path(cand.get("anchor_build") or _build_dir(cand, "anchor"))
     o = prim.oracle(cand, anchor, Path(b["build_dir"]))
-    r.update(backend="gpu", op_oracle=o.get("op_oracle"))   # gpu-lane paths only (stage_oracle)
+    r.update(backend=backend, op_oracle=o.get("op_oracle"))
     if not o.get("op_passed"):
         r.update(verdict="FAIL_CORRECTNESS (op oracle)", polar="FAIL")
         return r
@@ -467,7 +472,7 @@ def _stage_oracle(cand, prim: Primitives, *, test_mode: bool) -> dict:
     r["graph_kld"] = o["graph_kld"]
     # polar from the same policy gate_eval applies (gate_eval L2 re-derives it; a FAIL check always wins there)
     from . import gate_eval
-    checks = gate_eval.policy_checks(r, gate_eval.load_policy(), "gpu", gate_eval._constants())
+    checks = gate_eval.policy_checks(r, gate_eval.load_policy(), backend, gate_eval._constants())
     bad = [c for c in checks if not c["passed"]]
     r.update(verdict="PASS_ORACLE" if checks and not bad else
              f"FAIL_CORRECTNESS ({bad[0]['gate']} {bad[0]['metric']}={bad[0]['observed']})" if bad else
@@ -572,7 +577,36 @@ def stage_fold_check(cand, prim: Primitives, *, test_mode: bool) -> dict:
     return r
 
 
-BODIES = {"build": stage_build, "oracle-kld": stage_oracle, "op-perf": stage_op_perf, "ab-timing": stage_timing, "fold-check": stage_fold_check}
+def stage_serving_screen(cand, prim: Primitives, *, test_mode: bool) -> dict:
+    """Serving-knob SCREEN (never a gate, never a PASS, never a fold input): `serving_knob_measure.screen_stage` over the
+    candidate's steady_results / arm_map / burst_results / floor_result and the registry. No arm qualifies, or every arm
+    fails a guard -> polar FAIL; an arm clears the screen -> FUTILITY_SCREEN_ONLY_NO_KEEP with no polar (confirm with a
+    paired A/B). The backend is the path's lane."""
+    from . import serving_knob_measure as skm
+    from .serving_knobs import KnobError
+    r = {**_base("serving-screen", cand), "backend": resolve_path(cand)["lane"], "screening_only": True}
+    need = ("server", "steady_results", "arm_map", "burst_results", "floor_result")
+    if miss := [k for k in need if not cand.get(k)]:
+        raise StageRefused("FUTILITY_HARNESS_MISSING_INPUT", f"serving-knob candidate lacks {miss}")
+    try:
+        s = skm.screen_stage(**{k: cand[k] for k in need}, registry=cand.get("test_registry"))
+    except (ValueError, OSError) as e:   # KnobError / ScreeningInvalid / JSON: the instrument, never a verdict on the knob
+        raise StageRefused("FUTILITY_HARNESS_MISSING_INPUT" if isinstance(e, KnobError) and "MISSING_INPUT" in str(e)
+                           else "FUTILITY_HARNESS_INSTRUMENT", f"{type(e).__name__}: {e}")
+    rej = {e["arm_id"]: e["reasons"] for e in s["rejected"]}
+    r["screen"] = {k: s[k] for k in ("best_arm", "best_arm_why", "control", "guards", "burst_noise_floor", "rejected")} \
+        | {"ranking": [{k: e.get(k) for k in ("rank", "arm_id", "is_control")} for e in s["ranking"]]}
+    if s["best_arm"]:
+        r["verdict"] = (f"FUTILITY_SCREEN_ONLY_NO_KEEP (arm {s['best_arm']} clears the screen floor; a screen is not a gate: "
+                        "confirm with a paired A/B)")
+    else:
+        r.update(verdict=f"FAIL_SCREEN (no arm qualifies: {s['best_arm_why']}"
+                 + (f"; guard failures {rej}" if rej else "") + ")", polar="FAIL")
+    return r
+
+
+BODIES = {"build": stage_build, "oracle-kld": stage_oracle, "op-perf": stage_op_perf, "ab-timing": stage_timing,
+          "fold-check": stage_fold_check, "serving-screen": stage_serving_screen}
 
 
 # ---- test-mode primitives ---------------------------------------------------------------------------------------
@@ -656,8 +690,9 @@ def run_stage(stage: str, cand: Mapping[str, Any], *, lane: str, prim: Primitive
             guard_device(stage, lane, env, "cpu")
             return {**_base(stage, cand), "verdict": f"{e.token} ({e})"}
     guard_device(stage, lane, env, need)
-    if (stage in GPU_STAGES and need != "cpu" and lane != "gpu") or (need == "cpu" and lane != "cpu"):
-        return {**_base(stage, cand), "verdict": f"FUTILITY_HARNESS_WRONG_GRANT ({need or 'gpu'} stage on the {lane} lane"
+    want = need or ("gpu" if stage in GPU_STAGES else None)   # a PATH stage's device is its path's; others per GPU_STAGES
+    if want and lane != want:
+        return {**_base(stage, cand), "verdict": f"FUTILITY_HARNESS_WRONG_GRANT ({want} stage on the {lane} lane"
                 + ("; a cpu path needs the served host's topology" if need == "cpu" else "") + ")"}
     if prim is None and test_mode:
         fx = cand.get("test_fixture_repo")
