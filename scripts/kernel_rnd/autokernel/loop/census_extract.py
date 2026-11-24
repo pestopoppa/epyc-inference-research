@@ -9,7 +9,9 @@ import json
 import os
 import re
 
-SERVED_N = {1, 3, 4, 8, 16}
+from .census_coverage import served_n
+
+SERVED_N = set(served_n())  # registry-derived (census_coverage); fallback {1,3,4,8,16} if the registry is unreadable
 Q8_SHAPE_CLASS = {  # 27B Qwen3.8 Q8_0 tensor shapes -> (class name, calls per verify forward)
     "17408x5120": ("ffn_gate_up", 128), "5120x17408": ("ffn_down", 64), "10240x5120": ("gdn_attn_qkv", 48),
     "6144x5120": ("gdn_attn_gate", 48), "5120x6144": ("ssm_out+attn_output", 64), "12288x5120": ("attn_q", 16),
