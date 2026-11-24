@@ -6,6 +6,9 @@ only drives the already typed driver/executor pair one bounded selection at a ti
 
 from __future__ import annotations
 
+from .immutable_values import freeze_copied as _freeze
+from .immutable_values import thaw_copied as _thaw
+
 import copy
 from dataclasses import dataclass
 import math
@@ -55,20 +58,8 @@ def _seconds(value: Any, label: str) -> float:
     return result
 
 
-def _freeze(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return MappingProxyType({copy.deepcopy(key): _freeze(item) for key, item in value.items()})
-    if isinstance(value, (list, tuple)):
-        return tuple(_freeze(item) for item in value)
-    return copy.deepcopy(value)
 
 
-def _thaw(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {copy.deepcopy(key): _thaw(item) for key, item in value.items()}
-    if isinstance(value, tuple):
-        return [_thaw(item) for item in value]
-    return copy.deepcopy(value)
 
 
 @dataclass(frozen=True)

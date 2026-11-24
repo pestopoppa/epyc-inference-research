@@ -5,6 +5,8 @@ measure files, decide expiry, hold resources, or delete anything.
 """
 from __future__ import annotations
 
+from .immutable_values import freeze_copied as _freeze
+
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 import copy
@@ -101,13 +103,6 @@ def _text(value: Any, label: str) -> str:
     return value
 
 
-def _freeze(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return MappingProxyType({copy.deepcopy(key): _freeze(item)
-                                 for key, item in value.items()})
-    if isinstance(value, (list, tuple)):
-        return tuple(_freeze(item) for item in value)
-    return copy.deepcopy(value)
 
 
 def _plain(value: Any) -> Any:
