@@ -33,7 +33,7 @@ from typing import Callable, Sequence
 from ..controller import host_idle
 from .. import path_counters
 from ..execution import microbench
-from . import arm_accounting, integrity, residency
+from . import arm_accounting, integrity, launch_affinity, residency
 from . import futility as futility_mod
 from .floor_units import FLOOR_UNITS, UNIT_PROCESS
 
@@ -419,6 +419,7 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
     idle_pre = host_idle.observe("pre", CPU_LIST)
     for attempt in range(KILL_RETRIES + 1):
         env = residency.loader_env(binary)
+        launch_affinity.apply_pinned_launch_env(env, argv)  # GPS-PIN-3 layer 1 (taskset argv)
         with (nullcontext() if capture is None else capture.invocation(argv, env, attempt)):
             with residency.Sampler() as sampler:
                 done = _launch(argv, timeout=timeout_s, env=env, sampler=sampler)

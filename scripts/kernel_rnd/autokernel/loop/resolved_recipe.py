@@ -1085,7 +1085,7 @@ def _validate_resolved_consistency(resolved: ResolvedRecipe) -> None:
     if absent != set(resolved.absent_environment):
         raise ResolutionError("explicit absent environment does not match relevant state")
     allowed_launch = (set(policy.measurement_keys) | set(policy.allowed_inherit_keys)
-                      | {"LD_LIBRARY_PATH"})
+                      | set(serving.LOADER_SET_ENV))
     if set(launch) - allowed_launch or "HSA_OVERRIDE_GFX_VERSION" in launch:
         raise ResolutionError("resolved launch environment exceeds its allowlist")
     if launch.get("LD_LIBRARY_PATH") != str(Path(resolved.build_dir) / "bin"):
@@ -1381,7 +1381,7 @@ def _validate_canonical_consistency(resolved: CanonicalResolvedRecipe,
     relevant = dict(resolved.relevant_environment)
     if set(relevant) != set(policy.measurement_keys):
         raise ResolutionError("canonical relevant environment differs from policy")
-    allowed = set(policy.measurement_keys) | set(policy.allowed_inherit_keys) | {"LD_LIBRARY_PATH"}
+    allowed = set(policy.measurement_keys) | set(policy.allowed_inherit_keys) | set(serving.LOADER_SET_ENV)
     if set(launch) - allowed:
         raise ResolutionError("canonical launch environment exceeds policy")
     if any(marker in key.upper() for key in launch for marker in _CREDENTIAL_MARKERS):

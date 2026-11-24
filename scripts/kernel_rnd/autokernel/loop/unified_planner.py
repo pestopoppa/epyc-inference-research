@@ -534,7 +534,7 @@ def _prepare_local_anchor(target: campaign.TargetRevision,
         # those two representations and is independently checked against argv.
         "speculation": recipe.capability.speculation == execution.speculation,
         "environment": ({key: value for key, value in recipe.launch_env
-                         if key != "LD_LIBRARY_PATH"} == dict(execution.env)),
+                         if key not in serving.LOADER_SET_ENV} == dict(execution.env)),
     }
     failed = sorted(name for name, passed in checks.items() if not passed)
     if failed:
@@ -590,7 +590,7 @@ def _bind_runtime_anchor(target: campaign.TargetRevision, anchor: RuntimeAnchor,
         # valid enrolled launches.
         "speculation": recipe.capability.speculation == execution.speculation,
         "environment": ({key: value for key, value in recipe.launch_env
-                         if key != "LD_LIBRARY_PATH"} == dict(execution.env)),
+                         if key not in serving.LOADER_SET_ENV} == dict(execution.env)),
     }
     failed = sorted(name for name, passed in checks.items() if not passed)
     if failed:

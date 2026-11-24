@@ -44,7 +44,8 @@ MEASURED_STATUSES = frozenset({"runtime_observed", "kept", "keep_candidate",
 #: are tens of MB each. New rows of every measured status arrive through `observe`.
 RECONCILE_STATUSES = ("runtime_observed",)
 #: The loop's own LD path is a sealed function of the build, never a treatment.
-_IGNORED_ENV = frozenset({"LD_LIBRARY_PATH"})
+#: GPS-PIN-3: so is the ROCr affinity knob, a sealed function of the recipe cpu_list.
+_IGNORED_ENV = frozenset({"LD_LIBRARY_PATH", "HSA_OVERRIDE_CPU_AFFINITY_DEBUG"})
 
 
 def _canonical(value: Any) -> bytes:

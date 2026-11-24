@@ -383,7 +383,7 @@ def manifest_from_export(value: Path | str | Mapping[str, Any], *,
             "speculation": ("none" if target.get("speculation", "none") == "none" else
                             "external_draft" if "drafter" in artifacts else "self_draft"),
             "env": {key: val for key, val in target.get("environment", {}).items()
-                    if key != "LD_LIBRARY_PATH"},
+                    if key not in serving.LOADER_SET_ENV},
             "metric": config["metric"], "metric_direction": config["metric_direction"],
             "roles": list(target.get("aliases", [])) + [primary_role],
             "required_obligations": list(target.get("obligations", [])),

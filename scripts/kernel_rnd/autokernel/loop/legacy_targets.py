@@ -13,6 +13,7 @@ from ..execution.cpu_region_claim import parse_cpu_list, render_cpu_list
 from . import campaign
 from . import claim
 from .resolved_recipe import CanonicalResolvedRecipe
+from .serving import LOADER_SET_ENV
 
 
 class TargetSelectionRefused(ValueError):
@@ -77,7 +78,7 @@ checks its anchor build, original requests and startup provenance without a waiv
         "metric": execution.metric == launch.template.metric == "aggregate_tok_s",
         "metric_direction": execution.metric_direction == "higher",
         "environment": {key: value for key, value in launch.launch_env
-                        if key != "LD_LIBRARY_PATH"} == dict(execution.env),
+                        if key not in LOADER_SET_ENV} == dict(execution.env),
     }
     failed = sorted(name for name, passed in checks.items() if not passed)
     if failed:

@@ -10,8 +10,8 @@ libhsa-runtime64.so.1.14.60200) hands every thread it creates an explicit all-CP
 affinity unless ``HSA_OVERRIDE_CPU_AFFINITY_DEBUG`` is exactly ``"0"``. After health,
 ``serving._measure_once`` calls ``pin_own_child``: it re-pins anything still outside the
 placement, and the launch fails if a task escapes. The env key is exported for the
-stack launcher's use. The AutoKernel loader does NOT set it, because its launch env is
-identity-bearing (STACKCHG-GPUPIN-20261022 D2).
+stack launcher's use; the AutoKernel loader sets it on a pinned launch (GPS-PIN-3,
+STACKCHG-GPUPIN-20261022 D2).
 
 One-off research drivers (GPS-PIN-2, 2026-10-23) use the same two layers through
 ``apply_pinned_launch_env`` (layer 1, the env knob on a ``taskset -c`` launch; probe P1

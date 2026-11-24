@@ -82,11 +82,18 @@ def test_format_round_trip():
     assert la.format_cpu_list(la.parse_cpu_list("0-3,7,96-99")) == "0-3,7,96-99"
 
 
-def test_loader_env_is_unchanged_and_the_repin_is_wired():
-    """Layer 1 is deliberately NOT in the AK loader (identity-bearing env; package D2)."""
+def test_loader_sets_knob_on_pinned_launch_and_the_repin_is_wired():
+    """GPS-PIN-3: layer 1 is loader-owned and set only on a pinned launch."""
     import inspect
 
-    assert la.ROCR_AFFINITY_ENV_KEY not in serving.LOADER_OWNED_ENV
+    key = la.ROCR_AFFINITY_ENV_KEY
+    assert key in serving.LOADER_OWNED_ENV and key in serving.LOADER_SET_ENV
+    pinned = serving.Recipe(name="p", model="/m", temperature=0.6, cpu_list="184-191")
+    unpinned = serving.Recipe(name="u", model="/m", temperature=0.6)
+    assert pinned.server_env(Path("/b"), base={key: "1"})[key] == "0"
+    assert key not in unpinned.server_env(Path("/b"), base={key: "1"})
+    with pytest.raises(Exception):
+        serving.Recipe(name="r", model="/m", temperature=0.6, env={key: "1"}).server_env(Path("/b"))
     src = inspect.getsource(serving._measure_once)
     assert "launch_affinity.pin_own_child(srv.pid, recipe.cpu_list)" in src
     assert src.index("pin_own_child") < src.index('one(i, "measurement")')

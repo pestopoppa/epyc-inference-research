@@ -320,7 +320,12 @@ def _validate_matched_floor(row, recipe, frozen_requests, pairs, *, resolved=Non
 #: tree's ggml runs silently wrong and no exit code reports it. `HSA_OVERRIDE_GFX_VERSION` is
 #: deliberately UNSET by the loader env for the same reason. An arm that needs either of
 #: these is not an env arm; it is a different build or a different device.
-LOADER_OWNED_ENV = ("LD_LIBRARY_PATH", "HSA_OVERRIDE_GFX_VERSION")
+LOADER_OWNED_ENV = ("LD_LIBRARY_PATH", "HSA_OVERRIDE_GFX_VERSION",
+                    launch_affinity.ROCR_AFFINITY_ENV_KEY)
+#: Keys the loader WRITES (GPS-PIN-3, operator D2 2026-10-22): the DSO path, and the ROCr
+#: affinity knob on a pinned (`cpu_list`) launch. Both are sealed functions of build and
+#: placement, so identity sites compare recipe env with these excluded.
+LOADER_SET_ENV = ("LD_LIBRARY_PATH", launch_affinity.ROCR_AFFINITY_ENV_KEY)
 
 #: `env_readback` key standing for "the recipe does not set this variable at all".
 UNSET = "unset"
@@ -629,6 +634,9 @@ class Recipe:
         env = dict(os.environ if base is None else base)
         env.pop("HSA_OVERRIDE_GFX_VERSION", None)
         env["LD_LIBRARY_PATH"] = str(Path(build_dir) / "bin")
+        env.pop(launch_affinity.ROCR_AFFINITY_ENV_KEY, None)
+        if self.cpu_list:  # layer 1: no ROCr thread is born outside the pin (GPS-PIN-3)
+            env[launch_affinity.ROCR_AFFINITY_ENV_KEY] = launch_affinity.ROCR_AFFINITY_ENV_VALUE
         env.update(self.env or {})
         for key in self.explicit_unsets:
             env.pop(key, None)
@@ -1343,14 +1351,10 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     hip_maps = hip_launch_proof.mapped_ggml(srv.pid, Path(build_dir) / "bin")
                 # Every task of OUR server inside the recipe's cpu_list before a token is
                 # measured (2026-10-22): re-pin stragglers, refuse the launch if one escapes.
-                # Layer 2 only. The ROCr env knob (layer 1, HSA_OVERRIDE_CPU_AFFINITY_DEBUG=0)
-                # is NOT set here: the loader env is identity-bearing across resolved_recipe,
-                # unified_planner, production_enrollment, runtime_identity and legacy_targets,
-                # so adding a loader key is an AutoKernel identity change for its owner.
-                # Operator 2026-10-22, STACKCHG-GPUPIN-20261022: D1 = REFUSE on a stray thread
-                # (the raise below; no warn mode). D2 = re-check one GPU AK A/A at the next GPU
-                # AK window BEFORE the env knob is added here (pending task GPS-PIN-3, which
-                # threads it through the five identity sites). `affinity.escapes_end` records
+                # Layer 2. Layer 1 (the ROCr env knob) is set by `Recipe.server_env` on a
+                # pinned launch (GPS-PIN-3, threaded through the identity sites via
+                # `LOADER_SET_ENV`). Operator 2026-10-22, STACKCHG-GPUPIN-20261022: D1 =
+                # REFUSE on a stray thread (the raise below; no warn mode). `affinity.escapes_end` records
                 # whether a thread created after this pin (e.g. a later ROCr thread) escaped.
                 if recipe.cpu_list:
                     pin = launch_affinity.pin_own_child(srv.pid, recipe.cpu_list)
