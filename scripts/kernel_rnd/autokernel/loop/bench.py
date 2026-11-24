@@ -175,6 +175,8 @@ class Comparison:
     #: keep), with the pre-registered rule and the look that stopped it.
     stop_reason: str | None = None
     futility: dict | None = None
+    #: AK-EVAL-NPLAN: how `pairs` was pre-registered (sample_size.plan_pairs), or None.
+    pairs_basis: dict | None = None
 
     @property
     def drift_explains_the_effect(self) -> bool:
@@ -268,6 +270,8 @@ class Comparison:
             row["fresh_correctness"] = list(self.fresh_correctness)
         if self.fresh_input_recheck:
             row["fresh_input_recheck"] = self.fresh_input_recheck
+        if self.pairs_basis is not None:
+            row["pairs_basis"] = self.pairs_basis
         if self.futility is not None:
             row.update(stopping=futility_mod.STOPPING, futility=self.futility,
                        stop_reason=self.stop_reason, pairs_run=len(self.anchor_samples))
@@ -462,7 +466,8 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
             fresh_check: Callable[[Arm, int, int], dict] | None = None,
             kv_type: str | None = None, recipe_kv_type: str | None = None,
             utilisation_source: Callable[[float], dict | None] | None = None,
-            futility: "futility_mod.Rule | None" = None) -> Comparison:
+            futility: "futility_mod.Rule | None" = None,
+            pairs_basis: dict | None = None) -> Comparison:
     """Alternating paired A/B. The arms swap every pair, never run as two blocks.
 
     `warmup_pairs` are run and DISCARDED first. Without them the first measured pair
@@ -580,6 +585,7 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
         host_idle=tuple(row for proof in proofs for row in proof.get("host_idle", ())),
         stop_reason=None if stop_look is None else "futility",
         futility=None if futility is None else {**futility.plan(), "stopped_at": stop_look},
+        pairs_basis=pairs_basis,
     )
 
 

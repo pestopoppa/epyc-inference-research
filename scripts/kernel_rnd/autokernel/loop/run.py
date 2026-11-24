@@ -4454,12 +4454,13 @@ def _measure_for(worker, *, disable_runtime,
         # The anchor build is SHARED across lanes and only ever read, so it needs
         # no per-lane copy; the candidate binary is per lane because each lane
         # built it from its own patch.
+        pairs, bar, basis = _planned_bench_pairs(args, hypothesis, floor() if calibrated() else None)
         return _tripwire(measured_bench_compare(
             bench.Arm("anchor", anchor_build[0] / "bin" / "llama-bench"),
             bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
-            args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor(),
-            surface=args.surface, ubatch=ubatch, calibrated=calibrated(),
-            futility=_futility_rule(args, floor() if calibrated() else None, on_bench=True)))
+            args.model, pp=pp, tg=tg, pairs=pairs, noise_floor_pct=bar if calibrated() else floor(),
+            surface=args.surface, ubatch=ubatch, calibrated=calibrated(), pairs_basis=basis,
+            futility=_futility_rule(args, bar, on_bench=True)))
     return measure
 
 
@@ -6170,6 +6171,25 @@ def _cpu_compare(a_build, c_build, *, rebind_feedback=True,
         on_complete=lambda completed: retain_measured_source_comparison()(
             completed, a_build, anchor_recipe.execution_digest, serving_recipe().model))
     return result
+
+
+def _planned_bench_pairs(args, hypothesis, floor_pct):
+    """AK-EVAL-NPLAN: (pairs, bar, pairs_basis), fixed once before the first pair.
+
+    Off (--plan-pairs off) or uncalibrated: the declared --pairs and its own floor."""
+    if getattr(args, "plan_pairs", "off") != "on":
+        return args.pairs, floor_pct, None
+    from . import sample_size
+    try:
+        basis = sample_size.plan_pairs(
+            lambda n: noise_floor_pct(args.surface, n, args.model, store=args.store,
+                                      kv_type=getattr(args, "bench_kv_type", None)),
+            sample_size.target_effect_pct(hypothesis), n_min=args.pairs,
+            n_max=max(args.pairs, args.plan_pairs_max))
+    except sample_size.Uncalibrated as exc:
+        return args.pairs, floor_pct, {"schema": sample_size.SCHEMA, "refused": str(exc),
+                                       "pairs": args.pairs}
+    return basis["pairs"], basis["floor_pct"], basis
 
 
 def _futility_rule(args, floor_pct, *, on_bench=False, record=None):

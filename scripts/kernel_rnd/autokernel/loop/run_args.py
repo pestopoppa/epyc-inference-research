@@ -141,6 +141,11 @@ def build_parser(original_argv, *, description, run_module):
     parser.add_argument("--futility-z", type=float, default=None,
                         help="override the pre-registered z (default: 3.5 bench, 2.5 serving)")
     parser.add_argument("--futility-min-pairs", type=int, default=2)
+    parser.add_argument("--plan-pairs", choices=("off", "on"), default="off",
+                        help="AK-EVAL-NPLAN: pre-register bench pairs in [--pairs, "
+                             "--plan-pairs-max] from the stored floor and the hypothesis's "
+                             "declared min_effect_fraction (fixed before the first pair)")
+    parser.add_argument("--plan-pairs-max", type=int, default=20)
     parser.add_argument("--surface", choices=tuple(bench.SURFACES), default="pp512")
     parser.add_argument("--calibrate-surface", type=int, metavar="N", default=None,
                         help="A/A bootstrap-calibrate --surface: N pairs x 3 "
