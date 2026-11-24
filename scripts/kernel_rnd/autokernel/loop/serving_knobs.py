@@ -56,19 +56,15 @@ _FLAGS: dict[str, tuple[tuple[str, ...], str]] = {
     "np": (("-np", "--parallel"), "int"), "kv_unified": (("--kv-unified", "--no-kv-unified"), "switch"),
     "ctx_checkpoints": (("--ctx-checkpoints", "-ctxcp"), "int"), "cache_ram": (("--cache-ram", "-cram"), "int"),
     "spec_draft_n_max": (("--spec-draft-n-max",), "int"), "drafter": ((), "drafter"),
-    "temperature": (("--temp", "--temperature"), "float"), "top_p": (("--top-p",), "float"),
-    "top_k": (("--top-k",), "int"),
-    "n_ctx": (("-c", "--ctx-size"), "int"), "ctk": (("-ctk", "--cache-type-k"), "enum"),
-    "ctv": (("-ctv", "--cache-type-v"), "enum"),
+    "temperature": (("--temp", "--temperature"), "float"), "top_p": (("--top-p",), "float"), "top_k": (("--top-k",), "int"),
+    "n_ctx": (("-c", "--ctx-size"), "int"), "ctk": (("-ctk", "--cache-type-k"), "enum"), "ctv": (("-ctv", "--cache-type-v"), "enum"),
 }
 KNOBS = tuple(_FLAGS)
 SAMPLING = ("temperature", "top_p", "top_k")
 #: KV cache types a K/V knob may take. A quantized V cache needs flash-attn (checked at render, against the argv).
 KV_TYPES = ("f16", "bf16", "q8_0", "q4_0")
-_QUANTIZED_KV = frozenset({"q8_0", "q4_0"})
-_BOUNDS = {"batch": (1, 65536), "ubatch": (1, 65536), "np": (1, 16), "ctx_checkpoints": (0, 256),
-           "cache_ram": (0, 1 << 21), "spec_draft_n_max": (1, 32), "top_k": (0, 1000),
-           "n_ctx": (1, 1 << 24)}
+_BOUNDS = {"batch": (1, 65536), "ubatch": (1, 65536), "np": (1, 16), "ctx_checkpoints": (0, 256), "cache_ram": (0, 1 << 21),
+           "spec_draft_n_max": (1, 32), "top_k": (0, 1000), "n_ctx": (1, 1 << 24)}
 
 
 @dataclass(frozen=True)
@@ -228,11 +224,8 @@ def _find(argv: Sequence[str], aliases: Sequence[str]) -> int:
 def _set(argv: list[str], aliases: Sequence[str], value: Any, *, switch: bool = False) -> None:
     i = _find(argv, aliases)
     if switch:
-        flag = aliases[0] if value else aliases[1]
-        if i >= 0:
-            argv[i] = flag
-        else:
-            argv.append(flag)
+        i = i if i >= 0 else len(argv)   # an absent switch is appended
+        argv[i:i + 1] = [aliases[0] if value else aliases[1]]
     elif i >= 0 and i + 1 < len(argv):
         argv[i + 1] = str(value)
     else:
@@ -313,7 +306,7 @@ def render(recipe_argv: Sequence[str], base: ServingBase, delta: KnobDelta) -> R
     _apply_knobs(argv, base, dict(delta.knobs))
     fa = _find(argv, ("-fa", "--flash-attn"))
     final = {**base.values, **dict(delta.knobs)}
-    if final.get("ctv") in _QUANTIZED_KV and fa >= 0 and fa + 1 < len(argv) and argv[fa + 1] == "off":
+    if final.get("ctv") in ("q8_0", "q4_0") and fa >= 0 and fa + 1 < len(argv) and argv[fa + 1] == "off":
         raise KnobError(f"ctv {final['ctv']} is a quantized V cache and needs flash-attn, but the argv has -fa off")
     wanted = {k: v for k, v in delta.knobs if k != "drafter"}
     got = read_knobs(argv)

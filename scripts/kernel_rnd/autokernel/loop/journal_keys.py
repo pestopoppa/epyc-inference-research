@@ -91,7 +91,6 @@ def suppressed_by(candidate, negatives: dict):
 #: census family -> the ggml op op_perf_screen.grid matches on; the ONLY place this map lives (defect 20).
 OP_PERF_FAMILIES = {"dense-q8-gemv": "MUL_MAT", "dense-iq4xs-gemv": "MUL_MAT", "lm-head-gemv": "MUL_MAT", "mmid-moe": "MUL_MAT_ID"}
 OP_PERF_DIMS = ("k", "m")        # the journal-key dims op_perf_screen.grid accepts (n comes from the path's registry n-set)
-OP_PERF_RANGE_MAX = 1 << 16      # a [lo, hi] k/m range is expanded to its ints (grid filters by set membership) up to this width
 
 
 def op_perf_class(obj):
@@ -113,7 +112,8 @@ def op_perf_class(obj):
     dims = {}
     for d, v in (key.get("shape_class") or {}).items():
         r = _range(v)
-        if d in OP_PERF_DIMS and r and r[1] - r[0] <= OP_PERF_RANGE_MAX:
+        # a [lo, hi] k/m range is expanded to its ints (grid filters by set membership) up to 65536 wide
+        if d in OP_PERF_DIMS and r and r[1] - r[0] <= 1 << 16:
             dims[d] = list(range(int(r[0]), int(r[1]) + 1))
     return {"op_family": op, "dims": dims}
 

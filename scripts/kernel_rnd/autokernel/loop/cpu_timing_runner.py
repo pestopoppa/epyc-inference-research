@@ -93,10 +93,9 @@ def _has_flag(binary: str, flag: str) -> bool:
 
 def bench_argv(binary: Path, spec: Mapping, inst: Mapping, *, reps: int, seed: int) -> list[str]:
     kv = (((spec["serving"].get("serving_shape") or {}).get("kv_quant") or {}).get("k")) or bench.KV_DEFAULT
-    served = spec["serving"]   # as served: no_mmap -> `-mmp 0`; the registry's mlock -> `--mlock` where the binary has it
     return [*inst["prefix"], str(binary), "-m", spec["gguf"], "-p", "0", "-n", "128", "-r", str(reps), "-t", str(inst["threads"]),
             "-ngl", "0", "-fa", "1", "-o", "json", "--autokernel-harden", str(seed), "-ctk", kv, "-ctv", kv,
-            *(["-mmp", "0"] if served.get("no_mmap") else []), *(["--mlock"] if inst.get("mlock") and _has_flag(str(binary), "--mlock") else [])]
+            *(["-mmp", "0"] if spec["serving"].get("no_mmap") else []), *(["--mlock"] if inst.get("mlock") and _has_flag(str(binary), "--mlock") else [])]
 
 
 def recipe_name(spec: Mapping, topo: Sequence[Mapping]) -> str:

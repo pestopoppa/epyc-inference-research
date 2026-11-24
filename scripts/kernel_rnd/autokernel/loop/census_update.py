@@ -406,52 +406,41 @@ def write_stubs(d: str, c: dict) -> int:
 # Decided from provenance (which field carried it, which rows map), never from the value.
 
 # (model, kernel_class) -> (path, op). Explicit and tested: every census record must resolve (test_every_record_maps).
-OP_MAP = {
-    **{("27b-q8_0", k): ("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)") for k in (
+# Rows are (model, path, op, kernel classes); the q38fn per-class rows below take their op from the class name.
+OP_MAP = {(model, k): (path, op) for model, path, op, ks in (
+    ("27b-q8_0", "27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)", (
         "ffn_gate_up_v5i", "ffn_down_v5i", "gdn_attn_qkv_v5i", "gdn_attn_gate_v5i", "ssm_out+attn_output_v5i",
         "attn_q_v5i", "dense_verify_aggregate_v5i", "ffn_gate_up", "ffn_down", "gdn_attn_qkv", "gdn_attn_gate",
-        "ssm_out+attn_output", "attn_q")},
-    ("27b-q8_0", "attn_kv_v5i"): ("27b-df2-mi210", "attn_k/v 1024x5120 (q8sk)"),
-    ("27b-q8_0", "attn_kv_trace_q8sk"): ("27b-df2-mi210", "attn_k/v 1024x5120 (q8sk)"),
-    ("27b-q8_0", "gv_fattn_f16kv"): ("27b-df2-mi210", "gv_fattn + merge (verify FA)"),
-    ("27b-q8_0", "gv_fattn_q8kv"): ("27b-df2-mi210", "gv_fattn + merge (verify FA)"),
-    ("27b-q8_0", "lm_head_v5i"): ("27b-df2-mi210", "lm_head 248320x5120"),
-    # 27B verify-kernel roofline census (rocprof, per launch geometry; census_extract.extract_verify_roofline). gv_fattn_q8kv above.
-    ("27b-q8_0", "vk_dense_mmvq"): ("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)"),
-    ("27b-q8_0", "vk_dense_q8wv"): ("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)"),
-    ("27b-q8_0", "vk_lm_head"): ("27b-df2-mi210", "lm_head 248320x5120"),
-    ("27b-q8_0", "vk_q8sk_mul_mat"): ("27b-df2-mi210", "attn_k/v 1024x5120 (q8sk)"),
-    ("27b-q8_0", "gv_merge_q8kv"): ("27b-df2-mi210", "gv_fattn + merge (verify FA)"),
-    ("27b-q8_0", "vk_gated_delta_net"): ("27b-df2-mi210", "GDN recurrence (fused tree GDN)"),
-    ("27b-q8_0", "vk_actquant"): ("27b-df2-mi210", "actquant (q8mf_pre_i8 + q8sk_quantize)"),
-    ("27b-q8_0", "vk_launch_tail"): ("27b-df2-mi210", "launch-bound tail (eltwise/norm/copy/rope/conv)"),
-    **{("a3b-q8_0", k): ("a3b-mtp-mi210", "dense MMVQ (attn, GDN proj, shexp, lm_head)") for k in (
+        "ssm_out+attn_output", "attn_q", "vk_dense_mmvq", "vk_dense_q8wv")),
+    ("27b-q8_0", "27b-df2-mi210", "attn_k/v 1024x5120 (q8sk)", ("attn_kv_v5i", "attn_kv_trace_q8sk", "vk_q8sk_mul_mat")),
+    ("27b-q8_0", "27b-df2-mi210", "gv_fattn + merge (verify FA)", ("gv_fattn_f16kv", "gv_fattn_q8kv", "gv_merge_q8kv")),
+    ("27b-q8_0", "27b-df2-mi210", "lm_head 248320x5120", ("lm_head_v5i", "vk_lm_head")),
+    # 27B verify-kernel roofline census (rocprof, per launch geometry; census_extract.extract_verify_roofline): the vk_* classes.
+    ("27b-q8_0", "27b-df2-mi210", "GDN recurrence (fused tree GDN)", ("vk_gated_delta_net",)),
+    ("27b-q8_0", "27b-df2-mi210", "actquant (q8mf_pre_i8 + q8sk_quantize)", ("vk_actquant",)),
+    ("27b-q8_0", "27b-df2-mi210", "launch-bound tail (eltwise/norm/copy/rope/conv)", ("vk_launch_tail",)),
+    ("a3b-q8_0", "a3b-mtp-mi210", "dense MMVQ (attn, GDN proj, shexp, lm_head)", (
         "dense_mmvq_32row", "dense_mmvq_512row", "dense_mmvq_4096row", "dense_mmvq_8192row",
-        "dense_verify_aggregate", "dense_verify_aggregate_v5i", "lm_head")},
-    ("a3b-q8_0", "mmid_gate_up_trace"): ("a3b-mtp-mi210", "MUL_MAT_ID experts n=3"),
-    ("a3b-q8_0", "mmid_down_trace"): ("a3b-mtp-mi210", "MUL_MAT_ID experts n=3"),
-    ("a3b-q8_0", "mmid_gate_up"): ("a3b-mtp-mi210", "MUL_MAT_ID experts n=3"),  # op.table MMID rows (split16)
-    ("a3b-q8_0", "mmid_down"): ("a3b-mtp-mi210", "MUL_MAT_ID experts n=3"),
-    ("a3b-q8_0", "router_mul_mat_f32"): ("a3b-mtp-mi210", "router mul_mat_f F32 [2048,256]"),
-    ("a3b-q8_0-cpu", "MUL_MAT:fullattn_proj"): ("a3b-mtp-cpu", "fullattn_proj"),
-    ("a3b-q8_0-cpu", "MUL_MAT:gdn_proj"): ("a3b-mtp-cpu", "gdn_proj"),
-    ("a3b-q8_0-cpu", "MUL_MAT:lm_head"): ("a3b-mtp-cpu", "lm_head"),
-    ("a3b-q8_0-cpu", "MUL_MAT:shared_expert"): ("a3b-mtp-cpu", "shared expert N>=2"),
-    ("a3b-q8_0-cpu", "MUL_MAT:shared_expert@ubench"): ("a3b-mtp-cpu", "shared expert N>=2"),
-    ("a3b-q8_0-cpu", "MUL_MAT:shexp_down@ubench"): ("a3b-mtp-cpu", "shared expert N>=2"),
-    ("a3b-q8_0-cpu", "MUL_MAT_ID:exps_down"): ("a3b-mtp-cpu", "MUL_MAT_ID exps_down"),
-    ("a3b-q8_0-cpu", "MUL_MAT_ID:exps_gate_up"): ("a3b-mtp-cpu", "MUL_MAT_ID exps_gate_up"),
-    ("a3b-q8_0-cpu", "MUL_MAT_ID:exps_gate_up@ubench"): ("a3b-mtp-cpu", "MUL_MAT_ID exps_gate_up"),
-    ("q38fn-ud-iq4xs-cpu", "forward_m1_dense"): ("flash-next-cpu", "forward m1 dense (UD-IQ4_XS)"),
+        "dense_verify_aggregate", "dense_verify_aggregate_v5i", "lm_head")),
+    # mmid_gate_up / mmid_down: op.table MMID rows (split16)
+    ("a3b-q8_0", "a3b-mtp-mi210", "MUL_MAT_ID experts n=3", ("mmid_gate_up_trace", "mmid_down_trace", "mmid_gate_up", "mmid_down")),
+    ("a3b-q8_0", "a3b-mtp-mi210", "router mul_mat_f F32 [2048,256]", ("router_mul_mat_f32",)),
+    ("a3b-q8_0-cpu", "a3b-mtp-cpu", "fullattn_proj", ("MUL_MAT:fullattn_proj",)),
+    ("a3b-q8_0-cpu", "a3b-mtp-cpu", "gdn_proj", ("MUL_MAT:gdn_proj",)),
+    ("a3b-q8_0-cpu", "a3b-mtp-cpu", "lm_head", ("MUL_MAT:lm_head",)),
+    ("a3b-q8_0-cpu", "a3b-mtp-cpu", "shared expert N>=2", ("MUL_MAT:shared_expert", "MUL_MAT:shared_expert@ubench", "MUL_MAT:shexp_down@ubench")),
+    ("a3b-q8_0-cpu", "a3b-mtp-cpu", "MUL_MAT_ID exps_down", ("MUL_MAT_ID:exps_down",)),
+    ("a3b-q8_0-cpu", "a3b-mtp-cpu", "MUL_MAT_ID exps_gate_up", ("MUL_MAT_ID:exps_gate_up", "MUL_MAT_ID:exps_gate_up@ubench")),
+    ("q38fn-ud-iq4xs-cpu", "flash-next-cpu", "forward m1 dense (UD-IQ4_XS)", ("forward_m1_dense",)),
+) for k in ks} | {
     # q38fn per-class rows are COMPONENTS of the forward that parity `forward m1 dense` summarises (AutoKernel
     # 2026-11-24). They are the surfaces (d1k share, latest GB/s, d32k as context); `forward m1 dense` is a ROLL-UP
     # (GROUP_ROLLUPS) and never a surface of its own, so nothing is double-counted. Its 0.14 share does not reconcile
     # with the class shares and nobody vouches for either, so the group carries `unreconciled: true`.
-    **{("q38fn-ud-iq4xs-cpu", k): ("flash-next-cpu", k.split(":", 1)[1]) for k in (
+    ("q38fn-ud-iq4xs-cpu", k): ("flash-next-cpu", k.split(":", 1)[1]) for k in (
         "MUL_MAT:fullattn_proj", "MUL_MAT:gdn_proj", "MUL_MAT:indexer", "MUL_MAT:indexer_weight", "MUL_MAT:lm_head",
         "MUL_MAT:moe_router", "MUL_MAT:other_weight", "MUL_MAT:shared_expert", "MUL_MAT_ID:exps_down",
-        "MUL_MAT_ID:exps_gate_up")},
-}
+        "MUL_MAT_ID:exps_gate_up")}
 GROUP_ROLLUPS = {("flash-next-cpu", "forward m1 dense (UD-IQ4_XS)")}
 STEP_MS = {"27b-df2-mi210": 45.7, "a3b-mtp-mi210": 34.0}  # 27B per C18 verify round; A3B GPU per C14 busy step
 CPU_STEP_MODEL = {"a3b-mtp-cpu": "a3b-q8_0-cpu", "flash-next-cpu": "q38fn-ud-iq4xs-cpu"}

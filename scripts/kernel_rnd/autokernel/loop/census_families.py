@@ -17,44 +17,29 @@ from . import journal_keys as jk
 UNFAMILIED = "unfamilied"
 KNOB = "serving-knob"
 
-_FAMILY = {  # (path, op) -> family. Every cu.OP_MAP value MUST be here (test_every_op_map_entry_has_a_family).
-    ("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)"): "dense-q8-gemv",
-    ("27b-df2-mi210", "attn_k/v 1024x5120 (q8sk)"): "dense-q8-gemv",
-    ("a3b-mtp-mi210", "dense MMVQ (attn, GDN proj, shexp, lm_head)"): "dense-q8-gemv",
-    ("a3b-mtp-cpu", "fullattn_proj"): "dense-q8-gemv",
-    ("a3b-mtp-cpu", "gdn_proj"): "dense-q8-gemv",
-    ("a3b-mtp-cpu", "shared expert N>=2"): "dense-q8-gemv",
-    ("flash-next-cpu", "forward m1 dense (UD-IQ4_XS)"): "dense-iq4xs-gemv",
-    ("flash-next-cpu", "fullattn_proj"): "dense-iq4xs-gemv",
-    ("flash-next-cpu", "gdn_proj"): "dense-iq4xs-gemv",
-    ("flash-next-cpu", "indexer"): "dense-iq4xs-gemv",
-    ("flash-next-cpu", "indexer_weight"): "dense-iq4xs-gemv",
-    ("flash-next-cpu", "other_weight"): "dense-iq4xs-gemv",
-    ("flash-next-cpu", "shared_expert"): "dense-iq4xs-gemv",
-    ("27b-df2-mi210", "lm_head 248320x5120"): "lm-head-gemv",
-    ("a3b-mtp-cpu", "lm_head"): "lm-head-gemv",
-    ("flash-next-cpu", "lm_head"): "lm-head-gemv",
-    ("27b-df2-mi210", "gv_fattn + merge (verify FA)"): "flash-attn-verify",
-    ("27b-df2-mi210", "q4_0 KV attention (gv_fattn, q4_0 KV)"): "flash-attn-verify",
-    ("a3b-mtp-mi210", "FA / gv (10 layers, f16 KV)"): "flash-attn-verify",
-    ("a3b-mtp-mi210", "MUL_MAT_ID experts n=3"): "mmid-moe",
-    ("a3b-mtp-cpu", "MUL_MAT_ID exps_down"): "mmid-moe",
-    ("a3b-mtp-cpu", "MUL_MAT_ID exps_gate_up"): "mmid-moe",
-    ("flash-next-cpu", "exps_down"): "mmid-moe",
-    ("flash-next-cpu", "exps_gate_up"): "mmid-moe",
-    ("a3b-mtp-mi210", "router mul_mat_f F32 [2048,256]"): "moe-router",
-    ("a3b-mtp-mi210", "router chain softmax/argsort/get_rows"): "moe-router",
-    ("a3b-mtp-cpu", "router (CPU)"): "moe-router",
-    ("flash-next-cpu", "moe_router"): "moe-router",
+# (path, op) -> family, written as (family, path, ops...) rows. Every cu.OP_MAP value MUST be here (test_every_op_map_entry_has_a_family).
+_FAMILY = {(path, op): fam for fam, path, *ops in (
+    ("dense-q8-gemv", "27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)", "attn_k/v 1024x5120 (q8sk)"),
+    ("dense-q8-gemv", "a3b-mtp-mi210", "dense MMVQ (attn, GDN proj, shexp, lm_head)"),
+    ("dense-q8-gemv", "a3b-mtp-cpu", "fullattn_proj", "gdn_proj", "shared expert N>=2"),
+    ("dense-iq4xs-gemv", "flash-next-cpu", "forward m1 dense (UD-IQ4_XS)", "fullattn_proj", "gdn_proj", "indexer", "indexer_weight",
+     "other_weight", "shared_expert"),
+    ("lm-head-gemv", "27b-df2-mi210", "lm_head 248320x5120"), ("lm-head-gemv", "a3b-mtp-cpu", "lm_head"),
+    ("lm-head-gemv", "flash-next-cpu", "lm_head"),
+    ("flash-attn-verify", "27b-df2-mi210", "gv_fattn + merge (verify FA)", "q4_0 KV attention (gv_fattn, q4_0 KV)"),
+    ("flash-attn-verify", "a3b-mtp-mi210", "FA / gv (10 layers, f16 KV)"),
+    ("mmid-moe", "a3b-mtp-mi210", "MUL_MAT_ID experts n=3"), ("mmid-moe", "a3b-mtp-cpu", "MUL_MAT_ID exps_down", "MUL_MAT_ID exps_gate_up"),
+    ("mmid-moe", "flash-next-cpu", "exps_down", "exps_gate_up"),
+    ("moe-router", "a3b-mtp-mi210", "router mul_mat_f F32 [2048,256]", "router chain softmax/argsort/get_rows"),
+    ("moe-router", "a3b-mtp-cpu", "router (CPU)"), ("moe-router", "flash-next-cpu", "moe_router"),
     # parity ops whose census classes come from the verify-kernel roofline census (OP_MAP vk_* entries) or have none yet: all families
-    ("27b-df2-mi210", "GDN recurrence (fused tree GDN)"): "gdn-recurrence",
-    ("27b-df2-mi210", "drafter BF16 hipBLAS (not served; training deferred)"): "drafter-gemm",
-    ("27b-df2-mi210", "actquant (q8mf_pre_i8 + q8sk_quantize)"): "act-quantize",
-    ("27b-df2-mi210", "draft q8ip_permute"): "act-quantize",
-    ("a3b-mtp-mi210", "quantize_q8_1"): "act-quantize",
-    ("27b-df2-mi210", "launch-bound tail (eltwise/norm/copy/rope/conv)"): "launch-bound-tail",
-    ("a3b-mtp-mi210", "k_bin_bcast / scale"): "launch-bound-tail",
-}
+    ("gdn-recurrence", "27b-df2-mi210", "GDN recurrence (fused tree GDN)"),
+    ("drafter-gemm", "27b-df2-mi210", "drafter BF16 hipBLAS (not served; training deferred)"),
+    ("act-quantize", "27b-df2-mi210", "actquant (q8mf_pre_i8 + q8sk_quantize)", "draft q8ip_permute"),
+    ("act-quantize", "a3b-mtp-mi210", "quantize_q8_1"),
+    ("launch-bound-tail", "27b-df2-mi210", "launch-bound tail (eltwise/norm/copy/rope/conv)"),
+    ("launch-bound-tail", "a3b-mtp-mi210", "k_bin_bcast / scale"),
+) for op in ops}
 
 
 def op_family(path: str, op: str) -> str:

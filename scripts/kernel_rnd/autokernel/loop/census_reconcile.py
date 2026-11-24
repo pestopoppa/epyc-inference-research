@@ -28,15 +28,6 @@ def _newer(a: dict, b: dict) -> bool:
     return str(a.get("measured_at") or "") > str(b.get("measured_at") or "")
 
 
-def _union_keyed(live: dict, src: dict) -> list[str]:
-    changed = []
-    for k, v in src.items():
-        if k not in live or (isinstance(v, dict) and isinstance(live[k], dict) and _newer(v, live[k])):
-            live[k] = CLONE(v)
-            changed.append(k)
-    return changed
-
-
 def reconcile(live: dict, committed: dict) -> list[str]:
     """Merge `committed` into `live` in place by the rules above. Returns the sections changed (sorted)."""
     changed = set()
@@ -47,8 +38,11 @@ def reconcile(live: dict, committed: dict) -> list[str]:
             have.add(a.get("sha256"))
             changed.add("applied")
     for sec in ("records", "time_only"):
-        if committed.get(sec) and _union_keyed(live.setdefault(sec, {}), committed[sec]):
-            changed.add(sec)
+        for k, v in (committed.get(sec) or {}).items():
+            tgt = live.setdefault(sec, {})
+            if k not in tgt or (isinstance(v, dict) and isinstance(tgt[k], dict) and _newer(v, tgt[k])):
+                tgt[k] = CLONE(v)
+                changed.add(sec)
     recs = live.get("records", {})
     for r in [r for r in recs.values() if r.get("split_from")]:  # lumped record superseded by a classifier split
         for key, old in list(recs.items()):

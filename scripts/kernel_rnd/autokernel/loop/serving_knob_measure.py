@@ -28,10 +28,7 @@ from .serving_knobs import CONTROL, ITL_REGRESSION_MAX, SCREEN_SCHEMA, Screening
 
 SCHEMA = "epyc.autokernel.serving_knob_measure.v1"
 KS = (1, 2, 4)
-RANK_K = 4
-MIN_BURST_LAUNCHES = 3
 #: steady-state units per label; a label's cells are the MEDIAN over its valid units (one K=4 unit is one draw).
-MIN_STEADY_UNITS = 3
 _GIB = float(1 << 30)
 _MEMORY_FAILURE = re.compile(r"out ?of ?memory|\boom\b|not-resident|failed to (allocate|create context|load model)", re.I)
 _CELL_KEYS = ("aggregate_tok_s", "per_request_decode_tok_s_p50", "tokens_per_verify_step", "ttft_p95_s", "itl_p95_s")
@@ -160,17 +157,12 @@ def parse_burst_floor(result: Mapping[str, Any]) -> dict:
     return {k: floor[k] for k in keys} | {"unit": "process", "verdict": result.get("verdict")}
 
 
-def _cell(c: Mapping) -> dict:
-    return {k: _num(c.get(k)) for k in _CELL_KEYS}
-
-
 def _median_cells(units: list[Mapping]) -> dict[int, dict]:
     ks = {int(k) for u in units for k in (u.get("cells") or {})}
     out = {}
     for k in sorted(ks):
-        cs = [_cell(u["cells"][str(k)]) for u in units if str(k) in (u.get("cells") or {})]
-        out[k] = {key: statistics.median(v) if (v := [c[key] for c in cs if c[key] is not None]) else None
-                  for key in _CELL_KEYS}
+        cs = [u["cells"][str(k)] for u in units if str(k) in (u.get("cells") or {})]
+        out[k] = {key: statistics.median(v) if (v := [x for c in cs if (x := _num(c.get(key))) is not None]) else None for key in _CELL_KEYS}
     return out
 
 
@@ -295,9 +287,9 @@ def _entry(m: ArmMeasurement, ctrl: ArmMeasurement, rank_k: int, ctrl_itl: float
     return out
 
 
-def screen_cases(arms: Mapping[str, ArmMeasurement], *, control: str = CONTROL, rank_k: int = RANK_K,
-                 itl_regression_max: float = ITL_REGRESSION_MAX, min_burst_launches: int = MIN_BURST_LAUNCHES,
-                 min_steady_units: int = MIN_STEADY_UNITS, vram_capacity_gib: float,
+def screen_cases(arms: Mapping[str, ArmMeasurement], *, control: str = CONTROL, rank_k: int = 4,
+                 itl_regression_max: float = ITL_REGRESSION_MAX, min_burst_launches: int = 3,
+                 min_steady_units: int = 3, vram_capacity_gib: float,
                  noise_floor: Mapping[str, Any] | None = None) -> dict:
     """Rank by best-case aggregate tok/s at K=`rank_k`; reject an arm failing a worst-case guard rail.
 
@@ -337,9 +329,8 @@ def screen_cases(arms: Mapping[str, ArmMeasurement], *, control: str = CONTROL, 
     best_arm = top["arm_id"] if why == "clears-screen-floor" else None
     return {"schema": SCREEN_SCHEMA, "screening_only": True, "promotable": False, "control": control,
             "rank_metric": f"best-case aggregate_tok_s at K={rank_k}",
-            "guards": {"scope": "worst-case burst", "itl_p95_regression_max": itl_regression_max, "fit_memory": True,
-                       "correct_output": True, "min_burst_launches": min_burst_launches,
-                       "min_steady_units": min_steady_units, "vram_capacity_gib": vram_capacity_gib},
+            "guards": {"scope": "worst-case burst", "itl_p95_regression_max": itl_regression_max, "fit_memory": True, "correct_output": True,
+                       "min_burst_launches": min_burst_launches, "min_steady_units": min_steady_units, "vram_capacity_gib": vram_capacity_gib},
             "burst_noise_floor": dict(noise_floor) if noise_floor else None, "ranking": ranking, "rejected": rejected,
             "best_arm": best_arm, "best_arm_why": why,
             "note": "screen, not a gate: arms differ in np/batch/drafter; confirm a winner with a paired A/B"}
@@ -352,8 +343,7 @@ def screen_stage(*, server: str, steady_results: Path | str | Iterable[Mapping],
     registry (`serving_knobs.vram_capacity_gib`), screen once. `burst_results` maps knob arm id -> that arm's burst
     `results.jsonl`; `floor_result` is the burst row's RESULT.json (path or parsed). Raises ScreeningInvalid /
     KnobError rather than returning a partial screen."""
-    floor_body = json.loads(Path(floor_result).read_text(encoding="utf-8")) if isinstance(floor_result, (str, Path)) \
-        else floor_result
+    floor_body = json.loads(Path(floor_result).read_text(encoding="utf-8")) if isinstance(floor_result, (str, Path)) else floor_result
     return screen_cases(
         measurements(parse_steady_state(steady_results, arm_map),
                      {arm: parse_burst_results(src) for arm, src in burst_results.items()}),

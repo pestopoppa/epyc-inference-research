@@ -37,8 +37,7 @@ def weight(calls_per_round: float, share: float) -> float:
     """A cell's decision weight: how many times a round calls the op times its share of the round."""
     w = float(calls_per_round) * float(share)
     if not math.isfinite(w) or w <= 0:
-        raise ValueError(f"weight must be finite and positive, got calls_per_round={calls_per_round!r} "
-                         f"share={share!r}")
+        raise ValueError(f"weight must be finite and positive, got calls_per_round={calls_per_round!r} share={share!r}")
     return w
 
 
@@ -59,8 +58,7 @@ def grid(shape_class: Mapping[str, Any], served_shapes: Iterable[Any], n_set: It
     `decide([])` rejects it.
     """
     family = str(shape_class["op_family"])
-    dims = {str(name): {int(v) for v in values}
-            for name, values in dict(shape_class.get("dims") or {}).items()}
+    dims = {str(name): {int(v) for v in values} for name, values in dict(shape_class.get("dims") or {}).items()}
     unknown = sorted(set(dims) - set(_DIM_NAMES))
     if unknown:
         raise ValueError(f"unknown shape-class dims {unknown}; known: {list(_DIM_NAMES)}")
@@ -69,17 +67,14 @@ def grid(shape_class: Mapping[str, Any], served_shapes: Iterable[Any], n_set: It
         raise ValueError("n_set must be a non-empty set of positive widths")
     cells, seen = [], set()
     for shape in served_shapes:
-        if str(_attr(shape, "op")) != family:
-            continue
-        if any(int(_attr(shape, name)) not in allowed for name, allowed in dims.items()):
+        if str(_attr(shape, "op")) != family or any(int(_attr(shape, name)) not in allowed for name, allowed in dims.items()):
             continue
         name = str(_attr(shape, "name"))
         if name in seen:
             continue
         seen.add(name)
         for n in ns:
-            cells.append({"key": cell_key(name, n), "shape": name, "op": family, "n": n,
-                          "dims": {d: int(_attr(shape, d)) for d in _DIM_NAMES}})
+            cells.append({"key": cell_key(name, n), "shape": name, "op": family, "n": n, "dims": {d: int(_attr(shape, d)) for d in _DIM_NAMES}})
     return sorted(cells, key=lambda c: (c["shape"], c["n"]))
 
 
@@ -125,19 +120,16 @@ def decide(cells: Sequence[Mapping[str, Any]], weights: Mapping[str, float]) -> 
         if cell.get("key") in by_key:
             raise ValueError(f"duplicate cell key {cell.get('key')!r}")
         by_key[cell.get("key")] = cell
-    rows = [_cell_row(by_key.get(key, {"key": key}), weights.get(key)) for key in
-            sorted(set(by_key) | set(weights), key=str)]
+    rows = [_cell_row(by_key.get(key, {"key": key}), weights.get(key)) for key in sorted(set(by_key) | set(weights), key=str)]
     unmeasured = [r["key"] for r in rows if r["status"] == UNMEASURED]
     regressed = [r["key"] for r in rows if r["status"] == "regressed"]
-    out: dict[str, Any] = {"schema": SCHEMA, "screening_only": True, "cells": rows,
-                           "regressed": regressed, "unmeasured": unmeasured,
-                           "aggregate_effect_pct": None, "aggregate_floor_pct": None}
+    out: dict[str, Any] = {"schema": SCHEMA, "screening_only": True, "cells": rows, "regressed": regressed,
+                           "unmeasured": unmeasured, "aggregate_effect_pct": None, "aggregate_floor_pct": None}
     if not rows:
         return {**out, "screen": UNMEASURED, "reason": "no cells (empty grid or class matched no served shape)"}
     if unmeasured:
         return {**out, "screen": UNMEASURED,
-                "reason": f"{len(unmeasured)}/{len(rows)} cells unmeasured: {unmeasured[0]} "
-                          f"({next(r['reason'] for r in rows if r['key'] == unmeasured[0])})"}
+                "reason": f"{len(unmeasured)}/{len(rows)} cells unmeasured: {unmeasured[0]} ({next(r['reason'] for r in rows if r['key'] == unmeasured[0])})"}
     total = sum(r["weight"] for r in rows)
     agg = sum(r["weight"] * r["effect_pct"] for r in rows) / total
     agg_floor = sum(r["weight"] * r["floor_pct"] for r in rows) / total
@@ -145,14 +137,12 @@ def decide(cells: Sequence[Mapping[str, Any]], weights: Mapping[str, float]) -> 
     if regressed:
         return {**out, "screen": REJECT,
                 "reason": f"{len(regressed)} cell(s) regressed beyond their own floor: {regressed[0]} "
-                          f"({next(r['effect_pct'] for r in rows if r['key'] == regressed[0]):+.3f}%); "
-                          f"weighted aggregate {agg:+.3f}% does not offset a regression"}
+                          f"({next(r['effect_pct'] for r in rows if r['key'] == regressed[0]):+.3f}%); weighted aggregate {agg:+.3f}% does not offset a regression"}
     if agg <= agg_floor:
         return {**out, "screen": REJECT,
                 "reason": f"weighted aggregate {agg:+.3f}% does not clear the weighted floor {agg_floor:.3f}%"}
     return {**out, "screen": PASS,
-            "reason": f"weighted aggregate {agg:+.3f}% clears the weighted floor {agg_floor:.3f}% "
-                      f"over {len(rows)} cells, none regressed"}
+            "reason": f"weighted aggregate {agg:+.3f}% clears the weighted floor {agg_floor:.3f}% over {len(rows)} cells, none regressed"}
 
 
 def polar_result(decision: Mapping[str, Any], base: Mapping[str, Any] | None = None) -> dict:

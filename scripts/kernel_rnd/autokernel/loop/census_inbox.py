@@ -74,11 +74,6 @@ def surface_key(s: dict) -> dict:
             "device": "cpu" if str(s.get("device", "")).startswith("cpu") else "gpu"}
 
 
-def op_perf_shape_class(key: dict):
-    """Back-compat alias of the single mapping function `journal_keys.op_perf_class`."""
-    return journal_keys.op_perf_class(key)
-
-
 def seed_key(inbox: str | Path, *hypothesis_texts: object):
     """The journal key of the BWS seed a candidate cites (its id in mechanism_id/statement, a file in `inbox`), else None."""
     for tok in re.findall(r"BWS-[A-Za-z0-9_-]+", " ".join(str(t or "") for t in hypothesis_texts)):

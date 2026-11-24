@@ -29,7 +29,6 @@ from .tool_output import strip_ansi
 
 FLOOR_SCHEMA = "epyc.autokernel.op_perf_floor.v1"
 CALIBRATION_MIN_PAIRS = 24          # FLOOR-UNIT-1 (serving.MATCHED_CALIBRATION_PAIRS)
-FLOOR_KS = (5, 9, 20)
 PERF_CASE_SET_ID = "served_shape_perf_v1"
 STORE = Path("/mnt/raid0/llm/autokernel/loop-memory")
 CENSUS = Path(__file__).resolve().parent / "census" / "mi210_bandwidth_census.json"
@@ -53,8 +52,7 @@ def vars_prefix(cell: Mapping, type_a: str) -> str:
     """The `vars()` text of the case, up to (not including) any `,max_nmse=` the patched subclasses append."""
     d, t = cell["dims"], ssc.GGML_TYPE_NAMES[type_a]
     if cell["op"] == "MUL_MAT":
-        return (f"type_a={t},type_b=f32,m={d['m']},n={cell['n']},k={d['k']},bs=[1,1],nr=[1,1],"
-                "per=[0,1,2,3],k_v=0,o=1")
+        return f"type_a={t},type_b=f32,m={d['m']},n={cell['n']},k={d['k']},bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1"
     return (f"type_a={t},type_b=f32,n_mats={d['n_mats']},n_used={d['n_used']},b=0,m={d['m']},n={cell['n']},k={d['k']}")
 
 
@@ -68,8 +66,7 @@ def plan_cells(spec: Mapping, cells: Sequence[Mapping]) -> list[tuple[Mapping, l
 
 
 def parse_perf(text: str) -> list[tuple[str, str, float]]:
-    return [(m.group(1), m.group(2), float(m.group(3))) for ln in strip_ansi(text).splitlines()
-            if (m := _LINE.match(ln))]
+    return [(m.group(1), m.group(2), float(m.group(3))) for ln in strip_ansi(text).splitlines() if (m := _LINE.match(ln))]
 
 
 def cell_us(plan, lines) -> dict[str, float]:
@@ -181,8 +178,7 @@ def run(anchor: Path, cand: Path, cells, spec, *, pairs: int | None = None, stor
         runner=subprocess.run, live=True, floors: Mapping | None = None, census: Mapping | None = None) -> dict:
     """The stage primitive's result: {"cells": [{key, anchor, candidate, floor_pct}], "weights": {...}}."""
     pairs = max(int(pairs or ops.MIN_PAIRS), ops.MIN_PAIRS)
-    backend = "ROCm0" if spec["lane"] == "gpu" else "CPU"
-    fl = load_floors(store, spec, backend, pairs) if floors is None else dict(floors)
+    fl = load_floors(store, spec, "ROCm0" if spec["lane"] == "gpu" else "CPU", pairs) if floors is None else dict(floors)
     m = measure(anchor, cand, cells, spec, pairs=pairs, runner=runner, live=live)
     w, basis = weights(cells, spec, census)
     return {"cells": [{"key": k, **v, "floor_pct": fl.get(k)} for k, v in m.items()], "weights": w,
@@ -206,7 +202,7 @@ def calibrate(build: Path, spec: Mapping, *, source_row: str, pairs: int = CALIB
            "cells": {c["key"]: {"shape": c["shape"], "n": c["n"], "anchor_us": m[c["key"]]["anchor"],
                                 "candidate_us": m[c["key"]]["candidate"],
                                 "floor_pct": {str(k): v for k, v in bench.bootstrap_floor(
-                                    m[c["key"]]["anchor"], m[c["key"]]["candidate"], ks=FLOOR_KS).items()}}
+                                    m[c["key"]]["anchor"], m[c["key"]]["candidate"], ks=(5, 9, 20)).items()}}
                      for c in cells}}
     p = floor_path(store, spec["key"])
     p.parent.mkdir(parents=True, exist_ok=True)
