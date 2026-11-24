@@ -161,6 +161,21 @@ class Cpu(Base):
         self.run_(self.cpu_res("b", cpu_result(gate_up_ms=6.5)))   # 109.7 GB/s >= 100
         self.assertEqual(json.load(open(self.census))["seeds"]["CPU-A3B-MMID"]["status"], "done")
 
+
+class Parity(unittest.TestCase):
+    def test_gap_times_share_ranks_and_flags_unworked(self):
+        c = cu.empty_census()
+        c["parity"] = {"refs": {"r": {"pct": 85, "basis": "b", "cite": "x"}}, "ops": [
+            {"path": "p", "op": "a", "ours_gbps": 500, "roofline_gbps": 1000, "ref": "r", "share_of_step": 0.1,
+             "covered_by": "", "refresh_c21": True, "source": "s", "served": True},
+            {"path": "p", "op": "b", "ours_pct": 80, "roofline_gbps": 1000, "ref": "r", "share_of_step": 0.5,
+             "covered_by": "BOX", "refresh_c21": False, "source": "s", "served": True}]}
+        rows = cu.parity_rows(c)
+        self.assertEqual([r["op"] for r in rows], ["a", "b"])  # 35*0.1=3.5 > 5*0.5=2.5
+        self.assertAlmostEqual(rows[0]["score"], 3.5)
+        md = "\n".join(cu.parity_md(c))
+        self.assertIn("Top unworked gaps (served, no box or row): p a (3.5)", md)
+
 if __name__ == "__main__":
     unittest.main()
 

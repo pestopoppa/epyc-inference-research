@@ -80,6 +80,331 @@
  },
  "floor_gbps": 1000.0,
  "noise_frac": 0.03,
+ "parity": {
+  "note": "GPU roofline = MI210 HBM nameplate 1638 GB/s; CPU roofline = measured quarter-24t 112.9 GB/s. Shares: 27B per 45.7 ms round (C18 trace), A3B GPU per 34 ms busy step (C14), CPU per census step. Operator 2026-11-24: A3B GPU tracked as served (second GPU).",
+  "ops": [
+   {
+    "covered_by": "V5I base; C21 V2 RRS fold",
+    "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+    "ours_gbps": 1071,
+    "path": "27b-df2-mi210",
+    "ref": "cuda-gemv",
+    "refresh_c21": true,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.5520787746170678,
+    "source": "ak-c18-27b-df2-v5i-trace-gpu-20261122"
+   },
+   {
+    "covered_by": "ak-gvfattn-lds/splits/served rows; G3",
+    "op": "gv_fattn + merge (verify FA)",
+    "ours_gbps": 183,
+    "path": "27b-df2-mi210",
+    "ref": "cuda-flashdecode",
+    "refresh_c21": true,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.0711159737417943,
+    "source": "same + ak-g3-trace-read-20261124 (130-235 GB/s at 8-16k)"
+   },
+   {
+    "covered_by": "speculative-decoding.md batched tree GDN lane",
+    "op": "GDN recurrence (fused tree GDN)",
+    "ours_gbps": 200,
+    "path": "27b-df2-mi210",
+    "ref": "cuda-scan",
+    "refresh_c21": true,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.046389496717724285,
+    "source": "C18 trace; bytes approximate"
+   },
+   {
+    "covered_by": "AK-BW-27B-ACTQUANT-FUSE",
+    "op": "actquant (q8mf_pre_i8 + q8sk_quantize)",
+    "ours_pct": 35,
+    "path": "27b-df2-mi210",
+    "ref": "cuda-fused-tail",
+    "refresh_c21": false,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.0461706783369803,
+    "source": "C18 trace"
+   },
+   {
+    "covered_by": "",
+    "op": "launch-bound tail (eltwise/norm/copy/rope/conv)",
+    "ours_pct": 35,
+    "path": "27b-df2-mi210",
+    "ref": "cuda-fused-tail",
+    "refresh_c21": false,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.14660831509846828,
+    "source": "C18 verify 40.07 ms minus named classes"
+   },
+   {
+    "covered_by": "AK-BW-27B-ATTN-KV-CONCAT",
+    "op": "attn_k/v 1024x5120 (q8sk)",
+    "ours_gbps": 276,
+    "path": "27b-df2-mi210",
+    "ref": "cuda-gemv",
+    "refresh_c21": false,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.014223194748358862,
+    "source": "C18 trace"
+   },
+   {
+    "covered_by": "",
+    "op": "lm_head 248320x5120",
+    "ours_gbps": 1070,
+    "path": "27b-df2-mi210",
+    "ref": "cuda-gemv",
+    "refresh_c21": false,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.027571115973741792,
+    "source": "C18 trace (AT_FLOOR)"
+   },
+   {
+    "covered_by": "AK-BW-27B-DRAFT-Q8IP-PERMUTE",
+    "op": "draft q8ip_permute",
+    "ours_pct": 35,
+    "path": "27b-df2-mi210",
+    "ref": "cuda-fused-tail",
+    "refresh_c21": false,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.009409190371991246,
+    "source": "C18 trace"
+   },
+   {
+    "covered_by": "DF2-11-BF16-FIX (done); DF2-FT-1 deferred",
+    "op": "drafter BF16 hipBLAS (not served; training deferred)",
+    "ours_gbps": 144,
+    "path": "27b-df2-mi210",
+    "ref": "cuda-gemv",
+    "refresh_c21": false,
+    "roofline_gbps": 1638.4,
+    "served": false,
+    "share_of_step": 0.0,
+    "source": "DF2-11-BF16-TRACE-PROF"
+   },
+   {
+    "covered_by": "AK-BW-CENSUS-MI210-ROWS (C18 A3B trace, attribution)",
+    "op": "dense MMVQ (attn, GDN proj, shexp, lm_head)",
+    "ours_gbps": 224,
+    "path": "a3b-mtp-mi210",
+    "ref": "cuda-gemv",
+    "refresh_c21": true,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.2676470588235294,
+    "source": "C14 h-18 profile; attribution unresolved"
+   },
+   {
+    "covered_by": "",
+    "op": "router mul_mat_f F32 [2048,256]",
+    "ours_gbps": 18,
+    "path": "a3b-mtp-mi210",
+    "ref": "cuda-gemv",
+    "refresh_c21": true,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.13529411764705881,
+    "source": "C14 (pre MMVF cap knob 79650eeab)"
+   },
+   {
+    "covered_by": "ak-mmid-mf-gpu-20261122 (4297a2caa); MMID-HELPER-N10",
+    "op": "MUL_MAT_ID experts n=3",
+    "ours_gbps": 780,
+    "path": "a3b-mtp-mi210",
+    "ref": "cuda-moe",
+    "refresh_c21": true,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.1161764705882353,
+    "source": "ak-mmid-split16-gpu-20261121-r4"
+   },
+   {
+    "covered_by": "",
+    "op": "quantize_q8_1",
+    "ours_pct": 35,
+    "path": "a3b-mtp-mi210",
+    "ref": "cuda-fused-tail",
+    "refresh_c21": true,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.0911764705882353,
+    "source": "C14"
+   },
+   {
+    "covered_by": "",
+    "op": "k_bin_bcast / scale",
+    "ours_pct": 35,
+    "path": "a3b-mtp-mi210",
+    "ref": "cuda-fused-tail",
+    "refresh_c21": true,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.07058823529411765,
+    "source": "C14"
+   },
+   {
+    "covered_by": "",
+    "op": "router chain softmax/argsort/get_rows",
+    "ours_pct": 35,
+    "path": "a3b-mtp-mi210",
+    "ref": "cuda-fused-tail",
+    "refresh_c21": true,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.055882352941176466,
+    "source": "C14"
+   },
+   {
+    "covered_by": "",
+    "op": "FA / gv (10 layers, f16 KV)",
+    "ours_gbps": 183,
+    "path": "a3b-mtp-mi210",
+    "ref": "cuda-flashdecode",
+    "refresh_c21": true,
+    "roofline_gbps": 1638.4,
+    "served": true,
+    "share_of_step": 0.041176470588235294,
+    "source": "C14 share; GB/s borrowed from 27B gv_fattn"
+   },
+   {
+    "covered_by": "Q38P-1; INF-70; AKX-ALL-25",
+    "op": "forward m1 dense (UD-IQ4_XS)",
+    "ours_gbps": 60.6,
+    "path": "flash-next-cpu",
+    "ref": "cpu-avx512-gemv",
+    "refresh_c21": true,
+    "roofline_gbps": 112.9,
+    "served": true,
+    "share_of_step": 0.14,
+    "source": "q38fn-cpu-verify-weight-reuse-20261122 r3 (quarter-24t; served NUMA_FULL needs full-host ceiling)"
+   },
+   {
+    "covered_by": "AK-CPU-A3B-MMID (NO_LEVER)",
+    "op": "MUL_MAT_ID exps_gate_up",
+    "ours_gbps": 94.0,
+    "path": "a3b-mtp-cpu",
+    "ref": "cpu-avx512-gemv",
+    "refresh_c21": false,
+    "roofline_gbps": 112.9,
+    "served": true,
+    "share_of_step": 0.187,
+    "source": "a3b-cpu-gap-census-20261121"
+   },
+   {
+    "covered_by": "",
+    "op": "MUL_MAT_ID exps_down",
+    "ours_gbps": 98.7,
+    "path": "a3b-mtp-cpu",
+    "ref": "cpu-avx512-gemv",
+    "refresh_c21": false,
+    "roofline_gbps": 112.9,
+    "served": true,
+    "share_of_step": 0.089,
+    "source": "a3b-cpu-gap-census-20261121"
+   },
+   {
+    "covered_by": "AK-CPU-A3B-SHEXP-VERIFY-GAP",
+    "op": "shared expert N>=2",
+    "ours_gbps": 68.5,
+    "path": "a3b-mtp-cpu",
+    "ref": "cpu-avx512-gemv",
+    "refresh_c21": false,
+    "roofline_gbps": 112.9,
+    "served": true,
+    "share_of_step": 0.038,
+    "source": "ak-a3b-cpu-mmid-gateup-ubench-20261122-r2"
+   },
+   {
+    "covered_by": "",
+    "op": "gdn_proj",
+    "ours_gbps": 102.5,
+    "path": "a3b-mtp-cpu",
+    "ref": "cpu-avx512-gemv",
+    "refresh_c21": false,
+    "roofline_gbps": 112.9,
+    "served": true,
+    "share_of_step": 0.257,
+    "source": "a3b-cpu-gap-census-20261121"
+   },
+   {
+    "covered_by": "",
+    "op": "fullattn_proj",
+    "ours_gbps": 104.4,
+    "path": "a3b-mtp-cpu",
+    "ref": "cpu-avx512-gemv",
+    "refresh_c21": false,
+    "roofline_gbps": 112.9,
+    "served": true,
+    "share_of_step": 0.071,
+    "source": "a3b-cpu-gap-census-20261121"
+   },
+   {
+    "covered_by": "",
+    "op": "lm_head",
+    "ours_gbps": 110.7,
+    "path": "a3b-mtp-cpu",
+    "ref": "cpu-avx512-gemv",
+    "refresh_c21": false,
+    "roofline_gbps": 112.9,
+    "served": true,
+    "share_of_step": 0.12,
+    "source": "a3b-cpu-gap-census-20261121"
+   },
+   {
+    "covered_by": "AK-CPU-C22-LEVERS (router BF16 shadow)",
+    "op": "router (CPU)",
+    "ours_gbps": null,
+    "path": "a3b-mtp-cpu",
+    "ref": "cpu-avx512-gemv",
+    "refresh_c21": false,
+    "roofline_gbps": 112.9,
+    "served": true,
+    "share_of_step": null,
+    "source": "not in census: needs a row"
+   }
+  ],
+  "refs": {
+   "cpu-avx512-gemv": {
+    "basis": "% of measured STREAM",
+    "cite": "llama.cpp/ik_llama.cpp Zen4/5 AVX-512 Q8_0 token generation reported near STREAM; Intel neural-speed (Shen et al., arXiv:2311.00502). Approximate.",
+    "pct": 88
+   },
+   "cuda-flashdecode": {
+    "basis": "% of HBM peak",
+    "cite": "FlashInfer (Ye et al., arXiv:2501.01005) decode attention; FlashDecoding (Dao et al., 2023 blog). Recalled, not re-verified.",
+    "pct": 85
+   },
+   "cuda-fused-tail": {
+    "basis": "launch-efficiency proxy",
+    "cite": "TensorRT-LLM fused norm/act-quant prologues + CUDA graphs. Proxy: ours fixed at 35 for launch-bound classes.",
+    "pct": 85
+   },
+   "cuda-gemv": {
+    "basis": "% of HBM peak",
+    "cite": "Marlin (Frantar et al., arXiv:2408.11743): near-ideal weight-stream speedup to batch 16-32 on A10/A100; TensorRT-LLM decode GEMV. Recalled, not re-verified.",
+    "pct": 85
+   },
+   "cuda-moe": {
+    "basis": "% of HBM peak",
+    "cite": "vLLM/SGLang fused_moe Triton decode and MegaBlocks (Gale et al., arXiv:2211.15841). Approximate; no single published %-of-peak.",
+    "pct": 70
+   },
+   "cuda-scan": {
+    "basis": "% of HBM peak, estimate",
+    "cite": "Mamba/Mamba2 selective scan (arXiv:2312.00752, 2405.21060) and flash-linear-attention GDN kernels publish speedups, not %-of-peak. Estimate.",
+    "pct": 60
+   }
+  }
+ },
  "records": {
   "27b-q8_0|attn_kv_trace_q8sk|1024x5120|n8": {
    "arm": "V",

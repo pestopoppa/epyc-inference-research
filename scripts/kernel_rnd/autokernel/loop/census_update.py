@@ -219,6 +219,42 @@ def tgt(c: dict, r: dict) -> float:
     return c["target_gbps"]
 
 
+def parity_rows(c: dict) -> list[dict]:
+    """Roofline-parity view: ours % vs best published reference %, gap x share of step (pp)."""
+    p = c.get("parity") or {}
+    refs, rows = p.get("refs", {}), []
+    for o in p.get("ops", []):
+        ref = refs.get(o["ref"], {})
+        ours = o.get("ours_pct")
+        if ours is None and o.get("ours_gbps") is not None:
+            ours = 100.0 * o["ours_gbps"] / o["roofline_gbps"]
+        gap = None if ours is None else max(0.0, ref.get("pct", 0) - ours)
+        sh = o.get("share_of_step")
+        score = None if gap is None or sh is None else gap * sh
+        rows.append({**o, "ours": ours, "ref_pct": ref.get("pct"), "gap": gap, "score": score})
+    rows.sort(key=lambda r: (not r["served"], -(r["score"] or -1)))
+    return rows
+
+
+def parity_md(c: dict) -> list[str]:
+    rows = parity_rows(c)
+    if not rows:
+        return []
+    f = lambda x, s: "-" if x is None else format(x, s)
+    out = ["", "### Roofline parity (gap x share of step)", "", c["parity"].get("note", ""), "",
+           "| # | Path | Op | Ours % roofline | Best ref % | Ref | Gap pp | Share of step | Score (pp) | Covered by | C21 refresh | Source |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for i, r in enumerate(rows, 1):
+        out.append(f"| {i} | {r['path']}{'' if r['served'] else ' (not served)'} | {r['op']} | {f(r['ours'], '.0f')} | "
+                   f"{f(r['ref_pct'], '.0f')} | {r['ref']} | {f(r['gap'], '.0f')} | {f(r['share_of_step'], '.1%')} | "
+                   f"{f(r['score'], '.1f')} | {r['covered_by'] or '**none**'} | {'yes' if r['refresh_c21'] else '-'} | {r['source']} |")
+    top = [r for r in rows if r["served"] and not r["covered_by"] and r["score"]][:5]
+    out += ["", "Top unworked gaps (served, no box or row): " + "; ".join(
+        f"{r['path']} {r['op']} ({r['score']:.1f})" for r in top), "", "References:", ""]
+    out += [f"- `{k}` {v['pct']}% ({v['basis']}): {v['cite']}" for k, v in sorted(c["parity"].get("refs", {}).items())]
+    return out
+
+
 def table_md(c: dict, top: int = 40) -> str:
     allr = sorted(c["records"].items(), key=lambda kv: kv[1]["rank"])
     recs = [kv for kv in allr if kv[1].get("device", "gpu") == "gpu"][:top]
@@ -244,6 +280,7 @@ def table_md(c: dict, top: int = 40) -> str:
                    f"{r.get('ceiling_gbps', 0):.1f} | {'-' if fr is None else f'{fr:.0%}'} | "
                    f"{'-' if r.get('share_of_round') is None else format(r['share_of_round'], '.1%')} | {r['recoverable_ms_per_round']:.2f} | {r['status']} | "
                    f"{r.get('seed', '-')} | `{r['source_row']}` |")
+    out += parity_md(c)
     out += ["", END]
     return "\n".join(out)
 
@@ -293,6 +330,9 @@ def write_stubs(d: str, c: dict) -> int:
 
 def run(result: str, row: str | None, census: str, program: str | None, doc: str | None, seeds_out: str | None,
         dry_run: bool = False) -> dict:
+    if result is None:  # render-only: regenerate the doc block from the committed census
+        c = json.load(open(census))
+        return {"render_only": True, "doc_changed": write_doc(doc, c) if doc else False}
     res = json.load(open(result))
     row = row or res.get("row") or os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(result))))
     sha = sha256(result)
@@ -320,7 +360,7 @@ def run(result: str, row: str | None, census: str, program: str | None, doc: str
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--result", required=True)
+    ap.add_argument("--result", help="omit with --doc to render only")
     ap.add_argument("--row")
     ap.add_argument("--census", default=CENSUS)
     ap.add_argument("--program", default=None)
