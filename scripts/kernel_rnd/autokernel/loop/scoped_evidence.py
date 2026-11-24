@@ -140,21 +140,13 @@ def _strings(value: Any, label: str, *, empty: bool = False,
 def _dependency_identities(value: Any, label: str) -> Mapping[str, str]:
     if not isinstance(value, Mapping) or not value:
         raise EvidenceValidationError(f"{label}: expected non-empty object")
-    result: dict[str, str] = {}
-    for dep, identity in value.items():
-        dep = cast(str, _text(dep, f"{label} key"))
-        result[dep] = _digest(identity, f"{label}.{dep}")
-    return MappingProxyType(result)
+    return _digest_map(value, label)
 
 
 def _generations(value: Any, label: str) -> Mapping[str, int]:
     if not isinstance(value, Mapping) or not value:
         raise EvidenceValidationError(f"{label}: expected non-empty object")
-    result = {}
-    for dep, generation in value.items():
-        dep = cast(str, _text(dep, f"{label} key"))
-        result[dep] = _int(generation, f"{label}.{dep}")
-    return MappingProxyType(result)
+    return _generations_allow_empty(value, label)
 
 
 def _generations_allow_empty(value: Any, label: str) -> Mapping[str, int]:
