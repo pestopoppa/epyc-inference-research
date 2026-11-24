@@ -3821,7 +3821,7 @@ def _ppl_contract_evict_culprit(tip_commit: str, quality=None, *, current_anchor
 def _reprofile(*,
         cpu_launch, cpu_profile_observation, direct_launch, anchor_build, resumed, args, current_anchor_commit, manifest, screen_state, node_reprofile, longctx_reprofile, publish, latest,
         cpu_measurement_window, selected_identity, resolved_campaign, gpu_profile_observation, frozen_requests, gpu_long_context_hook, hotspot_rows, pp,
-        tg) -> None:
+        tg, keep_timer=None) -> None:
     """Re-derive the hotspots from the CURRENT champion.
 
     A profile names where the time goes in one binary. Once a patch is kept that
@@ -3830,7 +3830,20 @@ def _reprofile(*,
     spend hours aiming at a distribution it had already altered.
     """
     if cpu_launch():
-        from . import cpu_profile
+        from . import cpu_profile, reprofile_gate
+        # AK-EVAL-KEEPTIME: a keep whose diff misses every profiled hotspot symbol
+        # cannot have moved them; the retained observation stands, skip logged.
+        head = current_anchor_commit[0]
+        prior = (cpu_profile_observation.get("hotspots")
+                 if cpu_profile_observation.get("status") == "observed" else None)
+        reason = reprofile_gate.skip_reason(
+            _git(args.worktree, "diff", f"{head}^", head) if head and prior else "", prior)
+        if reason is not None:
+            cpu_profile_observation["reprofile_skipped"] = {"keep_head": head, "reason": reason}
+            if keep_timer is not None and keep_timer[0] is not None:
+                keep_timer[0].skip("reprofile_cpu", reason, commit=head)
+            print(f"profile   reprofile skipped: {reason}")
+            return
         cpu_profile_observation.clear()
         cpu_profile_observation["status"] = "unavailable"
         profile_arm = _cpu_arm(direct_launch(), anchor_build[0])
@@ -5192,8 +5205,16 @@ def _run_pooled(*, set_runtime_selection,
                 "reason": f"codegen sidecar failed: {type(exc).__name__}"}
             print(f"codegen   unavailable for {head[:12]}: {type(exc).__name__}: {exc}",
                   file=sys.stderr)
-        with keep_stage()("promote_anchor"):
-            promote_anchor()()
+        try:
+            with keep_stage()("promote_anchor"):
+                promote_anchor()()
+        except loop.RunAborted as aborted:
+            # AK-EVAL-KEEPTIME: an aborted keep (anchor guard) is where keep-path time
+            # matters most; carry its stage timing on the run_aborted evidence.
+            if keep_timer()[0] is not None:
+                aborted.keep_path_timing = keep_timer()[0].to_dict()
+                keep_timer()[0] = None
+            raise
         if source_fold_candidate and patch_path is not None and parent is not None:
             _, measurement_ref, measured_fields = measured_source_comparisons()[id(measured_comparison)]
             native = measured_comparison.to_dict()
@@ -7745,7 +7766,7 @@ def _main(argv: list[str] | None = None) -> int:
             latest=latest, cpu_measurement_window=cpu_measurement_window, selected_identity=selected_identity,
             resolved_campaign=resolved_campaign, gpu_profile_observation=gpu_profile_observation, frozen_requests=frozen_requests, gpu_long_context_hook=gpu_long_context_hook,
             hotspot_rows=hotspot_rows, pp=pp,
-            tg=tg)
+            tg=tg, keep_timer=keep_timer)
 
     # SCRATCH (operator 2026-09-26): this run's ONE scratch registry, rooted in the
     # store; created when the run body starts (below) and read by status/loop-run.

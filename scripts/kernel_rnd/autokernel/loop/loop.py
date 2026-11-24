@@ -2164,6 +2164,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                                 "mechanism_id": hypothesis.mechanism_id,
                                 "statement": hypothesis.statement,
                                 "committed_head": getattr(aborted, "committed_head", None),
+                                "keep_path_timing": getattr(aborted, "keep_path_timing", None),
                                 "paths": [str(path) for path in paths],
                                 "comparison": comparison.to_dict(),
                                 "runtime_pair_digests": (
