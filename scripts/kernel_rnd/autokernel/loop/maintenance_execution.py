@@ -81,6 +81,13 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(_canonical(value)).hexdigest()
 
 
+def _seal_digest(record, field: str, label: str) -> None:
+    expected = _digest(record.body())
+    if getattr(record, field) and getattr(record, field) != expected:
+        raise MaintenanceExecutionRefused(f"{label} digest mismatch")
+    object.__setattr__(record, field, expected)
+
+
 @dataclass(frozen=True, slots=True)
 class ExclusionToken:
     token_id: str
@@ -122,10 +129,7 @@ class ExclusionToken:
                 or any(not isinstance(item, str) or not item
                        for item in self.selected_artifact_ids)):
             raise MaintenanceExecutionRefused("token selection must contain 1..64 unique IDs")
-        expected = _digest(self.body())
-        if self.token_digest and self.token_digest != expected:
-            raise MaintenanceExecutionRefused("exclusion token digest mismatch")
-        object.__setattr__(self, "token_digest", expected)
+        _seal_digest(self, "token_digest", "exclusion token")
 
     def body(self) -> dict[str, Any]:
         return {"schema": self.schema, "token_id": self.token_id,
@@ -182,10 +186,7 @@ class HoldReceipt:
             raise MaintenanceExecutionRefused("hold deadline must be finite and positive")
         if type(self.current) is not bool or type(self.revoked) is not bool:
             raise MaintenanceExecutionRefused("hold status must be boolean")
-        expected = _digest(self.body())
-        if self.receipt_digest and self.receipt_digest != expected:
-            raise MaintenanceExecutionRefused("hold receipt digest mismatch")
-        object.__setattr__(self, "receipt_digest", expected)
+        _seal_digest(self, "receipt_digest", "hold receipt")
 
     def body(self) -> dict[str, Any]:
         return {"schema": self.schema, "provider_id": self.provider_id,
@@ -223,10 +224,7 @@ class NoHoldReceipt:
             raise MaintenanceExecutionRefused("provider_generation must be positive")
         _iso(self.refused_at, "refused_at")
         _text(self.reason, "reason")
-        expected = _digest(self.body())
-        if self.receipt_digest and self.receipt_digest != expected:
-            raise MaintenanceExecutionRefused("no-hold receipt digest mismatch")
-        object.__setattr__(self, "receipt_digest", expected)
+        _seal_digest(self, "receipt_digest", "no-hold receipt")
 
     def body(self) -> dict[str, Any]:
         return {"schema": self.schema, "provider_id": self.provider_id,
@@ -295,10 +293,7 @@ class AccountingReceipt:
                              self.cost.deleted_artifact_count,
                              self.cost.deleted_bytes_this_attempt)):
             raise MaintenanceExecutionRefused("maintenance costs must be nonnegative integers")
-        expected = _digest(self.body())
-        if self.receipt_digest and self.receipt_digest != expected:
-            raise MaintenanceExecutionRefused("accounting receipt digest mismatch")
-        object.__setattr__(self, "receipt_digest", expected)
+        _seal_digest(self, "receipt_digest", "accounting receipt")
 
     def body(self) -> dict[str, Any]:
         return {"schema": self.schema, "hold_receipt_digest": self.hold_receipt_digest,
