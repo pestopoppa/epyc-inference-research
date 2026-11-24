@@ -1010,6 +1010,7 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "tailsplit.py:git_rebase_fns.rebase:TemporaryDirectory": (1, "private GIT_INDEX_FILE for a rebase-and-recheck commit; removed on exit (AKPL-P3)"),
     "census_update.py:write_doc:open-write": (1, "evidence: regenerated census table block in the doc the caller names (AK-BW-CENSUS)"),
     "census_update.py:append_journal:open-write": (1, "state: census journal the ak_runend hook names, outside git (AK-BW-CENSUS)"),
+    "census_inbox.py:apply:write_text": (1, "state: BWS stub dot-temp in the loop inbox the caller names, then atomic replace (RSL-R2)"),
     "census_update.py:write_stubs:makedirs": (1, "evidence: seed-stub dir the caller names (AK-BW-CENSUS)"),
     "census_update.py:write_stubs:open-write": (1, "evidence: one seed stub per new open surface (AK-BW-CENSUS)"),
     "census_update.py:run:makedirs": (1, "state: parent dir of the census JSON the caller names (AK-BW-CENSUS)"),
