@@ -670,3 +670,37 @@ class PublishedFromFallback(unittest.TestCase):
                          ["27b-df2-mi210/q4_0 KV attention (gv_fattn, q4_0 KV)"])
         json.dump({"published_from": "/etc/spec.json"}, open(man, "w"))
         self.assertEqual(cu.with_spec_target({"verdict": "KEEP"}, man), {"verdict": "KEEP"})
+
+
+class ResultWarrant(Base):
+    """CPU-shaped RESULTs carry their stamp under different fields; every record needs the RESULT's own stamp + sha."""
+
+    def _cpu(self, **ts):
+        res = {k: v for k, v in json.load(open(os.path.join(FX, "a3b_r2", "RESULT.json"))).items() if k not in cu.TS_FIELDS}
+        return self.res("RESULT.json", dict(res, **ts))
+
+    def _cpu_recs(self):
+        return [r for r in json.load(open(self.census))["records"].values() if r.get("device") == "cpu"]
+
+    def test_each_timestamp_field_stamps_the_records(self):
+        for f in cu.TS_FIELDS:
+            if os.path.exists(self.census):
+                os.remove(self.census)
+            self.run_(self._cpu(**{f: "2026-11-22T00:57:21Z"}), row="fx-cpu")
+            recs = self._cpu_recs()
+            self.assertTrue(recs, f)
+            self.assertTrue(all(r["measured_at"] == "2026-11-22T00:57:21Z" and r["measured_at_basis"] == f for r in recs), f)
+
+    def test_no_timestamp_is_missing_not_invented(self):
+        p = self._cpu()
+        self.run_(p, row="fx-cpu")
+        for r in self._cpu_recs():
+            self.assertEqual((r["measured_at"], r["measured_at_basis"]), ("", "missing"))  # not mtime, not now()
+
+    def test_every_record_carries_the_result_files_sha(self):
+        p = self._cpu(updated_utc="2026-11-22T00:57:21Z")
+        self.run_(p, row="fx-cpu")
+        recs = self._cpu_recs()
+        self.assertTrue(recs and all(r["result_sha256"] == cu.sha256(p) for r in recs))
+        with self.assertRaises(ValueError):
+            cu.apply(json.load(open(self.census)), [], "fx", "", "2026-11-22")  # a null/empty sha is refused, never stored

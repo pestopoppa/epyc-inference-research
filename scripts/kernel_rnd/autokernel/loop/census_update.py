@@ -87,6 +87,18 @@ def sha256(path: str) -> str:
         return hashlib.sha256(f.read()).hexdigest()
 
 
+# RESULT-own timestamp fields, first non-empty wins (RESULT.json shapes: GPU ops use `at`, CPU rows `updated_utc`, others the rest).
+# Never file mtime, never now(): a RESULT with none of these is kept with measured_at_basis="missing".
+TS_FIELDS = ("at", "updated_utc", "utc_end", "finished_at", "completed_utc", "utc", "started_utc")
+
+
+def result_stamp(res: dict) -> tuple[str, str]:
+    for f in TS_FIELDS:
+        if isinstance(res.get(f), str) and res[f].strip():
+            return res[f].strip(), f
+    return "", "missing"
+
+
 def empty_census() -> dict:
     return {"cpu": json.loads(json.dumps(CPU_DEFAULTS)), "schema": "epyc.autokernel.bw_census.v1", "floor_gbps": FLOOR, "target_gbps": TARGET,
             "ceiling_gbps": CEILING, "noise_frac": NOISE, "records": {}, "seeds": {}, "seed_stubs": [],
@@ -165,19 +177,22 @@ def link_seeds(c: dict) -> list[str]:
     return notes
 
 
-def apply_time_only(c: dict, o: dict, row: str, sha: str, at: str) -> bool:
+def apply_time_only(c: dict, o: dict, row: str, sha: str, at: str, basis: str = "at") -> bool:
     """Observation with NO derivable byte basis (bytes_per_call None): kept under c['time_only'] (time, no GB/s, no rank, no seed).
     Same noise rule as bandwidth records; returns True when it moved."""
     k, old = rid(o), c.setdefault("time_only", {}).get(rid(o))
     if old and abs(o["us_per_call"] - old["us_per_call"]) <= c["noise_frac"] * abs(old["us_per_call"]):
         return False
     hist = list((old or {}).get("history") or ([[old["source_row"], old["us_per_call"]]] if old else []))
-    c["time_only"][k] = dict(o, source_row=row, result_sha256=sha, measured_at=at, history=(hist + [[row, o["us_per_call"]]])[-8:])
+    c["time_only"][k] = dict(o, source_row=row, result_sha256=sha, measured_at=at, measured_at_basis=basis, history=(hist + [[row, o["us_per_call"]]])[-8:])
     return True
 
 
-def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str) -> list[str]:
-    """Pure-ish: mutate census c, return journal lines. No-op when sha already applied."""
+def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str, basis: str | None = None) -> list[str]:
+    """Pure-ish: mutate census c, return journal lines. No-op when sha already applied. `sha` is the RESULT file's sha, never empty."""
+    if not sha:
+        raise ValueError("apply: result_sha256 is empty; a record without its RESULT's sha has no warrant")
+    basis = basis or ("at" if measured_at else "missing")
     if any(a["sha256"] == sha for a in c["applied"]):
         return []
     rerank(c)
@@ -185,7 +200,7 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str) -> lis
     moved, tmoved = [], 0
     for o in obs:
         if o.get("bytes_per_call") is None:
-            tmoved += apply_time_only(c, o, row, sha, measured_at)
+            tmoved += apply_time_only(c, o, row, sha, measured_at, basis)
             continue
         o = dict(o, unit=o.get("unit") or "GB/s")  # every census extractor emits bytes/us => GB/s; flops rows set unit
         if errs := validate_unit(o):
@@ -205,7 +220,7 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str) -> lis
             continue  # a contended/unguarded measurement never displaces a quiet-host one
         if old and not quiet_over_contended and abs(new - old["gbps"]) <= c["noise_frac"] * old["gbps"]:
             continue
-        rec = dict(old or {}, **o, source_row=row, result_sha256=sha, measured_at=measured_at)
+        rec = dict(old or {}, **o, source_row=row, result_sha256=sha, measured_at=measured_at, measured_at_basis=basis)
         rec.pop("stale", None)
         if quiet_over_contended:  # same op/shape: the guarded quiet-host value supersedes, the old one is kept as invalid
             rec["superseded"] = list(old.get("superseded") or []) + [{
@@ -775,7 +790,7 @@ def mark_stale(c: dict, res: dict, row: str, sha: str) -> list[str]:
             continue
         if skey(s) in st:
             continue
-        st[skey(s)] = {"stale_since": str(res.get("at") or ""), "stale_row": row, "parity_sig": _op_sig(c, s)}
+        st[skey(s)] = {"stale_since": result_stamp(res)[0], "stale_row": row, "parity_sig": _op_sig(c, s)}
         notes.append(f"- `{row}` ({sha[:12]}): KEEP touched parity-only {skey(s)}; static ours % "
                      f"{s.get('ours_pct') if s.get('ours_pct') is not None else 'none'} marked STALE (re-measure)")
     if notes:
@@ -828,7 +843,8 @@ def run(result: str | None, row: str | None, census: str, program: str | None, d
     c = json.load(open(census)) if os.path.exists(census) else empty_census()
     obs = extract(res) + extract_cpu(res, result)
     fresh = not any(a["sha256"] == sha for a in c["applied"])
-    lines = apply(c, obs, row, sha, str(res.get("at", "")))
+    stamp, basis = result_stamp(res)
+    lines = apply(c, obs, row, sha, stamp, basis)
     if fresh:
         if not c.get("surfaces"):
             derive_surfaces(c)
