@@ -150,7 +150,12 @@ def test_existing_loop_profiles_start_and_keep_not_null_or_calibration():
         return {"status": "observed", "execution_digest": recipe.execution_digest,
             "hotspots": [{"symbol": "synthetic", "period": 100, "sampled_period_fraction": 1.0}],
             "record": "synthetic-test-only"}
-    _run(False, profile_observer=observed, profile_contexts=contexts)
+    # The synthetic keep's diff cannot name "synthetic"; model an overlapping keep
+    # (AK-EVAL-KEEPTIME skip/overlap is pinned in test_reprofile_gate.py).
+    from unittest import mock
+    from . import reprofile_gate
+    with mock.patch.object(reprofile_gate, "skip_reason", return_value=None):
+        _run(False, profile_observer=observed, profile_contexts=contexts)
     assert len(seen) == 2  # startup + one actual source keep; four nulls do not reprofile
     assert seen[0].execution_digest != seen[1].execution_digest
     assert len(contexts) == 5
