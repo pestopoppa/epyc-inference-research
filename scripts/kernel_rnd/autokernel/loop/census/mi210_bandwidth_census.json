@@ -239,7 +239,7 @@
     "source": "C14 h-18 profile; attribution unresolved"
    },
    {
-    "covered_by": "",
+    "covered_by": "AK-RF-A3B-ROUTER-FUSE; seed 25-ak-kernel-triage-20261124",
     "op": "router mul_mat_f F32 [2048,256]",
     "ours_gbps": 18,
     "path": "a3b-mtp-mi210",
@@ -299,7 +299,7 @@
     "source": "C14"
    },
    {
-    "covered_by": "",
+    "covered_by": "AK-RF-A3B-GV-ATTN; seed 25-ak-kernel-triage-20261124",
     "op": "FA / gv (10 layers, f16 KV)",
     "ours_gbps": 183,
     "path": "a3b-mtp-mi210",
@@ -3644,7 +3644,7 @@
    "census_rows": [
     "a3b-q8_0|router_mul_mat_f32|256x2048|n4"
    ],
-   "covered_by": "",
+   "covered_by": "AK-RF-A3B-ROUTER-FUSE; seed 25-ak-kernel-triage-20261124",
    "d32k_pct": null,
    "device": "mi210",
    "gap_pp": null,
@@ -3667,7 +3667,7 @@
    "share_ms": 4.6,
    "share_of_step": 0.1353,
    "source": "C14 (pre MMVF cap knob 79650eeab)",
-   "status": "open",
+   "status": "covered",
    "step_ms": 34.0,
    "step_source": "fixed: A3B C14 busy step"
   },
@@ -3942,7 +3942,7 @@
   {
    "best_pct": null,
    "census_rows": [],
-   "covered_by": "",
+   "covered_by": "AK-RF-A3B-GV-ATTN; seed 25-ak-kernel-triage-20261124",
    "d32k_pct": null,
    "device": "mi210",
    "gap_pp": 75.8,
@@ -3965,7 +3965,7 @@
    "share_ms": 1.4,
    "share_of_step": 0.0412,
    "source": "C14 share; GB/s borrowed from 27B gv_fattn",
-   "status": "open",
+   "status": "covered",
    "step_ms": 34.0,
    "step_source": "fixed: A3B C14 busy step"
   },

@@ -8,6 +8,7 @@ CPU-only, no inference: it stops at context assembly. It proves that what is app
 * variable: `actor_context` writes it as the `program_strategy` file, lists its headings in
   the jump table, and names the Learnings sections under "Read these before you propose".
 """
+import json
 import re
 import tempfile
 import unittest
@@ -84,3 +85,47 @@ class CensusJournalReachesPlanner(unittest.TestCase):
     def test_missing_journal_leaves_program_unchanged(self):
         self.assertEqual(loop.program_text(Path("/nonexistent/journal.md")), PROGRAM)
 
+
+
+class SurfacesBlockReachesPlanner(unittest.TestCase):
+    """The regenerated top-surfaces section gets its own slot: whole, ahead of the journal tail, in both delivery modes."""
+
+    def _journal(self, d, n_lines):
+        from autokernel.loop import census_update as cu
+        c = json.load(open(cu.CENSUS))
+        j = Path(d) / "journal.md"
+        j.write_text("# header\n\n" + cu.JOURNAL_HEAD + "\n" + "".join(f"- `r{i}` (x): line {i}\n" for i in range(n_lines)))
+        self.assertTrue(cu.write_surfaces_block(str(j), c))
+        self.assertFalse(cu.write_surfaces_block(str(j), c))  # regenerated in place, never appended twice
+        return cu, c, j
+
+    def test_block_survives_journal_tail_cap_in_both_modes(self):
+        with tempfile.TemporaryDirectory() as d:
+            cu, c, j = self._journal(d, loop.BW_CENSUS_JOURNAL_MAX_LINES + 50)
+            text = loop.program_text(j)
+            top = c["surfaces"][0]
+            self.assertEqual(text.count(cu.SURF_HEAD), 1)
+            self.assertIn(f"{top['op']} · {top['path']}", text)
+            self.assertIn("| Owner |", text)
+            self.assertIn("**none**", text)
+            self.assertNotIn("line 0\n", text)  # tail cap still applies to the journal lines
+            self.assertIn(f"line {loop.BW_CENSUS_JOURNAL_MAX_LINES + 49}", text)
+            self.assertNotIn(cu.SURF_BEGIN, text)
+            self.assertIn(top["op"], actors.render_context({"program": text}))
+            sections = actor_context.split_sections(actors.render_context({"program": text}))
+            strategy = [s for s in sections if s.key == "program_strategy"]
+            self.assertEqual(len(strategy), 1)
+            self.assertIn(cu.SURF_HEAD, strategy[0].text)
+            with tempfile.TemporaryDirectory() as tmp:
+                index = actor_context._index_text(Path(tmp), [(s, f"sections/{s.key}.md") for s in sections], {})
+            must = index.split("Read these before you propose", 1)[1].split("| # |", 1)[0]
+            self.assertIn(cu.SURF_HEAD, must)
+            self.assertLessEqual(len(actor_context._headings(text)), actor_context.TOC_MAX_HEADINGS)
+
+    def test_block_alone_without_journal_section(self):
+        from autokernel.loop import census_update as cu
+        with tempfile.TemporaryDirectory() as d:
+            j = Path(d) / "journal.md"
+            j.write_text("# header\n")
+            cu.write_surfaces_block(str(j), json.load(open(cu.CENSUS)))
+            self.assertIn(cu.SURF_HEAD, loop.program_text(j))

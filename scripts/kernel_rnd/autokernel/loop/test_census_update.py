@@ -71,7 +71,8 @@ class Threshold(Base):
         self.assertEqual(gate["status"], "open_surface")
         self.assertEqual(ffn["status"], "ok")
         self.assertIn(gate, [c["records"][s["record"]] for s in c["seed_stubs"]])
-        self.assertEqual(len(os.listdir(os.path.join(self.d, "stubs"))), 1)
+        # per-record stubs stay a journal note; stub FILES are per surface, and this surface has no share (no parity) -> unranked
+        self.assertEqual(os.listdir(os.path.join(self.d, "stubs")), [])
         self.assertNotIn("n2", "".join(c["records"]))  # n=2 is not a served n
 
     def test_doc_block_regenerated_in_place(self):
@@ -562,3 +563,80 @@ class Surfaces(unittest.TestCase):
         want += [("27b-q8_0", c) for c, _ in cu.TRACE_Q8_CLASS.values()] + [("a3b-q8_0", c) for c, _ in cu.MMID_CLASS.values()]
         want += [("a3b-q8_0-cpu", f) for f in cu.A3B_CPU_FAMILY_BYTES] + [("a3b-q8_0-cpu", c) for c, _ in cu.UBENCH_CLASS.values()]
         self.assertEqual([w for w in want if w not in cu.OP_MAP], [])
+
+
+class SurfaceWiring(Base):
+    """Planner block, per-surface seeds, keep updates (operator 2026-11-24, AutoKernel seed format)."""
+
+    TAIL = "27b-df2-mi210/launch-bound tail (eltwise/norm/copy/rope/conv)"
+
+    def committed_live(self):
+        shutil.copy(cu.CENSUS, self.census)
+        return json.load(open(self.census))
+
+    def surf(self, key):
+        return next(s for s in json.load(open(self.census))["surfaces"] if cu.skey(s) == key)
+
+    def test_mapped_surface_rederives_from_its_census_rows(self):
+        self.run_(self.res("a.json", q8_result(90.41)))
+        k = "27b-df2-mi210/verify dense Q8 GEMV/GEMM (q8mf6, V5I)"
+        before = self.surf(k)["ours_pct"]
+        self.run_(self.res("b.json", q8_result(75.0, at="y")))
+        self.assertNotEqual(self.surf(k)["ours_pct"], before)
+        self.assertNotIn("stale", self.surf(k))
+
+    def test_keep_on_parity_only_surface_marks_stale_once_and_clears_on_parity_change(self):
+        self.committed_live()
+        res = {"verdict": "KEEP", "at": "2026-11-24T10:00:00Z", "target_surface": self.TAIL.upper()}
+        r = self.run_(self.res("k.json", res), row="ak-tail-fuse-gpu-20261124")
+        s = self.surf(self.TAIL)
+        self.assertEqual((s["stale"], s["stale_since"], s["stale_row"]),
+                         (True, "2026-11-24T10:00:00Z", "ak-tail-fuse-gpu-20261124"))
+        self.assertIsNone(s["ours_pct"])  # never invented from a RESULT without bytes and time
+        self.assertEqual(sum("marked STALE" in ln for ln in open(self.prog).read().splitlines()), 1)
+        self.assertIn("marked STALE", open(self.prog).read())
+        self.assertIn("STALE since 2026-11-24T10:00:00Z", open(self.prog).read())
+        self.assertEqual(self.run_(self.res("k.json", res))["journal_lines"], 0)
+        c = json.load(open(self.census))  # committed parity refreshed -> the flag clears
+        next(o for o in c["parity"]["ops"] if cu.skey(o) == self.TAIL)["ours_gbps"] = 600.0
+        cu.derive_surfaces(c)
+        self.assertNotIn("stale", next(x for x in c["surfaces"] if cu.skey(x) == self.TAIL))
+        self.assertEqual(c["surface_stale"], {})
+
+    def test_non_keep_or_ambiguous_name_marks_nothing(self):
+        self.committed_live()
+        self.run_(self.res("d.json", {"verdict": "DROP(x)", "at": "t1", "target_surface": self.TAIL}))
+        self.run_(self.res("e.json", {"verdict": "KEEP", "at": "t2", "target_surface": "lm_head"}))  # 3 paths -> ambiguous
+        self.assertEqual(json.load(open(self.census)).get("surface_stale", {}), {})
+
+    def test_bare_unique_op_matches(self):
+        c = self.committed_live()
+        cu.derive_surfaces(c)
+        self.assertEqual([cu.skey(s) for s in cu.match_surfaces(c, {"target_surfaces": ["quantize_q8_1"]})],
+                         ["a3b-mtp-mi210/quantize_q8_1"])
+
+    def test_one_stub_per_seedable_surface_and_committed_seed_file_is_current(self):
+        c = self.committed_live()
+        cu.rerank(c)
+        cu.derive_surfaces(c)
+        ss = cu.seedable_surfaces(c)
+        self.assertTrue(all(s["status"] == "open" and not s["covered_by"] and s["ours_measured"] for s in ss))
+        keys = {cu.skey(s) for s in ss}
+        self.assertIn("flash-next-cpu/gdn_proj", keys)
+        self.assertNotIn("a3b-mtp-mi210/router mul_mat_f F32 [2048,256]", keys)  # AK-RF-A3B-ROUTER-FUSE
+        self.assertNotIn("a3b-mtp-mi210/FA / gv (10 layers, f16 KV)", keys)  # AK-RF-A3B-GV-ATTN
+        d = os.path.join(self.d, "stubs")
+        self.assertEqual(cu.write_stubs(d, c), len(ss))
+        self.assertEqual(cu.write_stubs(d, c), 0)
+        self.assertEqual(sorted(os.listdir(d)), sorted(cu.surface_seed_id(s) + ".md" for s in ss))
+        committed = os.path.join(os.path.dirname(cu.CENSUS), "..", "seeds", "hypotheses", "26-bw-surfaces-20261124.md")
+        self.assertEqual(open(committed).read(), cu.surface_seeds_md(c, "2026-11-24"))
+        for s in ss:
+            self.assertIn(f"target_surface: {cu.skey(s)}", open(committed).read())
+
+    def test_table_md_has_surfaces_section(self):
+        c = self.committed_live()
+        cu.derive_surfaces(c)
+        t = cu.table_md(c)
+        self.assertIn("### Bandwidth surfaces (ranked by saving ms/step)", t)
+        self.assertIn("| Owner |", t)

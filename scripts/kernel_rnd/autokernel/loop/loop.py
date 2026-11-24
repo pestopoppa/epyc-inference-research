@@ -209,20 +209,27 @@ BW_CENSUS_JOURNAL_MAX_LINES = 200
 
 
 def program_text(journal: Path | None = None) -> str:
-    """program.md plus the generated census journal section (last BW_CENSUS_JOURNAL_MAX_LINES lines). Deterministic;
-    a missing or unreadable journal yields program.md unchanged."""
-    from autokernel.loop.census_update import JOURNAL_HEAD
+    """program.md, then the generated top-bandwidth-surfaces section WHOLE (its own slot: never subject to the tail cap),
+    then the generated census journal section (last BW_CENSUS_JOURNAL_MAX_LINES lines). Deterministic; a missing or
+    unreadable journal yields program.md unchanged."""
+    from autokernel.loop.census_update import JOURNAL_HEAD, SURF_BEGIN, SURF_END, SURF_HEAD
     text = PROGRAM.read_text(encoding="utf-8")
     try:
         j = (journal or BW_CENSUS_JOURNAL).read_text(encoding="utf-8")
     except OSError:
         return text
+    surf = ""
+    if SURF_BEGIN in j and SURF_END in j and SURF_HEAD not in text:
+        i, k = j.index(SURF_BEGIN), j.index(SURF_END)
+        surf = j[i + len(SURF_BEGIN):k].strip("\n")
+        j = j[:i] + j[k + len(SURF_END):]
+    out = text.rstrip("\n") + ("\n\n" + surf + "\n" if surf else "")
     if JOURNAL_HEAD not in j or JOURNAL_HEAD in text:
-        return text
+        return out if surf else text
     lines = [ln for ln in j[j.index(JOURNAL_HEAD) + len(JOURNAL_HEAD):].splitlines() if ln.strip()]
     if not lines:
-        return text
-    return text.rstrip("\n") + "\n\n" + JOURNAL_HEAD + "\n\n" + "\n".join(lines[-BW_CENSUS_JOURNAL_MAX_LINES:]) + "\n"
+        return out if surf else text
+    return out.rstrip("\n") + "\n\n" + JOURNAL_HEAD + "\n\n" + "\n".join(lines[-BW_CENSUS_JOURNAL_MAX_LINES:]) + "\n"
 
 
 class TailRefused(RuntimeError):
