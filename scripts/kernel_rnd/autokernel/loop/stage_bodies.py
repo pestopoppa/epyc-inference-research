@@ -220,26 +220,39 @@ def _live_oracle(cand: Mapping[str, Any], anchor_build: Path, cand_build: Path) 
     return out
 
 
+def _runner(fn: Callable[..., dict], *a: Any, **k: Any) -> dict:
+    """A live-runner refusal (op_perf_runner.RunnerRefused) is a stage refusal carrying its FUTILITY_HARNESS_* token."""
+    from .op_perf_runner import RunnerRefused
+    try:
+        return fn(*a, **k)
+    except RunnerRefused as e:
+        raise StageRefused(e.token, str(e))
+
+
 def _live_timing(cand: Mapping[str, Any], anchor_build: Path, cand_build: Path) -> dict:
-    """Alternating paired A/B, n >= bench.MIN_PAIRS, on the candidate's measured surface (quiet grant)."""
-    from . import bench
+    """Alternating paired A/B, n >= bench.MIN_PAIRS, on the candidate's served path. A CPU path runs the served host's
+    topology (cpu_timing_runner); a GPU path runs llama-bench under the path's OWN A/A floor (effect in PERCENT)."""
+    from . import bench, cpu_timing_runner as ctr
     pairs = max(int(cand.get("pairs") or bench.MIN_PAIRS), bench.MIN_PAIRS)
     spec = cand["path_spec"]
-    if spec["lane"] != "gpu":   # a CPU cell needs the served host's topology (spec["serving"]); no live runner yet
-        raise StageRefused("FUTILITY_HARNESS_INSTRUMENT", f"no live CPU timing runner for {spec['key']}")
+    if spec["lane"] != "gpu":
+        return _runner(ctr.time_path, cand, anchor_build, cand_build, spec, store=Path(cand.get("store") or LOOP_STORE))
     model = Path(spec["gguf"])
+    floor = (bench.floor_rows(spec["surface"], model, Path(cand.get("store") or LOOP_STORE)) or {}).get(pairs)
     c = bench.compare(bench.Arm("anchor", anchor_build / "bin" / "llama-bench"),
                       bench.Arm("candidate", cand_build / "bin" / "llama-bench"), model,
-                      pp=0, tg=128, pairs=pairs, surface=spec["surface"])
-    return {"effect_pct": float(c.effect), "pairs": int(c.pairs), "decisive": c.decisive,
+                      pp=0, tg=128, pairs=pairs, surface=spec["surface"], noise_floor_pct=floor)
+    return {"effect_pct": float(c.effect) * 100.0, "pairs": int(c.pairs), "decisive": c.decisive,
             "noise_floor_pct": c.noise_floor_pct, "device_seconds": c.device_seconds,
             "anchor_samples": list(c.anchor_samples), "candidate_samples": list(c.candidate_samples),
             "model": str(model)}
 
 
 def _live_op_perf(cand: Mapping[str, Any], anchor_build: Path, cand_build: Path, cells: list) -> dict:
-    """Needs paired `test-backend-ops perf` cells, a per-cell A/A floor and census weights: a measurement row, not code."""
-    raise StageRefused("FUTILITY_HARNESS_INSTRUMENT", "no live op-perf runner (needs per-cell floors + census weights)")
+    """Paired `test-backend-ops perf` per cell (op_perf_runner) under per-cell A/A floors; census-weighted."""
+    from . import op_perf_runner as opr
+    return _runner(opr.run, anchor_build, cand_build, cells, resolve_path(cand), pairs=cand.get("pairs"),
+                   store=Path(cand.get("store") or LOOP_STORE))
 
 
 def _live_cas(ref: str, new: str, old: str) -> None:
@@ -328,7 +341,9 @@ def timing_floor(spec: Mapping[str, Any], cand: Mapping[str, Any]) -> bool:
     """True iff this path has its OWN A/A floor (bench.floor_rows keys floors by surface AND model, never borrowed)."""
     if cand.get("test_registry"):   # fixture mode: the candidate names the paths that have a floor cell
         return spec["key"] in (cand.get("test_floor_paths") or [])
-    from . import bench
+    from . import bench, cpu_timing_runner as ctr
+    if spec["lane"] == "cpu":   # keyed per model AND topology (cpu_aa_calibration), never the GPU floor file
+        return ctr.floor_pct(spec, Path(cand.get("store") or LOOP_STORE), max(int(cand.get("pairs") or bench.MIN_PAIRS), bench.MIN_PAIRS)) is not None
     return bench.floor_rows(spec["surface"], spec["gguf"], Path(cand.get("store") or LOOP_STORE)) is not None
 
 
