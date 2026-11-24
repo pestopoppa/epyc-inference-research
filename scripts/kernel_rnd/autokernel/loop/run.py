@@ -6852,8 +6852,16 @@ def _main(argv: list[str] | None = None) -> int:
     if args.cpu_screen_scope:
         from . import cpu_screen
         try:
+            if args.quarter_streams_receipt is not None:
+                from . import contention_preflight
+                if args.cpu_screen_scope != "quarter" or args.cpu_screen_region is None:
+                    raise ValueError("a concurrent quarter stream needs --cpu-screen-scope "
+                                     "quarter and an explicit --cpu-screen-region")
+                contention_preflight.admitted_region(args.quarter_streams_receipt,
+                                                     args.cpu_screen_region)
             screen_prepared = cpu_screen.prepare_launch(
-                full_cpu_target, args.cpu_screen_scope, resolved_campaign.resources.cpu_logical)
+                full_cpu_target, args.cpu_screen_scope, resolved_campaign.resources.cpu_logical,
+                region=args.cpu_screen_region)
         except ValueError as exc:
             parser.error(f"CPU screen refused: {exc}")
         direct_launch = cpu_launch = screen_prepared["launch"]
@@ -6861,7 +6869,8 @@ def _main(argv: list[str] | None = None) -> int:
         build_jobs = min(build_jobs, cpu_launch.template.threads)
         screen_state = {"scope": args.cpu_screen_scope,
                         "full_execution_digest": full_cpu_target.execution_digest,
-                        "measured_execution_digest": cpu_launch.execution_digest, "candidate": None}
+                        "measured_execution_digest": cpu_launch.execution_digest, "candidate": None,
+                        **({"region": args.cpu_screen_region} if args.cpu_screen_region else {})}
         screen_hint = cpu_screen.planned_hint(args.out, original_argv, args.cpu_screen_scope)
 
     scheduler_selection = None
@@ -7002,7 +7011,8 @@ def _main(argv: list[str] | None = None) -> int:
                 request_digest=serving.request_digest(cpu_launch.template, frozen_requests),
                 original_head=verified_head)
             screen_prepared = cpu_screen.prepare_launch(full_cpu_target,
-                screen_confirmation["scope"], resolved_campaign.resources.cpu_logical)
+                screen_confirmation["scope"], resolved_campaign.resources.cpu_logical,
+                region=screen_confirmation.get("region"))
             if screen_prepared["launch"].execution_digest != CanonicalResolvedRecipe.from_dict(
                     screen_confirmation["evaluated_anchor"]).execution_digest:
                 raise cpu_screen.ScreenRefused("original reduced anchor differs from prepared common scope")

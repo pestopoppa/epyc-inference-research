@@ -291,6 +291,13 @@ def build_parser(original_argv, *, description, run_module):
                              "per-thread fault attribution and perturbs more")
     parser.add_argument("--cpu-screen-scope", choices=("quarter", "half"),
                         help="common reduced CPU source screen; positive requires separate full confirmation")
+    parser.add_argument("--cpu-screen-region", choices=("q0", "q1", "q2", "q3"), default=None,
+                        help="AK-EVAL-QUARTERS: the quarter a quarter screen runs on (default q0); "
+                             "pages bind to that NPS4 node (--membind)")
+    parser.add_argument("--quarter-streams-receipt", type=Path, default=None,
+                        help="AK-EVAL-QUARTERS (default off): run as one concurrent quarter "
+                             "stream; refused unless this contention_preflight receipt "
+                             "admits --cpu-screen-region")
     parser.add_argument("--cpu-confirm-from", type=Path,
                         help="original completed reduced batch retaining the exact source/build to confirm")
     parser.add_argument("--gpu-calibrate-serving", type=int,
