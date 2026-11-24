@@ -6,6 +6,8 @@ in :mod:`autokernel.storage` and its tombstone-first policy.
 """
 from __future__ import annotations
 
+from .field_validation import canonical_utf8 as _canonical
+
 from .field_validation import unique_texts as _unique_texts
 
 from .field_validation import integer_field as _integer_field, text_field as _text_field
@@ -75,9 +77,6 @@ def _sha(value: Any, label: str) -> str:
     return _require_sha256(_text(value, label), label, RetentionRefused, article="a ")
 
 
-def _canonical(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-                      allow_nan=False).encode("utf-8")
 
 
 def digest(value: Mapping[str, Any]) -> str:

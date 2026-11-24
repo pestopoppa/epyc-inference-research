@@ -61,3 +61,8 @@ def unique_texts(value: Any, label: str, error: type[Exception], text) -> tuple[
     if len(result) != len(set(result)):
         raise error(f"{label} contains duplicates")
     return tuple(str(item) for item in result)
+
+
+def canonical_utf8(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=False, allow_nan=False).encode("utf-8")

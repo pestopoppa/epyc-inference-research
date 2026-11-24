@@ -6,6 +6,8 @@ supplied by a future trusted consumer can account actual held service.
 """
 from __future__ import annotations
 
+from .field_validation import canonical_utf8 as _canonical
+
 from .field_validation import unique_texts as _unique_texts
 
 from .field_validation import integer_field as _integer_field, text_field as _text_field
@@ -131,9 +133,6 @@ def _texts(value: Any, label: str) -> tuple[str, ...]:
     return _unique_texts(value, label, SchedulingRefused, _text)
 
 
-def _canonical(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"),
-                      ensure_ascii=False, allow_nan=False).encode()
 
 
 def _deep_freeze(value: Any) -> Any:
