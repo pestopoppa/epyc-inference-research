@@ -153,5 +153,19 @@ class CpuConfigThreads(unittest.TestCase):
         self.assertEqual(cu.CPU_DEFAULTS["ceiling_gbps"]["q0q2"], 387.0)
 
 
+class VattnIpb(unittest.TestCase):
+    """Verify-attention profiler census RESULT -> one gv_fattn_q8kv observation per (kv, nq), bytes from kv_bytes."""
+    def test_shapes(self):
+        from autokernel.loop.census_extract import extract
+        res = {"row": "ak-rka-ipb-census-gpu-20261124-r2", "complete": True, "shapes": [
+            {"kv": 8192, "nq": 1, "kv_bytes": 17825792.0, "dur_us": 118.07, "achieved_gbps": 151.0, "valu_util": 0.085, "counters": {"SQ_WAVES": 512.0}},
+            {"kv": 8192, "nq": 8, "kv_bytes": 17825792.0, "dur_us": 0, "achieved_gbps": 0}]}
+        o = [x for x in extract(res) if x["kernel_class"] == "gv_fattn_q8kv"]
+        self.assertEqual(len(o), 1)
+        self.assertEqual((o[0]["model"], o[0]["shape"], o[0]["n"], o[0]["bytes_per_call"]), ("27b-q8_0", "kv8192", 1, 17825792))
+        self.assertEqual(extract(dict(res, complete=False)), [])
+        self.assertIn(("27b-q8_0", "gv_fattn_q8kv"), cu.OP_MAP)
+
+
 if __name__ == "__main__":
     unittest.main()

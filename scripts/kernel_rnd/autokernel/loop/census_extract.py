@@ -70,7 +70,7 @@ def extract(res: dict) -> list[dict]:
         cls, calls = MMID_CLASS.get(m.group(1), ("mmid_" + m.group(1), 1))
         out.append({"model": "a3b-q8_0", "kernel_class": cls, "shape": m.group(1), "n": int(m.group(2)), "arm": "ON",
                     "bytes_per_call": int(round(g * us * 1e3)), "us_per_call": float(us), "calls_per_round": calls})
-    return out + extract_trace(res) + extract_time_only(res)
+    return out + extract_trace(res) + extract_time_only(res) + extract_vattn_ipb(res)
 
 
 def extract_trace(res: dict) -> list[dict]:
@@ -309,4 +309,29 @@ def extract_ubench(res: dict) -> list[dict]:
              "bytes_per_call": int(b), "us_per_call": float(us), "calls_per_round": cls[1], "config": "quarter-24t",
              "bytes_basis": "row bytes_per_layer (standalone op harness)"}
         out.append(dict(o, quiet_host=True) if quiet else o)
+    return out
+
+
+def extract_vattn_ipb(res: dict) -> list[dict]:
+    """GPU verify-attention profiler census RESULT (`shapes[]{kv, nq, kv_bytes, dur_us, achieved_gbps, valu_util, counters}`,
+    e.g. ak-rka-ipb-census-gpu-20261124-r2): 27B verify FA over q8_0 KV (GQA). Bytes are the row's own kv_bytes; one
+    observation per (kv, nq). calls_per_round = 1: the RESULT is per-kernel-call and states no layer count (never invented)."""
+    shapes = res.get("shapes")
+    if not isinstance(shapes, list) or res.get("complete") is not True or "ipb" not in str(res.get("row") or ""):
+        return []
+    # rka-ipb rows profile the 27B verify path (AutoKernel 2026-11-24); the row id carries no model tag
+    model = _model_of(res) or ("27b-q8_0" if "rka" in str(res.get("row") or "") else None)
+    if model is None:
+        return []
+    out = []
+    for sh in shapes:
+        us, b, kv, nq = sh.get("dur_us"), sh.get("kv_bytes"), sh.get("kv"), sh.get("nq")
+        if not (_num(us) and _num(b) and us > 0 and b > 0 and _num(kv) and _num(nq)):
+            continue
+        c = sh.get("counters") or {}
+        out.append({"model": model, "kernel_class": "gv_fattn_q8kv", "shape": f"kv{int(kv)}", "n": int(nq), "arm": "C21",
+                    "bytes_per_call": int(b), "us_per_call": float(us), "calls_per_round": 1,
+                    "bytes_basis": "row kv_bytes (q8_0 K+V read per verify-attention call)",
+                    "calls_basis": "per call; the RESULT states no per-round layer count",
+                    "valu_util": sh.get("valu_util"), "waves": c.get("SQ_WAVES")})
     return out

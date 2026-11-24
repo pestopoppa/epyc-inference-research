@@ -379,6 +379,7 @@ OP_MAP = {
     ("27b-q8_0", "attn_kv_v5i"): ("27b-df2-mi210", "attn_k/v 1024x5120 (q8sk)"),
     ("27b-q8_0", "attn_kv_trace_q8sk"): ("27b-df2-mi210", "attn_k/v 1024x5120 (q8sk)"),
     ("27b-q8_0", "gv_fattn_f16kv"): ("27b-df2-mi210", "gv_fattn + merge (verify FA)"),
+    ("27b-q8_0", "gv_fattn_q8kv"): ("27b-df2-mi210", "gv_fattn + merge (verify FA)"),
     ("27b-q8_0", "lm_head_v5i"): ("27b-df2-mi210", "lm_head 248320x5120"),
     **{("a3b-q8_0", k): ("a3b-mtp-mi210", "dense MMVQ (attn, GDN proj, shexp, lm_head)") for k in (
         "dense_mmvq_32row", "dense_mmvq_512row", "dense_mmvq_4096row", "dense_mmvq_8192row",
