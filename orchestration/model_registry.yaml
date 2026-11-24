@@ -6838,6 +6838,15 @@ roles:
       "agentic" (Qwen2.5-VL) and "figure quality" (vision_qwen3_vl_4b) no longer needs two models.
       OPEN POST-CUTOVER CHECK — see vision_escalation.notes (K35 chart_tanzania).
   vision_escalation:
+    # OFFICIAL-SAMPLING-20261124 (follow-up, sc-official-sampling-vision-esc): Qwen3-VL-30B-A3B-Instruct generation_config.json (https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct/raw/main/generation_config.json); same process and weights as worker_vision, so the same values. Previously absent -> backend greedy fallback 0.0 / top_k 40 / repeat 1.1
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.7
+      top_p: 0.8
+      top_k: 20
+      min_p: 0.0
+      presence_penalty: 0.0
+      repeat_penalty: 1.0
     # 2026-07-31: ALIAS, not a server. Same process, same port 8086, same Qwen3-VL-30B-A3B
     # Q4_K_M weights as worker_vision. KEPT (not deleted) so the escalation trigger list below
     # survives as documentation for a future two-tier VL topology.
