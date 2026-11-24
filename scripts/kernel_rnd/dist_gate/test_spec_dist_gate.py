@@ -193,3 +193,30 @@ def test_server_form_records():
     oos = _to_server_form(corpus(seed=5))
     oos[0][0] = {"pit_less": -1.0, "pit_tie": -1.0, "rank": 20}
     assert g.gate(oos)["verdict"] == "FAIL"
+
+
+def _launch(n=64, flip=()):
+    return {p: [p, p + 1, (p + 2) if p not in flip else -1] for p in range(n)}
+
+
+def test_identity_replica_gate_needs_three_launches():
+    cand = _launch()
+    for refs in ([], [_launch()], [_launch(), _launch()]):
+        out = g.identity_replica_gate(cand, refs)
+        assert out["verdict"] == "INCONCLUSIVE" and out["needed"] == 3
+    assert g.identity_replica_gate(cand, [_launch()] * 4, promotion=True)["verdict"] == "INCONCLUSIVE"
+    assert g.identity_replica_gate(cand, [_launch()] * 3)["verdict"] == "PASS"
+
+
+def test_identity_replica_gate_floor_and_margins():
+    refs = [_launch(), _launch(flip=(1, 2)), _launch(flip=(3,))]
+    fl = g.replica_floor(refs)
+    assert fl["largest_pair"] == 3 and len(fl["pairs"]) == 3
+    noisy = _launch(flip=(5,))
+    assert g.identity_replica_gate(noisy, refs, margins={k: 0.05 for k in range(64)})["verdict"] == "PASS"
+    assert g.identity_replica_gate(noisy, refs)["verdict"] == "INCONCLUSIVE"
+    assert g.identity_replica_gate(noisy, refs, margins={k: 0.9 for k in range(64)})["verdict"] == "FAIL"
+    assert g.identity_replica_gate(_launch(flip=tuple(range(10))), refs,
+                                   margins={k: 0.0 for k in range(64)})["verdict"] == "FAIL"
+    # floor 0 (deterministic regime): any divergence is a defect candidate
+    assert g.identity_replica_gate(noisy, [_launch()] * 3, margins={5: 0.01})["verdict"] == "FAIL"

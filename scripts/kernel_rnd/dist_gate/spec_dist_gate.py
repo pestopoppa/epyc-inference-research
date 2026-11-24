@@ -29,6 +29,10 @@ SPEC-ID-GATE-1 -- token-identity comparisons:
   * ``classify_divergence``  -- NOISE / DEGEN_AFTER_TIE / DEFECT_CANDIDATE / DEFECT for one first divergence.
   * ``paired_count_test``    -- paired sign-flip test of per-block divergence counts (arm pair minus
                                 same-run A/A pair), for configs where the identity floor is not zero.
+SPEC-ID-GATE-2 -- replica floor:
+  * ``replica_floor``        -- largest-pair A/A divergence count over all pairs of reference launches.
+  * ``identity_replica_gate`` -- candidate vs >= 3 reference launches (>= 5 for a promotion gate);
+                                fewer launches -> INCONCLUSIVE.
 Protocol: /workspace/docs/guides/agent-workflows/spec-identity-gate-protocol.md (epyc-root).
 
 Record format used by the gate (one per emitted token), either
@@ -418,3 +422,60 @@ def paired_count_test(arm_counts: Sequence[float], aa_counts: Sequence[float], n
         ge = sum(1 for _ in range(n_perm) if sum(x if rng.random() < 0.5 else -x for x in d) >= obs - 1e-12)
         p = (ge + 1) / (n_perm + 1)
     return {"n_blocks": n, "mean_d": mean, "ci95": (mean - half, mean + half), "p_one_sided": p}
+
+
+# ----------------------------------------------------------------------------------------- SPEC-ID-GATE-2 replica floor
+REPLICA_MIN = {"default": 3, "promotion": 5}  # SPEC-ID-GATE-2 (a): reference launches needed for a floor
+
+
+def _divergent_prompts(a: Mapping[Hashable, Sequence[int]], b: Mapping[Hashable, Sequence[int]]) -> List[Hashable]:
+    """Prompt ids whose token sequences differ between two launches (a missing prompt counts as divergent)."""
+    return sorted((k for k in set(a) | set(b) if list(a.get(k, ())) != list(b.get(k, ())) or k not in a or k not in b),
+                  key=str)
+
+
+def replica_floor(launches: Sequence[Mapping[Hashable, Sequence[int]]]) -> dict:
+    """Largest-pair A/A floor over all pairs of reference launches (SPEC-ID-GATE-2 (a)).
+
+    launches: one {prompt_id: [token ids]} per reference launch of the unchanged config."""
+    pairs = []
+    for i in range(len(launches)):
+        for j in range(i + 1, len(launches)):
+            pairs.append({"pair": (i, j), "divergent": len(_divergent_prompts(launches[i], launches[j]))})
+    floor = max((p["divergent"] for p in pairs), default=None)
+    return {"n_launches": len(launches), "pairs": pairs, "largest_pair": floor}
+
+
+def identity_replica_gate(candidate: Mapping[Hashable, Sequence[int]],
+                          references: Sequence[Mapping[Hashable, Sequence[int]]], *,
+                          promotion: bool = False, margins: Optional[Mapping[Hashable, Optional[float]]] = None,
+                          tau: float = 0.5) -> dict:
+    """T=0 identity gate against a replica floor (SPEC-ID-GATE-2).
+
+    INCONCLUSIVE when fewer than 3 reference launches are supplied (5 when ``promotion``): one or two
+    launches cannot bound launch-to-launch drift. Otherwise the candidate's divergence count is the
+    largest count against any reference launch; FAIL if it exceeds the largest reference pair, or if any
+    first divergence (``margins``: prompt id -> top-2 margin at the first divergent position) classifies
+    as anything but NOISE. Missing margins for a divergent prompt -> UNCLASSIFIABLE -> INCONCLUSIVE."""
+    need = REPLICA_MIN["promotion" if promotion else "default"]
+    if len(references) < need:
+        return {"verdict": "INCONCLUSIVE", "n_references": len(references), "needed": need,
+                "reason": f"{len(references)} reference launches < {need}; the A/A floor is unbounded"}
+    floor = replica_floor(references)
+    per_ref = [_divergent_prompts(candidate, r) for r in references]
+    cand = max(len(d) for d in per_ref)
+    divergent = sorted({k for d in per_ref for k in d}, key=str)
+    classes = {}
+    if margins is not None or floor["largest_pair"] == 0:
+        for k in divergent:
+            m = None if margins is None else margins.get(k)
+            classes[k] = classify_divergence(m, identity_floor_zero=floor["largest_pair"] == 0, tau=tau)
+    verdicts = {c["verdict"] for c in classes.values()}
+    if cand > floor["largest_pair"] or verdicts - {"NOISE", "UNCLASSIFIABLE"}:
+        v = "FAIL"
+    elif "UNCLASSIFIABLE" in verdicts or (margins is None and divergent):
+        v = "INCONCLUSIVE"
+    else:
+        v = "PASS"
+    return {"verdict": v, "n_references": len(references), "needed": need, "floor": floor,
+            "candidate_divergent": cand, "per_reference": [len(d) for d in per_ref], "classes": classes}
