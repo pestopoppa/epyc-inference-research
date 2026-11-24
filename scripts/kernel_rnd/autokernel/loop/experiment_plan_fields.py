@@ -1,7 +1,7 @@
 """Plan-validation errors and field validators for experiment_plan.py, split verbatim from experiment_plan.py (code-budget split)."""
 from __future__ import annotations
 
-from .field_validation import text_field as _text_field
+from .field_validation import integer_field as _integer_field, text_field as _text_field
 
 import math
 import re
@@ -33,9 +33,7 @@ def _text(value: Any, label: str, *, nullable: bool = False) -> str | None:
 
 
 def _integer(value: Any, label: str, *, minimum: int = 0) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-        raise PlanValidationError(f"{label}: expected integer >= {minimum}")
-    return value
+    return _integer_field(value, label, PlanValidationError, minimum=minimum, wording=': expected ')
 
 
 def _finite(value: Any, label: str) -> float:

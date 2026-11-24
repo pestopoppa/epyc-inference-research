@@ -6,7 +6,7 @@ supplied by a future trusted consumer can account actual held service.
 """
 from __future__ import annotations
 
-from .field_validation import text_field as _text_field
+from .field_validation import integer_field as _integer_field, text_field as _text_field
 
 from .immutable_values import thaw as _plain
 
@@ -116,9 +116,7 @@ def _text(value: Any, label: str, *, nullable: bool = False) -> str | None:
 
 
 def _integer(value: Any, label: str, *, minimum: int = 0) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-        raise SchedulingRefused(f"{label} must be an integer >= {minimum}")
-    return value
+    return _integer_field(value, label, SchedulingRefused, minimum=minimum, wording=' must be an ')
 
 
 def _enum(value: Any, allowed: frozenset[str], label: str) -> str:

@@ -7,7 +7,7 @@ trusted callbacks supplied by an eventual registered adapter.
 """
 from __future__ import annotations
 
-from .field_validation import text_field as _text_field
+from .field_validation import integer_field as _integer_field, text_field as _text_field
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
@@ -77,9 +77,7 @@ def _enum(value: Any, choices: frozenset[str], label: str) -> str:
 
 
 def _int(value: Any, label: str, *, minimum: int = 0) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-        raise EvidenceValidationError(f"{label}: expected integer >= {minimum}")
-    return value
+    return _integer_field(value, label, EvidenceValidationError, minimum=minimum, wording=': expected ')
 
 
 def _number(value: Any, label: str, *, minimum: float | None = None) -> float:

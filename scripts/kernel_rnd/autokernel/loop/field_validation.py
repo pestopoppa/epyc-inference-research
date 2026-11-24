@@ -46,3 +46,9 @@ def text_field(value: Any, label: str, error: type[Exception], *, nullable: bool
     if not isinstance(value, str) or not value.strip():
         raise error(f"{label}{wording}non-empty text")
     return value
+
+
+def integer_field(value: Any, label: str, error: type[Exception], *, minimum: int, wording: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise error(f"{label}{wording}integer >= {minimum}")
+    return value

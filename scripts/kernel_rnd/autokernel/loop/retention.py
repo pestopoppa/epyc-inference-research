@@ -6,7 +6,7 @@ in :mod:`autokernel.storage` and its tombstone-first policy.
 """
 from __future__ import annotations
 
-from .field_validation import text_field as _text_field
+from .field_validation import integer_field as _integer_field, text_field as _text_field
 
 from .field_validation import require_sha256 as _require_sha256
 
@@ -62,9 +62,7 @@ def _text(value: Any, label: str, *, nullable: bool = False) -> str | None:
 
 
 def _integer(value: Any, label: str, *, minimum: int = 0) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-        raise RetentionRefused(f"{label} must be an integer >= {minimum}")
-    return value
+    return _integer_field(value, label, RetentionRefused, minimum=minimum, wording=' must be an ')
 
 
 def _texts(value: Any, label: str) -> tuple[str, ...]:
