@@ -7,6 +7,11 @@ devices agree (when both are stated) and every dim present in BOTH has intersect
 of the key: a measured negative on model A's range blocks the same idea on model B's overlapping range. A candidate that has
 new evidence says so with "reopens": [mechanism_id, ...] and is then compared against everything else.
 
+Numeric-dim conventions: `quant` is the GGML type id of the weights (q8_0=8, iq4_nl=20, iq3_s=21); `kv_type` is the KV-cache
+type id; `mech` separates mechanisms that share a family+range (1 = small-N barrier change, 2 = 4-row tile dispatch). A
+candidate that omits a dim is a wildcard against it, so a quant- or mechanism-specific negative narrows only candidates that
+declare the dim.
+
 A negative reaches the sidecar `<store>/journal_keys.json` ({mechanism_id: key + status}); only a status=measured_null entry
 blocks. Entries with no key are NOT blocked or blocking: they keep working exactly as before and are reported as `unkeyed`.
 

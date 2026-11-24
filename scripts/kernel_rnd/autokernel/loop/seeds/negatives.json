@@ -59,7 +59,14 @@
    "target_surface": "runtime flag (-ctk/-ctv), not a kernel patch",
    "target_symbol": "kv cache dequant path",
    "effect_fraction": -0.167,
-   "reason": "FALSIFIED 2026-08-14 on frozen v9 (0db32c06e / 10125), observation-grade, 64k single-stream: 35B-A3B GDN hybrid 75.8 -> 63.1 t/s (-16.7%), dense 27B 21.7 -> 20.2 t/s (-6.9%). The dequant cast cost exceeds the KV bandwidth saving even on the dense 27B (all-full-global KV, where the KV read most rivals weight bytes). Matches the CPU precedent that the dequant cast COSTS throughput. Note mi210-q8-dequant-gemv-roofline.md still lists this as an ALIVE Tier-3 lever (L8); it is not. Source: handoffs/active/fable5-window2-findings-05c-mi210-lever-category-matrix.md gap-list row L14."
+   "reason": "FALSIFIED 2026-08-14 on frozen v9 (0db32c06e / 10125), observation-grade, 64k single-stream: 35B-A3B GDN hybrid 75.8 -> 63.1 t/s (-16.7%), dense 27B 21.7 -> 20.2 t/s (-6.9%). The dequant cast cost exceeds the KV bandwidth saving even on the dense 27B (all-full-global KV, where the KV read most rivals weight bytes). Matches the CPU precedent that the dequant cast COSTS throughput. Note mi210-q8-dequant-gemv-roofline.md still lists this as an ALIVE Tier-3 lever (L8); it is not. Source: handoffs/active/fable5-window2-findings-05c-mi210-lever-category-matrix.md gap-list row L14.",
+   "op_family": "flash-attn-verify",
+   "device": "gpu",
+   "shape_class": {
+    "n": 1,
+    "kv": 65536,
+    "kv_type": 8
+   }
   },
   {
    "status": "measured_null",
@@ -93,7 +100,10 @@
    "op_family": "flash-attn-verify",
    "device": "gpu",
    "shape_class": {
-    "kv": 32768
+    "kv": [
+     16384,
+     65536
+    ]
    }
   },
   {
@@ -176,7 +186,8 @@
    "op_family": "mmid-moe",
    "device": "cpu",
    "shape_class": {
-    "n": 512
+    "n": 512,
+    "quant": 20
    }
   },
   {
@@ -277,7 +288,8 @@
    "op_family": "flash-attn-verify",
    "device": "gpu",
    "shape_class": {
-    "kv": 131072
+    "kv": 131072,
+    "n": 1
    }
   },
   {
@@ -314,6 +326,10 @@
     "kv": [
      32768,
      131072
+    ],
+    "n": [
+     1,
+     8
     ]
    }
   },
@@ -325,7 +341,16 @@
    "target_surface": "ggml/src/ggml-cuda/mmvq.cu (gate+up MMVQ) + ggml/src/ggml-cpu/ggml-cpu.c (MUL_MAT gate/up)",
    "target_symbol": "gate/up paired launch",
    "effect_fraction": -0.0,
-   "reason": "MEASURED NO_CANDIDATE on both devices. GPU: gate+up is ALREADY one fused launch (mul_mat_vec_q<Q8_0,...,true,true>, 29.3% of decode, 0 us gap); FFN quantize ~0.87%. CPU: upper bound 1.52% @0 / 1.25% @8192 (< 2%), quantize 0.48%. Source: root handoffs/active/rocm-kernel-authoring.md INF48-GATEUP-PROBE (row inf48-gateup-cpu-prof-20261118, research f834d3d24)."
+   "reason": "MEASURED NO_CANDIDATE on both devices. GPU: gate+up is ALREADY one fused launch (mul_mat_vec_q<Q8_0,...,true,true>, 29.3% of decode, 0 us gap); FFN quantize ~0.87%. CPU: upper bound 1.52% @0 / 1.25% @8192 (< 2%), quantize 0.48%. Source: root handoffs/active/rocm-kernel-authoring.md INF48-GATEUP-PROBE (row inf48-gateup-cpu-prof-20261118, research f834d3d24).",
+   "op_family": "dense-q8-gemv",
+   "device": "cpu",
+   "shape_class": {
+    "n": 1,
+    "kv": [
+     0,
+     8192
+    ]
+   }
   },
   {
    "status": "measured_null",
@@ -364,7 +389,8 @@
    "op_family": "mmid-moe",
    "device": "cpu",
    "shape_class": {
-    "n": 1
+    "n": 1,
+    "quant": 21
    }
   },
   {
@@ -375,7 +401,15 @@
    "target_surface": "ggml/src/ggml-cuda (gated_delta_net fused)",
    "target_symbol": "GGML_HIP_GDN_FUSED",
    "effect_fraction": -0.3,
-   "reason": "MEASURED r2 ak-gdn-fused-gpu-20261123-r2: LDS-occupancy-bound, halves occupancy, K=T regressed to knob-off speed. r3 (64-thread) KEEP. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+   "reason": "MEASURED r2 ak-gdn-fused-gpu-20261123-r2: LDS-occupancy-bound, halves occupancy, K=T regressed to knob-off speed. r3 (64-thread) KEEP. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md",
+   "op_family": "gdn-recurrence",
+   "device": "gpu",
+   "shape_class": {
+    "n": [
+     8,
+     12
+    ]
+   }
   },
   {
    "status": "measured_null",
@@ -452,7 +486,8 @@
     "n": [
      2,
      3
-    ]
+    ],
+    "mech": 1
    }
   }
  ]

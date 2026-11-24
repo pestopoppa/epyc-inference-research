@@ -128,5 +128,42 @@ class Pricing(unittest.TestCase):
             self.assertEqual([h["id"] for h in jk.hypothesis_entries(tmp)], ["30-x"])
 
 
+class R7Review(unittest.TestCase):
+    """Box-owner review of the negatives.json keys (2026-11-24)."""
+
+    @classmethod
+    def setUpClass(cls):
+        recs = json.loads((seed.SEEDS / "negatives.json").read_text(encoding="utf-8"))["records"]
+        cls.neg = {r["mechanism_id"]: jk.key_of(r) for r in recs if jk.key_of(r)}
+
+    def test_q0_rm4_keep_lever_not_suppressed_by_barrier_null(self):
+        q0 = {"op_family": "dense-q8-gemv", "device": "cpu", "shape_class": {"n": [2, 3], "mech": 2}}
+        self.assertIsNone(jk.suppressed_by(q0, self.neg))
+        barrier = {"op_family": "dense-q8-gemv", "device": "cpu", "shape_class": {"n": 2, "mech": 1}}
+        self.assertEqual(jk.suppressed_by(barrier, self.neg), "akm-a3b-shexp-smalln-barrier")
+        reopened = {**barrier, "reopens": ["akm-a3b-shexp-smalln-barrier"]}
+        self.assertIsNone(jk.suppressed_by(reopened, self.neg))
+
+    def test_quant_narrows_moe_nulls(self):
+        moe = lambda q: {"op_family": "mmid-moe", "device": "cpu", "shape_class": {"n": 1, "quant": q}}
+        self.assertEqual(jk.suppressed_by(moe(21), self.neg), "akm-q38fn-cpu-mmid-gateup-fuse-iq3s")
+        self.assertIsNone(jk.suppressed_by(moe(8), self.neg))
+        self.assertEqual(jk.suppressed_by({"op_family": "mmid-moe", "device": "cpu", "shape_class": {"n": 512, "quant": 20}},
+                                          self.neg), "akm-c9-q38fn-iq4nl-moe-iqk")
+        self.assertIsNone(jk.suppressed_by({"op_family": "mmid-moe", "device": "cpu",
+                                            "shape_class": {"n": 512, "quant": 8}}, self.neg))
+
+    def test_widened_and_new_keys(self):
+        fa = lambda **s: jk.suppressed_by({"op_family": "flash-attn-verify", "device": "gpu", "shape_class": s}, self.neg)
+        self.assertEqual(fa(kv=16384), "akm-lsa-h12-pca-indexer-gpu")
+        self.assertIsNone(fa(n=36, kv=131072))  # more-splits and combine-tail nulls are n<=8 only
+        self.assertEqual(fa(n=1, kv=131072), "akm-c13-favec-combine-tail-split")  # first by id; both overlap
+        self.assertIsNotNone(fa(n=1, kv=65536, kv_type=8))  # several nulls overlap here; kv-quant is one of them
+        self.assertIn("akm-gdn-fused-128thread-kt", self.neg)
+        self.assertIn("akm-c14-paired-gate-up-launch", self.neg)
+        for r in self.neg.values():
+            self.assertEqual(jk.problems(r), [])
+
+
 if __name__ == "__main__":
     unittest.main()
