@@ -1113,9 +1113,21 @@ def resolve(bundle: Bundle, serving_row: dict, policy: AccumulatorPolicy,
     and the new champion of record the loop should record on a PROMOTE."""
     if effective_measurement_validity(bundle, store) == MEASUREMENT_STALE_BASELINE:
         raise BundleRecoveryRequired("stale_baseline: compounded gain cannot be quoted")
+    from . import production_surfaces as ps
     outcome = classify_serving(serving_row)
+    surf = ps.keep_assessment(serving_row)
+    refusal = ps.promotion_refusal(surf) if surf is not None else None
+    label = None if surf is None else {"label": surf.label, "missing": list(surf.missing),
+                                       "regressed": list(surf.regressed), "gate_enabled": ps.gate_enabled()}
+    if outcome is Outcome.PROMOTE and refusal and ps.gate_enabled():
+        return {"outcome": Outcome.DIVERGED, "action": policy.on_divergence, "production_surfaces": label,
+                "new_champion_of_record": bundle.champion_of_record,
+                "reason": (f"PRODUCTION-SHAPE REFUSAL (AKX-ALL-LB2.1): serving said "
+                           f"{serving_row.get('effect_pct', 0.0):+.3f}% at the anchor width, but {refusal}; "
+                           f"champion of record HOLDS at {bundle.champion_of_record[:12]}")}
     if outcome is Outcome.PROMOTE:
         return {
+            "production_surfaces": label,
             "outcome": outcome, "action": None,
             "new_champion_of_record": bundle.tip,
             "reason": (f"bundle of {len(bundle.keeps)} keep(s) (+{bundle.compounded_bench_pct:.2f}% "
@@ -1123,6 +1135,7 @@ def resolve(bundle: Bundle, serving_row: dict, policy: AccumulatorPolicy,
                        f"(floor {serving_row.get('noise_floor_pct')}%) -> champion of record "
                        f"advances to {bundle.tip[:12]}")}
     return {
+        "production_surfaces": label,
         "outcome": outcome, "action": policy.on_divergence,
         "new_champion_of_record": bundle.champion_of_record,
         "reason": (f"DIVERGENCE: bundle of {len(bundle.keeps)} keep(s) reached "
