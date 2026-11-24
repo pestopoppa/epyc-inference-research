@@ -48,8 +48,8 @@ def delta(**knobs):
 # --- schema + actuator ---
 def test_base_reads_the_registry_shape(base):
     assert base.values == {"np": 4, "batch": 512, "ubatch": 512, "kv_unified": True, "cache_ram": 65536,
-                           "ctx_checkpoints": 32, "spec_draft_n_max": 7, "drafter": "dflash2"}
-    assert base.shape == {"n_ctx": 393216, "ctk": "q8_0", "ctv": "q8_0"}
+                           "ctx_checkpoints": 32, "spec_draft_n_max": 7, "drafter": "dflash2",
+                           "n_ctx": 393216, "ctk": "q8_0", "ctv": "q8_0"}
     assert base.sampling_allowed["temperature"] == (0.3, 1.0)
 
 
@@ -61,12 +61,13 @@ def test_missing_registry_entry_is_refused_not_invented():
 def test_render_overlays_the_registry_then_the_delta_over_the_recipe_argv(base, recipe):
     out = sk.render(argv_of(recipe), base, delta(batch=1024, ubatch=1024, ctx_checkpoints=16))
     assert sk.read_knobs(out.base_argv) == {"np": 4, "batch": 512, "ubatch": 512, "kv_unified": True,
-                                            "cache_ram": 65536, "ctx_checkpoints": 32, "spec_draft_n_max": 7}
+                                            "cache_ram": 65536, "ctx_checkpoints": 32, "spec_draft_n_max": 7,
+                                            "n_ctx": 393216, "ctk": "q8_0", "ctv": "q8_0"}
     got = sk.read_knobs(out.argv)
     assert (got["batch"], got["ubatch"], got["ctx_checkpoints"], got["cache_ram"]) == (1024, 1024, 16, 65536)
     assert {f for f, _, _ in out.argv_delta} == {"-b", "-ub", "--ctx-checkpoints"}
     assert out.argv[:3] == ("taskset", "-c", "184-191"), "taskset's own -c must not be mistaken for --ctx-size"
-    assert out.argv[out.argv.index("-c") + 1] == "184-191" and "393216" in out.argv
+    assert out.argv[out.argv.index("-c") + 1] == "184-191" and got["n_ctx"] == 393216
     assert out.delta_digest == delta(batch=1024, ubatch=1024, ctx_checkpoints=16).digest
 
 
@@ -122,6 +123,50 @@ def test_delta_round_trips_and_recipe_gains_no_field_and_keeps_its_hash(base, re
     sk.render(argv_of(recipe), base, d)
     assert recipe.recipe_hash == h
     assert not [f.name for f in dataclasses.fields(serving.Recipe) if "knob" in f.name]
+
+
+# --- KV type and context knobs ---
+def test_kv_type_and_ctx_render_ctk_ctv_c_over_the_taskset_prefix(base, recipe):
+    out = sk.render(argv_of(recipe), base, delta(ctk="f16", ctv="q8_0", n_ctx=262144))
+    assert out.argv[:3] == ("taskset", "-c", "184-191")
+    got = sk.read_knobs(out.argv)
+    assert (got["ctk"], got["ctv"], got["n_ctx"]) == ("f16", "q8_0", 262144)
+    assert sk.read_knobs(out.base_argv)["ctk"] == "q8_0"
+    assert {f for f, _, _ in out.argv_delta} == {"-ctk", "-c"}, "ctv equals the registry value, so only K and ctx move"
+    assert "-ctv" not in {f for f, _, _ in out.argv_delta}
+
+
+@pytest.mark.parametrize("kind", ["f16", "bf16", "q8_0", "q4_0"])
+def test_every_allowed_kv_type_is_accepted(base, kind):
+    knobs = {"ctk": kind} if kind != "q8_0" else {"ctv": "f16"}
+    sk.KnobDelta.of("srv", knobs).validate(base)
+
+
+@pytest.mark.parametrize("knobs,why", [
+    ({"ctk": "q5_0"}, r"one of \['f16', 'bf16', 'q8_0', 'q4_0'\]"), ({"ctv": "iq4_nl"}, "not a valid enum"),
+    ({"ctk": 8}, "not a valid enum"), ({"n_ctx": 0}, "outside"), ({"n_ctx": -4}, "outside"),
+    ({"n_ctx": 262145}, "not a multiple of np 4"), ({"np": 5}, "not a multiple of np 5"),
+    ({"n_ctx": 393216}, "not a delta"), ({"n_ctx": 262144.0}, "not a valid int"),
+])
+def test_kv_and_ctx_bounds(base, knobs, why):
+    with pytest.raises(sk.KnobError, match=why):
+        sk.KnobDelta.of("srv", knobs).validate(base)
+
+
+def test_np_and_n_ctx_multiple_is_checked_on_the_effective_pair(base):
+    sk.KnobDelta.of("srv", {"np": 2, "n_ctx": 100}).validate(base)
+    sk.KnobDelta.of("srv", {"np": 3}).validate(base)                     # 393216 % 3 == 0
+    with pytest.raises(sk.KnobError, match="multiple"):
+        sk.KnobDelta.of("srv", {"np": 2, "n_ctx": 101}).validate(base)
+
+
+def test_quantized_v_cache_is_refused_when_the_argv_has_flash_attn_off(base, recipe):
+    off = [("off" if i and argv_of(recipe)[i - 1] == "-fa" else t) for i, t in enumerate(argv_of(recipe))]
+    with pytest.raises(sk.KnobError, match="needs flash-attn"):
+        sk.render(off, base, delta(ctv="q4_0"))
+    assert sk.read_knobs(sk.render(off, base, delta(ctv="f16", ctk="f16")).argv)["ctv"] == "f16"  # f16 V needs no FA
+    with pytest.raises(sk.KnobError, match="needs flash-attn"):
+        sk.render(off, base, delta(ctk="f16"))        # the registry V is q8_0: still quantized, so still refused
 
 
 # --- screening evaluator ---
@@ -184,6 +229,10 @@ def test_shipped_seed_loads_and_every_arm_validates_and_renders(base):
     reg["server_mode"]["architect_critic"] = reg["server_mode"].pop("srv")
     sk.load_seed(SEED_FILE, registry=reg)           # every arm valid against the server's shape
     assert seed["kind"] == "serving-knob" and len(seed["arms"]) >= 6
+    kv = {a["arm_id"]: a["knobs"] for a in seed["arms"] if a["arm_id"].startswith("kv-") and "f16" in a["arm_id"]}
+    assert kv == {"kv-f16": {"ctk": "f16", "ctv": "f16"}, "kv-k-f16-v-q8": {"ctk": "f16", "ctv": "q8_0"},
+                  "kv-f16-ctx262144": {"ctk": "f16", "ctv": "f16", "n_ctx": 262144},
+                  "kv-f16-ub2048": {"ctk": "f16", "ctv": "f16", "batch": 2048, "ubatch": 2048}}
     argv = argv_of(serving.Recipe(name="r", model=MODEL, temperature=1.0))
     b = sk.base_from_registry("architect_critic", reg)
     for a in seed["arms"]:

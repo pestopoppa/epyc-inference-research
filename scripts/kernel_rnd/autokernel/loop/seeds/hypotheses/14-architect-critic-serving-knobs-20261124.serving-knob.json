@@ -3,7 +3,7 @@
   "schema": "epyc.autokernel.serving_knob_seed.v1",
   "seed_id": "architect-critic-serving-20261124",
   "server": "architect_critic",
-  "summary": "Server-argv knobs over the :8083 architect_critic registry serving_shape (np 4, -b/-ub 512, --kv-unified, cache_ram 65536, ctx_checkpoints 32, dflash2 n-max 7). Aggregate tok/s is the ranking metric; each arm changes exactly one family so a winner is attributable.",
+  "summary": "Server-argv knobs over the :8083 architect_critic registry serving_shape (np 4, -b/-ub 512, --kv-unified, cache_ram 65536, ctx_checkpoints 32, dflash2 n-max 7, q8_0 KV at n_ctx 393216). Aggregate tok/s is the ranking metric; each arm changes one knob family, except the kv-f16-* arms, which stack ctx or batch on f16 KV so the KV-type effect is separable against kv-f16.",
   "falsifier": "No arm beats the registry-shape control on median aggregate tok/s while passing fit-memory, ITL-during-prefill (<= +20%) and correct-output, so the served shape is already at its local optimum on this surface.",
   "arms": [
     {"arm_id": "batch-ubatch-1024", "knobs": {"batch": 1024, "ubatch": 1024}},
@@ -13,6 +13,10 @@
     {"arm_id": "ctxcp-16", "knobs": {"ctx_checkpoints": 16}},
     {"arm_id": "cache-ram-32768", "knobs": {"cache_ram": 32768}},
     {"arm_id": "kv-unified-off", "knobs": {"kv_unified": false}},
-    {"arm_id": "drafter-mtp", "knobs": {"drafter": "mtp"}}
+    {"arm_id": "drafter-mtp", "knobs": {"drafter": "mtp"}},
+    {"arm_id": "kv-f16", "knobs": {"ctk": "f16", "ctv": "f16"}},
+    {"arm_id": "kv-k-f16-v-q8", "knobs": {"ctk": "f16", "ctv": "q8_0"}},
+    {"arm_id": "kv-f16-ctx262144", "knobs": {"ctk": "f16", "ctv": "f16", "n_ctx": 262144}},
+    {"arm_id": "kv-f16-ub2048", "knobs": {"ctk": "f16", "ctv": "f16", "batch": 2048, "ubatch": 2048}}
   ]
 }

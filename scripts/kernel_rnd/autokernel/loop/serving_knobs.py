@@ -58,13 +58,17 @@ _FLAGS: dict[str, tuple[tuple[str, ...], str]] = {
     "spec_draft_n_max": (("--spec-draft-n-max",), "int"), "drafter": ((), "drafter"),
     "temperature": (("--temp", "--temperature"), "float"), "top_p": (("--top-p",), "float"),
     "top_k": (("--top-k",), "int"),
+    "n_ctx": (("-c", "--ctx-size"), "int"), "ctk": (("-ctk", "--cache-type-k"), "enum"),
+    "ctv": (("-ctv", "--cache-type-v"), "enum"),
 }
 KNOBS = tuple(_FLAGS)
 SAMPLING = ("temperature", "top_p", "top_k")
-#: Registry shape values that are overlaid on the recipe argv but are NOT proposable knobs.
-_SHAPE_FLAGS = {"n_ctx": ("-c", "--ctx-size"), "ctk": ("-ctk", "--cache-type-k"), "ctv": ("-ctv", "--cache-type-v")}
+#: KV cache types a K/V knob may take. A quantized V cache needs flash-attn (checked at render, against the argv).
+KV_TYPES = ("f16", "bf16", "q8_0", "q4_0")
+_QUANTIZED_KV = frozenset({"q8_0", "q4_0"})
 _BOUNDS = {"batch": (1, 65536), "ubatch": (1, 65536), "np": (1, 16), "ctx_checkpoints": (0, 256),
-           "cache_ram": (0, 1 << 21), "spec_draft_n_max": (1, 32), "top_k": (0, 1000)}
+           "cache_ram": (0, 1 << 21), "spec_draft_n_max": (1, 32), "top_k": (0, 1000),
+           "n_ctx": (1, 1 << 24)}
 
 
 @dataclass(frozen=True)
@@ -72,13 +76,12 @@ class ServingBase:
     """The registry `server_mode.<server>` serving shape the delta is measured over."""
     server: str
     values: Mapping[str, Any]                 # knob -> registry value (absent = registry silent)
-    shape: Mapping[str, Any]                  # n_ctx / ctk / ctv, applied but not tunable
     drafters: Mapping[str, Mapping[str, Any]]  # eligible drafter id -> {spec_type, draft_model, draft_max, ngld}
     sampling_allowed: Mapping[str, tuple]     # sampling knob -> values some served role declares
     model: str | None = None
 
     def digest(self) -> str:
-        return _digest({"server": self.server, "values": dict(self.values), "shape": dict(self.shape),
+        return _digest({"server": self.server, "values": dict(self.values),
                         "drafters": {k: dict(v) for k, v in self.drafters.items()},
                         "sampling": {k: list(v) for k, v in self.sampling_allowed.items()}})
 
@@ -100,11 +103,12 @@ def base_from_registry(server: str, registry: Any = None) -> ServingBase:
     drafters = {k: dict(v) for k, v in ((roles.get(entry.get("model_role")) or {}).get("drafters") or {}).items()
                 if isinstance(v, Mapping)}
     chosen = (accel.get("drafter_selection") or {}).get("drafter")
+    kv = shape.get("kv_quant") or {}
     values: dict[str, Any] = {"np": entry.get("slots"), "batch": shape.get("batch"), "ubatch": shape.get("ubatch"),
                               "kv_unified": shape.get("kv_unified"), "cache_ram": entry.get("cache_ram"),
                               "ctx_checkpoints": entry.get("ctx_checkpoints"),
-                              "spec_draft_n_max": accel.get("draft_max"), "drafter": chosen}
-    kv = shape.get("kv_quant") or {}
+                              "spec_draft_n_max": accel.get("draft_max"), "drafter": chosen,
+                              "n_ctx": shape.get("n_ctx"), "ctk": kv.get("k"), "ctv": kv.get("v")}
     allowed: dict[str, set] = {k: set() for k in SAMPLING}
     for role in [entry.get("model_role"), *(entry.get("shared_with") or ())]:
         defaults = (roles.get(role) or {}).get("generation_defaults") or {}
@@ -113,8 +117,6 @@ def base_from_registry(server: str, registry: Any = None) -> ServingBase:
                 allowed[key].add(defaults[key])
     return ServingBase(
         server=server, values={k: v for k, v in values.items() if v is not None},
-        shape={k: v for k, v in (("n_ctx", shape.get("n_ctx")), ("ctk", kv.get("k")), ("ctv", kv.get("v")))
-               if v is not None},
         drafters=drafters, sampling_allowed={k: tuple(sorted(v)) for k, v in allowed.items()},
         model=entry.get("model"))
 
@@ -140,13 +142,16 @@ class KnobDelta:
                 ok = isinstance(value, bool)
             elif kind == "drafter":
                 ok = isinstance(value, str) and bool(value)
+            elif kind == "enum":
+                ok = value in KV_TYPES
             elif kind == "float":
                 ok = isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) \
                     and value >= 0
             else:
                 ok = isinstance(value, int) and not isinstance(value, bool)
             if not ok:
-                raise KnobError(f"knob {name}={value!r} is not a valid {kind}")
+                raise KnobError(f"knob {name}={value!r} is not a valid {kind}"
+                                + (f" (one of {list(KV_TYPES)})" if kind == "enum" else ""))
             lo, hi = _BOUNDS.get(name, (None, None))
             if lo is not None and not lo <= value <= hi:
                 raise KnobError(f"knob {name}={value} outside [{lo}, {hi}]")
@@ -175,13 +180,16 @@ class KnobDelta:
         want = dict(self.knobs)
         eff = {**base.values, **want}
         for name, value in want.items():
-            if base.values.get(name) == value:
-                raise KnobError(f"knob {name}={value!r} equals the registry value: not a delta")
             if name in SAMPLING and value not in base.sampling_allowed.get(name, ()):
                 raise KnobError(f"{name}={value} is not a value any role on {self.server} declares "
                                 f"({list(base.sampling_allowed.get(name, ()))}): the role does not allow it")
             if name == "drafter" and value not in base.drafters:
                 raise KnobError(f"drafter {value!r} is not eligible for {self.server}: {sorted(base.drafters)}")
+        if all(base.values.get(k) == v for k, v in want.items()):
+            raise KnobError(f"{want} equals the registry shape: not a delta")  # a redundant knob inside a real delta is fine
+        if "n_ctx" in want or "np" in want:
+            if eff.get("n_ctx") and eff.get("np") and eff["n_ctx"] % eff["np"]:
+                raise KnobError(f"n_ctx {eff['n_ctx']} is not a multiple of np {eff['np']}")
         if "ubatch" in eff and "batch" in eff and eff["ubatch"] > eff["batch"]:
             raise KnobError(f"ubatch {eff['ubatch']} exceeds batch {eff['batch']}")
         spec = (base.drafters.get(eff.get("drafter")) or {}).get("spec_type")
@@ -252,7 +260,7 @@ def read_knobs(argv: Sequence[str]) -> dict[str, Any]:
         if kind == "switch":
             out[name] = argv[i] == aliases[0]
         elif i + 1 < len(argv):
-            out[name] = (float if kind == "float" else int)(argv[i + 1])
+            out[name] = argv[i + 1] if kind == "enum" else (float if kind == "float" else int)(argv[i + 1])
     return out
 
 
@@ -279,15 +287,16 @@ def render(recipe_argv: Sequence[str], base: ServingBase, delta: KnobDelta) -> R
     disagrees with the delta."""
     delta.validate(base)
     argv = list(recipe_argv)
-    for key, aliases in _SHAPE_FLAGS.items():
-        if key in base.shape:
-            _set(argv, aliases, base.shape[key])
     reg = {k: v for k, v in base.values.items() if k != "drafter"}
     _apply_knobs(argv, base, reg)
     if base.values.get("drafter") in base.drafters:
         _apply_drafter(argv, base, base.values["drafter"], n_max=False)
     base_argv = tuple(argv)
     _apply_knobs(argv, base, dict(delta.knobs))
+    fa = _find(argv, ("-fa", "--flash-attn"))
+    final = {**base.values, **dict(delta.knobs)}
+    if final.get("ctv") in _QUANTIZED_KV and fa >= 0 and fa + 1 < len(argv) and argv[fa + 1] == "off":
+        raise KnobError(f"ctv {final['ctv']} is a quantized V cache and needs flash-attn, but the argv has -fa off")
     wanted = {k: v for k, v in delta.knobs if k != "drafter"}
     got = read_knobs(argv)
     bad = {k: (v, got.get(k)) for k, v in wanted.items() if got.get(k) != v}
