@@ -126,9 +126,9 @@ class Cpu(Base):
         c = json.load(open(self.census))
         gdn = c["records"]["cpu|a3b-q8_0-cpu|MUL_MAT:gdn_proj|quarter-24t|n1"]
         gu = c["records"]["cpu|a3b-q8_0-cpu|MUL_MAT_ID:exps_gate_up|quarter-24t|n1"]
-        self.assertEqual(gdn["ceiling_gbps"], 112.9)
-        self.assertEqual(gdn["status"], "ok")            # 102.5 GB/s = 91% of ceiling
-        self.assertEqual(gu["status"], "open_surface")   # 81.0 GB/s = 72% of ceiling (< 0.75 x 112.9 = 84.7)
+        self.assertEqual(gdn["ceiling_gbps"], 129.0)
+        self.assertEqual(gdn["status"], "ok")            # 102.5 GB/s = 79% of ceiling
+        self.assertEqual(gu["status"], "open_surface")   # 81.0 GB/s = 63% of ceiling (< 0.75 x 129 = 96.75)
         self.assertNotIn("FLASH_ATTN", "".join(c["records"]))   # no static bytes -> no record
         self.assertEqual(sum("cpu|" in k for k in c["records"]), 2)  # MTP config skipped
         self.assertIn("### CPU (EPYC 9655", open(self.doc).read())
@@ -143,7 +143,7 @@ class Cpu(Base):
 
     def test_flag_frac_is_a_tunable_parameter(self):
         c = cu.empty_census()
-        c["cpu"]["flag_frac"] = 0.70
+        c["cpu"]["flag_frac"] = 0.60  # 0.60 x 129 = 77.4 < 81.0
         json.dump(c, open(self.census, "w"))
         self.run_(self.cpu_res("a", cpu_result()))
         c = json.load(open(self.census))
@@ -229,20 +229,21 @@ class UnitRule(unittest.TestCase):
 FX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "testdata", "census")
 
 class CpuCeiling(unittest.TestCase):
-    """AK-CPU-CEIL-MEASURED: quarter-24t ceiling is the measured 112.9 GB/s, not the derived 129.9."""
+    """Operator 2026-11-24: one ceiling per device -- MI210 1500, CPU quarter-24t 129, CPU full host 520 GB/s."""
 
-    def test_quarter_ceiling_is_measured_with_provenance(self):
-        self.assertEqual(cu.CPU_DEFAULTS["ceiling_gbps"]["quarter-24t"], 112.9)
+    def test_quarter_ceiling_is_operator_set_with_provenance(self):
+        self.assertEqual(cu.CPU_DEFAULTS["ceiling_gbps"]["quarter-24t"], 129.0)
+        self.assertEqual(cu.CPU_DEFAULTS["ceiling_gbps"]["full-host"], 520.0)
+        self.assertEqual(cu.CEILINGS_GBPS, {"mi210": 1500.0, "cpu-quarter-24t": 129.0, "cpu-full-host": 520.0})
         src = cu.CPU_DEFAULTS["ceiling_source"]["quarter-24t"]
-        self.assertTrue(src.startswith("measured:"))
-        self.assertIn("AK-CPU-QUARTER-READCEIL", src)
-        self.assertIn("9e379493", src)
-        self.assertEqual(cu.empty_census()["cpu"]["ceiling_gbps"]["quarter-24t"], 112.9)
+        self.assertTrue(src.startswith("operator 2026-11-24"))
+        self.assertIn("9e379493", src)  # the superseded measurement stays cited
+        self.assertEqual(cu.empty_census()["cpu"]["ceiling_gbps"]["quarter-24t"], 129.0)
         self.assertEqual(cu.CPU_DEFAULTS["ceiling_gbps"]["half-48t"], 259.8)  # untouched
 
-    def test_open_surface_threshold_is_75pct_of_112_9(self):
+    def test_open_surface_threshold_is_75pct_of_129(self):
         c = cu.empty_census()
-        for name, g in (("below", 84.6), ("above", 84.8)):
+        for name, g in (("below", 96.7), ("above", 96.8)):
             c["records"][f"cpu|m|{name}|quarter-24t|n1"] = {
                 "device": "cpu", "model": "m", "kernel_class": name, "shape": "quarter-24t", "config": "quarter-24t",
                 "n": 1, "bytes_per_call": g * 1e6, "us_per_call": 1e3, "calls_per_round": 1, "source_row": "fx"}
@@ -252,12 +253,13 @@ class CpuCeiling(unittest.TestCase):
 
     def test_committed_census_is_reranked_against_measured_ceiling(self):
         c = json.load(open(cu.CENSUS))
-        self.assertEqual(c["cpu"]["ceiling_gbps"]["quarter-24t"], 112.9)
+        self.assertEqual(c["cpu"]["ceiling_gbps"]["quarter-24t"], 129.0)
+        self.assertEqual(c["ceiling_gbps"], 1500.0)
         self.assertEqual(c["cpu"]["ceiling_source"]["quarter-24t"], cu.CPU_DEFAULTS["ceiling_source"]["quarter-24t"])
         q = [r for r in c["records"].values() if r.get("device") == "cpu" and r.get("config") == "quarter-24t"]
         self.assertTrue(q)
-        self.assertTrue(all(r["ceiling_gbps"] == 112.9 for r in q))
-        self.assertTrue(all(r["status"] == ("open_surface" if r["gbps"] < 0.75 * 112.9 else "ok") for r in q))
+        self.assertTrue(all(r["ceiling_gbps"] == 129.0 for r in q))
+        self.assertTrue(all(r["status"] == ("open_surface" if r["gbps"] < 0.75 * 129.0 else "ok") for r in q))
 
 
 class RealResultFixtures(Base):
@@ -278,9 +280,9 @@ class RealResultFixtures(Base):
         p = os.path.join(FX, "q38fn", "RESULT.json")
         self.run_(p)
         r = json.load(open(self.census))["records"]["cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:gdn_proj|quarter-24t-d1k|n1"]
-        self.assertEqual(r["ceiling_gbps"], 112.9)
-        self.assertEqual(r["frac_of_ceiling"], round(83.5 / 112.9, 3))
-        self.assertEqual(r["status"], "open_surface")   # 83.5 GB/s < 0.75 x 112.9 = 84.7
+        self.assertEqual(r["ceiling_gbps"], 129.0)
+        self.assertEqual(r["frac_of_ceiling"], round(83.5 / 129.0, 3))
+        self.assertEqual(r["status"], "open_surface")   # 83.5 GB/s < 0.75 x 129 = 96.75
 
     def test_a3b_r2_still_folds_with_static_bytes(self):
         p = os.path.join(FX, "a3b_r2", "RESULT.json")
@@ -454,8 +456,8 @@ class MergeStatic(Base):
         src = os.path.join(self.d, "src.json")
         json.dump(self.committed(), open(src, "w"))
         json.dump(self.live(), open(self.census, "w"))
-        self.assertEqual(cu.run(None, None, self.census, None, None, None, merge_static_from=src)["merge_static"],
-                         ["newkey", "parity", "time_only"])
+        first = cu.run(None, None, self.census, None, None, None, merge_static_from=src)["merge_static"]
+        self.assertTrue({"newkey", "parity", "time_only", "surfaces"} <= set(first))
         self.assertEqual(cu.run(None, None, self.census, None, None, None, merge_static_from=src)["merge_static"], [])
         self.assertIn("parity", json.load(open(self.census)))
 
@@ -467,3 +469,89 @@ class MergeStatic(Base):
         c = json.load(open(self.census))
         self.assertIn("parity", c)
         self.assertTrue(c["records"])
+
+
+class Surfaces(unittest.TestCase):
+    """One ranked list of bandwidth surfaces (operator 2026-11-24)."""
+
+    def committed(self):
+        c = json.load(open(cu.CENSUS))
+        cu.rerank(c)
+        cu.derive_surfaces(c)
+        return c
+
+    def test_every_record_maps_to_an_op(self):
+        c = self.committed()
+        self.assertEqual([k for k, r in c["records"].items() if r.get("op") is None], [])
+        for r in c["records"].values():
+            self.assertEqual(cu.op_of(r), (r["op_path"], r["op"]))
+
+    def test_mapping_examples(self):
+        v = ("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)")
+        for k in ("ffn_gate_up_v5i", "ffn_down_v5i", "gdn_attn_qkv_v5i", "gdn_attn_gate_v5i", "ssm_out+attn_output_v5i",
+                  "attn_q_v5i"):
+            self.assertEqual(cu.OP_MAP[("27b-q8_0", k)], v)
+        for k in ("mmid_gate_up_trace", "mmid_down_trace"):
+            self.assertEqual(cu.OP_MAP[("a3b-q8_0", k)], ("a3b-mtp-mi210", "MUL_MAT_ID experts n=3"))
+        self.assertEqual(cu.OP_MAP[("a3b-q8_0-cpu", "MUL_MAT:gdn_proj")], ("a3b-mtp-cpu", "gdn_proj"))
+        self.assertEqual(cu.OP_MAP[("q38fn-ud-iq4xs-cpu", "MUL_MAT:gdn_proj")], ("flash-next-cpu", "gdn_proj"))
+
+    def test_saving_formula_and_ranking(self):
+        c = self.committed()
+        s = c["surfaces"]
+        self.assertEqual(c["target_pct"], 88.0)
+        for x in s:
+            if x["saving_ms_per_step"] is not None:
+                want = x["step_ms"] * x["share_of_step"] * max(0.0, 1 - x["ours_pct"] / 88.0)
+                self.assertAlmostEqual(x["saving_ms_per_step"], want, places=2)
+        sv = [x["saving_ms_per_step"] for x in s]
+        known = [v for v in sv if v is not None]
+        self.assertEqual(known, sorted(known, reverse=True))
+        self.assertTrue(all(v is None for v in sv[len(known):]))  # nulls sink
+
+    def test_sanity_anchors(self):
+        by = {(x["path"], x["op"]): x for x in self.committed()["surfaces"]}
+        for key, want in ((("a3b-mtp-mi210", "dense MMVQ (attn, GDN proj, shexp, lm_head)"), 7.6),
+                          (("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)"), 4.8),  # 6.5 was the 1638 nameplate
+                          (("a3b-mtp-mi210", "router mul_mat_f F32 [2048,256]"), 4.5),
+                          (("27b-df2-mi210", "gv_fattn + merge (verify FA)"), 2.8)):
+            self.assertAlmostEqual(by[key]["saving_ms_per_step"], want, delta=0.15)
+
+    def test_placeholders_and_null_refs(self):
+        by = {(x["path"], x["op"]): x for x in self.committed()["surfaces"]}
+        tail = by[("27b-df2-mi210", "launch-bound tail (eltwise/norm/copy/rope/conv)")]
+        self.assertFalse(tail["ours_measured"])
+        self.assertIsNone(tail["ours_pct"])
+        self.assertEqual(tail["ours_pct_placeholder"], 35)
+        self.assertIsNone(tail["saving_ms_per_step"])
+        self.assertEqual(tail["status"], "needs_measurement")
+        aq = by[("27b-df2-mi210", "actquant (q8mf_pre_i8 + q8sk_quantize)")]
+        self.assertEqual(aq["measured_ms"], 2.1)
+        self.assertIsNone(aq["ours_pct"])
+        v = by[("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)")]
+        self.assertIsNone(v["ref_pct"])
+        self.assertIsNone(v["gap_pp"])  # null ref -> null gap, never 0
+        self.assertTrue(v["ours_measured"])
+        self.assertEqual(len(v["census_rows"]), 31)
+
+    def test_rollup_is_never_a_surface(self):
+        c = self.committed()
+        ops = {(x["path"], x["op"]) for x in c["surfaces"]}
+        self.assertNotIn(("flash-next-cpu", "forward m1 dense (UD-IQ4_XS)"), ops)
+        g = c["surface_groups"][0]
+        self.assertTrue(g["unreconciled"])
+        self.assertEqual(g["members"], sum(x["group"] == g["op"] for x in c["surfaces"]))
+        gdn = next(x for x in c["surfaces"] if x["path"] == "flash-next-cpu" and x["op"] == "gdn_proj")
+        self.assertIsNotNone(gdn["d32k_pct"])
+        self.assertTrue(gdn["step_source"].startswith("derived"))
+
+    def test_gpu_rows_carry_parity_share_and_ceilings_single(self):
+        c = self.committed()
+        g = [r for r in c["records"].values() if r.get("device", "gpu") == "gpu"]
+        self.assertTrue(all(r.get("share_of_round") is not None for r in g))
+        self.assertTrue(all(o["roofline_gbps"] in (1500.0, 129.0) for o in c["parity"]["ops"]))
+
+    def test_keeps_old_keys(self):
+        c = self.committed()
+        for k in ("records", "parity", "seeds", "time_only", "surfaces", "target_pct"):
+            self.assertIn(k, c)
