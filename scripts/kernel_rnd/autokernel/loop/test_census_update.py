@@ -640,3 +640,15 @@ class SurfaceWiring(Base):
         t = cu.table_md(c)
         self.assertIn("### Bandwidth surfaces (ranked by saving ms/step)", t)
         self.assertIn("| Owner |", t)
+
+
+class SpecTargetFallback(unittest.TestCase):
+    def test_result_without_target_uses_spec(self):
+        import tempfile
+        from autokernel.loop import census_update as cu
+        d = tempfile.mkdtemp()
+        sp = os.path.join(d, "spec.json")
+        json.dump({"target_surface": "27b-df2-mi210/launch-bound tail"}, open(sp, "w"))
+        self.assertEqual(cu.with_spec_target({"verdict": "KEEP"}, sp)["target_surfaces"], ["27b-df2-mi210/launch-bound tail"])
+        self.assertEqual(cu.with_spec_target({"verdict": "KEEP", "target_surface": "x/y"}, sp), {"verdict": "KEEP", "target_surface": "x/y"})
+        self.assertEqual(cu.with_spec_target({"verdict": "KEEP"}, None), {"verdict": "KEEP"})

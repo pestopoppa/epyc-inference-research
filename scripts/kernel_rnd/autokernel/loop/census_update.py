@@ -687,6 +687,19 @@ def _op_sig(c: dict, s: dict) -> str:
     return hashlib.sha256(json.dumps(o, sort_keys=True).encode()).hexdigest()[:16]
 
 
+def with_spec_target(res: dict, spec: str | None) -> dict:
+    """RESULT names no target -> fall back to the row spec's target_surface[s] (AutoKernel 2026-11-24: spec.json is
+    per-row and AK-owned; RESULT emission is the D9-gated shared harness). RESULT wins when it names one."""
+    if res.get("target_surfaces") or res.get("target_surface") or not spec or not os.path.exists(spec):
+        return res
+    try:
+        sp = json.load(open(spec))
+    except (OSError, ValueError):
+        return res
+    t = sp.get("target_surfaces") or sp.get("target_surface")
+    return {**res, "target_surfaces": [t] if isinstance(t, str) else list(t)} if t else res
+
+
 def mark_stale(c: dict, res: dict, row: str, sha: str) -> list[str]:
     if not str(res.get("verdict", "")).upper().startswith("KEEP"):
         return []
@@ -723,7 +736,7 @@ def merge_static(live: dict, committed: dict) -> list[str]:
 
 
 def run(result: str | None, row: str | None, census: str, program: str | None, doc: str | None, seeds_out: str | None,
-        dry_run: bool = False, merge_static_from: str | None = None) -> dict:
+        dry_run: bool = False, merge_static_from: str | None = None, spec: str | None = None) -> dict:
     """seeds_out gets per-surface stubs (preview only). Surface seeds for commit: --surface-seeds-out."""
     merged = None
     if merge_static_from and os.path.exists(merge_static_from) and os.path.exists(census):
@@ -753,7 +766,7 @@ def run(result: str | None, row: str | None, census: str, program: str | None, d
     if fresh:
         if not c.get("surfaces"):
             derive_surfaces(c)
-        lines += mark_stale(c, res, row, sha)
+        lines += mark_stale(c, with_spec_target(res, spec), row, sha)
     rep = {"row": row, "sha256": sha[:12], "observations": len(obs), "journal_lines": len(lines), "changed": False}
     if merged is not None:
         rep["merge_static"] = merged
@@ -786,6 +799,7 @@ def main(argv=None) -> int:
     ap.add_argument("--doc", default=None)
     ap.add_argument("--seeds-out", default=None)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--spec", default=None, help="row spec/manifest JSON; its target_surface[s] is the KEEP-stale fallback")
     ap.add_argument("--merge-static-from", metavar="PATH", default=None,
                     help="committed census whose absent/static (parity, time_only) sections are merged into --census")
     ap.add_argument("--surface-seeds-out", metavar="PATH", default=None,
@@ -800,7 +814,7 @@ def main(argv=None) -> int:
         open(a.surface_seeds_out, "w", encoding="utf-8").write(surface_seeds_md(c, a.date or "undated"))
         print("BW-CENSUS " + json.dumps({"surface_seeds": len(seedable_surfaces(c)), "out": a.surface_seeds_out}))
         return 0
-    rep = run(a.result, a.row, a.census, a.program, a.doc, a.seeds_out, a.dry_run, a.merge_static_from)
+    rep = run(a.result, a.row, a.census, a.program, a.doc, a.seeds_out, a.dry_run, a.merge_static_from, a.spec)
     print("BW-CENSUS " + json.dumps(rep, sort_keys=True))
     return 0
 
