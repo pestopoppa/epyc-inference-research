@@ -176,6 +176,18 @@ class Parity(unittest.TestCase):
         md = "\n".join(cu.parity_md(c))
         self.assertIn("Top unworked gaps (served, no box or row): p a (3.5)", md)
 
+    def test_null_ref_pct_has_no_gap_or_score(self):
+        c = cu.empty_census()
+        c["parity"] = {"refs": {"n": {"pct": None, "basis": "b", "cite": "x", "status": "no-published-measurement",
+                                      "bracket_pct": {"e2e": 80}}},
+                       "ops": [{"path": "p", "op": "a", "ours_pct": 35, "ref": "n", "share_of_step": 0.5,
+                                "covered_by": "", "refresh_c21": False, "source": "s", "served": True}]}
+        r = cu.parity_rows(c)[0]
+        self.assertEqual((r["ref_pct"], r["gap"], r["score"]), (None, None, None))
+        md = "\n".join(cu.parity_md(c))
+        self.assertIn("no published measurement", md)
+        self.assertIn("e2e 80%", md)
+
     def test_status_label_and_batch_table_render(self):
         c = cu.empty_census()
         c["parity"] = {"refs": {"m": {"pct": 88, "basis": "b", "cite": "x", "status": "measured"},

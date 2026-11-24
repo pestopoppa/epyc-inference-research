@@ -110,7 +110,7 @@
      "pct": "10-20"
     }
    ],
-   "source": "intake-2866 (arXiv 2611.30027), H200, operator-approved"
+   "source": "intake-2868 (arXiv 2611.30027), H200, operator-approved"
   },
   "note": "GPU roofline = MI210 HBM nameplate 1638 GB/s; CPU roofline = measured quarter-24t 112.9 GB/s. Shares: 27B per 45.7 ms round (C18 trace), A3B GPU per 34 ms busy step (C14), CPU per census step. Operator 2026-11-24: A3B GPU tracked as served (second GPU).",
   "ops": [
@@ -417,21 +417,25 @@
   ],
   "refs": {
    "cpu-avx512-gemv": {
-    "basis": "% of measured STREAM",
-    "cite": "llama.cpp/ik_llama.cpp Zen4/5 AVX-512 Q8_0 token generation reported near STREAM; Intel neural-speed (Shen et al., arXiv:2311.00502). Approximate.",
+    "basis": "% of measured sustained bandwidth (likwid load, 1 socket)",
+    "cite": "DERIVED from measured, llama.cpp discussion #11733: Llama-3.1-70B F16 tg128 x 141.1 GB weights over likwid-load bandwidth, 1 socket: 9374F 176/185.3=95%, 9175F 332/378.3=88%, 9654 309/359.9=86%. Caveats: F16 not Q8; likwid not STREAM; warm-up workaround applied. Quantized MoE: Mixtral-8x22B Q8_0 on 9175F ~74% (active bytes estimated).",
     "pct": 88,
-    "status": "recalled, not re-verified"
+    "range_pct": [
+     86,
+     95
+    ],
+    "status": "measured"
    },
    "cuda-flashdecode": {
     "basis": "% of HBM peak (H200 measured; upper bracket H100/B200)",
-    "cite": "MEASURED, intake-2866 (arXiv 2611.30027): FA4 FP8 decode attention 85-89% of peak at batch>=8 on H200; plain device copy of the same bytes 87-89% on H200 (copy ceiling); ref = 88% midpoint of FA4 FP8 and the copy ceiling. Upper bracket: FlashInfer BF16 decode >90% on H100/B200 (intake-2875). Operator-approved figures.",
+    "cite": "MEASURED, intake-2868 (arXiv 2611.30027): FA4 FP8 decode attention 85-89% of peak at batch>=8 on H200; plain device copy of the same bytes 87-89% on H200 (copy ceiling); ref = 88% midpoint of FA4 FP8 and the copy ceiling. Upper bracket: FlashInfer BF16 decode >90% on H100/B200 (FOSCAR, arXiv 2611.09722, intake-2877). Operator-approved figures.",
     "pct": 88,
     "status": "measured",
     "upper_bracket_pct": 90
    },
    "cuda-flashdecode-q4kv": {
     "basis": "% of HBM peak (H200 measured, batched)",
-    "cite": "MEASURED, intake-2866 (arXiv 2611.30027): best 4-bit KV attention kernel 67-75% of peak at batch 32-128 on H200; ref = 71% midpoint of 67-75%. Deployed vLLM NVFP4 only 10-20% on H200. Operator-approved figures. Benchmarks row ak-gvfattn-q4kv-gpu-20261124.",
+    "cite": "MEASURED, intake-2868 (arXiv 2611.30027): best 4-bit KV attention kernel 67-75% of peak at batch 32-128 on H200; ref = 71% midpoint of 67-75%. Deployed vLLM NVFP4 only 10-20% on H200. Operator-approved figures. Benchmarks row ak-gvfattn-q4kv-gpu-20261124.",
     "pct": 71,
     "range_pct": [
      67,
@@ -440,28 +444,44 @@
     "status": "measured"
    },
    "cuda-fused-tail": {
-    "basis": "launch-efficiency proxy",
-    "cite": "TensorRT-LLM fused norm/act-quant prologues + CUDA graphs. Proxy: ours fixed at 35 for launch-bound classes.",
-    "pct": 85,
-    "status": "recalled, not re-verified"
+    "basis": "% of HBM peak / whole-step proxy",
+    "bracket_pct": {
+     "megakernel_e2e_h100": 78,
+     "rmsnorm_large_h100": 83,
+     "vllm_sglang_e2e_h100": 50
+    },
+    "cite": "No per-kernel figure at decode shapes. Large-shape H100 (AutoKernel arXiv:2603.21331 Sec 7.1/Table 4): rmsnorm 83% at 8192x8192, ~51% at 4096^2; softmax ~50%; rotary ~17-18%. Whole-step launch-bound proxy: intake-448 (HazyResearch Megakernels), vLLM/SGLang ~50% of H100 bandwidth, fused megakernel 78%. Ours remains a fixed 35 proxy.",
+    "pct": null,
+    "status": "no-published-measurement"
    },
    "cuda-gemv": {
     "basis": "% of HBM peak",
-    "cite": "Marlin (Frantar et al., arXiv:2408.11743): near-ideal weight-stream speedup to batch 16-32 on A10/A100; TensorRT-LLM decode GEMV. Recalled, not re-verified.",
-    "pct": 85,
-    "status": "recalled, not re-verified"
+    "bracket_pct": {
+     "exl2_e2e_l4": 75.4,
+     "llamacpp_e2e_rtx5090": 80,
+     "marlin_awq_e2e_l4": 28.9,
+     "pytorch_bf16_e2e_h100": 26.9
+    },
+    "cite": "No per-kernel %-of-peak for quantized decode GEMV on H100/A100 found. Marlin (arXiv:2408.11743; github IST-DASLab/marlin README) gives only speedup vs FP16 (3.87x ideal to bs 16-32, A10). Brackets, all end-to-end: llama.cpp CUDA ~80% SOL, RTX 5090, gpt-oss-20b MXFP4 (llama.cpp discussion #17621); ExLlamaV2 4.25bpw 75.4% / AutoAWQ-Marlin 28.9% of int4 floor, L4 (arXiv:2605.30571 Table 7); PyTorch bf16 26.9%, H100 (same paper, Table 8).",
+    "pct": null,
+    "status": "no-published-measurement"
    },
    "cuda-moe": {
-    "basis": "% of HBM peak",
-    "cite": "vLLM/SGLang fused_moe Triton decode and MegaBlocks (Gale et al., arXiv:2211.15841). Approximate; no single published %-of-peak.",
-    "pct": 70,
-    "status": "recalled, not re-verified"
+    "basis": "% of HBM peak (H200 measured, decode)",
+    "batch_note": "B=1: 21% best-kernel; compare n=3 MMID at the B=4-8 range",
+    "cite": "MEASURED, arXiv:2609.04244 (MonoMoE) Sec 4.3, Qwen3.5-35B-A3B-FP8 on H200: MonoMoE 21.20/37.51/49.06/57.99% of peak at B=1/2/4/8 (vLLM Triton baseline 10.62/19.36/30.78/45.07%); Table 1 baseline fused_moe BW 20.0/46.1/62.8/60.1% at BS 1/4/8/16. ref = best published kernel at B=8. Corroboration: Cursor warp-decode, B200 B=32, 58% of measured 6.8 TB/s copy peak.",
+    "pct": 58,
+    "range_pct": [
+     49,
+     58
+    ],
+    "status": "measured"
    },
    "cuda-scan": {
-    "basis": "% of HBM peak, estimate",
-    "cite": "Mamba/Mamba2 selective scan (arXiv:2312.00752, 2405.21060) and flash-linear-attention GDN kernels publish speedups, not %-of-peak. Estimate.",
-    "pct": 60,
-    "status": "recalled, not re-verified"
+    "basis": "% of HBM peak",
+    "cite": "No tuned GDN/Mamba decode kernel reports %-of-peak (fla, Mamba2 SSD papers report speedups). Only measured datum: NVLabs PyTorch reference GDN decode, 1 layer hv=32 d=128 FP32 state, H100 285 us/token for 4,194,304 B, i.e. 14.7 GB/s = 0.44% (arXiv:2603.05931 Tables II, IV). Untuned, not a parity ref.",
+    "pct": null,
+    "status": "no-published-measurement"
    }
   }
  },

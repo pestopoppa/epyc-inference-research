@@ -228,10 +228,11 @@ def parity_rows(c: dict) -> list[dict]:
         ours = o.get("ours_pct")
         if ours is None and o.get("ours_gbps") is not None:
             ours = 100.0 * o["ours_gbps"] / o["roofline_gbps"]
-        gap = None if ours is None else max(0.0, ref.get("pct", 0) - ours)
+        ref_pct = ref.get("pct")  # null = no published measurement: no gap, no score (never read as 0 %)
+        gap = None if ours is None or ref_pct is None else max(0.0, ref_pct - ours)
         sh = o.get("share_of_step")
         score = None if gap is None or sh is None else gap * sh
-        rows.append({**o, "ours": ours, "ref_pct": ref.get("pct"), "gap": gap, "score": score})
+        rows.append({**o, "ours": ours, "ref_pct": ref_pct, "gap": gap, "score": score})
     rows.sort(key=lambda r: (not r["served"], -(r["score"] or -1)))
     return rows
 
@@ -246,12 +247,14 @@ def parity_md(c: dict) -> list[str]:
            "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for i, r in enumerate(rows, 1):
         out.append(f"| {i} | {r['path']}{'' if r['served'] else ' (not served)'} | {r['op']} | {f(r['ours'], '.0f')} | "
-                   f"{f(r['ref_pct'], '.0f')} | {r['ref']} | {f(r['gap'], '.0f')} | {f(r['share_of_step'], '.1%')} | "
+                   f"{'no published measurement' if r['ref_pct'] is None else f(r['ref_pct'], '.0f')} | {r['ref']} | {f(r['gap'], '.0f')} | {f(r['share_of_step'], '.1%')} | "
                    f"{f(r['score'], '.1f')} | {r['covered_by'] or '**none**'} | {'yes' if r['refresh_c21'] else '-'} | {r['source']} |")
     top = [r for r in rows if r["served"] and not r["covered_by"] and r["score"]][:5]
     out += ["", "Top unworked gaps (served, no box or row): " + "; ".join(
         f"{r['path']} {r['op']} ({r['score']:.1f})" for r in top), "", "References:", ""]
-    out += [f"- `{k}` {v['pct']}% [{v.get('status', 'recalled, not re-verified')}] ({v['basis']}): {v['cite']}"
+    out += [f"- `{k}` {'no published measurement' if v['pct'] is None else str(v['pct']) + '%'}"
+            f"{'' if not v.get('bracket_pct') else ' (brackets, end-to-end: ' + ', '.join(f'{b} {x}%' for b, x in v['bracket_pct'].items()) + ')'}"
+            f" [{v.get('status', 'recalled, not re-verified')}] ({v['basis']}): {v['cite']}"
             for k, v in sorted(c["parity"].get("refs", {}).items())]
     bd = c["parity"].get("batch_dependence")
     if bd:
