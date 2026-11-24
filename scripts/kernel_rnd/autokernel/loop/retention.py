@@ -6,6 +6,8 @@ in :mod:`autokernel.storage` and its tombstone-first policy.
 """
 from __future__ import annotations
 
+from .field_validation import unique_texts as _unique_texts
+
 from .field_validation import integer_field as _integer_field, text_field as _text_field
 
 from .field_validation import require_sha256 as _require_sha256
@@ -66,12 +68,7 @@ def _integer(value: Any, label: str, *, minimum: int = 0) -> int:
 
 
 def _texts(value: Any, label: str) -> tuple[str, ...]:
-    if not isinstance(value, (list, tuple)):
-        raise RetentionRefused(f"{label} must be an array")
-    result = tuple(_text(item, f"{label}[]") for item in value)
-    if len(result) != len(set(result)):
-        raise RetentionRefused(f"{label} contains duplicates")
-    return tuple(str(item) for item in result)
+    return _unique_texts(value, label, RetentionRefused, _text)
 
 
 def _sha(value: Any, label: str) -> str:

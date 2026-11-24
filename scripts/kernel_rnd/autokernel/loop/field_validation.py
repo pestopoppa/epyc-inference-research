@@ -52,3 +52,12 @@ def integer_field(value: Any, label: str, error: type[Exception], *, minimum: in
     if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
         raise error(f"{label}{wording}integer >= {minimum}")
     return value
+
+
+def unique_texts(value: Any, label: str, error: type[Exception], text) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        raise error(f"{label} must be an array")
+    result = tuple(text(item, f"{label}[]") for item in value)
+    if len(result) != len(set(result)):
+        raise error(f"{label} contains duplicates")
+    return tuple(str(item) for item in result)
