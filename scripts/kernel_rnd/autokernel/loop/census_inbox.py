@@ -24,6 +24,7 @@ import re
 import sys
 from pathlib import Path
 
+from . import census_families, journal_keys
 from .census_update import seedable_surfaces, skey, surface_seed_id, surface_seed_section
 
 SPOOL = os.environ.get("AKCHAIN_SPOOL") or "/mnt/raid0/llm/tmp/akchain-spool"
@@ -55,6 +56,45 @@ def spool_hypotheses(spool: str | Path | None) -> set[str]:
     return out
 
 
+OP_PERF_FAMILIES = {"dense-q8-gemv": "MUL_MAT", "dense-iq4xs-gemv": "MUL_MAT", "lm-head-gemv": "MUL_MAT",
+                    "mmid-moe": "MUL_MAT_ID"}   # census family -> the ggml op op_perf_screen.grid matches on
+OP_PERF_DIMS = ("k", "m")                       # the only journal-key dims op_perf_screen.grid accepts
+
+
+def surface_key(s: dict) -> dict:
+    """journal_keys key of one census surface: census family + dims (m/k from an `MxK` op name or the record's own
+    `shape`/`n`, n from the census rows' `|nN` suffix) + device. A dim the record does not state is left out (wildcard)."""
+    dims = {}
+    m = re.search(r"(\d+)x(\d+)", str(s.get("op")))
+    if m:
+        dims.update(m=int(m[1]), k=int(m[2]))
+    dims.update({d: v for d, v in (s.get("shape") or {}).items() if isinstance(v, (int, float))})
+    ns = {int(x) for r in s.get("census_rows") or [] for x in re.findall(r"\|n(\d+)$", r)}
+    if s.get("n") is not None or len(ns) == 1:
+        dims["n"] = int(s["n"]) if s.get("n") is not None else ns.pop()
+    return {"op_family": census_families.op_family(s["path"], s["op"]), "shape_class": dims,
+            "device": "cpu" if str(s.get("device", "")).startswith("cpu") else "gpu"}
+
+
+def op_perf_shape_class(key: dict):
+    """The candidate `shape_class` ({op_family: ggml op, dims: {dim: [v]}}) a surface key implies, or None when its family
+    has no served-shape grid (flash-attn, router, ...). Only scalar k/m dims carry over; the rest stay a whole-family grid."""
+    op = OP_PERF_FAMILIES.get(key.get("op_family"))
+    dims = {d: [int(v)] for d, v in (key.get("shape_class") or {}).items()
+            if d in OP_PERF_DIMS and isinstance(v, (int, float)) and not isinstance(v, bool)}
+    return {"op_family": op, "dims": dims} if op else None
+
+
+def seed_shape_class(inbox: str | Path, *hypothesis_texts: object):
+    """shape_class for a candidate that cites a BWS seed (its id in mechanism_id/statement, a file in `inbox`), else None."""
+    for tok in re.findall(r"BWS-[A-Za-z0-9_-]+", " ".join(str(t or "") for t in hypothesis_texts)):
+        for cand in dict.fromkeys((tok, tok.rstrip("-_"))):
+            key = journal_keys.parse_key(_read(Path(inbox) / (cand + ".md")))
+            if key and not journal_keys.problems(key):
+                return op_perf_shape_class(key)
+    return None
+
+
 def plan(census: dict, inbox: str | Path, spool: str | Path | None = None) -> dict:
     """{"install": {name: body}, "remove": [name], "skipped": {surface_seed_id: "inbox"|"spool"}}. Pure: writes nothing."""
     texts = {p.name: _read(p) for p in sorted(Path(inbox).glob("*.md"))}
@@ -69,7 +109,8 @@ def plan(census: dict, inbox: str | Path, spool: str | Path | None = None) -> di
             dup.add(sid)
     for s in seedable_surfaces(census):
         sid, name = surface_seed_id(s), surface_seed_id(s) + ".md"
-        body = "\n".join(surface_seed_section(s, census)) + "\n"
+        sec = surface_seed_section(s, census)   # trailing "" kept last; the key rides in one comment so the stub is journal-keyed
+        body = "\n".join(sec[:-1] + [f"<!-- journal-key: {json.dumps(surface_key(s), sort_keys=True)} -->"] + sec[-1:]) + "\n"
         if sid in dup:
             skipped[sid] = "inbox"
         elif any(_slug(sid) in h or _slug(skey(s)) == h for h in hyps) and name not in texts:

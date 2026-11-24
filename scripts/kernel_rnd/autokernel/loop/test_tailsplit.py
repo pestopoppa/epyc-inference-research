@@ -180,3 +180,27 @@ def test_tests_never_spool_into_the_live_candidate_spool():
     live = Path("/mnt/raid0/llm/tmp/akchain-spool")
     assert tailsplit.SPOOL != live
     assert os.environ.get("AKCHAIN_SPOOL") and Path(os.environ["AKCHAIN_SPOOL"]) != live
+
+
+def _seed_inbox(tmp_path):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir(exist_ok=True)
+    (inbox / "BWS-LM.md").write_text('## BWS-LM\n<!-- journal-key: {"op_family": "lm-head-gemv", "device": "gpu", '
+                                     '"shape_class": {"m": 248320, "k": 5120}} -->\n')
+    return inbox
+
+
+def _rec(tmp_path, hid, **kw):
+    h = loop.Hypothesis(hid, "statement", "f", "ggml/src/ggml-cuda/a.cu", "sym")
+    return tailsplit.candidate_record(base="b" * 40, patch="p" * 40, hypothesis=h, paths=["a"], lane="l",
+                                      inbox=_seed_inbox(tmp_path), **kw)
+
+
+def test_candidate_citing_a_bws_seed_gets_its_shape_class(tmp_path):
+    assert _rec(tmp_path, "BWS-LM")["shape_class"] == {"op_family": "MUL_MAT", "dims": {"k": [5120], "m": [248320]}}
+
+
+def test_candidate_with_its_own_shape_class_keeps_it(tmp_path):
+    own = {"op_family": "MUL_MAT", "dims": {"k": [1]}}
+    assert _rec(tmp_path, "BWS-LM", shape_class=own)["shape_class"] == own
+    assert "shape_class" not in _rec(tmp_path, "unrelated-idea")

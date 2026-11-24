@@ -9,6 +9,7 @@ import pytest
 from ..controller import inbox as ctl_inbox
 from . import census_inbox as ci
 from . import census_update as cu
+from . import journal_keys as jk
 
 
 def surf(path, op, status="open", covered="", measured=True, saving=1.5):
@@ -54,7 +55,22 @@ def test_stub_body_is_what_write_stubs_writes(census, box, tmp_path):
     run(census, inbox, spool)
     cu.write_stubs(str(tmp_path / "preview"), census)
     for n in names(inbox):
-        assert (inbox / n).read_text() == (tmp_path / "preview" / n).read_text()
+        body = (inbox / n).read_text()
+        assert jk.KEY_RE.sub("", body).replace("\n\n\n", "\n\n") == (tmp_path / "preview" / n).read_text()
+
+
+def test_stub_carries_a_valid_journal_key_and_shape_class(census, box):
+    inbox, spool = box
+    census["surfaces"][0]["op"] = "lm_head 248320x5120"
+    census["surfaces"][0]["path"] = "27b-df2-mi210"
+    run(census, inbox, spool)
+    sid = cu.surface_seed_id(census["surfaces"][0])
+    key = jk.parse_key((inbox / (sid + ".md")).read_text())
+    assert jk.problems(key) == [] and key["op_family"] == "lm-head-gemv" and key["device"] == "gpu"
+    assert key["shape_class"] == {"m": 248320, "k": 5120}
+    assert all(jk.problems(jk.parse_key(p.read_text())) == [] for p in inbox.glob("BWS-*.md"))
+    assert ci.seed_shape_class(inbox, sid) == \
+        {"op_family": "MUL_MAT", "dims": {"k": [5120], "m": [248320]}}
 
 
 def test_surface_that_turns_covered_or_ok_loses_its_stub(census, box):

@@ -81,7 +81,7 @@ def snapshot_commit(worktree: Path, base: str, paths: Iterable[str], message: st
 
 
 def candidate_record(*, base: str, patch: str, hypothesis: Any, paths: Sequence[str], lane: str,
-                     predicted_effect: str | None = None, **extra) -> dict[str, Any]:
+                     predicted_effect: str | None = None, inbox: str | Path | None = None, **extra) -> dict[str, Any]:
     hid = (getattr(hypothesis, "mechanism_id", None) or getattr(hypothesis, "hypothesis_id", None)
            or (hypothesis.get("mechanism_id") if isinstance(hypothesis, Mapping) else None) or "unnamed")
     eff = predicted_effect
@@ -101,6 +101,11 @@ def candidate_record(*, base: str, patch: str, hypothesis: Any, paths: Sequence[
                          else hypothesis.get("statement")),
            "emitted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     rec.update({k: v for k, v in extra.items() if v is not None})
+    if inbox and not rec.get("shape_class"):   # RSL-R5: a candidate citing a BWS seed inherits the seed's op-perf shape class
+        from .census_inbox import seed_shape_class
+        sc = seed_shape_class(inbox, hid, rec["statement"])
+        if sc:
+            rec["shape_class"] = sc
     return rec
 
 
@@ -203,8 +208,8 @@ class EmittingTail:
 
     def __init__(self, *, worker, base: str, handoff: Callable[[Mapping[str, Any]], dict],
                  snapshot: Callable[[Path, str, Sequence[str], str], str] = snapshot_commit,
-                 log: list | None = None) -> None:
-        self.worker, self.base = worker, base
+                 log: list | None = None, inbox: str | Path | None = None) -> None:
+        self.worker, self.base, self.inbox = worker, base, inbox
         self._handoff, self._snapshot = handoff, snapshot
         self.log = log if log is not None else []
 
@@ -221,7 +226,8 @@ class EmittingTail:
             hid = getattr(self.h, "mechanism_id", None) or "candidate"
             patch = o._snapshot(Path(o.worker.worktree), o.base, paths,
                                 f"akloop candidate {hid} (lane {o.worker.name}, base {o.base[:12]})")
-            rec = candidate_record(base=o.base, patch=patch, hypothesis=self.h, paths=paths, lane=o.worker.name)
+            rec = candidate_record(base=o.base, patch=patch, hypothesis=self.h, paths=paths, lane=o.worker.name,
+                                   inbox=o.inbox)
             done = o._handoff(rec)
             o.log.append(done)
             exc = HandedOff(f"handed off as candidate {rec['id']} (patch {patch[:12]} on base {o.base[:12]}); "

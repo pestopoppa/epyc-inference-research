@@ -243,6 +243,11 @@ def run(args, *, seat_common: Mapping[str, Any],
     backend = actors.backend_for(args.planner_model, args.planner_effort)
     store = Path(args.store).resolve()
     mismatch = anchor_mismatch(profile, source_commit)
+    try:
+        seeds = inbox.read_inbox(store / "inbox")   # both paths (run.py does the same): BWS seeds reach the GPU planner too
+    except inbox.InboxMissing as exc:
+        print(f"planner-only REFUSED: {exc}", file=sys.stderr)
+        return 2
     cpu_context = {
         "target": {"scope": "experimental candidate, NOT canonical champion; planner-only, "
                             "nothing is built or measured", "recipe": launch,
@@ -250,10 +255,10 @@ def run(args, *, seat_common: Mapping[str, Any],
                    "profile_anchor_mismatch": mismatch},
         "cpu_profile": {"status": "not_collected",
                         "reason": "planner-only supplies only a retained node profile"},
-        "inbox": inbox.read_inbox(store / "inbox"),
     } if cpu else {}
     context = {
         **cpu_context,
+        "inbox": seeds,
         "program": loop.program_text(),
         "actor_provenance": {"planner": backend.describe()},
         "actor_read_roots": [str(out.resolve()), *([str(store), str(store.parent)] if cpu else [])],

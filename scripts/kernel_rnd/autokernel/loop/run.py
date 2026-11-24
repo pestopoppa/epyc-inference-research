@@ -9026,7 +9026,8 @@ def _tail_split_enabled(args) -> bool:
 def _emitting_tail_factory(args):
     from . import tailsplit
     handoff = tailsplit.ChainHandoff(spool=getattr(args, "chain_spool", None) or tailsplit.SPOOL)
-    return lambda worker, base: tailsplit.EmittingTail(worker=worker, base=base, handoff=handoff)
+    return lambda worker, base: tailsplit.EmittingTail(worker=worker, base=base, handoff=handoff,
+                                                       inbox=Path(args.store) / "inbox")
 
 def _isa_check_factory(args):
     """C5-ISA-1: per-worker ISA archive + claims check for a GPU campaign; refused for CPU."""

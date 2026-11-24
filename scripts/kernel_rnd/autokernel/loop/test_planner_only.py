@@ -34,7 +34,9 @@ def _args(tmp_path: Path, **kw) -> argparse.Namespace:
                 belief_escalate_after_s=1.0, belief_reader_timeout_s=1.0,
                 belief_focus_symbol=None, preseeded_hypotheses=None,
                 cpu_serving_launch=None, planner_surface=None)
-    return argparse.Namespace(**{**base, **kw})
+    ns = argparse.Namespace(**{**base, **kw})
+    (Path(ns.store) / "inbox").mkdir(exist_ok=True)
+    return ns
 
 
 class _Stub:
@@ -213,6 +215,17 @@ def test_gpu_counters_reach_the_planner_context(tmp_path):
     assert code == 0 and made[0].context["gpu_counters"]["status"] == "present"
     report = json.loads((tmp_path / "out" / po.REPORT_NAME).read_text())
     assert report["gpu_counters"]["status"] == "present"
+
+
+def test_gpu_planner_gets_the_inbox_too(tmp_path):
+    _tree(tmp_path)
+    store = tmp_path / "store"
+    (store / "inbox").mkdir(parents=True)
+    (store / "inbox" / "BWS-X.md").write_text("## BWS-X (proposed)\n")
+    (store / "loop-status.json").write_text(json.dumps({"hotspots": [{"signature": "k"}]}))
+    hypo = loop.Hypothesis("m", "s", "f", "ggml/src/ggml-cuda/a.cu", "sym")
+    code, made = _run(tmp_path, hypo, store=store)
+    assert code == 0 and made[0].context["inbox"] == ["## BWS-X (proposed)"]
 
 
 def test_control_arm_has_no_counters(tmp_path):
