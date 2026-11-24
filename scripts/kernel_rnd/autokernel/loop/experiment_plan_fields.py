@@ -9,6 +9,7 @@ from typing import Any, Mapping, cast
 from .. import schemas
 from .immutable_values import thaw as _thaw
 from .field_validation import exact as _shared_exact
+from .field_validation import text_array as _text_array
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -81,11 +82,4 @@ def _freeze(value: Any, label: str) -> Any:
 
 def _strings(value: Any, label: str, *, allow_empty: bool = False,
              unique: bool = True) -> tuple[str, ...]:
-    if not isinstance(value, (list, tuple)):
-        raise PlanValidationError(f"{label}: expected array")
-    items = tuple(_text(item, f"{label}[]") for item in value)
-    if not allow_empty and not items:
-        raise PlanValidationError(f"{label}: must not be empty")
-    if unique and len(set(items)) != len(items):
-        raise PlanValidationError(f"{label}: duplicate identifiers")
-    return items  # type: ignore[return-value]
+    return _text_array(value, label, PlanValidationError, _text, empty=allow_empty, unique=unique)

@@ -27,3 +27,14 @@ def require_sha256(value: str, label: str, error: type[Exception], *, article: s
     if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
         raise error(f"{label} must be {article}lowercase SHA-256")
     return value
+
+
+def text_array(value: Any, label: str, error: type[Exception], text, *, empty: bool, unique: bool) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        raise error(f"{label}: expected array")
+    items = tuple(text(item, f"{label}[]") for item in value)
+    if not empty and not items:
+        raise error(f"{label}: must not be empty")
+    if unique and len(set(items)) != len(items):
+        raise error(f"{label}: duplicate identifiers")
+    return items

@@ -17,6 +17,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 from .. import schemas
 from .immutable_values import thaw as _thaw
 from .field_validation import exact as _shared_exact
+from .field_validation import text_array as _text_array
 
 
 CLAIM_KEY_SCHEMA = "epyc.autokernel.scoped_claim_key.v1"
@@ -127,14 +128,7 @@ def _mapping(value: Any, label: str, *, nonempty: bool = True) -> Mapping[str, A
 
 def _strings(value: Any, label: str, *, empty: bool = False,
              unique: bool = True) -> tuple[str, ...]:
-    if not isinstance(value, (list, tuple)):
-        raise EvidenceValidationError(f"{label}: expected array")
-    result = tuple(cast(str, _text(item, f"{label}[]")) for item in value)
-    if not empty and not result:
-        raise EvidenceValidationError(f"{label}: must not be empty")
-    if unique and len(set(result)) != len(result):
-        raise EvidenceValidationError(f"{label}: duplicate identifiers")
-    return result
+    return _text_array(value, label, EvidenceValidationError, _text, empty=empty, unique=unique)
 
 
 def _dependency_identities(value: Any, label: str) -> Mapping[str, str]:
