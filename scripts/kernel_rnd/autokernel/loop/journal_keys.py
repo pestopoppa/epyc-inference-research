@@ -89,17 +89,18 @@ def suppressed_by(candidate, negatives: dict):
 
 
 #: census family -> the ggml op op_perf_screen.grid matches on; the ONLY place this map lives (defect 20).
-OP_PERF_FAMILIES = {"dense-q8-gemv": "MUL_MAT", "dense-iq4xs-gemv": "MUL_MAT", "lm-head-gemv": "MUL_MAT", "mmid-moe": "MUL_MAT_ID"}
+OP_PERF_FAMILIES = {"dense-q8-gemv": "MUL_MAT", "dense-iq4xs-gemv": "MUL_MAT", "lm-head-gemv": "MUL_MAT", "mmid-moe": "MUL_MAT_ID",
+                   "flash-attn-verify": "FLASH_ATTN_EXT"}
 OP_PERF_DIMS = ("k", "m")        # the journal-key dims op_perf_screen.grid accepts (n comes from the path's registry n-set)
 
 
 def op_perf_class(obj):
     """THE mapping from a candidate's shape description to the `shape_class` op_perf_screen.grid takes:
-    {"op_family": <ggml op>, "dims": {dim: [int, ...]}}, or None when the family has no served-shape grid (flash-attn, ...).
+    {"op_family": <ggml op>, "dims": {dim: [int, ...]}}, or None when the family has no served-shape grid.
 
     `obj` is a candidate record (its `journal_key`), a bare journal key, or the LEGACY op-perf class itself (a `shape_class`
     that already has `dims`): the legacy form is accepted unchanged, so every existing caller keeps working. Of a journal key
-    only k/m carry over; a dim the key leaves out is a wildcard, and a k/m range expands to its ints (never silently widened)."""
+    only k/m (kv for FLASH_ATTN_EXT) carry over; a dim the key leaves out is a wildcard, and a k/m range expands to its ints (never silently widened)."""
     if not isinstance(obj, dict):
         return None
     sc = obj.get("shape_class")
@@ -113,7 +114,7 @@ def op_perf_class(obj):
     for d, v in (key.get("shape_class") or {}).items():
         r = _range(v)
         # a [lo, hi] k/m range is expanded to its ints (grid filters by set membership) up to 65536 wide
-        if d in OP_PERF_DIMS and r and r[1] - r[0] <= 1 << 16:
+        if d in (("kv",) if op == "FLASH_ATTN_EXT" else OP_PERF_DIMS) and r and r[1] - r[0] <= 1 << 16:
             dims[d] = list(range(int(r[0]), int(r[1]) + 1))
     return {"op_family": op, "dims": dims}
 

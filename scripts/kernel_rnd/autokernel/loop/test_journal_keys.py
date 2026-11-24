@@ -30,13 +30,19 @@ class OpPerfClass(unittest.TestCase):
         self.assertIs(jk.op_perf_class({"shape_class": legacy, "journal_key": self.KEY}), legacy)
 
     def test_family_without_a_grid_or_junk_is_none(self):
-        self.assertIsNone(jk.op_perf_class({"op_family": "flash-attn-verify", "shape_class": {"kv": 1}}))
+        self.assertIsNone(jk.op_perf_class({"op_family": "moe-router", "shape_class": {"kv": 1}}))
         self.assertIsNone(jk.op_perf_class(None))
 
     def test_mapped_class_is_accepted_by_op_perf_screen_grid(self):
         from autokernel.loop import op_perf_screen as ops
         shapes = [{"name": "lm", "op": "MUL_MAT", "k": 5120, "m": 248320, "n_mats": 1, "n_used": 1}]
         self.assertEqual([c["key"] for c in ops.grid(jk.op_perf_class(self.KEY), shapes, [4])], ["lm@n4"])
+
+
+class OpPerfFlashAttn(unittest.TestCase):
+    def test_flash_attn_verify_maps_to_flash_attn_ext_and_only_kv_carries_over(self):
+        key = {"op_family": "flash-attn-verify", "device": "gpu", "shape_class": {"kv": [8192, 8193], "k": 5120, "n": 4}}
+        self.assertEqual(jk.op_perf_class(key), {"op_family": "FLASH_ATTN_EXT", "dims": {"kv": [8192, 8193]}})
 
 
 class Overlap(unittest.TestCase):

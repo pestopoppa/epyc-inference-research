@@ -33,7 +33,7 @@ def test_parse_real_perf_console_and_mul_mat_format():
 
 
 def test_grid_matches_ggufs_times_nset_and_cells_are_sum_over_types():
-    assert len(opr.full_grid(SPEC27)) == 9 * len(N)
+    assert len(opr.full_grid(SPEC27)) == 9 * len(N) + 2 * len(N)   # + FLASH_ATTN_EXT kv 8192/32768
     fn = ops.grid({"op_family": "MUL_MAT_ID", "dims": {"k": [2560]}}, ssc.lane_served_shapes("q38fn"), [1])
     plan = opr.plan_cells(SPECFN, fn)
     assert all(len(rx) >= 3 for _, rx in plan)   # gate_up: IQ3_S, IQ4_XS, plus the operator-listed Q6_K extra
@@ -146,3 +146,44 @@ def test_cli_test_mode_runs_no_binary(tmp_path, capsys):
     assert res["decision"]["screening_only"] is True and res["decision"]["screen"] in (ops.PASS, ops.UNMEASURED)
     assert opr.main(["--path", "27b-q8_0|mi210", "--anchor-build", str(BUILD / "a"), "--test-mode", "--outcome", "bad-rc",
                      "--out", str(out)]) == 0 and json.loads(out.read_text())["verdict"].startswith("FUTILITY_HARNESS_INSTRUMENT")
+
+
+# VERBATIM test_flash_attn_ext::vars() + print_test_result() shape of the served_shape_perf_v1 case (llama-served-perf-20261124
+# tests/test-backend-ops.cpp: VARS_TO_STR14 + the ak_add_served_shape_perf_cases FA loop); no binary was run for this fixture.
+FA_LINE = ("  FLASH_ATTN_EXT(hsk=256,hsv=256,nh=4,nr23=[6,1],kv=8192,nb=3,mask=1,sinks=0,max_bias=0.000000,logit_softcap=0.000000,"
+           "prec=f32,type_K=q8_0,type_V=q8_0,permute=[0,1,2,3]):    1500 runs -   42.50 us/run - 12.00 MFLOP/run - \033[1;34m  1.0 GFLOPS\033[0m")
+
+
+def fa_cells(spec, **dims):
+    return ops.grid({"op_family": "FLASH_ATTN_EXT", "dims": dims}, ssc.fa_shapes("q38_27b" if spec["lane"] == "gpu" else "q38fn"), spec["n"])
+
+
+def test_fa_output_line_parses_and_matches_its_cell():
+    spec = {**SPEC27, "n": [1, 2, 3, 4, 5, 6, 7, 8]}
+    cell = next(c for c in fa_cells(spec, kv=[8192]) if c["n"] == 3)
+    assert opr.parse_perf(FA_LINE) == [("FLASH_ATTN_EXT", FA_LINE.split("(")[1].split("):")[0], 42.5)]
+    assert opr.vars_prefix(cell, "Q8_0") == opr.parse_perf(FA_LINE)[0][1]
+    assert opr.cell_us(opr.plan_cells(spec, [cell]), opr.parse_perf(FA_LINE)) == {cell["key"]: 42.5}
+    other = next(c for c in fa_cells(spec, kv=[8192]) if c["n"] == 4)   # nb=3 must not satisfy nb=4 (nor kv 32768)
+    assert opr.cell_us(opr.plan_cells(spec, [other]), opr.parse_perf(FA_LINE)) == {}
+
+
+def test_fa_grid_27b_and_q38fn_match_the_registered_cases():
+    g27, gfn = fa_cells({**SPEC27, "n": list(range(1, 9))}), fa_cells({**SPECFN, "n": list(range(1, 6))})
+    assert len(g27) == 2 * 8 and len(gfn) == 2 * 5 and {c["op"] for c in g27 + gfn} == {"FLASH_ATTN_EXT"}
+    assert {(c["dims"]["n_kv_heads"], c["dims"]["gqa"], c["dims"]["hd"], c["dims"]["kv_type"]) for c in g27} == {(4, 6, 256, "q8_0")}
+    assert {(c["dims"]["n_kv_heads"], c["dims"]["gqa"]) for c in gfn} == {(2, 12)} and {c["dims"]["kv"] for c in gfn} == {8192, 32768}
+    assert {c["n"] for c in g27} == set(range(1, 9)) and g27[0]["key"] == "q38_27b_fa_kv32768@n1"
+    assert [c for c in opr.full_grid(SPECFN) if c["op"] == "FLASH_ATTN_EXT"] == fa_cells(SPECFN)
+    assert len(fa_cells(SPEC27, kv_type=["q8_0"], kv=[32768])) == len(N) and fa_cells(SPEC27, kv_type=["f16"]) == []
+
+
+def test_fa_weights_sum_fattn_and_merge_rows_and_ignore_other_kv_types():
+    rec = lambda kc, kv, n, calls, share: {"model": "27b-q8_0", "kernel_class": kc, "shape": f"kv{kv}", "n": n, "calls_per_round": calls, "share_of_round": share}
+    census = {"records": {"a": rec("gv_fattn_q8kv", 8192, 4, 16, 0.02), "b": rec("gv_merge_q8kv", 8192, 4, 16, 0.005),
+                          "c": rec("gv_fattn_q8kv", 8192, 4, 16, 0.01), "d": rec("gv_fattn_f16kv", 32768, 4, 16, 0.5)}}
+    cells = fa_cells(SPEC27)
+    w, basis = opr.weights(cells, SPEC27, census)
+    k = lambda kv, n: next(c["key"] for c in cells if c["dims"]["kv"] == kv and c["n"] == n)
+    assert w[k(8192, 4)] == pytest.approx(16 * 0.02 + 16 * 0.005)             # per-class max, then the fattn + merge sum
+    assert k(32768, 4) not in w and basis[k(32768, 4)] == "unmeasured"        # an f16 KV row is not q8_0 evidence

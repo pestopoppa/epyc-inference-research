@@ -31,6 +31,11 @@ MIN_PAIRS = 5
 
 PASS, REJECT, UNMEASURED = "pass", "reject", "unmeasured"
 _DIM_NAMES = ("k", "m", "n_mats", "n_used")
+_FA_DIMS = ("hd", "kv", "kv_type", "n_kv_heads", "gqa")   # FLASH_ATTN_EXT cells (kv_type is the one string dim)
+
+
+def _val(v: Any) -> Any:
+    return v if isinstance(v, str) else int(v)
 
 
 def weight(calls_per_round: float, share: float) -> float:
@@ -58,23 +63,24 @@ def grid(shape_class: Mapping[str, Any], served_shapes: Iterable[Any], n_set: It
     `decide([])` rejects it.
     """
     family = str(shape_class["op_family"])
-    dims = {str(name): {int(v) for v in values} for name, values in dict(shape_class.get("dims") or {}).items()}
-    unknown = sorted(set(dims) - set(_DIM_NAMES))
+    names = _FA_DIMS if family == "FLASH_ATTN_EXT" else _DIM_NAMES
+    dims = {str(name): {_val(v) for v in values} for name, values in dict(shape_class.get("dims") or {}).items()}
+    unknown = sorted(set(dims) - set(names))
     if unknown:
-        raise ValueError(f"unknown shape-class dims {unknown}; known: {list(_DIM_NAMES)}")
+        raise ValueError(f"unknown shape-class dims {unknown}; known: {list(names)}")
     ns = sorted({int(n) for n in n_set})
     if not ns or any(n < 1 for n in ns):
         raise ValueError("n_set must be a non-empty set of positive widths")
     cells, seen = [], set()
     for shape in served_shapes:
-        if str(_attr(shape, "op")) != family or any(int(_attr(shape, name)) not in allowed for name, allowed in dims.items()):
+        if str(_attr(shape, "op")) != family or any(_val(_attr(shape, name)) not in allowed for name, allowed in dims.items()):
             continue
         name = str(_attr(shape, "name"))
         if name in seen:
             continue
         seen.add(name)
         for n in ns:
-            cells.append({"key": cell_key(name, n), "shape": name, "op": family, "n": n, "dims": {d: int(_attr(shape, d)) for d in _DIM_NAMES}})
+            cells.append({"key": cell_key(name, n), "shape": name, "op": family, "n": n, "dims": {d: _val(_attr(shape, d)) for d in names}})
     return sorted(cells, key=lambda c: (c["shape"], c["n"]))
 
 

@@ -1,6 +1,6 @@
 """RSL-R3 live op-perf runner: paired `test-backend-ops perf` over the op_perf_screen grid, plus the A/A floor writer.
 
-Per round the whole grid is run once per binary and per op (MUL_MAT, MUL_MAT_ID); the arm order alternates every round
+Per round the whole grid is run once per binary and per op (MUL_MAT, MUL_MAT_ID, FLASH_ATTN_EXT); the arm order alternates every round
 (AB, BA, AB, ...), the same ABBA idiom `cpu_fa_reference.perf_screen` uses. Each (shape, n) cell is the SUM of us/run over
 the types its lane serves. Floors come ONLY from a per-cell paired A/A file (never borrowed): a cell without one is
 UNMEASURED and the stage reports FUTILITY_HARNESS_INSTRUMENT. `calibrate` writes that file; a measurement row runs it.
@@ -30,6 +30,8 @@ from .tool_output import strip_ansi
 FLOOR_SCHEMA = "epyc.autokernel.op_perf_floor.v1"
 CALIBRATION_MIN_PAIRS = 24          # FLOOR-UNIT-1 (serving.MATCHED_CALIBRATION_PAIRS)
 PERF_CASE_SET_ID = "served_shape_perf_v1"
+FA_OP = "FLASH_ATTN_EXT"
+FA_CLASSES = ("gv_fattn_q8kv", "gv_merge_q8kv")   # census kernel classes of the FA op (weight = their sum)
 STORE = Path("/mnt/raid0/llm/autokernel/loop-memory")
 CENSUS = Path(__file__).resolve().parent / "census" / "mi210_bandwidth_census.json"
 PERF_TIMEOUT_S = 1800
@@ -50,7 +52,11 @@ def floor_path(store: Path, key: str) -> Path:
 
 def vars_prefix(cell: Mapping, type_a: str) -> str:
     """The `vars()` text of the case, up to (not including) any `,max_nmse=` the patched subclasses append."""
-    d, t = cell["dims"], ssc.GGML_TYPE_NAMES[type_a]
+    d = cell["dims"]
+    if cell["op"] == FA_OP:   # test_flash_attn_ext::vars(), VARS_TO_STR14 (the served set registers mask=1, no sinks/bias/softcap)
+        return (f"hsk={d['hd']},hsv={d['hd']},nh={d['n_kv_heads']},nr23=[{d['gqa']},1],kv={d['kv']},nb={cell['n']},mask=1,sinks=0,"
+                f"max_bias=0.000000,logit_softcap=0.000000,prec=f32,type_K={d['kv_type']},type_V={d['kv_type']},permute=[0,1,2,3]")
+    t = ssc.GGML_TYPE_NAMES[type_a]
     if cell["op"] == "MUL_MAT":
         return f"type_a={t},type_b=f32,m={d['m']},n={cell['n']},k={d['k']},bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1"
     return (f"type_a={t},type_b=f32,n_mats={d['n_mats']},n_used={d['n_used']},b=0,m={d['m']},n={cell['n']},k={d['k']}")
@@ -62,7 +68,7 @@ def plan_cells(spec: Mapping, cells: Sequence[Mapping]) -> list[tuple[Mapping, l
         raise RunnerRefused("FUTILITY_HARNESS_MISSING_INPUT", f"no served-shape lane for {spec['key']}")
     shapes = {s.name: s for s in ssc.lane_served_shapes(lane or dense)}
     return [(c, [(t, re.compile("^" + re.escape(vars_prefix(c, t))))
-                 for t in (("Q8_0",) if dense else ssc.routed_types(lane, shapes[c["shape"]]))]) for c in cells]
+                 for t in (("Q8_0",) if dense or c["op"] == FA_OP else ssc.routed_types(lane, shapes[c["shape"]]))]) for c in cells]
 
 
 def parse_perf(text: str) -> list[tuple[str, str, float]]:
@@ -84,7 +90,7 @@ def cell_us(plan, lines) -> dict[str, float]:
 def full_grid(spec: Mapping) -> list[dict]:
     """Every served cell of the path's lane (no shape-class narrowing): the floor file must cover any class."""
     lane = ssc.lane_for_model(spec["gguf"]) or ssc.dense_lane_for_model(spec["gguf"])
-    shapes = ssc.lane_served_shapes(lane)
+    shapes = ssc.lane_served_shapes(lane) + ssc.fa_shapes(lane)
     return [c for fam in sorted({s.op for s in shapes}) for c in ops.grid({"op_family": fam}, shapes, spec["n"])]
 
 
@@ -107,14 +113,17 @@ def weights(cells: Sequence[Mapping], spec: Mapping, census: Mapping | None = No
     (a width nobody measured is not evidence for the width next to it; a median needs a ratified rule to exist)."""
     ck = cc.CENSUS_KEY.get((spec["model_role"], spec["device"]))
     recs = (census or json.loads(CENSUS.read_text()))["records"].values()
-    by: dict[tuple, list[float]] = {}
+    by: dict[tuple, dict] = {}
     for r in recs:
-        if ck and r.get("model") == ck[0] and r.get("calls_per_round") and r.get("share_of_round"):
-            by.setdefault((r["shape"], int(r["n"])), []).append(r["calls_per_round"] * r["share_of_round"])
+        if (ck and r.get("model") == ck[0] and r.get("calls_per_round") and r.get("share_of_round")
+                and (not str(r["shape"]).startswith("kv") or r.get("kernel_class") in FA_CLASSES)):
+            d, kc = by.setdefault((r["shape"], int(r["n"])), {}), r.get("kernel_class")
+            d[kc] = max(d.get(kc, 0.0), r["calls_per_round"] * r["share_of_round"])
     out, basis = {}, {}
     for c in cells:
-        if (v := by.get((f"{c['dims']['m']}x{c['dims']['k']}", c["n"]))):
-            out[c["key"]], basis[c["key"]] = max(v), "exact"
+        fa = c["op"] == FA_OP   # an FA cell is the fattn kernel PLUS its merge kernel: the weights add; a GEMM cell takes the max
+        if (v := by.get((f"kv{c['dims']['kv']}" if fa else f"{c['dims']['m']}x{c['dims']['k']}", c["n"]))):
+            out[c["key"]], basis[c["key"]] = (sum if fa else max)(v.values()), "exact"
         else:
             basis[c["key"]] = "unmeasured"
     return out, basis

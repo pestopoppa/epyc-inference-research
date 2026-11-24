@@ -246,6 +246,18 @@ DENSE_PROFILES: dict[str, tuple[str, tuple[tuple[str, int, int], ...]]] = {
 }
 
 
+#: FLASH_ATTN_EXT verify shapes the perf case set registers (served_shape_perf_v1): hd256, q8_0 KV; lane -> (n_kv_heads, gqa).
+FA_LANES = {"q38_27b": (4, 6), "q38fn": (2, 12)}
+FA_KV_LENS = (8192, 32768)
+
+
+def fa_shapes(lane: str) -> tuple:
+    from types import SimpleNamespace as NS   # attribute access, like ServedShape (op_perf_screen.grid reads both forms)
+    nkv, gqa = FA_LANES.get(lane, (0, 0))
+    return tuple(NS(name=f"{lane}_fa_kv{kv}", op="FLASH_ATTN_EXT", hd=256, kv=kv, kv_type="q8_0", n_kv_heads=nkv, gqa=gqa)
+                 for kv in FA_KV_LENS if nkv)
+
+
 def candidate_experts(profile: MoeProfile) -> int:
     """The CANDIDATE corpus' test expert count: 8, or the next power of two that still
     routes `expert_used` DISTINCT experts per token (Q38FN: 10 used -> 16).
