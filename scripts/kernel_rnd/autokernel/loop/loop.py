@@ -985,6 +985,10 @@ def _null_reason(comparison: bench.Comparison) -> str:
                 f" decisive=None, keeps refused until --calibrate-surface writes one")
     if comparison.noise_floor_pct is None:
         return "no noise floor declared"
+    if getattr(comparison, "stop_reason", None) == "futility":
+        return (f"FUTILE — stopped at an interim look (AK-EVAL-FUT): raw effect "
+                f"{comparison.effect * 100:+.3f}% cannot reach the "
+                f"{comparison.noise_floor_pct:.3f}% floor; a null, not a keep")
     if comparison.drifting:
         return (f"NOT RESOLVED — the instrument drifted during the run "
                 f"(anchor {comparison.anchor_drift_pct:+.3f}%, candidate "
@@ -2139,6 +2143,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         accumulate_valid_positive
                         and hypothesis.runtime_pair is None
                         and comparison.decisive is False
+                        and getattr(comparison, "stop_reason", None) is None
                         and comparison.noise_floor_pct is not None
                         and not comparison.drifting
                         and comparison.effect > 0)

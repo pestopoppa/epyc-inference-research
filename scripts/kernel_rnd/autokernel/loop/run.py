@@ -160,6 +160,10 @@ class ServingComparison:
         return self.row["noise_floor_pct"]
 
     @property
+    def stop_reason(self):
+        return self.row.get("stop_reason")
+
+    @property
     def surface(self):
         return "serving:" + self.row["recipe"]
 
@@ -4441,7 +4445,8 @@ def _measure_for(worker, *, disable_runtime,
             bench.Arm("anchor", anchor_build[0] / "bin" / "llama-bench"),
             bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
             args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor(),
-            surface=args.surface, ubatch=ubatch, calibrated=calibrated()))
+            surface=args.surface, ubatch=ubatch, calibrated=calibrated(),
+            futility=_futility_rule(args, floor() if calibrated() else None, on_bench=True)))
     return measure
 
 
@@ -6136,6 +6141,7 @@ def _cpu_compare(a_build, c_build, *, rebind_feedback=True,
         anchor_resolved_recipe=anchor_recipe, candidate_resolved_recipe=candidate_recipe,
         frozen_requests=frozen_requests(), floor_request_digest=floor_request_digest(),
         floor_record=floor_record(),
+        futility=_futility_rule(args(), floor(), record=floor_record()) if source_instrument() else None,
         **({"instrument": args().serving_instrument} if source_instrument() else {})),
         "experimental_candidate_not_champion" if experimental()
         else "canonical_candidate_vs_current_anchor",
@@ -6143,6 +6149,28 @@ def _cpu_compare(a_build, c_build, *, rebind_feedback=True,
         on_complete=lambda completed: retain_measured_source_comparison()(
             completed, a_build, anchor_recipe.execution_digest, serving_recipe().model))
     return result
+
+
+def _futility_rule(args, floor_pct, *, on_bench=False, record=None):
+    """AK-EVAL-FUT: the run's pre-registered futility rule, or None (fixed_pairs).
+
+    sigma_pair from the surface's own A/A: the matched serving floor record's samples,
+    or the bench k=1 floor row. Off unless --futility-looks on; never on an uncalibrated bar."""
+    if getattr(args, "futility_looks", "off") != "on" or floor_pct is None:
+        return None
+    from . import futility
+    if on_bench:
+        rows = bench.floor_rows(args.surface, args.model, args.store,
+                                             kv_type=getattr(args, "bench_kv_type", None))
+        sigma, source = futility.sigma_from_single_pair_floor((rows or {}).get(1)), "bench_floor_rows_k1"
+    else:
+        if not isinstance(record, dict) or getattr(args, "serving_instrument", None) != serving.MATCHED_INSTRUMENT:
+            return None
+        sigma = futility.sigma_from_aa_samples(record.get("anchor_samples"), record.get("candidate_samples"))
+        source = "matched_serving_floor_aa_samples"
+    z = args.futility_z or (futility.Z_BENCH if on_bench else futility.Z_SERVING)
+    return futility.rule_or_none(z=z, min_pairs=args.futility_min_pairs, bar_pct=floor_pct,
+                                 sigma_pair_pct=sigma, sigma_source=source)
 
 
 def _install_runtime_owner(*, set_runtime_selection,

@@ -129,7 +129,7 @@ def _instrument(instrument, pairs):
     return instrument == MATCHED_INSTRUMENT
 
 
-def _matched_plan(pairs, *, seed=None):
+def _matched_plan(pairs, *, seed=None, futility=None):
     from ..evaluator.statistics import OrderSchedule, ORDER_ANCHOR_FIRST
     # Draw before the first observation and retain the draw. A reschedule is the
     # same declared missing arm, not an outcome-dependent new schedule.
@@ -138,9 +138,17 @@ def _matched_plan(pairs, *, seed=None):
                                     base_blocks=pairs)
     orders = [["anchor", "candidate"] if schedule.order_for(i) == ORDER_ANCHOR_FIRST
               else ["candidate", "anchor"] for i in range(pairs)]
-    return {"instrument": MATCHED_INSTRUMENT, "estimator": MATCHED_ESTIMATOR,
+    plan = {"instrument": MATCHED_INSTRUMENT, "estimator": MATCHED_ESTIMATOR,
             "unit": "process", "pairs": pairs, "stopping": "fixed_pairs",
             "order_algorithm": MATCHED_ORDER, "seed": seed, "orders": orders}
+    if futility is not None:
+        # AK-EVAL-FUT: pre-registered futility-only looks; `pairs` stays the declared max.
+        from . import futility as futility_mod
+        if not (isinstance(futility, dict) and futility.get("schema") == futility_mod.SCHEMA
+                and futility.get("stop_on_answer") is False):
+            raise RecipeError("a futility plan must be the futility-only schema")
+        plan.update(stopping=futility_mod.STOPPING, futility=dict(futility))
+    return plan
 
 
 #: SL-4: a prompt of at least this many tokens (or 4 bytes/token of text) makes the
@@ -225,7 +233,14 @@ def comparison_instrument_matches(comparison, *, instrument, pairs):
             and comparison.get("pairs") == pairs and isinstance(plan, dict)
             and isinstance(plan.get("seed"), str) and len(plan["seed"]) == 32
             and all(c in "0123456789abcdef" for c in plan["seed"])
-            and plan == _matched_plan(pairs, seed=plan["seed"]))
+            and _plan_rebuilds(plan, pairs))
+
+
+def _plan_rebuilds(plan, pairs):
+    try:
+        return plan == _matched_plan(pairs, seed=plan["seed"], futility=plan.get("futility"))
+    except RecipeError:
+        return False
 
 
 def _matched_frame(recipe, resolved, frozen_requests):
@@ -2227,7 +2242,7 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             runtime_pair=None, instrument=LEGACY_INSTRUMENT, floor_record=None,
             floor_unit: str | None = None, runtime_evidence: str | None = None,
             longctx=None, steps_floor_record=None, arm_order=None,
-            arm_order_seed=None) -> dict:
+            arm_order_seed=None, futility=None) -> dict:
     """Paired, alternating serving A/B: anchor vs candidate, `pairs` times, each pair a
     fresh server per side (drift control). Effect = median(candidate)/median(anchor) - 1.
     `decisive` is None when uncalibrated (no floor), so the keep gate fails closed.
@@ -2322,7 +2337,12 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
         raise RecipeError("resolved comparison requires both original arm launches")
     a_options = _resolved_launch_options(recipe, anchor_build, port, anchor_resolved_recipe)
     c_options = _resolved_launch_options(candidate_recipe, candidate_build, port, candidate_resolved_recipe)
-    measurement_plan = _matched_plan(pairs) if matched else None
+    if futility is not None and not (matched and floor_pct is not None
+                                     and futility.bar_pct == floor_pct):
+        raise RecipeError("futility looks need the matched instrument and its own floor as the bar")
+    measurement_plan = (None if not matched else _matched_plan(pairs) if futility is None
+                        else _matched_plan(pairs, futility=futility.plan()))
+    stop_look = [None]
     if arm_order not in (None, LEGACY_ORDER_ANCHOR_FIRST, LEGACY_ORDER_RANDOMIZED):
         raise RecipeError("unknown legacy arm order")
     if matched and (arm_order is not None or arm_order_seed is not None):
@@ -2399,6 +2419,10 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     def complete():
         nonlocal belief_error
         for pair_index in range(pairs):
+            if (futility is not None and pair_index and len(a_runs) == len(c_runs) == pair_index
+                    and (look := futility(a_runs, c_runs))["decision"] == "futile"):
+                stop_look[0] = look
+                break
             arms = {"anchor": (recipe, anchor_build, a_options, a_runs, a_residency, a_steps),
                     "candidate": (candidate_recipe, candidate_build, c_options, c_runs,
                                   c_residency, c_steps)}
@@ -2530,6 +2554,14 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
                        floor_sha256=None if floor_record is None else floor_record["content_sha256"])
         if requests_digest is not None:
             out.update(request_digest=requests_digest, floor_request_digest=floor_request_digest)
+        if futility is not None:
+            out.update(pairs_run=len(a_runs), stop_reason=None)
+            if stop_look[0] is not None:
+                # A futile stop is a NULL: never decisive, never a regression, never a keep.
+                out.update(stop_reason="futility", futility_stop=stop_look[0], decisive=False)
+                if gate is not None:
+                    gate.update(decisive=False, regression=False, verdict_effect=effect)
+                    out.update(regression=False, verdict_effect=effect)
         if runtime_pair is not None:
             out.update(schema="epyc.autokernel.serving_runtime_ab.v1",
                        runtime_pair=runtime_pair.to_dict(),

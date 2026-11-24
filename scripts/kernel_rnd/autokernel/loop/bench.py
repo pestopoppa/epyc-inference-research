@@ -34,6 +34,7 @@ from ..controller import host_idle
 from .. import path_counters
 from ..execution import microbench
 from . import arm_accounting, integrity, residency
+from . import futility as futility_mod
 from .floor_units import FLOOR_UNITS, UNIT_PROCESS
 
 #: The unit EVERY number in this module is measured in, floors and effects alike: a
@@ -170,6 +171,10 @@ class Comparison:
     fresh_input_recheck: dict | None = None
     #: Observe-only pre/post idle reading of every measured process.
     host_idle: tuple[dict, ...] = ()
+    #: AK-EVAL-FUT: "futility" when an interim look ended it early (a null, never a
+    #: keep), with the pre-registered rule and the look that stopped it.
+    stop_reason: str | None = None
+    futility: dict | None = None
 
     @property
     def drift_explains_the_effect(self) -> bool:
@@ -227,7 +232,7 @@ class Comparison:
         """
         if not self.calibrated or self.kv_mismatch:
             return None
-        if self.noise_floor_pct is None:
+        if self.stop_reason == "futility" or self.noise_floor_pct is None:
             return False
         if self.drifting:
             # An arm that is still warming is not resolving anything. Reporting this
@@ -263,6 +268,9 @@ class Comparison:
             row["fresh_correctness"] = list(self.fresh_correctness)
         if self.fresh_input_recheck:
             row["fresh_input_recheck"] = self.fresh_input_recheck
+        if self.futility is not None:
+            row.update(stopping=futility_mod.STOPPING, futility=self.futility,
+                       stop_reason=self.stop_reason, pairs_run=len(self.anchor_samples))
         return row
 
 
@@ -453,7 +461,8 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
             ubatch: int | None = None, calibrated: bool = True,
             fresh_check: Callable[[Arm, int, int], dict] | None = None,
             kv_type: str | None = None, recipe_kv_type: str | None = None,
-            utilisation_source: Callable[[float], dict | None] | None = None) -> Comparison:
+            utilisation_source: Callable[[float], dict | None] | None = None,
+            futility: "futility_mod.Rule | None" = None) -> Comparison:
     """Alternating paired A/B. The arms swap every pair, never run as two blocks.
 
     `warmup_pairs` are run and DISCARDED first. Without them the first measured pair
@@ -468,6 +477,9 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
     opt-in comparison with intervening GPU work needs its own A/A calibration;
     the ordinary floor does not become transferable merely because this observer
     was enabled.
+
+    `futility` (AK-EVAL-FUT, futility.Rule) is looked at after each complete pair;
+    a futile look ends the comparison as a null (`stop_reason: futility`).
     """
     if pairs < 1:
         raise ValueError("compare needs at least one pair")
@@ -483,7 +495,12 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
     proofs: list[dict] = []
     started = time.monotonic()
     fresh_summaries: list[dict] = []
+    stop_look = None
     for pair_index in range(pairs):
+        if futility is not None and pair_index and (
+                last := futility(anchor_samples, candidate_samples))["decision"] == "futile":
+            stop_look = last
+            break
         for arm, sink in ((anchor, anchor_samples), (candidate, candidate_samples)):
             value, proof = run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch,
                                     reps=reps, hardening_seed=hardening_seed, kv_type=kv_type)
@@ -561,6 +578,8 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
                              if fresh_summaries else None),
         kv_type=kv_type or KV_DEFAULT, recipe_kv_type=recipe_kv_type,
         host_idle=tuple(row for proof in proofs for row in proof.get("host_idle", ())),
+        stop_reason=None if stop_look is None else "futility",
+        futility=None if futility is None else {**futility.plan(), "stopped_at": stop_look},
     )
 
 
