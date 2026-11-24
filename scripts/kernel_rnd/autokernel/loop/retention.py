@@ -16,6 +16,7 @@ from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from .. import storage
+from .immutable_values import thaw as _thaw
 
 NODE_SCHEMA = "epyc.autokernel.retention_node.v1"
 ROOT_SCHEMA = "epyc.autokernel.retention_root.v1"
@@ -120,13 +121,6 @@ def _freeze_value(value: Any, label: str) -> Any:
         return tuple(_freeze_value(item, f"{label}[]") for item in value)
     raise RetentionRefused(f"{label} contains an unsupported/nonfinite value")
 
-
-def _thaw(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {key: _thaw(item) for key, item in value.items()}
-    if isinstance(value, tuple):
-        return [_thaw(item) for item in value]
-    return value
 
 
 @dataclass(frozen=True, slots=True)

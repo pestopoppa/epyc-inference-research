@@ -15,6 +15,7 @@ from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from .. import schemas
+from .immutable_values import thaw as _thaw
 
 
 CLAIM_KEY_SCHEMA = "epyc.autokernel.scoped_claim_key.v1"
@@ -123,13 +124,6 @@ def _freeze(value: Any, label: str) -> Any:
         raise EvidenceValidationError(f"{label}: {exc}") from exc
     return frozen
 
-
-def _thaw(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {key: _thaw(item) for key, item in value.items()}
-    if isinstance(value, tuple):
-        return [_thaw(item) for item in value]
-    return value
 
 
 def _mapping(value: Any, label: str, *, nonempty: bool = True) -> Mapping[str, Any]:

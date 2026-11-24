@@ -7,6 +7,7 @@ from types import MappingProxyType
 from typing import Any, Mapping, cast
 
 from .. import schemas
+from .immutable_values import thaw as _thaw
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -85,13 +86,6 @@ def _freeze(value: Any, label: str) -> Any:
         return tuple(_freeze(item, f"{label}[]") for item in value)
     return value
 
-
-def _thaw(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {key: _thaw(item) for key, item in value.items()}
-    if isinstance(value, tuple):
-        return [_thaw(item) for item in value]
-    return value
 
 
 def _strings(value: Any, label: str, *, allow_empty: bool = False,
