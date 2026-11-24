@@ -7,9 +7,12 @@ next GPU"), then by the path's MODEL (e.g. "a3b-q8_0"), then 1. Surfaces whose s
 Serving-knob arms ({"name", "path"?, "step_ms"?, "vs_control_pct"?}) are listed beside the families: priced only when they
 carry a screened vs_control_pct (a THROUGHPUT gain vs control, 100*(tok_s_arm-tok_s_ctrl)/tok_s_ctrl, serving_knobs.py), else
 saving=None, 'unpriced'. Step saving = step_ms x (1 - 1/(1 + pct/100)); a negative pct clamps to 0 and stays priced at 0.
+Hand-written hypotheses ({"id", "touches": [{"path", "op"|"family", "fraction"}]}, journal_keys.price) rank in the same list as
+kind="hypothesis": saving = sum of fraction x the touched census surfaces' share_ms on EVERY device they touch (negative = cost).
 Read-only on census_update; this module owns the family table, census_update.OP_MAP stays the (model, class)->(path, op) map.
 """
 from . import census_update as cu
+from . import journal_keys as jk
 
 UNFAMILIED = "unfamilied"
 KNOB = "serving-knob"
@@ -87,8 +90,16 @@ def _knob_row(a: dict, steps: dict, mw, pm) -> dict:
             "weight": w, "status": "unpriced" if saving is None else "priced", "members": []}
 
 
-def rank(surfaces: list, model_weights: dict | None = None, knob_arms: list | None = None) -> list:
-    """Families (and knob arms) sorted by weighted score, unpriced last. Each row: family, kind, score, n_surfaces,
+def _hypothesis_row(h: dict, surfaces: list, mw, pm) -> dict:
+    p = jk.price(h, surfaces, op_family, lambda path: weight_of(path, mw, pm))
+    return {"family": f"hypothesis:{h.get('id')}", "kind": "hypothesis", "path": None, "saving_ms_per_step": p["saving_ms_per_step"],
+            "score": p["score"], "by_device": p["by_device"], "n_unpriced": p["n_unpriced"],
+            "status": "unpriced" if p["score"] is None else "priced", "members": p["touches"]}
+
+
+def rank(surfaces: list, model_weights: dict | None = None, knob_arms: list | None = None,
+         hypotheses: list | None = None) -> list:
+    """Families (and knob arms, and priced hand-written hypotheses) sorted by weighted score, unpriced last. Each row: family, kind, score, n_surfaces,
     n_unpriced, status (priced|unpriced), members [{path, op, weight, saving_ms_per_step}]."""
     pm = _path_model()
     fam = {}
@@ -106,5 +117,6 @@ def rank(surfaces: list, model_weights: dict | None = None, knob_arms: list | No
                      "members": sorted(ms, key=lambda m: -(m["weighted"] or 0))})
     steps = {s["path"]: s["step_ms"] for s in surfaces if s.get("step_ms")}
     rows += [_knob_row(a, steps, model_weights, pm) for a in knob_arms or []]
+    rows += [_hypothesis_row(h, surfaces, model_weights, pm) for h in hypotheses or []]
     rows.sort(key=lambda r: (r["score"] is None, -(r["score"] or 0), r["family"]))
     return rows

@@ -23,7 +23,12 @@
    "target_surface": "ggml/src/ggml-cuda/mmvq.cu",
    "target_symbol": "mul_mat_vec_q",
    "effect_fraction": -0.12,
-   "reason": "REJECTED 2026-07-11 on MI210, llama-bench base decode, r5, graphs ON, all 4 Q8 models. Net-negative and it hurts the DENSE models most despite targeting dense GEMV: Qwen3.6-27B dense -12%/-18%, gemma4-31B dense -6%/-7.5%. MoE marginal and sign-inconsistent (gemma4-A4B -3.5%/-0.3%, Qwen3.6-35B-A3B +4.2%/+3.1%), i.e. near noise. The prefetch/LDS-double-buffer overhead outweighs DMA-latency hiding on gfx90a at these shapes. Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md."
+   "reason": "REJECTED 2026-07-11 on MI210, llama-bench base decode, r5, graphs ON, all 4 Q8 models. Net-negative and it hurts the DENSE models most despite targeting dense GEMV: Qwen3.6-27B dense -12%/-18%, gemma4-31B dense -6%/-7.5%. MoE marginal and sign-inconsistent (gemma4-A4B -3.5%/-0.3%, Qwen3.6-35B-A3B +4.2%/+3.1%), i.e. near noise. The prefetch/LDS-double-buffer overhead outweighs DMA-latency hiding on gfx90a at these shapes. Source: handoffs/active/gemma-challenge-kernel-techniques-v7.md.",
+   "op_family": "dense-q8-gemv",
+   "device": "gpu",
+   "shape_class": {
+    "n": 1
+   }
   },
   {
    "status": "measured_null",
@@ -84,7 +89,12 @@
    "target_surface": "ggml/src/ggml-cuda (QSA indexer + fused sparse FA, LSA-H12-INDEXER)",
    "target_symbol": "lsa_indexer_pca_topk",
    "effect_fraction": -0.632,
-   "reason": "MEASURED FUTILE on build 289207e31 (store gpu-20261106-289207e31-lsah12) vs C7 c420b9d1a, MI210. geomean dense/lsa at kv=32768 = 0.368 (lsa SLOWER). Cells dense_us/lsa_us -> ratio: kv32768 nb1 342.7/722.9=0.474, nb8 400.4/1269.2=0.315, nb16 519.7/1564.6=0.332, nb512 5482/14820=0.370; kv16384 nb512 0.202; kv65536 nb1 0.574. Ratio higher=better. Packet caveat: selection is a flat per-key PCA top-k (+ window 512, sinks 4), NOT the author Ward bucket selector (only the map and scorer math ported), so this refutes the flat-PCA-indexer variant, not Ward/bucketed LSA. Source: /mnt/raid0/llm/tmp/lsa-h12-indexer-gate-20261106/out/RESULT.json (perf.json, correct.json). Evidence /mnt/raid0/llm/tmp/lsa-h12-indexer-gate-20261106/out/RESULT.json. Measured on C7 (2026-11-06), not this file's historical epoch."
+   "reason": "MEASURED FUTILE on build 289207e31 (store gpu-20261106-289207e31-lsah12) vs C7 c420b9d1a, MI210. geomean dense/lsa at kv=32768 = 0.368 (lsa SLOWER). Cells dense_us/lsa_us -> ratio: kv32768 nb1 342.7/722.9=0.474, nb8 400.4/1269.2=0.315, nb16 519.7/1564.6=0.332, nb512 5482/14820=0.370; kv16384 nb512 0.202; kv65536 nb1 0.574. Ratio higher=better. Packet caveat: selection is a flat per-key PCA top-k (+ window 512, sinks 4), NOT the author Ward bucket selector (only the map and scorer math ported), so this refutes the flat-PCA-indexer variant, not Ward/bucketed LSA. Source: /mnt/raid0/llm/tmp/lsa-h12-indexer-gate-20261106/out/RESULT.json (perf.json, correct.json). Evidence /mnt/raid0/llm/tmp/lsa-h12-indexer-gate-20261106/out/RESULT.json. Measured on C7 (2026-11-06), not this file's historical epoch.",
+   "op_family": "flash-attn-verify",
+   "device": "gpu",
+   "shape_class": {
+    "kv": 32768
+   }
   },
   {
    "status": "measured_null",
@@ -94,7 +104,15 @@
    "target_surface": "ggml/src/ggml-cuda (mmq / skinny Q8_0 matmul dispatch, gfx90a)",
    "target_symbol": "H16 skinny MFMA Q8_0 GEMM (C8-2-H16-M36)",
    "effect_fraction": -0.1458,
-   "reason": "MEASURED NO_KEEP_OP_FUTILE on candidate a60768af3 (store gpu-20261107-a60768af3-c8h16) vs C7r 62cb6a6af, MI210 gfx90a, row c8-h16-gate-20261107. Correctness passed on 5 suites; kill-switch parity 1.0018. Op-level M=36 verify-step matmul over the real 27B shape census (7 shapes, 407 matmuls): base/new = 0.8542 (effect -14.58%, keep_tail P 2.23% / F 3.15%, effect_inside_tail False, enforced), so a resolved loss; e2e never ran. Per-M geomean base/new: M12 0.802, M16 0.776, M18 0.839, M24 0.848, M27 0.810, M32 0.742, M36 0.890 (M9 reads 0.558 under the key geomean_base_over_h16, a differently named key). The slow cells are the large GEMMs (5120x17408@32 0.708, 5120x6144@32 0.612); only 6144x5120@36 won (1.109). Ratio higher=better (base/new). Do not re-propose an MFMA f16 skinny Q8_0 kernel for M 12..36 without a mechanism that explains the M=12..32 loss. Source: /mnt/raid0/llm/tmp/c8-h16-gate-20261107/out/RESULT.json keys /b/op_ratio_M36, /b/keep_tail, /b/per_M, /b/cases, /b/killsw_over_base_geomean, /verdict; root commit d3f97494f handoffs/active/kernel-champion-and-promotion.md (C8-2-H16-M36). Measured on C7r (2026-11-07), not this file's historical epoch."
+   "reason": "MEASURED NO_KEEP_OP_FUTILE on candidate a60768af3 (store gpu-20261107-a60768af3-c8h16) vs C7r 62cb6a6af, MI210 gfx90a, row c8-h16-gate-20261107. Correctness passed on 5 suites; kill-switch parity 1.0018. Op-level M=36 verify-step matmul over the real 27B shape census (7 shapes, 407 matmuls): base/new = 0.8542 (effect -14.58%, keep_tail P 2.23% / F 3.15%, effect_inside_tail False, enforced), so a resolved loss; e2e never ran. Per-M geomean base/new: M12 0.802, M16 0.776, M18 0.839, M24 0.848, M27 0.810, M32 0.742, M36 0.890 (M9 reads 0.558 under the key geomean_base_over_h16, a differently named key). The slow cells are the large GEMMs (5120x17408@32 0.708, 5120x6144@32 0.612); only 6144x5120@36 won (1.109). Ratio higher=better (base/new). Do not re-propose an MFMA f16 skinny Q8_0 kernel for M 12..36 without a mechanism that explains the M=12..32 loss. Source: /mnt/raid0/llm/tmp/c8-h16-gate-20261107/out/RESULT.json keys /b/op_ratio_M36, /b/keep_tail, /b/per_M, /b/cases, /b/killsw_over_base_geomean, /verdict; root commit d3f97494f handoffs/active/kernel-champion-and-promotion.md (C8-2-H16-M36). Measured on C7r (2026-11-07), not this file's historical epoch.",
+   "op_family": "dense-q8-gemv",
+   "device": "gpu",
+   "shape_class": {
+    "n": [
+     12,
+     36
+    ]
+   }
   },
   {
    "status": "measured_null",
@@ -104,7 +122,13 @@
    "target_surface": "ggml/src/ggml-cuda/mmq-q8-wvsk.cu (q8wv_mul_mat)",
    "target_symbol": "GGML_HIP_Q8_WVSK_PREFETCH (commit c1160517e, unpushed)",
    "effect_fraction": -0.047,
-   "reason": "MEASURED NO_KEEP_FUTILITY on c1160517e (store gpu-20261109-c1160517e-c10q8wvpf), base C9, MI210, 27B Q8_0, q8_0 KV, llama-bench -p 9 -n 0 -d 8192 -r 8. On/off pairs 0.956, 0.920, 0.953 (higher=better; median -4.7%); witness present on every on arm; secondaries and np4 not run. Mechanism of the loss NOT diagnosed (candidates: L2 eviction, extra touch traffic). It does not test the no-overlap diagnosis directly because the touch adds traffic. Source: evidence /mnt/raid0/llm/tmp/c10-q8wvpf-ab-20261109/out/RESULT.json. Epoch C9 d210f85c2 family, not this file's historical epoch."
+   "reason": "MEASURED NO_KEEP_FUTILITY on c1160517e (store gpu-20261109-c1160517e-c10q8wvpf), base C9, MI210, 27B Q8_0, q8_0 KV, llama-bench -p 9 -n 0 -d 8192 -r 8. On/off pairs 0.956, 0.920, 0.953 (higher=better; median -4.7%); witness present on every on arm; secondaries and np4 not run. Mechanism of the loss NOT diagnosed (candidates: L2 eviction, extra touch traffic). It does not test the no-overlap diagnosis directly because the touch adds traffic. Source: evidence /mnt/raid0/llm/tmp/c10-q8wvpf-ab-20261109/out/RESULT.json. Epoch C9 d210f85c2 family, not this file's historical epoch.",
+   "op_family": "dense-q8-gemv",
+   "device": "gpu",
+   "shape_class": {
+    "n": 9,
+    "kv": 8192
+   }
   },
   {
    "status": "measured_null",
@@ -114,7 +138,15 @@
    "target_surface": "ggml/src/ggml-cuda/mmq-q8-wvsk.cu (q8wv_mul_mat)",
    "target_symbol": "q8wv two-load-set variant (prefetch-attempt.patch, no store)",
    "effect_fraction": null,
-   "reason": "ISA-GATE STOP, no runtime measurement, so no effect size exists. Measured from compiled ISA: a second live set reaches 128 VGPRs with scratch on every shape (M=8 87->128, 180 B scratch; M=10 95->128, 236 B); single-set control 89/97 VGPRs, 0 scratch; five variants also spilled. Inferred, not measured: the speed estimate 1.05-1.10x of kernel time at d8192 (timing model T = 14.1 us + B/1033 GB/s, fits C8 traces within 6-12%). Untried: partial prefetch (YT=2), fewer waves. Source: evidence /mnt/raid0/llm/tmp/c10-q8wv-diag-20261109/, patch /mnt/raid0/llm/tmp/c10-q8wvpf-20261109/prefetch-attempt.patch."
+   "reason": "ISA-GATE STOP, no runtime measurement, so no effect size exists. Measured from compiled ISA: a second live set reaches 128 VGPRs with scratch on every shape (M=8 87->128, 180 B scratch; M=10 95->128, 236 B); single-set control 89/97 VGPRs, 0 scratch; five variants also spilled. Inferred, not measured: the speed estimate 1.05-1.10x of kernel time at d8192 (timing model T = 14.1 us + B/1033 GB/s, fits C8 traces within 6-12%). Untried: partial prefetch (YT=2), fewer waves. Source: evidence /mnt/raid0/llm/tmp/c10-q8wv-diag-20261109/, patch /mnt/raid0/llm/tmp/c10-q8wvpf-20261109/prefetch-attempt.patch.",
+   "op_family": "dense-q8-gemv",
+   "device": "gpu",
+   "shape_class": {
+    "n": [
+     8,
+     10
+    ]
+   }
   },
   {
    "status": "measured_null",
@@ -124,7 +156,13 @@
    "target_surface": "ggml/src/ggml-cuda/mmq-q8-wvsk.cu",
    "target_symbol": "GGML_HIP_Q8_WVSK_WIDE (commit b9931dc0c, unpushed)",
    "effect_fraction": -0.257,
-   "reason": "MEASURED NO_KEEP_FUTILITY on b9931dc0c (store gpu-20261109-b9931dc0c-c9v36mmq), MI210, 27B Q8_0, llama-bench v36 d8192. On/off 0.743, 0.749, 0.739 (median -25.7%). Why q8wv loses at M=36 was NOT diagnosed. Do not assume wider batches help q8wv. Source: evidence /mnt/raid0/llm/tmp/c9-v36mmq-ab-20261109/out/RESULT.json."
+   "reason": "MEASURED NO_KEEP_FUTILITY on b9931dc0c (store gpu-20261109-b9931dc0c-c9v36mmq), MI210, 27B Q8_0, llama-bench v36 d8192. On/off 0.743, 0.749, 0.739 (median -25.7%). Why q8wv loses at M=36 was NOT diagnosed. Do not assume wider batches help q8wv. Source: evidence /mnt/raid0/llm/tmp/c9-v36mmq-ab-20261109/out/RESULT.json.",
+   "op_family": "dense-q8-gemv",
+   "device": "gpu",
+   "shape_class": {
+    "n": 36,
+    "kv": 8192
+   }
   },
   {
    "status": "measured_null",
@@ -134,7 +172,12 @@
    "target_surface": "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp (MoE path)",
    "target_symbol": "GGML_IQK_IQ4NL_MOE (commit be7595f80, unpushed)",
    "effect_fraction": -0.0651,
-   "reason": "MEASURED FUTILE, n=1 by stop rule, on be7595f80 (Q38FN UD-IQ4_XS, CPU q0): pp512 155.4 -> 145.3 t/s, ratio 0.935; pp2048 and tg64 not run. Premise error: these tensors already run AVX2 iq4_nl_8x8_q8_0 CPU_REPACK (the profiler labels both paths iq4_nl), so a new kernel must beat repack, not the native dot (it is 1.84x vs native per dot). Inferred, not measured: DS41-1017 MXFP4 experts have the same repack shape, so a port must beat repack first. Source: evidence /mnt/raid0/llm/tmp/c9-iq4nl-ab-20261108/out/RESULT.json."
+   "reason": "MEASURED FUTILE, n=1 by stop rule, on be7595f80 (Q38FN UD-IQ4_XS, CPU q0): pp512 155.4 -> 145.3 t/s, ratio 0.935; pp2048 and tg64 not run. Premise error: these tensors already run AVX2 iq4_nl_8x8_q8_0 CPU_REPACK (the profiler labels both paths iq4_nl), so a new kernel must beat repack, not the native dot (it is 1.84x vs native per dot). Inferred, not measured: DS41-1017 MXFP4 experts have the same repack shape, so a port must beat repack first. Source: evidence /mnt/raid0/llm/tmp/c9-iq4nl-ab-20261108/out/RESULT.json.",
+   "op_family": "mmid-moe",
+   "device": "cpu",
+   "shape_class": {
+    "n": 512
+   }
   },
   {
    "status": "measured_null",
@@ -230,7 +273,12 @@
    "target_surface": "ggml/src/ggml-cuda/fattn-gqa-verify.cu (gv_fattn_kernel split heuristic)",
    "target_symbol": "gv_fattn split multiple 1x/4x/8x (diag store 422a07b77)",
    "effect_fraction": -0.058,
-   "reason": "MEASURED, row verdict INCONCLUSIVE only because the 4x/8x debug witnesses are missing (their times did change). d131072 gv ratio 1x/4x/8x = 1.014/0.942/0.899 on 27B, 1.055/0.953/0.854 on A3B: more splits are slower. Counters: SQ_WAIT_ANY 74%/72% of wave cycles (includes barriers), MFMA busy about 1%, LDS-full 0. Source: evidence /mnt/raid0/llm/tmp/c9-fa-diag-20261109/out/RESULT.json."
+   "reason": "MEASURED, row verdict INCONCLUSIVE only because the 4x/8x debug witnesses are missing (their times did change). d131072 gv ratio 1x/4x/8x = 1.014/0.942/0.899 on 27B, 1.055/0.953/0.854 on A3B: more splits are slower. Counters: SQ_WAIT_ANY 74%/72% of wave cycles (includes barriers), MFMA busy about 1%, LDS-full 0. Source: evidence /mnt/raid0/llm/tmp/c9-fa-diag-20261109/out/RESULT.json.",
+   "op_family": "flash-attn-verify",
+   "device": "gpu",
+   "shape_class": {
+    "kv": 131072
+   }
   },
   {
    "status": "measured_null",
@@ -240,7 +288,16 @@
    "target_surface": "ggml/src/ggml-cuda/fattn-vec.cuh (flash_attn_ext_vec<256> parallel_blocks at long context)",
    "target_symbol": "GGML_HIP_FA_VEC_LONGCTX_PB",
    "effect_fraction": -0.05,
-   "reason": "MEASURED REJECTED in r2: 0.95x @32k, 0.90x @128k; default-off in e1d9ba2f6. Regime: Qwen3.8-27B Q8_0 + DFlash2, np4 unified KV. Source: root handoffs/active/kernel-champion-and-promotion.md C8-1-LCATTN (row c8-lcattn-gate-20261107-r2)."
+   "reason": "MEASURED REJECTED in r2: 0.95x @32k, 0.90x @128k; default-off in e1d9ba2f6. Regime: Qwen3.8-27B Q8_0 + DFlash2, np4 unified KV. Source: root handoffs/active/kernel-champion-and-promotion.md C8-1-LCATTN (row c8-lcattn-gate-20261107-r2).",
+   "op_family": "flash-attn-verify",
+   "device": "gpu",
+   "shape_class": {
+    "n": 1,
+    "kv": [
+     32768,
+     131072
+    ]
+   }
   },
   {
    "status": "measured_null",
@@ -250,7 +307,15 @@
    "target_surface": "ggml/src/ggml-cuda/fattn-common.cuh (flash_attn_combine_results) + fattn-gqa-verify.cu (gv_merge_kernel)",
    "target_symbol": "combine-tail split S=2/4/8 (branch a01b44adc)",
    "effect_fraction": -0.01,
-   "reason": "MEASURED FUTILITY: op-level FA time knob off vs S=8 kv32k 318.7->302.1 us (-5%), kv64k 581.1->575.4 (-1%), kv128k 1118.7->1145.7 (+2% slower); nb8 within +-1.5%; correctness clean. The main vec/gv kernels already fill the GPU (>=95% of a wave). Source: root handoffs/active/rocm-kernel-authoring.md INF48-FAVEC-TAIL (row inf48-favec-tail-c13-20261117)."
+   "reason": "MEASURED FUTILITY: op-level FA time knob off vs S=8 kv32k 318.7->302.1 us (-5%), kv64k 581.1->575.4 (-1%), kv128k 1118.7->1145.7 (+2% slower); nb8 within +-1.5%; correctness clean. The main vec/gv kernels already fill the GPU (>=95% of a wave). Source: root handoffs/active/rocm-kernel-authoring.md INF48-FAVEC-TAIL (row inf48-favec-tail-c13-20261117).",
+   "op_family": "flash-attn-verify",
+   "device": "gpu",
+   "shape_class": {
+    "kv": [
+     32768,
+     131072
+    ]
+   }
   },
   {
    "status": "measured_null",
@@ -270,7 +335,12 @@
    "target_surface": "ggml/src/ggml-cuda/mmvq.cu (calc_rows_per_block, ncols_dst==4)",
    "target_symbol": "GGML_HIP_MMVQ_Q8_B4_ROWS",
    "effect_fraction": -0.012,
-   "reason": "MEASURED FUTILITY: ratio 0.988 at n=4 (not the cause). The step is the F32/BF16 router leaving MMVF at ne11>3 on CDNA; fixed by GGML_HIP_MMVF_CDNA_MAX_NE11 (79650eeab, KEEP). Source: root handoffs/active/rocm-kernel-authoring.md RKA-A3B-N4-STEP (row rka-a3b-n4-step-gpu-20261118)."
+   "reason": "MEASURED FUTILITY: ratio 0.988 at n=4 (not the cause). The step is the F32/BF16 router leaving MMVF at ne11>3 on CDNA; fixed by GGML_HIP_MMVF_CDNA_MAX_NE11 (79650eeab, KEEP). Source: root handoffs/active/rocm-kernel-authoring.md RKA-A3B-N4-STEP (row rka-a3b-n4-step-gpu-20261118).",
+   "op_family": "dense-q8-gemv",
+   "device": "gpu",
+   "shape_class": {
+    "n": 4
+   }
   },
   {
    "status": "measured_null",
@@ -290,7 +360,12 @@
    "target_surface": "ggml/src/ggml-cpu (MUL_MAT_ID gate+up fusion)",
    "target_symbol": "GGML_MMID_GATEUP_FUSE",
    "effect_fraction": -0.053,
-   "reason": "MEASURED: slower in every quiet pair, tok/s 11.90->11.26 (CI95 [-15.7,+5.0]%), exps_gate_up 78.7->70.9 GB/s; IQ3_S dequant makes the fused pass compute-bound; served greedy output diverged although the op test passed. Owner withdrew. Row ak-q38fn-cpu-mmid-gateup-fuse-20261123, fork 132960d4e. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+   "reason": "MEASURED: slower in every quiet pair, tok/s 11.90->11.26 (CI95 [-15.7,+5.0]%), exps_gate_up 78.7->70.9 GB/s; IQ3_S dequant makes the fused pass compute-bound; served greedy output diverged although the op test passed. Owner withdrew. Row ak-q38fn-cpu-mmid-gateup-fuse-20261123, fork 132960d4e. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md",
+   "op_family": "mmid-moe",
+   "device": "cpu",
+   "shape_class": {
+    "n": 1
+   }
   },
   {
    "status": "measured_null",
@@ -370,7 +445,15 @@
    "target_surface": "ggml/src/ggml-cpu (tinyBLAS small N)",
    "target_symbol": "GGML_MM_SMALLN",
    "effect_fraction": 0.05,
-   "reason": "MEASURED NO_KEEP: +3..8% sub-CI; the loss is the 2-row tile dispatch at N=2/3, not the barrier (open lever GGML_Q0_RM4). Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+   "reason": "MEASURED NO_KEEP: +3..8% sub-CI; the loss is the 2-row tile dispatch at N=2/3, not the barrier (open lever GGML_Q0_RM4). Source: epyc-root progress/2026-11/2026-11-23-autokernel.md",
+   "op_family": "dense-q8-gemv",
+   "device": "cpu",
+   "shape_class": {
+    "n": [
+     2,
+     3
+    ]
+   }
   }
  ]
 }
