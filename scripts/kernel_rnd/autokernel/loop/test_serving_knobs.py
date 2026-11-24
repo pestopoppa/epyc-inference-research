@@ -1,4 +1,4 @@
-"""AK-SURFACE-SERVING-1: serving-knob schema, actuator, screening evaluator, seed, planner emission."""
+"""AK-SURFACE-SERVING-1: serving-knob schema, actuator, seed, planner emission."""
 from __future__ import annotations
 
 import dataclasses
@@ -51,6 +51,21 @@ def test_base_reads_the_registry_shape(base):
                            "ctx_checkpoints": 32, "spec_draft_n_max": 7, "drafter": "dflash2",
                            "n_ctx": 393216, "ctk": "q8_0", "ctv": "q8_0"}
     assert base.sampling_allowed["temperature"] == (0.3, 1.0)
+    # DEFECT 25: --temp is server-wide, so top_p / top_k (declared by `big` only, not by `coder`) are not allowed
+    assert base.sampling_allowed["top_p"] == () and base.sampling_allowed["top_k"] == ()
+    with pytest.raises(sk.KnobError, match="role does not allow"):
+        delta(top_p=0.95).validate(base)
+
+
+def test_single_role_server_allows_what_its_one_role_declares_and_vram_capacity_is_the_card_ceiling():
+    reg = {"server_mode": {"s1": {"model_role": "big", "serving_shape": {"n_ctx": 8}}},
+           "roles": {"big": {"generation_defaults": {"top_p": 0.95}, "vram_gib": 36.7}}}
+    assert sk.base_from_registry("s1", reg).sampling_allowed["top_p"] == (0.95,)
+    assert sk.vram_capacity_gib("s1", reg) == 62.0      # the loop's card ceiling, not the role's 36.7 footprint
+    assert sk.vram_capacity_gib("s2", {"server_mode": {"s2": {"device": "ROCm0", "model_role": "x"}}}) == 62.0
+    for bad in ("srv", "nope"):                         # CPU server (no device, no vram_gib) / unknown server
+        with pytest.raises(sk.KnobError, match="MISSING_INPUT"):
+            sk.vram_capacity_gib(bad, REGISTRY)
 
 
 def test_missing_registry_entry_is_refused_not_invented():
@@ -169,59 +184,6 @@ def test_quantized_v_cache_is_refused_when_the_argv_has_flash_attn_off(base, rec
         sk.render(off, base, delta(ctk="f16"))        # the registry V is q8_0: still quantized, so still refused
 
 
-# --- screening evaluator ---
-def launches(tok, itl=100.0, *, n=3, used=30.0, ok=True, warm=1):
-    rows = [{"warmup": True, "aggregate_tok_s": tok / 2, "itl_prefill_ms": itl * 3, "output_ok": True,
-             "mem_used_gib": used, "mem_capacity_gib": 64.0} for _ in range(warm)]
-    rows += [{"warmup": False, "aggregate_tok_s": tok + i, "itl_prefill_ms": itl, "output_ok": ok,
-              "mem_used_gib": used, "mem_capacity_gib": 64.0} for i in range(n)]
-    return rows
-
-
-def test_screen_ranks_by_median_aggregate_tok_s_ignoring_warmup():
-    r = sk.screen({"control": launches(100), "a": launches(120), "b": launches(110)})
-    assert [v["arm_id"] for v in r["ranking"]] == ["a", "b", "control"]
-    assert r["best_arm"] == "a" and r["ranking"][0]["median_tok_s"] == 121.0
-    assert r["ranking"][0]["vs_control_pct"] == pytest.approx(100 * 20 / 101, abs=1e-3)
-    assert r["screening_only"] is True and r["promotable"] is False and not r["rejected"]
-
-
-def test_screen_best_is_none_when_no_arm_beats_control():
-    r = sk.screen({"control": launches(100), "a": launches(90)})
-    assert r["best_arm"] is None and r["ranking"][0]["arm_id"] == "control"
-
-
-@pytest.mark.parametrize("arm,reason", [
-    (launches(200, itl=121.0), "itl-regression>20%"),
-    (launches(200, ok=False), "incorrect-output"),
-    (launches(200, used=65.0), "does-not-fit-memory"),
-    (launches(200, n=2), "insufficient-launches:2<3"),
-    ([{**r, "status": "oom"} for r in launches(200)], "does-not-fit-memory"),
-    ([{k: v for k, v in r.items() if k != "itl_prefill_ms"} for r in launches(200)], "itl-unmeasured"),
-    ([{k: v for k, v in r.items() if k != "output_ok"} for r in launches(200)], "incorrect-output"),
-    ([{k: v for k, v in r.items() if k != "mem_used_gib"} for r in launches(200)], "memory-unmeasured"),
-])
-def test_a_faster_arm_failing_a_guard_is_rejected_not_ranked(arm, reason):
-    r = sk.screen({"control": launches(100), "fast": arm, "slow": launches(105)})
-    assert [v["arm_id"] for v in r["ranking"]] == ["slow", "control"]
-    assert reason in {x for v in r["rejected"] for x in v["reasons"]} and r["rejected"][0]["arm_id"] == "fast"
-
-
-def test_itl_regression_exactly_at_the_limit_passes():
-    r = sk.screen({"control": launches(100), "a": launches(130, itl=120.0)})
-    assert [v["arm_id"] for v in r["ranking"]] == ["a", "control"]
-    assert r["ranking"][0]["itl_regression_pct"] == 20.0
-
-
-@pytest.mark.parametrize("arms", [
-    {"a": launches(100)}, {"control": launches(100, ok=False)}, {"control": launches(100, n=1)},
-    {"control": [{**r, "aggregate_tok_s": float("nan")} for r in launches(100)]},
-])
-def test_an_unsound_or_missing_control_refuses_to_screen(arms):
-    with pytest.raises(sk.ScreeningInvalid):
-        sk.screen(arms)
-
-
 # --- seed ---
 def test_shipped_seed_loads_and_every_arm_validates_and_renders(base):
     seed = sk.load_seed(SEED_FILE)
@@ -301,6 +263,21 @@ def test_planner_still_requires_free_text_for_plain_rows_and_rejects_bad_serving
         o = typed_planner.build_options(sk.portfolio_rows({"seed_id": "s", "server": "srv", "summary": "x",
                                                           "arms": [{"arm_id": "a", "knobs": {"np": 2}}]}))
         typed_planner.parse_choice({"choice": "serving-knob:s:a", "statement": "s"}, o)
+
+
+def test_candidate_from_choice_routes_serving_knob_to_emit_candidate_and_leaves_rows_alone(base, recipe):
+    row = {"kind": "row", "choice": "m1"}
+    assert typed_planner.candidate_from_choice(row) is None
+    knob = {"kind": "serving-knob", "choice": "k", "serving_knob": delta(batch=1024, ubatch=1024).to_dict()}
+    cand = typed_planner.candidate_from_choice(knob, base=base, recipe_argv=argv_of(recipe),
+                                               base_recipe_hash=recipe.recipe_hash)
+    assert cand["kind"] == "serving-knob" and sk.read_knobs(cand["argv"])["batch"] == 1024
+    with pytest.raises(typed_planner.TypedPlannerRefused, match="needs the registry base"):
+        typed_planner.candidate_from_choice(knob)
+    bad = knob | {"serving_knob": delta(batch=512).to_dict()}
+    with pytest.raises(typed_planner.TypedPlannerRefused, match="not a delta"):
+        typed_planner.candidate_from_choice(bad, base=base, recipe_argv=argv_of(recipe),
+                                            base_recipe_hash=recipe.recipe_hash)
 
 
 def test_emit_refuses_a_non_knob_choice_and_an_invalid_delta(base, recipe):

@@ -24,14 +24,15 @@ from pathlib import Path
 import statistics
 from typing import Any, Iterable, Mapping
 
-from .serving_knobs import CONTROL, ITL_REGRESSION_MAX, SCREEN_SCHEMA, ScreeningInvalid
+from .serving_knobs import CONTROL, ITL_REGRESSION_MAX, SCREEN_SCHEMA, ScreeningInvalid, vram_capacity_gib
 
 SCHEMA = "epyc.autokernel.serving_knob_measure.v1"
 KS = (1, 2, 4)
 RANK_K = 4
 MIN_BURST_LAUNCHES = 3
-#: MI210 HBM; the steady-state job's own `fits` is a startup probe, this bounds the measured own VRAM.
-VRAM_CAPACITY_GIB = 64.0
+#: steady-state units per label; a label's cells are the MEDIAN over its valid units (one K=4 unit is one draw).
+MIN_STEADY_UNITS = 3
+_GIB = float(1 << 30)
 _MEMORY_FAILURE = re.compile(r"out ?of ?memory|\boom\b|not-resident|failed to (allocate|create context|load model)", re.I)
 _CELL_KEYS = ("aggregate_tok_s", "per_request_decode_tok_s_p50", "tokens_per_verify_step", "ttft_p95_s", "itl_p95_s")
 
@@ -51,6 +52,12 @@ def _pct(values: Iterable[float], q: float) -> float | None:
     return v[lo] + (v[hi] - v[lo]) * (k - lo)
 
 
+def _gib(res: Any) -> float | None:
+    """`own_vram_b` of a residency record in GiB (the one unit this module screens in); None = no info."""
+    b = res.get("own_vram_b") if isinstance(res, Mapping) else None
+    return b / _GIB if isinstance(b, int) and not isinstance(b, bool) else None
+
+
 def _num(value: Any) -> float | None:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) else None
 
@@ -65,7 +72,8 @@ class BestCase:
     fits: bool = True
     fit_why: str | None = None
     probe_garbage: str | None = None
-    own_vram_b: int | None = None
+    own_vram_gib: float | None = None
+    n_units: int = 0                          # valid units the cells' medians are taken over
 
     @property
     def k4_over_k1(self) -> float | None:
@@ -82,7 +90,7 @@ class BurstLaunch:
     predicted_n: int = 0
     draft_n_accepted: int = 0
     decode_ms_per_token: tuple[float, ...] = ()   # per request: predicted_ms / predicted_n
-    own_vram_b: int | None = None
+    own_vram_gib: float | None = None
     invalid_why: tuple[str, ...] = ()
 
 
@@ -137,8 +145,7 @@ def parse_burst_results(source: Path | str | Iterable[Mapping]) -> WorstCase:
             valid=bool(u.get("valid")), why=str(u.get("why", "ok")), aggregate_tok_s=_num(rec.get("aggregate_tok_s")),
             predicted_n=sum(int(r.get("predicted_n") or 0) for r in reqs),
             draft_n_accepted=sum(int(r.get("draft_n_accepted") or 0) for r in reqs), decode_ms_per_token=decode,
-            own_vram_b=res.get("own_vram_b") if isinstance(res.get("own_vram_b"), int) else None,
-            invalid_why=tuple(str(x) for x in (u.get("invalid_why") or ()))))
+            own_vram_gib=_gib(res), invalid_why=tuple(str(x) for x in (u.get("invalid_why") or ()))))
     if not launches:
         raise ScreeningInvalid("burst results are empty")
     return WorstCase(tuple(launches))
@@ -157,30 +164,48 @@ def _cell(c: Mapping) -> dict:
     return {k: _num(c.get(k)) for k in _CELL_KEYS}
 
 
+def _median_cells(units: list[Mapping]) -> dict[int, dict]:
+    ks = {int(k) for u in units for k in (u.get("cells") or {})}
+    out = {}
+    for k in sorted(ks):
+        cs = [_cell(u["cells"][str(k)]) for u in units if str(k) in (u.get("cells") or {})]
+        out[k] = {key: statistics.median(v) if (v := [c[key] for c in cs if c[key] is not None]) else None
+                  for key in _CELL_KEYS}
+    return out
+
+
+def _best_case(units: list[Mapping]) -> BestCase:
+    drop = next((u for u in units if u.get("kind") == "dropped"), None)
+    if drop is not None:                       # an arm that did not fit
+        return BestCase({}, False, (str(drop.get("reason")),), fits=False, fit_why=str(drop.get("reason")))
+    infos = [u.get("info") or {} for u in units]
+    info_ok = all(infos)                       # a unit with no info proves nothing about fit: never fits=True
+    fits = info_ok and all(i.get("ready") and i.get("alive") and not i.get("oom_line") for i in infos)
+    vram = [_gib(i.get("residency")) for i in infos]
+    ok = [u for u in units if u.get("valid")]
+    bad = [str(x) for u in units if not u.get("valid") for x in (u.get("invalid_why") or ())]
+    return BestCase(
+        _median_cells(ok), bool(ok), tuple(bad) if ok else tuple(bad) or ("no-valid-units",), fits=fits,
+        fit_why=next((i["oom_line"] for i in infos if i.get("oom_line")), None)
+        or (None if fits else "info-missing" if not info_ok else "server not ready/alive"),
+        probe_garbage=next((g for u in units if (g := (u.get("probe") or {}).get("garbage"))), None),
+        own_vram_gib=max(vram) if vram and None not in vram else None, n_units=len(ok))
+
+
 def parse_steady_state(units: Path | str | Iterable[Mapping], arm_map: Mapping[str, str]) -> dict[str, BestCase]:
     """Steady-state `results.jsonl` units (or RESULT.json `units`) -> {knob arm id: BestCase}. `arm_map` maps the
     row's labels (A, B, B65K ...) to knob arm ids; an unmapped label raises, so a different -c (B65K) is never
-    silently merged into B. A `dropped` unit is an arm that did not fit. The last unit per label wins."""
-    out: dict[str, BestCase] = {}
+    silently merged into B. A `dropped` unit is an arm that did not fit. Every valid unit of a label is kept and each
+    cell is the MEDIAN over them (`n_units`), not the last unit."""
+    by_label: dict[str, list[Mapping]] = {}
     for u in _jsonl(units):
         kind, label = u.get("kind"), u.get("label") or u.get("arm")
         if kind not in ("arm_run", "dropped") or u.get("smoke"):
             continue
         if label not in arm_map:
             raise ScreeningInvalid(f"steady-state label {label!r} has no arm mapping {sorted(arm_map)}")
-        info = u.get("info") or {}
-        if kind == "dropped":
-            out[arm_map[label]] = BestCase({}, False, (str(u.get("reason")),), fits=False, fit_why=str(u.get("reason")))
-            continue
-        cells = {int(k): _cell(c) for k, c in (u.get("cells") or {}).items()}
-        fits = bool(info.get("ready") and info.get("alive") and not info.get("oom_line")) if info else True
-        res = info.get("residency") or {}
-        out[arm_map[label]] = BestCase(
-            cells, bool(u.get("valid")), tuple(str(x) for x in (u.get("invalid_why") or ())), fits=fits,
-            fit_why=info.get("oom_line") or (None if fits else "server not ready/alive"),
-            probe_garbage=(u.get("probe") or {}).get("garbage"),
-            own_vram_b=res.get("own_vram_b") if isinstance(res.get("own_vram_b"), int) else None)
-    return out
+        by_label.setdefault(label, []).append(u)
+    return {arm_map[label]: _best_case(us) for label, us in by_label.items()}
 
 
 def measurements(best: Mapping[str, BestCase], worst: Mapping[str, WorstCase]) -> dict[str, ArmMeasurement]:
@@ -190,16 +215,20 @@ def measurements(best: Mapping[str, BestCase], worst: Mapping[str, WorstCase]) -
 
 # --- evaluator ---------------------------------------------------------------------------
 def _reasons(m: ArmMeasurement, ctrl_itl: float | None, *, rank_k: int, min_launches: int, itl_max: float,
-             vram_cap_b: float) -> list[str]:
+             vram_cap_gib: float, min_units: int) -> list[str]:
     r: list[str] = []
     b, w = m.best, m.worst
     if b is None:
         r.append("best-case-missing")
     else:
         if not b.fits:
+            r.append("info-missing" if b.fit_why == "info-missing" else "does-not-fit-memory")
+        elif b.own_vram_gib is None:
+            r.append("info-missing")             # no memory info is never a fit
+        if b.own_vram_gib is not None and b.own_vram_gib > vram_cap_gib:
             r.append("does-not-fit-memory")
-        if b.own_vram_b is not None and b.own_vram_b > vram_cap_b:
-            r.append("does-not-fit-memory")
+        if b.valid and b.n_units < min_units:
+            r.append(f"insufficient-steady-units:{b.n_units}<{min_units}")
         if b.probe_garbage:
             r.append("incorrect-output")
         if not b.valid and b.fits:
@@ -214,8 +243,10 @@ def _reasons(m: ArmMeasurement, ctrl_itl: float | None, *, rank_k: int, min_laun
                 continue
             oom = bool(_MEMORY_FAILURE.search(x.why + " " + " ".join(x.invalid_why)))
             r.append("does-not-fit-memory" if oom else "incorrect-output" if x.why == "ok" else f"launch-failed:{x.why[:40]}")
-        if any(x.own_vram_b is not None and x.own_vram_b > vram_cap_b for x in w.launches):
+        if any(x.own_vram_gib is not None and x.own_vram_gib > vram_cap_gib for x in w.launches):
             r.append("does-not-fit-memory")
+        if any(x.valid and x.own_vram_gib is None for x in w.launches):
+            r.append("info-missing")
         if len(w.good) < min_launches:
             r.append(f"insufficient-burst-launches:{len(w.good)}<{min_launches}")
         itl = w.itl_p95_ms
@@ -266,44 +297,68 @@ def _entry(m: ArmMeasurement, ctrl: ArmMeasurement, rank_k: int, ctrl_itl: float
 
 def screen_cases(arms: Mapping[str, ArmMeasurement], *, control: str = CONTROL, rank_k: int = RANK_K,
                  itl_regression_max: float = ITL_REGRESSION_MAX, min_burst_launches: int = MIN_BURST_LAUNCHES,
-                 vram_capacity_gib: float = VRAM_CAPACITY_GIB, noise_floor: Mapping[str, Any] | None = None) -> dict:
+                 min_steady_units: int = MIN_STEADY_UNITS, vram_capacity_gib: float,
+                 noise_floor: Mapping[str, Any] | None = None) -> dict:
     """Rank by best-case aggregate tok/s at K=`rank_k`; reject an arm failing a worst-case guard rail.
 
     The `control` arm (the served shape) needs BOTH cases, sound, because ITL is relative to it. `noise_floor`
-    (from `parse_burst_floor`) is attached so a reader can compare the burst deltas to the served noise; it never
-    changes a verdict. Output is screening only."""
+    (from `parse_burst_floor`) is attached, and `best_arm` is named only when the top arm clears its
+    `screen_floor_pct` (|vs_control_pct| >= floor; no floor means no best arm). `vram_capacity_gib` is required:
+    take it from the registry (`serving_knobs.vram_capacity_gib`), there is no default. Screening only."""
     if control not in arms:
         raise ScreeningInvalid(f"no {control!r} arm: the ITL guard has nothing to be relative to")
-    if rank_k not in KS or not 0 <= itl_regression_max < 1 or min_burst_launches < 1:
+    if rank_k not in KS or not 0 <= itl_regression_max < 1 or min_burst_launches < 1 or min_steady_units < 1 \
+            or not (isinstance(vram_capacity_gib, (int, float)) and vram_capacity_gib > 0):
         raise ScreeningInvalid("guard parameters out of range")
-    cap = vram_capacity_gib * (1 << 30)
     ctrl = arms[control]
     if ctrl.best is None or ctrl.worst is None:
         raise ScreeningInvalid("control arm needs both the best case and the worst case")
     ctrl_itl = ctrl.worst.itl_p95_ms
-    bad = _reasons(ctrl, None, rank_k=rank_k, min_launches=min_burst_launches, itl_max=itl_regression_max, vram_cap_b=cap)
+    bad = _reasons(ctrl, None, rank_k=rank_k, min_launches=min_burst_launches, itl_max=itl_regression_max,
+                   vram_cap_gib=vram_capacity_gib, min_units=min_steady_units)
     if bad or ctrl_itl is None or not (ctrl.best.cells.get(rank_k) or {}).get("aggregate_tok_s"):
         raise ScreeningInvalid(f"control arm is unsound: {bad or ['itl/throughput-unmeasured']}")
     kept, rejected = [], []
     for arm_id in sorted(a for a in arms if a != control):
         m = arms[arm_id]
         reasons = _reasons(m, ctrl_itl, rank_k=rank_k, min_launches=min_burst_launches, itl_max=itl_regression_max,
-                           vram_cap_b=cap)
+                           vram_cap_gib=vram_capacity_gib, min_units=min_steady_units)
         e = _entry(m, ctrl, rank_k, ctrl_itl) if m.best and m.worst and not reasons else {"arm_id": arm_id}
         (rejected if reasons else kept).append(e | {"reasons": reasons} if reasons else e)
     ranking = sorted([_entry(ctrl, ctrl, rank_k, ctrl_itl) | {"is_control": True}, *kept],
                      key=lambda e: (-e["best"]["aggregate_tok_s"], not e.get("is_control"), e["arm_id"]))
     for i, e in enumerate(ranking, 1):
         e["rank"] = i
-    return {"schema": SCREEN_SCHEMA + ".two_case", "screening_only": True, "promotable": False, "control": control,
+    top = ranking[0]
+    floor = _num((noise_floor or {}).get("screen_floor_pct"))
+    vs = (top.get("best") or {}).get("vs_control_pct")
+    why = ("control-leads" if top.get("is_control") else "noise-floor-missing" if floor is None
+           else "below-screen-floor" if vs is None or abs(vs) < floor else "clears-screen-floor")
+    best_arm = top["arm_id"] if why == "clears-screen-floor" else None
+    return {"schema": SCREEN_SCHEMA, "screening_only": True, "promotable": False, "control": control,
             "rank_metric": f"best-case aggregate_tok_s at K={rank_k}",
             "guards": {"scope": "worst-case burst", "itl_p95_regression_max": itl_regression_max, "fit_memory": True,
                        "correct_output": True, "min_burst_launches": min_burst_launches,
-                       "vram_capacity_gib": vram_capacity_gib},
+                       "min_steady_units": min_steady_units, "vram_capacity_gib": vram_capacity_gib},
             "burst_noise_floor": dict(noise_floor) if noise_floor else None, "ranking": ranking, "rejected": rejected,
-            "best_arm": None if ranking[0].get("is_control") else ranking[0]["arm_id"],
+            "best_arm": best_arm, "best_arm_why": why,
             "note": "screen, not a gate: arms differ in np/batch/drafter; confirm a winner with a paired A/B"}
 
 
+def screen_stage(*, server: str, steady_results: Path | str | Iterable[Mapping], arm_map: Mapping[str, str],
+                 burst_results: Mapping[str, Path | str | Iterable[Mapping]], floor_result: Path | str | Mapping,
+                 registry: Any = None, **guards: Any) -> dict:
+    """The chain-stage entry point (pure; file reads only): parse the two rows' outputs, take the fit bound from the
+    registry (`serving_knobs.vram_capacity_gib`), screen once. `burst_results` maps knob arm id -> that arm's burst
+    `results.jsonl`; `floor_result` is the burst row's RESULT.json (path or parsed). Raises ScreeningInvalid /
+    KnobError rather than returning a partial screen."""
+    floor_body = json.loads(Path(floor_result).read_text(encoding="utf-8")) if isinstance(floor_result, (str, Path)) \
+        else floor_result
+    return screen_cases(
+        measurements(parse_steady_state(steady_results, arm_map),
+                     {arm: parse_burst_results(src) for arm, src in burst_results.items()}),
+        vram_capacity_gib=vram_capacity_gib(server, registry), noise_floor=parse_burst_floor(floor_body), **guards)
+
+
 __all__ = ["ArmMeasurement", "BestCase", "BurstLaunch", "WorstCase", "measurements", "parse_burst_floor",
-           "parse_burst_results", "parse_steady_state", "screen_cases", "tokens_per_verify_step"]
+           "parse_burst_results", "parse_steady_state", "screen_cases", "screen_stage", "tokens_per_verify_step"]

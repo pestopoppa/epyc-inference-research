@@ -33,6 +33,8 @@ BATCH_SCHEMA = "epyc.autokernel.validation_batch.v1"
 STATE_SCHEMA = "epyc.autokernel.candidate_state.v1"
 EQUIVALENCE_SCHEMA = "epyc.autokernel.equivalence_receipt.v1"
 
+#: `serving-knob` (AK-SURFACE-SERVING-1) is deliberately NOT a keep kind: its candidate is `screening_only` and
+#: never promotable (arms differ in np/batch/drafter), so a winner needs a paired A/B before any keep exists.
 KEEP_KINDS = frozenset({"source", "build", "runtime"})
 ROW_STATUSES = frozenset({"pending", "prerequisite_missing", "running", "passed", "failed",
                           "inconclusive", "unsupported", "nonidentifiable"})

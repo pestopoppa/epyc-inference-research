@@ -13,9 +13,10 @@ Three pure parts, none of which launches anything:
   * schema + actuator: a CLOSED knob table, validated against the registry `server_mode.<server>`
     shape, rendered into an argv delta by `render`. Nobody hand-types an argv: the base is
     `Recipe.server_argv`, then the registry shape is overlaid, then the delta.
-  * `screen`: ranks arms by aggregate tok/s and rejects an arm that fails a guard rail
-    (fit-in-memory, ITL-during-prefill regression <= 20%, correct output). SCREENING ONLY: arms
-    differ in np / batch / drafter, so this is not an apples-to-apples gate and never promotes.
+  * screening: ONE evaluator, `serving_knob_measure.screen_cases` (GiB, two-case schema), reached by
+    `serving_knob_measure.screen_stage`. SCREENING ONLY: arms differ in np / batch / drafter, so it is
+    not an apples-to-apples gate and never promotes (which is why the kind is NOT in
+    candidate_manifest.KEEP_KINDS: a screening candidate is not a keep).
   * seed + planner emission: `load_seed`, `portfolio_rows`, `emit_candidate`.
 """
 from __future__ import annotations
@@ -25,7 +26,6 @@ import hashlib
 import json
 import math
 from pathlib import Path
-import statistics
 from typing import Any, Mapping, Sequence
 
 from . import sampling_axis
@@ -33,12 +33,11 @@ from . import sampling_axis
 SCHEMA = "epyc.autokernel.serving_knob.v1"
 SEED_SCHEMA = "epyc.autokernel.serving_knob_seed.v1"
 CANDIDATE_SCHEMA = "epyc.autokernel.serving_knob_candidate.v1"
-SCREEN_SCHEMA = "epyc.autokernel.serving_knob_screen.v1"
+SCREEN_SCHEMA = "epyc.autokernel.serving_knob_screen.v2"
 SEED_KIND = "serving-knob"
 SEED_SUFFIX = ".serving-knob.json"
 CONTROL = "control"
 ITL_REGRESSION_MAX = 0.20
-MIN_LAUNCHES = 3
 
 
 class KnobError(ValueError):
@@ -109,16 +108,34 @@ def base_from_registry(server: str, registry: Any = None) -> ServingBase:
                               "ctx_checkpoints": entry.get("ctx_checkpoints"),
                               "spec_draft_n_max": accel.get("draft_max"), "drafter": chosen,
                               "n_ctx": shape.get("n_ctx"), "ctk": kv.get("k"), "ctv": kv.get("v")}
+    # A knob renders as a SERVER-WIDE flag (--temp ...), so it is allowed only when EVERY role served on this
+    # server declares it (a single-role server is the one-role case); the values are those the roles declare.
+    served = list(dict.fromkeys([entry.get("model_role"), *(entry.get("shared_with") or ())]))
     allowed: dict[str, set] = {k: set() for k in SAMPLING}
-    for role in [entry.get("model_role"), *(entry.get("shared_with") or ())]:
-        defaults = (roles.get(role) or {}).get("generation_defaults") or {}
-        for key in SAMPLING:
-            if isinstance(defaults.get(key), (int, float)) and not isinstance(defaults[key], bool):
-                allowed[key].add(defaults[key])
+    for key in SAMPLING:
+        declared = [(roles.get(r) or {}).get("generation_defaults", {}).get(key) for r in served]
+        if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in declared):
+            allowed[key] = set(declared)
     return ServingBase(
         server=server, values={k: v for k, v in values.items() if v is not None},
         drafters=drafters, sampling_allowed={k: tuple(sorted(v)) for k, v in allowed.items()},
         model=entry.get("model"))
+
+
+def vram_capacity_gib(server: str, registry: Any = None) -> float:
+    """The fit bound for the screen: the card ceiling the loop already enforces
+    (`surface_validation.GPU_CAPACITY_CEILING_BYTES`, 62 GiB), NOT the role's `vram_gib` (that is a footprint: the
+    served control already measures above it). A GPU server is one with `device: ROCm*` or a role that declares
+    `vram_gib`. The loop has no host-RAM budget for CPU servers, so one raises KnobError MISSING_INPUT."""
+    from .surface_validation import GPU_CAPACITY_CEILING_BYTES
+    reg = sampling_axis._registry(registry)
+    entry = (reg.get("server_mode") or {}).get(server)
+    if not isinstance(entry, Mapping):
+        raise KnobError(f"MISSING_INPUT: registry server_mode.{server} not found")
+    role = (reg.get("roles") or {}).get(entry.get("model_role")) or {}
+    if str(entry.get("device") or "").lower().startswith(("rocm", "gpu", "hip")) or role.get("vram_gib") is not None:
+        return GPU_CAPACITY_CEILING_BYTES / (1 << 30)
+    raise KnobError(f"MISSING_INPUT: server {server!r} is not a GPU server and the loop has no host-RAM budget")
 
 
 @dataclass(frozen=True)
@@ -308,87 +325,6 @@ def render(recipe_argv: Sequence[str], base: ServingBase, delta: KnobDelta) -> R
     return Rendered(tuple(argv), base_argv, changed, delta.digest)
 
 
-# --- screening evaluator -----------------------------------------------------------------
-def _num(rec: Mapping, key: str, label: str, *, positive: bool = False) -> float | None:
-    v = rec.get(key)
-    if v is None:
-        return None
-    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 \
-            or (positive and v == 0):
-        raise ScreeningInvalid(f"{label}: {key}={v!r} is not a finite non-negative number")
-    return float(v)
-
-
-def _arm_verdict(arm_id: str, launches: Sequence[Mapping], min_launches: int, itl_ref: float | None,
-                 itl_max: float) -> dict:
-    """Aggregate one arm and apply every guard that does not need the control's ITL (or needs it, when given)."""
-    reasons: list[str] = []
-    live = [r for r in launches if not r.get("warmup")]
-    for n, r in enumerate(launches):
-        label = f"{arm_id}[{n}]"
-        if r.get("status", "ok") != "ok":
-            reasons.append("does-not-fit-memory" if r.get("status") == "oom" else f"launch-failed:{r.get('status')}")
-        elif r.get("output_ok") is not True:   # absent is NOT correct
-            reasons.append("incorrect-output")
-        used, cap = _num(r, "mem_used_gib", label), _num(r, "mem_capacity_gib", label, positive=True)
-        if r.get("status", "ok") == "ok" and (used is None or cap is None):
-            reasons.append("memory-unmeasured")
-        elif used is not None and cap is not None and used > cap:
-            reasons.append("does-not-fit-memory")
-    ok = [r for r in live if r.get("status", "ok") == "ok"]
-    if len(live) < min_launches:
-        reasons.append(f"insufficient-launches:{len(live)}<{min_launches}")
-    toks = [t for t in (_num(r, "aggregate_tok_s", arm_id, positive=True) for r in ok) if t is not None]
-    itls = [t for t in (_num(r, "itl_prefill_ms", arm_id, positive=True) for r in ok) if t is not None]
-    if ok and len(toks) != len(ok):
-        reasons.append("throughput-unmeasured")
-    out = {"arm_id": arm_id, "launches": len(live), "median_tok_s": statistics.median(toks) if toks else None,
-           "itl_prefill_ms": statistics.median(itls) if itls else None, "itl_regression_pct": None}
-    if itl_ref is not None:
-        if not itls:
-            reasons.append("itl-unmeasured")      # fail closed: an unmeasurable guard is not a pass
-        else:
-            out["itl_regression_pct"] = round(100.0 * (out["itl_prefill_ms"] - itl_ref) / itl_ref, 3)
-            if out["itl_prefill_ms"] > itl_ref * (1 + itl_max):
-                reasons.append(f"itl-regression>{itl_max * 100:g}%")
-    out["reasons"] = sorted(set(reasons))
-    return out
-
-
-def screen(arms: Mapping[str, Sequence[Mapping[str, Any]]], *, control: str = CONTROL,
-           min_launches: int = MIN_LAUNCHES, itl_regression_max: float = ITL_REGRESSION_MAX) -> dict:
-    """Rank arms by median post-warm-up aggregate tok/s; reject any that fails a guard rail.
-
-    `arms` maps arm id -> launch records {status, warmup, aggregate_tok_s, itl_prefill_ms (decode
-    inter-token latency while a prefill is in flight), output_ok, mem_used_gib, mem_capacity_gib}.
-    The registry-shape arm `control` is required and must itself be sound, because the ITL guard is
-    relative to it. Output is SCREENING ONLY (`promotable` is always False)."""
-    if control not in arms:
-        raise ScreeningInvalid(f"no {control!r} arm: the ITL guard has nothing to be relative to")
-    if not 0 <= itl_regression_max < 1 or min_launches < 1:
-        raise ScreeningInvalid("guard parameters out of range")
-    base = _arm_verdict(control, arms[control], min_launches, None, itl_regression_max)
-    if base["reasons"] or base["itl_prefill_ms"] is None or base["median_tok_s"] is None:
-        raise ScreeningInvalid(f"control arm is unsound: {base['reasons'] or ['itl/throughput-unmeasured']}")
-    kept, rejected = [], []
-    for arm_id in sorted(a for a in arms if a != control):
-        v = _arm_verdict(arm_id, arms[arm_id], min_launches, base["itl_prefill_ms"], itl_regression_max)
-        (rejected if v["reasons"] else kept).append(v)
-    for v in kept:
-        v["vs_control_pct"] = round(100.0 * (v["median_tok_s"] - base["median_tok_s"]) / base["median_tok_s"], 3)
-    ranking = sorted([dict(base, vs_control_pct=0.0, is_control=True), *kept],
-                     key=lambda v: (-v["median_tok_s"], v["arm_id"] != control, v["arm_id"]))
-    for i, v in enumerate(ranking, 1):
-        v["rank"] = i
-    return {"schema": SCREEN_SCHEMA, "screening_only": True, "promotable": False, "control": control,
-            "metric": "aggregate_tok_s", "guards": {"itl_regression_max": itl_regression_max,
-                                                     "min_launches": min_launches,
-                                                     "fit_memory": True, "correct_output": True},
-            "ranking": ranking, "rejected": rejected,
-            "best_arm": None if ranking[0].get("is_control") else ranking[0]["arm_id"],
-            "note": "screen, not a gate: arms differ in np/batch/drafter, so confirm a winner with a paired A/B"}
-
-
 # --- seed + planner emission -------------------------------------------------------------
 def load_seed(path: Path | str, registry: Any = None) -> dict:
     """Load a `serving-knob` seed. Structure is always checked; with a `registry` every arm is
@@ -455,4 +391,4 @@ def emit_candidate(choice: Mapping[str, Any], base: ServingBase, recipe_argv: Se
 
 __all__ = ["CONTROL", "KNOBS", "KnobDelta", "KnobError", "Rendered", "SEED_KIND", "SEED_SUFFIX", "ScreeningInvalid",
            "ServingBase", "base_from_registry", "emit_candidate", "load_seed", "portfolio_rows", "read_knobs",
-           "render", "render_seed_markdown", "screen"]
+           "render", "render_seed_markdown", "vram_capacity_gib"]

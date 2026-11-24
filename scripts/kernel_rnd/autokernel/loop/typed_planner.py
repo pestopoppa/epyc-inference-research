@@ -132,6 +132,23 @@ def parse_choice(reply: str | Mapping[str, Any], options: Sequence[Mapping[str, 
     return out
 
 
+def candidate_from_choice(choice: Mapping[str, Any], *, base: Any = None, recipe_argv: Sequence[str] = (),
+                          base_recipe_hash: str | None = None) -> dict | None:
+    """Where a validated planner choice becomes a candidate. A `serving-knob` choice is routed to
+    `serving_knobs.emit_candidate` (the delta rendered over `recipe_argv` and the registry `base`); it needs `base`
+    and `base_recipe_hash`, and a missing one is refused, never defaulted. Any other kind (row / control) has no
+    knob candidate: returns None and the caller keeps its existing free-text path."""
+    if choice.get("kind") != SERVING_KNOB:
+        return None
+    if base is None or not base_recipe_hash:
+        raise TypedPlannerRefused("a serving-knob choice needs the registry base and the base recipe hash")
+    from . import serving_knobs
+    try:
+        return serving_knobs.emit_candidate(choice, base, recipe_argv, base_recipe_hash=base_recipe_hash)
+    except serving_knobs.KnobError as exc:
+        raise TypedPlannerRefused(f"serving-knob choice {choice.get('choice')!r}: {exc}") from exc
+
+
 def replay_yield(calls: Sequence[Mapping[str, Any]], keeps: Sequence[Mapping[str, Any]], *,
                  choice_wall_min: float = 5.0, explore_reserve: float = EXPLORE_RESERVE,
                  conditions: tuple[bool, bool, bool] = (True, True, True)) -> dict:
@@ -179,5 +196,5 @@ def replay_yield(calls: Sequence[Mapping[str, Any]], keeps: Sequence[Mapping[str
 
 
 __all__ = ["SERVING_KNOB", "CONTROLS", "EXHAUSTED", "EXPLORE", "EXPLORE_RESERVE", "SCHEMA", "TypedPlannerRefused",
-           "build_options", "explore_required", "parse_choice", "render_choice_prompt",
+           "build_options", "candidate_from_choice", "explore_required", "parse_choice", "render_choice_prompt",
            "replay_yield"]
