@@ -523,6 +523,22 @@ def derive_surfaces(c: dict) -> list[dict]:
                        "census_rows": rows_by.get(g, []), "unreconciled": True,
                        "note": "roll-up of the per-class surfaces below, never ranked itself; the parity share and the "
                                "class-share sum do not reconcile and neither is vouched for"})
+    # A roll-up with no per-class rows yet must still appear in the ranked table, as needs_measurement,
+    # or its share silently vanishes (Flash-Next until AK-RF-C21-CENSUS-REFRESH lands the q38fn classes).
+    for gr in groups:
+        if gr["members"] == 0:
+            dev = device_of(gr["path"])
+            out.append({
+                "path": gr["path"], "op": gr["op"], "device": dev, "served": True,
+                "share_of_step": None, "step_ms": None, "step_source": None, "group": None, "d32k_pct": None,
+                "measured_ms": None, "measured_ms_source": None, "share_ms": None,
+                "ours_pct": None, "ours_measured": False, "ours_pct_placeholder": None,
+                "n_runs": 0, "best_pct": None, "latest_pct": None, "saving_ms_per_step": None,
+                "ref": None, "ref_pct": None, "ref_status": None, "gap_pp": None,
+                "covered_by": gr["covered_by"], "refresh_c21": True, "status": "needs_measurement",
+                "source": "roll-up with no per-class census rows yet; parity share "
+                          f"{gr['parity_share_of_step']} not ranked (unreconciled)",
+                "census_rows": gr["census_rows"]})
     for gr in groups:
         for x in out:
             if x["group"] == gr["op"]:
