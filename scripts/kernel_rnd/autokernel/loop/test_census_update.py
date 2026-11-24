@@ -424,7 +424,9 @@ def rid_of(o):
 class MergeStatic(Base):
     def committed(self):
         return {"parity": {"ops": [], "refs": {}, "note": "n"}, "time_only": {"x": {"us_per_call": 1.0}}, "newkey": {"a": 1},
-                "records": {"R": {"gbps": 1}}, "applied": [{"row": "z", "sha256": "z"}], "seeds": {"S": {}}}
+                "records": {"R": {"model": "m", "kernel_class": "k", "shape": "s", "n": 1, "bytes_per_call": 1e6, "us_per_call": 1.0,
+                                  "calls_per_round": 1, "source_row": "z", "measured_at": "t"}}, "applied": [{"row": "z", "sha256": "z"}],
+                "seeds": {"S": {"status": "done", "match": {"model": "none"}}}}  # well-formed: run() now unions these in
 
     def live(self):
         c = cu.empty_census()

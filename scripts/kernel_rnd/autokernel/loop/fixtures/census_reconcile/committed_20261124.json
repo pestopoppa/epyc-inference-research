@@ -1,0 +1,622 @@
+{
+ "applied": [
+  {
+   "row": "ak-q8wv-split16-gpu-20261122-r3",
+   "sha256": "76dca4da1a9203d82932cb028de31a5a2afb6516161896c93715ab83463ddf37"
+  },
+  {
+   "row": "a3b-cpu-gap-census-20261121",
+   "sha256": "e06640638cfdda230ffb5310a76a2c9d57cfdfec955a1b1934caa09ebc225010"
+  },
+  {
+   "row": "ak-q38fn-cpu-gap-census-20261122",
+   "sha256": "ca608decf62961896c1ead47d1bf945fa0d2f6289cd8fd7c9da17950751d5be8"
+  },
+  {
+   "row": "ak-c18-a3b-mtp-trace-gpu-20261122",
+   "sha256": "2b952c22f671224d894a85d52a43c8146a3e28a85b3332aa3663c6f94e7b6e3b"
+  },
+  {
+   "row": "a3b-cpu-gap-census-20261122-r2",
+   "sha256": "e57d7da945c36e655a5253c79a0d7ca52f5fca674af222f691ecc99d53eac78b"
+  },
+  {
+   "row": "ak-c18-27b-df2-v5i-trace-gpu-20261122",
+   "sha256": "5f363b7aa30249f6fd09a985ee75a21f3c3fbe4c1f0a3f0aa9a0f789baad7416"
+  },
+  {
+   "row": "ak-q38fn-cpu-d32k-gemv-diag-20261123",
+   "sha256": "92999c8d1a2fe03e0e9964f7f492d4250dfca58a21146fbea8a27b55d40ac042"
+  },
+  {
+   "row": "ak-gdn-fused-gpu-20261123-r3",
+   "sha256": "7448a039c2ba304468536bd204b6f96df56c234514e462b65d3acd624df5f064"
+  },
+  {
+   "row": "ak-gdn-dispatch-gpu-20261123",
+   "sha256": "b40f8019343b8d1d35bad0121907d2e9d6b8aaf9172a3092886d6129644f1318"
+  },
+  {
+   "row": "ak-gdn-colwidth-gpu-20261123",
+   "sha256": "bc070505ee3128326f898de630f110cddff3f578942c064b5ac64d2a83323f74"
+  },
+  {
+   "row": "ak-gdn-verify-base-gpu-20261122",
+   "sha256": "11708b36cd200e42ca63121d32004c1dba9a438e50906facfc5f142f48dccdf7"
+  },
+  {
+   "row": "ak-dtree-rowcost-gdn-gpu-20261123",
+   "sha256": "369d6d3542bc91a5a4897d5e54acaf4f9551f649a577810d45bc59669cdd6106"
+  },
+  {
+   "row": "ak-dtree-host-gap-gpu-20261123",
+   "sha256": "90833230f39b78ab0a876991a736e4fc1e677ee86d9d646ef678c1aa2b7d2ab8"
+  },
+  {
+   "row": "ak-c18-q8ip-getrows-gpu-20261123-r2",
+   "sha256": "28334bee0001357bcc96b7a0834371dea8eb17ac6db3cbd55ac1a56a2603414a"
+  },
+  {
+   "row": "ak-a3b-cpu-mmid-gateup-ubench-20261122-r2",
+   "sha256": "efbe1075b6068fe1fe8de0790cc27e46e206b447b0992936ba5e93e3bddd832b"
+  },
+  {
+   "row": "ak-a3b-cpu-shexp-verify-gap-20261123-r2",
+   "sha256": "2cfcce2462d88ba4812e3c26b2c7b04cfd00e2afa0de9e6f2e281f9dc0bb82cf"
+  }
+ ],
+ "ceiling_gbps": 1500.0,
+ "cpu": {
+  "ceiling_gbps": {
+   "full-host": 520.0,
+   "half-48t": 259.8,
+   "quarter-24t": 129.0
+  },
+  "ceiling_source": {
+   "full-host": "operator 2026-11-24: 520 GB/s",
+   "half-48t": "measured: q38p1-c13-20261117-r4 same-window bench_readbw read-sum",
+   "quarter-24t": "operator 2026-11-24: 129 GB/s (was measured 112.9, AK-CPU-QUARTER-READCEIL 9e379493 q2)"
+  },
+  "flag_frac": 0.75,
+  "target_frac": 0.8
+ },
+ "floor_gbps": 1000.0,
+ "noise_frac": 0.03,
+ "records": {
+  "27b-q8_0|attn_kv_trace_q8sk|1024x5120|n8": {
+   "arm": "V",
+   "bytes_basis": "q8sk_mul_mat grid 46592, 32 launches = 16 attn layers x k,v",
+   "bytes_per_call": 5570560,
+   "calls_per_round": 32,
+   "device": "gpu",
+   "gbps": 275.8,
+   "history": [
+    [
+     "ak-c18-27b-df2-v5i-trace-gpu-20261122",
+     275.8
+    ]
+   ],
+   "kernel_class": "attn_kv_trace_q8sk",
+   "measured_at": "2026-11-23T06:15:29Z",
+   "model": "27b-q8_0",
+   "n": 8,
+   "op": "attn_k/v 1024x5120 (q8sk)",
+   "op_path": "27b-df2-mi210",
+   "rank": 20,
+   "recoverable_ms_per_round": 0.498,
+   "result_sha256": "5f363b7aa30249f6fd09a985ee75a21f3c3fbe4c1f0a3f0aa9a0f789baad7416",
+   "round": "27B DF2 verify segment",
+   "seed": "BW-DENSE-M16",
+   "shape": "1024x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.0142,
+   "source_row": "ak-c18-27b-df2-v5i-trace-gpu-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 20.2
+  },
+  "27b-q8_0|attn_kv_v5i|1024x5120|n1": {
+   "arm": "V",
+   "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
+   "bytes_per_call": 5570560,
+   "calls_per_round": 32,
+   "device": "gpu",
+   "gbps": 781.3,
+   "history": [
+    [
+     "ak-c18-27b-df2-v5i-trace-gpu-20261122",
+     781.3
+    ]
+   ],
+   "kernel_class": "attn_kv_v5i",
+   "measured_at": "2026-11-23T06:15:29Z",
+   "model": "27b-q8_0",
+   "n": 1,
+   "op": "attn_k/v 1024x5120 (q8sk)",
+   "op_path": "27b-df2-mi210",
+   "rank": 50,
+   "recoverable_ms_per_round": 0.08,
+   "result_sha256": "5f363b7aa30249f6fd09a985ee75a21f3c3fbe4c1f0a3f0aa9a0f789baad7416",
+   "round": "27B DF2 verify forward",
+   "shape": "1024x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.0142,
+   "source_row": "ak-c18-27b-df2-v5i-trace-gpu-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 7.13
+  },
+  "27b-q8_0|attn_kv_v5i|1024x5120|n16": {
+   "arm": "V",
+   "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
+   "bytes_per_call": 5570560,
+   "calls_per_round": 32,
+   "device": "gpu",
+   "gbps": 221.4,
+   "history": [
+    [
+     "ak-c18-27b-df2-v5i-trace-gpu-20261122",
+     221.4
+    ]
+   ],
+   "kernel_class": "attn_kv_v5i",
+   "measured_at": "2026-11-23T06:15:29Z",
+   "model": "27b-q8_0",
+   "n": 16,
+   "op": "attn_k/v 1024x5120 (q8sk)",
+   "op_path": "27b-df2-mi210",
+   "rank": 12,
+   "recoverable_ms_per_round": 0.657,
+   "result_sha256": "5f363b7aa30249f6fd09a985ee75a21f3c3fbe4c1f0a3f0aa9a0f789baad7416",
+   "round": "27B DF2 verify forward",
+   "seed": "BW-DENSE-M16",
+   "shape": "1024x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.0142,
+   "source_row": "ak-c18-27b-df2-v5i-trace-gpu-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 25.16
+  },
+  "27b-q8_0|attn_kv_v5i|1024x5120|n3": {
+   "arm": "V",
+   "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
+   "bytes_per_call": 5570560,
+   "calls_per_round": 32,
+   "device": "gpu",
+   "gbps": 480.2,
+   "history": [
+    [
+     "ak-c18-27b-df2-v5i-trace-gpu-20261122",
+     480.2
+    ]
+   ],
+   "kernel_class": "attn_kv_v5i",
+   "measured_at": "2026-11-23T06:15:29Z",
+   "model": "27b-q8_0",
+   "n": 3,
+   "op": "attn_k/v 1024x5120 (q8sk)",
+   "op_path": "27b-df2-mi210",
+   "rank": 40,
+   "recoverable_ms_per_round": 0.223,
+   "result_sha256": "5f363b7aa30249f6fd09a985ee75a21f3c3fbe4c1f0a3f0aa9a0f789baad7416",
+   "round": "27B DF2 verify forward",
+   "shape": "1024x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.0142,
+   "source_row": "ak-c18-27b-df2-v5i-trace-gpu-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 11.6
+  },
+  "27b-q8_0|attn_kv_v5i|1024x5120|n4": {
+   "arm": "V",
+   "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
+   "bytes_per_call": 5570560,
+   "calls_per_round": 32,
+   "device": "gpu",
+   "gbps": 380.2,
+   "history": [
+    [
+     "ak-c18-27b-df2-v5i-trace-gpu-20261122",
+     380.2
+    ]
+   ],
+   "kernel_class": "attn_kv_v5i",
+   "measured_at": "2026-11-23T06:15:29Z",
+   "model": "27b-q8_0",
+   "n": 4,
+   "op": "attn_k/v 1024x5120 (q8sk)",
+   "op_path": "27b-df2-mi210",
+   "rank": 33,
+   "recoverable_ms_per_round": 0.32,
+   "result_sha256": "5f363b7aa30249f6fd09a985ee75a21f3c3fbe4c1f0a3f0aa9a0f789baad7416",
+   "round": "27B DF2 verify forward",
+   "shape": "1024x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.0142,
+   "source_row": "ak-c18-27b-df2-v5i-trace-gpu-20261122",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 14.65
+  },
+  "27b-q8_0|attn_q_v5i|12288x5120|n1": {
+   "arm": "V",
+   "bytes_per_call": 66846720,
+   "calls_per_round": 16,
+   "gbps": 1098.9,
+   "history": [],
+   "kernel_class": "attn_q_v5i",
+   "measured_at": "2026-11-22T13:07:57Z",
+   "model": "27b-q8_0",
+   "n": 1,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "op_path": "27b-df2-mi210",
+   "rank": 49,
+   "recoverable_ms_per_round": 0.082,
+   "result_sha256": "76dca4da1a9203d82932cb028de31a5a2afb6516161896c93715ab83463ddf37",
+   "shape": "12288x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.5521,
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3",
+   "status": "ok",
+   "us_per_call": 60.83
+  },
+  "27b-q8_0|attn_q_v5i|12288x5120|n16": {
+   "arm": "V",
+   "bytes_per_call": 66846720,
+   "calls_per_round": 16,
+   "gbps": 980.7,
+   "history": [],
+   "kernel_class": "attn_q_v5i",
+   "measured_at": "2026-11-22T13:07:57Z",
+   "model": "27b-q8_0",
+   "n": 16,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "op_path": "27b-df2-mi210",
+   "rank": 42,
+   "recoverable_ms_per_round": 0.199,
+   "result_sha256": "76dca4da1a9203d82932cb028de31a5a2afb6516161896c93715ab83463ddf37",
+   "seed": "BW-DENSE-M16",
+   "shape": "12288x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.5521,
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3",
+   "status": "open_surface",
+   "us_per_call": 68.16
+  },
+  "27b-q8_0|attn_q_v5i|12288x5120|n3": {
+   "arm": "V",
+   "bytes_per_call": 66846720,
+   "calls_per_round": 16,
+   "gbps": 1052.2,
+   "history": [],
+   "kernel_class": "attn_q_v5i",
+   "measured_at": "2026-11-22T13:07:57Z",
+   "model": "27b-q8_0",
+   "n": 3,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "op_path": "27b-df2-mi210",
+   "rank": 47,
+   "recoverable_ms_per_round": 0.125,
+   "result_sha256": "76dca4da1a9203d82932cb028de31a5a2afb6516161896c93715ab83463ddf37",
+   "shape": "12288x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.5521,
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3",
+   "status": "ok",
+   "us_per_call": 63.53
+  },
+  "27b-q8_0|attn_q_v5i|12288x5120|n4": {
+   "arm": "V",
+   "bytes_per_call": 66846720,
+   "calls_per_round": 16,
+   "gbps": 1070.2,
+   "history": [],
+   "kernel_class": "attn_q_v5i",
+   "measured_at": "2026-11-22T13:07:57Z",
+   "model": "27b-q8_0",
+   "n": 4,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "op_path": "27b-df2-mi210",
+   "rank": 48,
+   "recoverable_ms_per_round": 0.108,
+   "result_sha256": "76dca4da1a9203d82932cb028de31a5a2afb6516161896c93715ab83463ddf37",
+   "shape": "12288x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.5521,
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3",
+   "status": "ok",
+   "us_per_call": 62.46
+  },
+  "27b-q8_0|attn_q_v5i|12288x5120|n8": {
+   "arm": "V",
+   "bytes_per_call": 66846720,
+   "calls_per_round": 16,
+   "gbps": 1036.2,
+   "history": [],
+   "kernel_class": "attn_q_v5i",
+   "measured_at": "2026-11-22T13:07:57Z",
+   "model": "27b-q8_0",
+   "n": 8,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "op_path": "27b-df2-mi210",
+   "rank": 45,
+   "recoverable_ms_per_round": 0.141,
+   "result_sha256": "76dca4da1a9203d82932cb028de31a5a2afb6516161896c93715ab83463ddf37",
+   "seed": "BW-DENSE-M16",
+   "shape": "12288x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.5521,
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3",
+   "status": "ok",
+   "us_per_call": 64.51
+  }
+ },
+ "schema": "epyc.autokernel.bw_census.v1",
+ "seed_stubs": [
+  {
+   "gbps": 979.3,
+   "record": "27b-q8_0|gdn_attn_gate_v5i|6144x5120|n3",
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3"
+  },
+  {
+   "gbps": 996.5,
+   "record": "27b-q8_0|gdn_attn_gate_v5i|6144x5120|n4",
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3"
+  },
+  {
+   "gbps": 998.9,
+   "record": "27b-q8_0|ssm_out+attn_output_v5i|5120x6144|n4",
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3"
+  },
+  {
+   "gbps": 87.5,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:fullattn_proj|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 38.1,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:fullattn_proj|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 83.5,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:gdn_proj|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 36.7,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:gdn_proj|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 65.7,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:indexer|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 25.0,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:indexer|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 93.9,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:lm_head|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 37.7,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:lm_head|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 87.0,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:moe_router|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 35.7,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:moe_router|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 74.6,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:other_weight|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 34.3,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:other_weight|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 78.5,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:shared_expert|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 36.7,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:shared_expert|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 82.6,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT_ID:exps_down|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 36.4,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT_ID:exps_down|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 73.7,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT_ID:exps_gate_up|quarter-24t-d1k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 33.3,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT_ID:exps_gate_up|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-gap-census-20261122"
+  },
+  {
+   "gbps": 781.3,
+   "record": "27b-q8_0|attn_kv_v5i|1024x5120|n1",
+   "source_row": "ak-c18-27b-df2-v5i-trace-gpu-20261122"
+  },
+  {
+   "gbps": 480.2,
+   "record": "27b-q8_0|attn_kv_v5i|1024x5120|n3",
+   "source_row": "ak-c18-27b-df2-v5i-trace-gpu-20261122"
+  },
+  {
+   "gbps": 380.2,
+   "record": "27b-q8_0|attn_kv_v5i|1024x5120|n4",
+   "source_row": "ak-c18-27b-df2-v5i-trace-gpu-20261122"
+  },
+  {
+   "gbps": 80.0,
+   "record": "cpu|q38fn-ud-iq4xs-cpu|MUL_MAT:indexer_weight|quarter-24t-d32k|n1",
+   "source_row": "ak-q38fn-cpu-d32k-gemv-diag-20261123"
+  },
+  {
+   "gbps": 70.1,
+   "record": "cpu|a3b-q8_0-cpu|MUL_MAT:shared_expert@ubench|quarter-24t-ubench|n2",
+   "source_row": "ak-a3b-cpu-mmid-gateup-ubench-20261122-r2"
+  },
+  {
+   "gbps": 66.8,
+   "record": "cpu|a3b-q8_0-cpu|MUL_MAT:shared_expert@ubench|quarter-24t-ubench|n3",
+   "source_row": "ak-a3b-cpu-mmid-gateup-ubench-20261122-r2"
+  },
+  {
+   "gbps": 69.2,
+   "record": "cpu|a3b-q8_0-cpu|MUL_MAT:shared_expert@ubench|quarter-24t-ubench|n4",
+   "source_row": "ak-a3b-cpu-mmid-gateup-ubench-20261122-r2"
+  },
+  {
+   "gbps": 66.3,
+   "record": "cpu|a3b-q8_0-cpu|MUL_MAT:shared_expert@ubench|quarter-24t-ubench|n5",
+   "source_row": "ak-a3b-cpu-mmid-gateup-ubench-20261122-r2"
+  },
+  {
+   "gbps": 65.4,
+   "record": "cpu|a3b-q8_0-cpu|MUL_MAT:shexp_down@ubench|quarter-24t-ubench|n2",
+   "source_row": "ak-a3b-cpu-shexp-verify-gap-20261123-r2"
+  },
+  {
+   "gbps": 61.8,
+   "record": "cpu|a3b-q8_0-cpu|MUL_MAT:shexp_down@ubench|quarter-24t-ubench|n3",
+   "source_row": "ak-a3b-cpu-shexp-verify-gap-20261123-r2"
+  },
+  {
+   "gbps": 74.6,
+   "record": "cpu|a3b-q8_0-cpu|MUL_MAT:shexp_down@ubench|quarter-24t-ubench|n4",
+   "source_row": "ak-a3b-cpu-shexp-verify-gap-20261123-r2"
+  },
+  {
+   "gbps": 69.8,
+   "record": "cpu|a3b-q8_0-cpu|MUL_MAT:shexp_down@ubench|quarter-24t-ubench|n5",
+   "source_row": "ak-a3b-cpu-shexp-verify-gap-20261123-r2"
+  }
+ ],
+ "seeds": {
+  "BW-DENSE-M16": {
+   "file": "seeds/hypotheses/21-bw-census-mi210-20261122.md",
+   "match": {
+    "model": "27b-q8_0"
+   },
+   "n": [
+    8,
+    16
+   ],
+   "status": "open",
+   "target_gbps": 1150
+  },
+  "BW-MMID": {
+   "covered_by": "4297a2caa / ak-mmid-mf-gpu-20261122",
+   "file": "seeds/hypotheses/21-bw-census-mi210-20261122.md",
+   "match": {
+    "model": "a3b-q8_0"
+   },
+   "status": "open",
+   "target_gbps": 1000
+  },
+  "CPU-A3B-MMID": {
+   "device": "cpu",
+   "file": "seeds/hypotheses/22-bw-census-cpu-20261122.md",
+   "match": {
+    "kernel_class": "MUL_MAT_ID:exps_gate_up",
+    "model": "a3b-q8_0-cpu"
+   },
+   "status": "open",
+   "target_gbps": 103.92000000000002
+  },
+  "CPU-A3B-SHEXP": {
+   "device": "cpu",
+   "file": "seeds/hypotheses/22-bw-census-cpu-20261122.md",
+   "match": {
+    "kernel_class": "MUL_MAT:shared_expert",
+    "model": "a3b-q8_0-cpu"
+   },
+   "status": "open",
+   "target_gbps": 103.92000000000002
+  },
+  "CPU-Q38FN-M1-DENSE": {
+   "covered_by": "C-series CPU decode work / INF-70 axes / AKX-ALL-25 (cpu-decode-roofline-program.md gated lever)",
+   "device": "cpu",
+   "file": "seeds/hypotheses/22-bw-census-cpu-20261122.md",
+   "match": {
+    "kernel_class": "forward_m1_dense",
+    "model": "q38fn-ud-iq4xs-cpu"
+   },
+   "status": "open",
+   "target_gbps": 97.42500000000001
+  }
+ },
+ "target_gbps": 1200.0,
+ "target_pct": 88.0,
+ "time_only": {
+  "27b-q8_0|e2e_draft_ms|OFF|n0": {
+   "bytes_basis": "unknown: rocprof trace time per segment; kernel byte basis not in RESULT",
+   "bytes_per_call": null,
+   "calls_per_round": 1,
+   "history": [
+    [
+     "ak-c18-q8ip-getrows-gpu-20261123-r2",
+     2455.982
+    ]
+   ],
+   "kernel_class": "e2e_draft_ms",
+   "measured_at": "2026-11-23T06:47:30Z",
+   "model": "27b-q8_0",
+   "n": 0,
+   "reps": 1,
+   "result_sha256": "28334bee0001357bcc96b7a0834371dea8eb17ac6db3cbd55ac1a56a2603414a",
+   "shape": "OFF",
+   "source_row": "ak-c18-q8ip-getrows-gpu-20261123-r2",
+   "us_per_call": 2455.982
+  },
+  "27b-q8_0|e2e_draft_ms|ON|n0": {
+   "bytes_basis": "unknown: rocprof trace time per segment; kernel byte basis not in RESULT",
+   "bytes_per_call": null,
+   "calls_per_round": 1,
+   "history": [
+    [
+     "ak-c18-q8ip-getrows-gpu-20261123-r2",
+     2013.421
+    ]
+   ],
+   "kernel_class": "e2e_draft_ms",
+   "measured_at": "2026-11-23T06:47:30Z",
+   "model": "27b-q8_0",
+   "n": 0,
+   "reps": 1,
+   "result_sha256": "28334bee0001357bcc96b7a0834371dea8eb17ac6db3cbd55ac1a56a2603414a",
+   "shape": "ON",
+   "source_row": "ak-c18-q8ip-getrows-gpu-20261123-r2",
+   "us_per_call": 2013.421
+  }
+ }
+}

@@ -1,0 +1,446 @@
+{
+ "applied": [
+  {
+   "row": "ak-q8wv-split16-gpu-20261122-r3",
+   "sha256": "76dca4da1a9203d82932cb028de31a5a2afb6516161896c93715ab83463ddf37"
+  },
+  {
+   "row": "ak-mmid-split16-gpu-20261121-r4",
+   "sha256": "d806546115e3445feb896c108cb28582eb7db98915168caa897806ef63a2d729"
+  },
+  {
+   "row": "a3b-cpu-gap-census-20261121",
+   "sha256": "e06640638cfdda230ffb5310a76a2c9d57cfdfec955a1b1934caa09ebc225010"
+  },
+  {
+   "row": "ak-rka-ipb-census-gpu-20261124-r2",
+   "sha256": "9926dcb52fda77c604d000bfed150758cf2e2304a53832394f5c9b45c4dc2fa1"
+  }
+ ],
+ "ceiling_gbps": 1500.0,
+ "cpu": {
+  "ceiling_gbps": {
+   "full-host": 520.0,
+   "half-48t": 259.8,
+   "quarter-24t": 129.0
+  },
+  "ceiling_source": {
+   "full-host": "operator 2026-11-24: 520 GB/s",
+   "half-48t": "measured: q38p1-c13-20261117-r4 same-window bench_readbw read-sum",
+   "quarter-24t": "operator 2026-11-24: 129 GB/s (was measured 112.9, AK-CPU-QUARTER-READCEIL 9e379493 q2)"
+  },
+  "flag_frac": 0.75,
+  "target_frac": 0.8
+ },
+ "floor_gbps": 1000.0,
+ "noise_frac": 0.03,
+ "records": {
+  "27b-q8_0|attn_q_v5i|12288x5120|n1": {
+   "arm": "V",
+   "bytes_per_call": 66846720,
+   "calls_per_round": 16,
+   "gbps": 1098.9,
+   "history": [],
+   "kernel_class": "attn_q_v5i",
+   "measured_at": "2026-11-22T13:07:57Z",
+   "model": "27b-q8_0",
+   "n": 1,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "op_path": "27b-df2-mi210",
+   "rank": 48,
+   "recoverable_ms_per_round": 0.082,
+   "result_sha256": "76dca4da1a9203d82932cb028de31a5a2afb6516161896c93715ab83463ddf37",
+   "seed": "BW-DENSE-M16",
+   "shape": "12288x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.5521,
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3",
+   "status": "ok",
+   "us_per_call": 60.83
+  },
+  "27b-q8_0|attn_q_v5i|12288x5120|n16": {
+   "arm": "V",
+   "bytes_per_call": 66846720,
+   "calls_per_round": 16,
+   "gbps": 980.7,
+   "history": [],
+   "kernel_class": "attn_q_v5i",
+   "measured_at": "2026-11-22T13:07:57Z",
+   "model": "27b-q8_0",
+   "n": 16,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "op_path": "27b-df2-mi210",
+   "rank": 38,
+   "recoverable_ms_per_round": 0.199,
+   "result_sha256": "76dca4da1a9203d82932cb028de31a5a2afb6516161896c93715ab83463ddf37",
+   "seed": "BW-DENSE-M16",
+   "shape": "12288x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.5521,
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3",
+   "status": "open_surface",
+   "us_per_call": 68.16
+  },
+  "27b-q8_0|attn_q_v5i|12288x5120|n3": {
+   "arm": "V",
+   "bytes_per_call": 66846720,
+   "calls_per_round": 16,
+   "gbps": 1052.2,
+   "history": [],
+   "kernel_class": "attn_q_v5i",
+   "measured_at": "2026-11-22T13:07:57Z",
+   "model": "27b-q8_0",
+   "n": 3,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "op_path": "27b-df2-mi210",
+   "rank": 42,
+   "recoverable_ms_per_round": 0.125,
+   "result_sha256": "76dca4da1a9203d82932cb028de31a5a2afb6516161896c93715ab83463ddf37",
+   "seed": "BW-DENSE-M16",
+   "shape": "12288x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.5521,
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3",
+   "status": "ok",
+   "us_per_call": 63.53
+  },
+  "27b-q8_0|attn_q_v5i|12288x5120|n4": {
+   "arm": "V",
+   "bytes_per_call": 66846720,
+   "calls_per_round": 16,
+   "gbps": 1070.2,
+   "history": [],
+   "kernel_class": "attn_q_v5i",
+   "measured_at": "2026-11-22T13:07:57Z",
+   "model": "27b-q8_0",
+   "n": 4,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "op_path": "27b-df2-mi210",
+   "rank": 45,
+   "recoverable_ms_per_round": 0.108,
+   "result_sha256": "76dca4da1a9203d82932cb028de31a5a2afb6516161896c93715ab83463ddf37",
+   "seed": "BW-DENSE-M16",
+   "shape": "12288x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.5521,
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3",
+   "status": "ok",
+   "us_per_call": 62.46
+  },
+  "27b-q8_0|attn_q_v5i|12288x5120|n8": {
+   "arm": "V",
+   "bytes_per_call": 66846720,
+   "calls_per_round": 16,
+   "gbps": 1036.2,
+   "history": [],
+   "kernel_class": "attn_q_v5i",
+   "measured_at": "2026-11-22T13:07:57Z",
+   "model": "27b-q8_0",
+   "n": 8,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "op_path": "27b-df2-mi210",
+   "rank": 41,
+   "recoverable_ms_per_round": 0.141,
+   "result_sha256": "76dca4da1a9203d82932cb028de31a5a2afb6516161896c93715ab83463ddf37",
+   "seed": "BW-DENSE-M16",
+   "shape": "12288x5120",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.5521,
+   "source_row": "ak-q8wv-split16-gpu-20261122-r3",
+   "status": "ok",
+   "us_per_call": 64.51
+  },
+  "27b-q8_0|gv_fattn_q8kv|kv32768|n1": {
+   "arm": "C21",
+   "bytes_basis": "row kv_bytes (q8_0 K+V read per verify-attention call)",
+   "bytes_per_call": 71303168,
+   "calls_basis": "per call; the RESULT states no per-round layer count",
+   "calls_per_round": 1,
+   "gbps": 278.8,
+   "history": [
+    [
+     "ak-rka-ipb-census-gpu-20261124-r2",
+     278.8
+    ]
+   ],
+   "kernel_class": "gv_fattn_q8kv",
+   "measured_at": "2026-11-24T20:14:11Z",
+   "model": "27b-q8_0",
+   "n": 1,
+   "op": "gv_fattn + merge (verify FA)",
+   "op_path": "27b-df2-mi210",
+   "rank": 39,
+   "recoverable_ms_per_round": 0.196,
+   "result_sha256": "9926dcb52fda77c604d000bfed150758cf2e2304a53832394f5c9b45c4dc2fa1",
+   "shape": "kv32768",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.0711,
+   "source_row": "ak-rka-ipb-census-gpu-20261124-r2",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 255.72,
+   "valu_util": 0.1452438825343564,
+   "waves": 832.0
+  },
+  "27b-q8_0|gv_fattn_q8kv|kv32768|n2": {
+   "arm": "C21",
+   "bytes_basis": "row kv_bytes (q8_0 K+V read per verify-attention call)",
+   "bytes_per_call": 71303168,
+   "calls_basis": "per call; the RESULT states no per-round layer count",
+   "calls_per_round": 1,
+   "gbps": 274.2,
+   "history": [
+    [
+     "ak-rka-ipb-census-gpu-20261124-r2",
+     274.2
+    ]
+   ],
+   "kernel_class": "gv_fattn_q8kv",
+   "measured_at": "2026-11-24T20:14:11Z",
+   "model": "27b-q8_0",
+   "n": 2,
+   "op": "gv_fattn + merge (verify FA)",
+   "op_path": "27b-df2-mi210",
+   "rank": 37,
+   "recoverable_ms_per_round": 0.201,
+   "result_sha256": "9926dcb52fda77c604d000bfed150758cf2e2304a53832394f5c9b45c4dc2fa1",
+   "shape": "kv32768",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.0711,
+   "source_row": "ak-rka-ipb-census-gpu-20261124-r2",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 260.08,
+   "valu_util": 0.14280584216481124,
+   "waves": 832.0
+  },
+  "27b-q8_0|gv_fattn_q8kv|kv32768|n5": {
+   "arm": "C21",
+   "bytes_basis": "row kv_bytes (q8_0 K+V read per verify-attention call)",
+   "bytes_per_call": 71303168,
+   "calls_basis": "per call; the RESULT states no per-round layer count",
+   "calls_per_round": 1,
+   "gbps": 267.1,
+   "history": [
+    [
+     "ak-rka-ipb-census-gpu-20261124-r2",
+     267.1
+    ]
+   ],
+   "kernel_class": "gv_fattn_q8kv",
+   "measured_at": "2026-11-24T20:14:11Z",
+   "model": "27b-q8_0",
+   "n": 5,
+   "op": "gv_fattn + merge (verify FA)",
+   "op_path": "27b-df2-mi210",
+   "rank": 36,
+   "recoverable_ms_per_round": 0.208,
+   "result_sha256": "9926dcb52fda77c604d000bfed150758cf2e2304a53832394f5c9b45c4dc2fa1",
+   "shape": "kv32768",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.0711,
+   "source_row": "ak-rka-ipb-census-gpu-20261124-r2",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 266.93,
+   "valu_util": 0.1625753390999208,
+   "waves": 832.0
+  },
+  "27b-q8_0|gv_fattn_q8kv|kv32768|n8": {
+   "arm": "C21",
+   "bytes_basis": "row kv_bytes (q8_0 K+V read per verify-attention call)",
+   "bytes_per_call": 71303168,
+   "calls_basis": "per call; the RESULT states no per-round layer count",
+   "calls_per_round": 1,
+   "gbps": 245.5,
+   "history": [
+    [
+     "ak-rka-ipb-census-gpu-20261124-r2",
+     245.5
+    ]
+   ],
+   "kernel_class": "gv_fattn_q8kv",
+   "measured_at": "2026-11-24T20:14:11Z",
+   "model": "27b-q8_0",
+   "n": 8,
+   "op": "gv_fattn + merge (verify FA)",
+   "op_path": "27b-df2-mi210",
+   "rank": 34,
+   "recoverable_ms_per_round": 0.231,
+   "result_sha256": "9926dcb52fda77c604d000bfed150758cf2e2304a53832394f5c9b45c4dc2fa1",
+   "seed": "BW-DENSE-M16",
+   "shape": "kv32768",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.0711,
+   "source_row": "ak-rka-ipb-census-gpu-20261124-r2",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 290.41,
+   "valu_util": 0.1704666599027185,
+   "waves": 832.0
+  },
+  "27b-q8_0|gv_fattn_q8kv|kv8192|n1": {
+   "arm": "C21",
+   "bytes_basis": "row kv_bytes (q8_0 K+V read per verify-attention call)",
+   "bytes_per_call": 17825792,
+   "calls_basis": "per call; the RESULT states no per-round layer count",
+   "calls_per_round": 1,
+   "gbps": 151.0,
+   "history": [
+    [
+     "ak-rka-ipb-census-gpu-20261124-r2",
+     151.0
+    ]
+   ],
+   "kernel_class": "gv_fattn_q8kv",
+   "measured_at": "2026-11-24T20:14:11Z",
+   "model": "27b-q8_0",
+   "n": 1,
+   "op": "gv_fattn + merge (verify FA)",
+   "op_path": "27b-df2-mi210",
+   "rank": 47,
+   "recoverable_ms_per_round": 0.103,
+   "result_sha256": "9926dcb52fda77c604d000bfed150758cf2e2304a53832394f5c9b45c4dc2fa1",
+   "shape": "kv8192",
+   "share_basis": "parity op share_of_step (share of the op this row measures)",
+   "share_of_round": 0.0711,
+   "source_row": "ak-rka-ipb-census-gpu-20261124-r2",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 118.07,
+   "valu_util": 0.0853251724679378,
+   "waves": 512.0
+  }
+ },
+ "schema": "epyc.autokernel.bw_census.v1",
+ "seed_stubs": [
+  {
+   "gbps": 278.8,
+   "record": "27b-q8_0|gv_fattn_q8kv|kv32768|n1",
+   "source_row": "ak-rka-ipb-census-gpu-20261124-r2"
+  },
+  {
+   "gbps": 274.2,
+   "record": "27b-q8_0|gv_fattn_q8kv|kv32768|n2",
+   "source_row": "ak-rka-ipb-census-gpu-20261124-r2"
+  },
+  {
+   "gbps": 267.1,
+   "record": "27b-q8_0|gv_fattn_q8kv|kv32768|n5",
+   "source_row": "ak-rka-ipb-census-gpu-20261124-r2"
+  },
+  {
+   "gbps": 151.0,
+   "record": "27b-q8_0|gv_fattn_q8kv|kv8192|n1",
+   "source_row": "ak-rka-ipb-census-gpu-20261124-r2"
+  },
+  {
+   "gbps": 146.5,
+   "record": "27b-q8_0|gv_fattn_q8kv|kv8192|n2",
+   "source_row": "ak-rka-ipb-census-gpu-20261124-r2"
+  },
+  {
+   "gbps": 140.6,
+   "record": "27b-q8_0|gv_fattn_q8kv|kv8192|n5",
+   "source_row": "ak-rka-ipb-census-gpu-20261124-r2"
+  }
+ ],
+ "seeds": {
+  "BW-DENSE-M16": {
+   "file": "seeds/hypotheses/21-bw-census-mi210-20261122.md",
+   "match": {
+    "model": "27b-q8_0"
+   },
+   "n": [
+    8,
+    16
+   ],
+   "status": "open",
+   "target_gbps": 1150
+  },
+  "BW-MMID": {
+   "covered_by": "4297a2caa / ak-mmid-mf-gpu-20261122",
+   "file": "seeds/hypotheses/21-bw-census-mi210-20261122.md",
+   "match": {
+    "model": "a3b-q8_0"
+   },
+   "status": "open",
+   "target_gbps": 1000
+  },
+  "CPU-A3B-MMID": {
+   "device": "cpu",
+   "file": "seeds/hypotheses/22-bw-census-cpu-20261122.md",
+   "match": {
+    "kernel_class": "MUL_MAT_ID:exps_gate_up",
+    "model": "a3b-q8_0-cpu"
+   },
+   "status": "open",
+   "target_gbps": 103.92000000000002
+  },
+  "CPU-A3B-SHEXP": {
+   "device": "cpu",
+   "file": "seeds/hypotheses/22-bw-census-cpu-20261122.md",
+   "match": {
+    "kernel_class": "MUL_MAT:shared_expert",
+    "model": "a3b-q8_0-cpu"
+   },
+   "status": "open",
+   "target_gbps": 103.92000000000002
+  },
+  "CPU-Q38FN-M1-DENSE": {
+   "covered_by": "C-series CPU decode work / INF-70 axes / AKX-ALL-25 (cpu-decode-roofline-program.md gated lever)",
+   "device": "cpu",
+   "file": "seeds/hypotheses/22-bw-census-cpu-20261122.md",
+   "match": {
+    "kernel_class": "forward_m1_dense",
+    "model": "q38fn-ud-iq4xs-cpu"
+   },
+   "status": "open",
+   "target_gbps": 97.42500000000001
+  }
+ },
+ "target_gbps": 1200.0,
+ "target_pct": 88.0,
+ "time_only": {
+  "27b-q8_0|e2e_draft_ms|OFF|n0": {
+   "bytes_basis": "unknown: rocprof trace time per segment; kernel byte basis not in RESULT",
+   "bytes_per_call": null,
+   "calls_per_round": 1,
+   "history": [
+    [
+     "ak-c18-q8ip-getrows-gpu-20261123-r2",
+     2455.982
+    ]
+   ],
+   "kernel_class": "e2e_draft_ms",
+   "measured_at": "2026-11-23T06:47:30Z",
+   "model": "27b-q8_0",
+   "n": 0,
+   "reps": 1,
+   "result_sha256": "28334bee0001357bcc96b7a0834371dea8eb17ac6db3cbd55ac1a56a2603414a",
+   "shape": "OFF",
+   "source_row": "ak-c18-q8ip-getrows-gpu-20261123-r2",
+   "us_per_call": 2455.982
+  },
+  "27b-q8_0|e2e_draft_ms|ON|n0": {
+   "bytes_basis": "unknown: rocprof trace time per segment; kernel byte basis not in RESULT",
+   "bytes_per_call": null,
+   "calls_per_round": 1,
+   "history": [
+    [
+     "ak-c18-q8ip-getrows-gpu-20261123-r2",
+     2013.421
+    ]
+   ],
+   "kernel_class": "e2e_draft_ms",
+   "measured_at": "2026-11-23T06:47:30Z",
+   "model": "27b-q8_0",
+   "n": 0,
+   "reps": 1,
+   "result_sha256": "28334bee0001357bcc96b7a0834371dea8eb17ac6db3cbd55ac1a56a2603414a",
+   "shape": "ON",
+   "source_row": "ak-c18-q8ip-getrows-gpu-20261123-r2",
+   "us_per_call": 2013.421
+  }
+ }
+}

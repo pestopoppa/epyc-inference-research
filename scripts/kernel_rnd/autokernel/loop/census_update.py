@@ -35,6 +35,7 @@ import sys
 from .census_extract import (  # noqa: F401  re-exported: callers/tests address these via census_update
     A3B_CPU_FAMILY_BYTES, CPU_MODEL_ALIAS, CPU_MODEL_BY_ID, MMID_CLASS, Q8_SHAPE_CLASS, SERVED_N, TRACE_DENSE_BYTES,
     TRACE_Q8_CLASS, UBENCH_CLASS, cpu_config, extract, extract_cpu, extract_time_only, extract_trace)
+from .census_reconcile import reconcile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CENSUS = os.path.join(HERE, "census", "mi210_bandwidth_census.json")
@@ -731,13 +732,13 @@ def mark_stale(c: dict, res: dict, row: str, sha: str) -> list[str]:
     return notes
 
 
-STATIC_KEYS = ("parity", "time_only")  # committed-authored sections the live file never produces itself
+STATIC_KEYS = ("parity",)  # committed-authored section the live file never produces; time_only is reconciled (newer wins)
 NEVER_MERGE = ("records", "applied", "seeds")
 
 
 def merge_static(live: dict, committed: dict) -> list[str]:
-    """Copy into `live` every committed key absent from it, plus the static sections (parity, time_only), which the
-    committed census owns. records/applied/seeds are never touched. Idempotent. Returns the keys changed."""
+    """Copy into `live` every committed key absent from it, plus the static section (parity), which the
+    committed census owns. records/applied/seeds/time_only are census_reconcile's (union, newer wins). Idempotent. Returns the keys changed."""
     changed = []
     for k, v in committed.items():
         if k in NEVER_MERGE or (k in live and k not in STATIC_KEYS):
@@ -754,7 +755,7 @@ def run(result: str | None, row: str | None, census: str, program: str | None, d
     merged = None
     if merge_static_from and os.path.exists(merge_static_from) and os.path.exists(census):
         live, src = json.load(open(census)), json.load(open(merge_static_from))
-        merged = merge_static(live, src)
+        merged = sorted(set(merge_static(live, src)) | set(reconcile(live, src)))  # census_reconcile: union, newer measured_at wins
         before = json.dumps(live, sort_keys=True)
         rerank(live)
         derive_surfaces(live)
@@ -814,7 +815,8 @@ def main(argv=None) -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--spec", default=None, help="row spec/manifest JSON; its target_surface[s] is the KEEP-stale fallback")
     ap.add_argument("--merge-static-from", metavar="PATH", default=None,
-                    help="committed census whose absent/static (parity, time_only) sections are merged into --census")
+                    help="committed census merged into --census on every run: absent/static keys (parity) plus the census_reconcile union "
+                         "of records/applied(by sha)/time_only/seeds/seed_stubs, newer measured_at wins")
     ap.add_argument("--surface-seeds-out", metavar="PATH", default=None,
                     help="write the per-surface seed file (loop/seeds/hypotheses format) from --census and exit; "
                          "committing it is a reviewed commit, never a run-end write")
