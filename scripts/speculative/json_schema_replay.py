@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 
 BODY_SCHEMA = 'epyc.orchestrator.serving_call_body.v1'
 SCHEMA_STORE_DIR = 'json_schema_store'
+RAW_SCHEMA_DIR = 'json_schema_store/raw'   # orchestrator 4fea85c11524: original-order schema text, <schema_raw_sha256>.json
 
 
 def _sha(b):
@@ -39,6 +40,7 @@ class Resolved:
     request_class: str
     schema_sha256: str
     schema: dict = None
+    schema_is_raw: bool = False   # True: schema is the verified original-order text (no order_recovered heuristic)
     output_text: str = None
     prompt_text: str = None
     prompt_sha256: str = None
@@ -62,7 +64,25 @@ def resolve_row(row, base):
     r = Resolved(record_id=str(row.get('record_id')), request_class=cap.get('request_class') or 'unknown',
                  schema_sha256=cap.get('schema_sha256'), prompt_sha256=cap.get('prompt_sha256'),
                  serving_tokens=_serving_tokens(row))
-    # schema: content-addressed
+    # schema: original-order raw text when the row carries schema_raw_sha256 (orchestrator 4fea85c11524), else the canonical store
+    raw_sha = cap.get('schema_raw_sha256')
+    if raw_sha:
+        try:
+            raw = open(os.path.join(base, RAW_SCHEMA_DIR, f'{raw_sha}.json'), 'rb').read()
+            if _sha(raw) != raw_sha:
+                r.problems.append('schema_raw_sha_mismatch')
+            else:
+                r.schema = json.loads(raw)
+                r.schema_is_raw = True
+                if cap.get('schema_raw_chars') not in (None, len(raw.decode('utf-8'))):
+                    r.problems.append('schema_raw_chars_mismatch')
+        except OSError:
+            r.problems.append('schema_raw_missing')
+        except ValueError:
+            r.problems.append('schema_raw_unparsable')
+        if r.schema is not None:
+            return _resolve_rest(r, row, cap, base)
+        # raw unusable (problem recorded above): fall back to the canonical store + heuristic
     sp = os.path.join(base, SCHEMA_STORE_DIR, f'{cap.get("schema_sha256")}.json')
     try:
         raw = open(sp, 'rb').read()
@@ -76,6 +96,10 @@ def resolve_row(row, base):
         r.problems.append('schema_missing')
     except ValueError:
         r.problems.append('schema_unparsable')
+    return _resolve_rest(r, row, cap, base)
+
+
+def _resolve_rest(r, row, cap, base):
     # output: inline
     out = cap.get('output_text')
     if isinstance(out, str):
@@ -181,10 +205,12 @@ def replay_one(L, tk, lt, schema, output_text, want_single=True):
             'runs': dict(runs), 'single_allowed': single}
 
 
-def replay_resolved(L, tk, lt, schema, output_text):
-    """replay_one on the stored schema; if rejected, once more on the output-order-recovered schema (flagged order_recovered)."""
+def replay_resolved(L, tk, lt, schema, output_text, schema_is_raw=False):
+    """schema_is_raw: the schema is the verified original-order text, used directly (no heuristic, never flagged order_recovered).
+    Otherwise (older rows): replay_one on the stored canonical schema; if rejected, once more on the output-order-recovered
+    schema (flagged order_recovered)."""
     d = replay_one(L, tk, lt, schema, output_text)
-    if d.get('ok'):
+    if d.get('ok') or schema_is_raw:
         return d
     try:
         val = json.loads(output_text)
@@ -230,7 +256,7 @@ def run(log_dir, tokenizer_json, site=None, limit=None):
     for r in rows:
         d = None
         if r.schema is not None and r.output_text is not None:
-            d = replay_resolved(L, tk, lt, r.schema, r.output_text)
+            d = replay_resolved(L, tk, lt, r.schema, r.output_text, r.schema_is_raw)
         res.append((r, d))
     probs = collections.Counter(p for r in rows for p in r.problems)
     digest = _sha(open(os.path.join(log_dir, 'serving_calls.jsonl'), 'rb').read())

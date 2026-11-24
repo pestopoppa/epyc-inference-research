@@ -16,10 +16,15 @@ def canon(o):
     return json.dumps(o, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
 
 
-def build(base, outputs, drop_body=(), corrupt_schema=False):
+def build(base, outputs, drop_body=(), corrupt_schema=False, raw_rows=(), corrupt_raw=False):
     os.makedirs(base + '/json_schema_store'); os.makedirs(base + '/json_schema_bodies')
     c = canon(SCHEMA); sha = hashlib.sha256(c.encode()).hexdigest()
     open(f'{base}/json_schema_store/{sha}.json', 'w').write(c + ('x' if corrupt_schema else ''))
+    rawtxt = json.dumps(SCHEMA, ensure_ascii=False, separators=(',', ':'))   # original (insertion) order: verdict, score
+    rsha = hashlib.sha256(rawtxt.encode()).hexdigest()
+    if raw_rows:
+        os.makedirs(base + '/json_schema_store/raw')
+        open(f'{base}/json_schema_store/raw/{rsha}.json', 'w').write(rawtxt + ('x' if corrupt_raw else ''))
     rows = []
     for i, out in enumerate(outputs):
         rid = f'rec{i:02d}'
@@ -30,10 +35,11 @@ def build(base, outputs, drop_body=(), corrupt_schema=False):
             body = f'json_schema_bodies/{rid}.json'
             json.dump({'schema': R.BODY_SCHEMA, 'record_id': rid, 'prompt_sha256': psha, 'prompt_kind': 'prompt', 'prompt_text': prompt},
                       open(f'{base}/{body}', 'w'))
+        rawf = {'schema_raw_sha256': rsha, 'schema_raw_chars': len(rawtxt)} if i in raw_rows else {}
         rows.append({'record_id': rid, 'schema': 'epyc.orchestrator.serving_call.v1', 'role': 'frontdoor', 'timings': {'predicted_n': 12},
                      'json_schema_capture': {'schema_sha256': sha, 'schema_chars': len(c), 'request_class': 'json:typed_decision' if i % 2 == 0 else 'json:review',
                                               'request_class_source': 'caller.client_class', 'output_text': out, 'output_chars': len(out),
-                                              'prompt_sha256': psha, 'prompt_chars': len(prompt), 'prompt_body': body}})
+                                              'prompt_sha256': psha, 'prompt_chars': len(prompt), 'prompt_body': body, **rawf}})
     rows.append({'record_id': 'plain', 'role': 'frontdoor'})   # no capture block: ignored
     open(base + '/serving_calls.jsonl', 'w').write('\n'.join(json.dumps(r) for r in rows) + '\n')
     return sha
@@ -60,6 +66,31 @@ class Resolve(unittest.TestCase):
             self.assertIsNone(rs[0].schema)
             self.assertIn('prompt_body_absent', rs[1].problems)
 
+    def test_raw_schema_used_directly_when_present(self):
+        with tempfile.TemporaryDirectory() as t:
+            build(t, ['{"verdict":"accept","score":3}', '{"verdict":"reject","score":10}'], raw_rows=(0,))
+            rs = list(R.resolve_rows(t))
+            self.assertTrue(rs[0].schema_is_raw)
+            self.assertEqual(rs[0].problems, [])
+            self.assertEqual(list(rs[0].schema['properties']), ['verdict', 'score'])   # original order, not sorted
+            self.assertEqual(rs[0].schema, SCHEMA)
+
+    def test_old_row_without_raw_field_keeps_canonical(self):
+        with tempfile.TemporaryDirectory() as t:
+            build(t, ['{"verdict":"accept","score":3}', '{"verdict":"reject","score":10}'], raw_rows=(0,))
+            r = list(R.resolve_rows(t))[1]
+            self.assertFalse(r.schema_is_raw)
+            self.assertEqual(r.problems, [])
+            self.assertEqual(list(r.schema['properties']), ['score', 'verdict'])        # canonical store sorts
+
+    def test_raw_sha_checked_falls_back_to_canonical(self):
+        with tempfile.TemporaryDirectory() as t:
+            build(t, ['{}'], raw_rows=(0,), corrupt_raw=True)
+            r = list(R.resolve_rows(t))[0]
+            self.assertIn('schema_raw_sha_mismatch', r.problems)
+            self.assertFalse(r.schema_is_raw)
+            self.assertEqual(list(r.schema['properties']), ['score', 'verdict'])
+
     def test_prompt_digest_checked(self):
         with tempfile.TemporaryDirectory() as t:
             build(t, ['{}'])
@@ -84,6 +115,14 @@ class Replay(unittest.TestCase):
     def test_recover_property_order(self):
         r = R.recover_property_order(json.loads(canon(SCHEMA)), {'verdict': 'accept', 'score': 1})
         self.assertEqual(list(r['properties']), ['verdict', 'score'])
+
+    def test_raw_row_not_flagged_order_recovered(self):
+        with tempfile.TemporaryDirectory() as t:
+            build(t, ['{"verdict":"accept","score":3}', '{"verdict":"reject","score":10}'], raw_rows=(0,))
+            out = R.run(t, TOKENIZER, LLG_SITE)
+        ty = out['classes']['json:typed_decision']     # rec00 has the raw schema: direct, no heuristic
+        self.assertEqual((ty['replayed_ok'], ty['order_recovered']), (1, 0))
+        self.assertEqual(out['classes']['json:review']['order_recovered'], 1)   # rec01 old row: heuristic, flagged
 
     def test_forced_share_on_fixture(self):
         with tempfile.TemporaryDirectory() as t:
