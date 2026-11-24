@@ -70,22 +70,13 @@ The active 39-question sentinel pool spans GPQA, olympiad math, multi-hop QA, to
 
 ---
 
-## Recent Results (last 60 days)
+## Recent Results
 
-Per [MEASUREMENT.md](https://github.com/pestopoppa/epyc-root/blob/main/MEASUREMENT.md), a number without a protocol citation is an **observation**, not a decision-gating result. The rows below name *what changed* and point at the artifact that carries the protocol, identity witnesses and grade — read the numbers there, not here.
+Per [MEASUREMENT.md](https://github.com/pestopoppa/epyc-root/blob/main/MEASUREMENT.md), a number without a protocol citation is an **observation**, not a decision-gating result. This README no longer restates results (a dated list here only goes stale). Read them at the source:
 
-| Date | Result | Where to read |
-|---|---|---|
-| 2026-07-29 | **Scoring-infra hardening.** `code_exec_scorer.py` now runs the scored subprocess in its own process group and SIGKILLs the whole group on timeout (no more surviving orphans); `agentic_swe_harness.py` gained a fail-closed `/testbed` reset before every trial, closing a hole where repeated-trial sweeps scored against the previous trial's leftovers | [`scripts/benchmark/code_exec_scorer.py`](scripts/benchmark/code_exec_scorer.py), [`scripts/benchmark/agentic_swe_harness.py`](scripts/benchmark/agentic_swe_harness.py) |
-| 2026-07-25 | **Production kernel v8 freeze.** `/mnt/raid0/llm/llama.cpp` is frozen on `production-consolidated-v8` at `67a433bf45a8a091d83b4ea0b32ff0735fd51800` (`llama-server --version` → `10107`), a single-kernel serving path — the separate `ik_llama.cpp` binary is fully deprecated as a serving path | [epyc-root CLAUDE.md](https://github.com/pestopoppa/epyc-root/blob/main/CLAUDE.md), [`docs/data/laguna_iq2_mi210_kv_sweep_20260725.md`](docs/data/laguna_iq2_mi210_kv_sweep_20260725.md) |
-| 2026-07-25 | **Laguna-S-2.1 UD-IQ2_M K/V + flash-attention sweep on MI210** — exact-tip run with full pre/post source, server, shared-library, model, harness and execution-binding witnesses. Explicitly labelled *observation only*: not a promotion gate and not a global-optimum claim | [`docs/data/laguna_iq2_mi210_kv_sweep_20260725.md`](docs/data/laguna_iq2_mi210_kv_sweep_20260725.md) |
-| 2026-07-18 → 07-20 | **CPU prefill-compute trace campaign (PC-0 → PC-4m).** A ~15-step profiling chain through the MoE/FFN/router/scheduler path, ending in an opt-in `GGML_CPU_CONCAT_DIM0_ROWS=1` CPU fast path in `llama.cpp-experimental` with a real support predicate. Post-candidate research — the frozen v7 promotion candidate `6ad45fa3ff` was not updated by it | [`docs/data/cpu_prefill_compute_pc4m_concat_dim0_hardening_20260720.md`](docs/data/cpu_prefill_compute_pc4m_concat_dim0_hardening_20260720.md) and the `docs/data/cpu_prefill_compute_pc*` series |
-| 2026-07-18 | **GLM-MTP / sparse final-attention prep** (zero-inference source prep). No upstream path supports complete GLM/GLM-DSA native MTP or real indexed sparse DSA final attention; the experimental tree has a buildable GLM-5.2 `glm-dsa` single-NextN scaffold only. No throughput or quality claims until the GLM reviewer gate closes | [`docs/reference/benchmarks/glm_mtp_sparse_attention_prep_20260718.md`](docs/reference/benchmarks/glm_mtp_sparse_attention_prep_20260718.md), [`docs/reference/kernel/glm-mtp-sparse-attention-implementation-map-20260718.md`](docs/reference/kernel/glm-mtp-sparse-attention-implementation-map-20260718.md) |
-| 2026-07-16 → 07-20 | **Model-admission checkpoint + artifact audit** for the quiet-window backlog (GLM-5.2, Hy3, Bonsai / Ternary Bonsai, Qwable, Nemotron, Gemma4). Research candidates only — nothing here is promoted into the lean orchestrator registry without an explicit stack-change handoff | [`docs/reference/models/model-admission-2026-07-16.md`](docs/reference/models/model-admission-2026-07-16.md) |
-
-The full headline-throughput map per quant per role lives in [`docs/reference/benchmarks/RESULTS.md`](docs/reference/benchmarks/RESULTS.md); the standing rationale for the current model lineup is in [`docs/MODEL_MANIFEST.md`](docs/MODEL_MANIFEST.md) and the epyc-root wiki. Cross-repo probe rows go to the canonical scoreboard in epyc-root, never into a fork of it here — see [`docs/reference/model-probe-scoreboard.md`](docs/reference/model-probe-scoreboard.md).
-
----
+- **Daily progress**: [epyc-root `progress/`](https://github.com/pestopoppa/epyc-root/tree/main/progress), with one file per agent per day.
+- **Live work and what's next**: [master handoff index](https://github.com/pestopoppa/epyc-root/blob/main/handoffs/active/master-handoff-index.md).
+- **Compiled findings**: [wiki/INDEX.md](https://github.com/pestopoppa/epyc-root/blob/main/wiki/INDEX.md).
 
 ## Running Benchmarks
 
@@ -243,7 +234,7 @@ epyc-inference-research/
 |---|---|---|
 | **[epyc-orchestrator](https://github.com/pestopoppa/epyc-orchestrator)** | `/mnt/raid0/llm/epyc-orchestrator` | Production orchestration that consumes these benchmarks via the autopilot eval tower. Also owns `scripts/server/` (llama-server lifecycle via `orchestrator_stack.py`), `scripts/benchmark/seed_*.py` (routing/seeding), `scripts/region-lock`, and the **lean** registry compiled from this repo's full one |
 | **[epyc-root](https://github.com/pestopoppa/epyc-root)** | `/mnt/raid0/llm/epyc-root` | Governance, hooks, handoffs, the compiled knowledge base (`wiki/`, `research/`), `MEASUREMENT.md`, and the canonical model-probe scoreboard |
-| **[llama.cpp fork](https://github.com/pestopoppa/llama.cpp)** | `/mnt/raid0/llm/llama.cpp` | `production-consolidated-v8`, frozen 2026-07-25 at `67a433bf4` (`llama-server --version` → `10107`). Single serving kernel; `ik_llama.cpp` is deprecated as a serving path. **Production branches are immutable** — all kernel/benchmark experiments happen on `llama.cpp-experimental` branches and are promoted as a new version |
+| **[llama.cpp fork](https://github.com/pestopoppa/llama.cpp)** | `/mnt/raid0/llm/llama.cpp` | `production-consolidated-v10`, frozen 2026-09-22 at `ffc1bac82` (`llama-server --version` → `10303`), served from the kernel store (`kernels/production/{cpu,gpu}`), not the tree's own `build/`. Single serving kernel; `ik_llama.cpp` is deprecated as a serving path. **Production branches are immutable** — all kernel/benchmark experiments happen on `llama.cpp-experimental` branches and are promoted as a new version |
 
 ---
 
