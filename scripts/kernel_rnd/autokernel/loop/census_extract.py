@@ -116,7 +116,8 @@ def cpu_config(result_path: str | None, cfg: str) -> str:
     a = [str(x) for x in (a.get("argv", []) if isinstance(a, dict) else a)]
     t = int(a[a.index("-t") + 1]) if "-t" in a else 0
     # 96 threads = the whole host (NUMA_FULL rows, e.g. ak-c21-census-refresh-cpu): census ceiling key "full-host"
-    return {24: "quarter-24t", 48: "half-48t", 96: "full-host"}.get(t, f"{t}t")
+    # 72 threads on q0-q2 (cores 0-71, --interleave=0,1,2): ceiling key "q0q2" = 3 x quarter
+    return {24: "quarter-24t", 48: "half-48t", 72: "q0q2", 96: "full-host"}.get(t, f"{t}t")
 
 
 def extract_cpu(res: dict, result_path: str | None = None) -> list[dict]:

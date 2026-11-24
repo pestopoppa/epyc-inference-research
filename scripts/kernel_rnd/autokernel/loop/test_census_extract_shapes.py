@@ -144,12 +144,13 @@ class CpuConfigThreads(unittest.TestCase):
     """-t 96 (NUMA_FULL) maps to the full-host ceiling key (520 GB/s), not an unceilinged '96t'."""
     def test_thread_counts(self):
         from autokernel.loop.census_extract import cpu_config
-        for t, want in ((24, "quarter-24t"), (48, "half-48t"), (96, "full-host"), (12, "12t")):
+        for t, want in ((24, "quarter-24t"), (48, "half-48t"), (72, "q0q2"), (96, "full-host"), (12, "12t")):
             with tempfile.TemporaryDirectory() as d:
                 os.makedirs(os.path.join(d, "servers"))
                 json.dump({"argv": ["llama-server", "-t", str(t)]}, open(os.path.join(d, "servers", "c-L1.argv.json"), "w"))
                 self.assertEqual(cpu_config(os.path.join(d, "RESULT.json"), "c"), want)
         self.assertEqual(cu.CPU_DEFAULTS["ceiling_gbps"]["full-host"], 520.0)
+        self.assertEqual(cu.CPU_DEFAULTS["ceiling_gbps"]["q0q2"], 387.0)
 
 
 if __name__ == "__main__":
