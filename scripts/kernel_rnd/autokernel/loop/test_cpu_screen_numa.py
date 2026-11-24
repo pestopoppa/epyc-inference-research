@@ -18,6 +18,15 @@ def test_quarter_screen_binds_its_own_node_and_gets_its_own_floor_name(region, n
     assert result["launch"].template.cpu_list == ",".join(map(str, range(24 * node, 24 * node + 24)))
 
 
+@pytest.mark.parametrize("region,offset", [(None, 0), ("q0", 0), ("q1", 1), ("q2", 2)])
+def test_concurrent_quarter_streams_get_distinct_ports(region, offset):
+    _template, full = _canonical_launch(18311)
+    launch = cpu_screen.prepare_launch(full, "quarter", range(96), region=region)["launch"]
+    assert launch.port == 18311 + offset
+    argv = list(launch.command_argv)
+    assert argv[argv.index("--port") + 1] == str(18311 + offset)
+
+
 def test_half_screen_keeps_interleave_and_region_needs_a_quarter():
     _template, full = _canonical_launch(18311)
     half = cpu_screen.prepare_launch(full, "half", range(96))

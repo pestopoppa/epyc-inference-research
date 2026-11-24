@@ -90,6 +90,13 @@ def prepare_launch(full: rr.CanonicalResolvedRecipe, scope: str, owned_cpus,
     if prefix[position + 1:position + 2] != ["-c"] or position + 2 >= len(prefix):
         raise ScreenRefused("original CPU topology does not expose taskset -c")
     prefix[position + 2] = cpu_list
+    # Concurrent quarter streams must not share one server port: an explicit quarter
+    # takes the full port + its node index (q0 keeps the full port).
+    port = full.port + (QUARTER_NODE[regions[0]] if region is not None else 0)
+    if port != full.port:
+        if command.count("--port") != 1 or command.index("--port") + 1 >= len(command):
+            raise ScreenRefused("original command does not expose one --port")
+        command[command.index("--port") + 1] = str(port)
     for flag in ("-t", "-tb"):
         if flag not in command and flag == "-tb":
             continue
@@ -102,7 +109,7 @@ def prepare_launch(full: rr.CanonicalResolvedRecipe, scope: str, owned_cpus,
         artifact_identities={"model": full.model.to_dict(),
             "drafter": full.drafter.to_dict() if full.drafter else None,
             "executable": full.executable.to_dict(), "dsos": [x.to_dict() for x in full.dsos]},
-        backend=full.backend, environment_policy=full.environment_policy, port=full.port,
+        backend=full.backend, environment_policy=full.environment_policy, port=port,
         runtime_binary_dir=full.runtime_binary_dir, runtime_ld_paths=full.runtime_ld_paths,
         provenance={**dict(full.provenance), "cpu_screen_full_target": full.snapshot_digest})
     return {"scope": scope, "full": full, "launch": reduced, "cpu_list": cpu_list,
