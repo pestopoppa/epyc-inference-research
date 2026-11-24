@@ -6,6 +6,8 @@ in :mod:`autokernel.storage` and its tombstone-first policy.
 """
 from __future__ import annotations
 
+from .field_validation import text_field as _text_field
+
 from .field_validation import require_sha256 as _require_sha256
 
 import hashlib
@@ -56,11 +58,7 @@ def _mapping(value: Any, fields: frozenset[str], label: str) -> Mapping[str, Any
 
 
 def _text(value: Any, label: str, *, nullable: bool = False) -> str | None:
-    if value is None and nullable:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise RetentionRefused(f"{label} must be non-empty text")
-    return value
+    return _text_field(value, label, RetentionRefused, nullable=nullable, wording=' must be ')
 
 
 def _integer(value: Any, label: str, *, minimum: int = 0) -> int:

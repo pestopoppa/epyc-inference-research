@@ -38,3 +38,11 @@ def text_array(value: Any, label: str, error: type[Exception], text, *, empty: b
     if unique and len(set(items)) != len(items):
         raise error(f"{label}: duplicate identifiers")
     return items
+
+
+def text_field(value: Any, label: str, error: type[Exception], *, nullable: bool, wording: str) -> str | None:
+    if value is None and nullable:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise error(f"{label}{wording}non-empty text")
+    return value

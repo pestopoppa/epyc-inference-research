@@ -1,6 +1,8 @@
 """Plan-validation errors and field validators for experiment_plan.py, split verbatim from experiment_plan.py (code-budget split)."""
 from __future__ import annotations
 
+from .field_validation import text_field as _text_field
+
 import math
 import re
 from types import MappingProxyType
@@ -27,11 +29,7 @@ def _exact(obj: Mapping[str, Any], fields: set[str], label: str) -> None:
 
 
 def _text(value: Any, label: str, *, nullable: bool = False) -> str | None:
-    if value is None and nullable:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise PlanValidationError(f"{label}: expected non-empty text")
-    return value
+    return _text_field(value, label, PlanValidationError, nullable=nullable, wording=': expected ')
 
 
 def _integer(value: Any, label: str, *, minimum: int = 0) -> int:

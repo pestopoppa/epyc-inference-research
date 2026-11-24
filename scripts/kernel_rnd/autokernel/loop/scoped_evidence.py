@@ -7,6 +7,8 @@ trusted callbacks supplied by an eventual registered adapter.
 """
 from __future__ import annotations
 
+from .field_validation import text_field as _text_field
+
 from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
 import math
@@ -64,11 +66,7 @@ def _exact(obj: Mapping[str, Any], fields: set[str], label: str) -> None:
 
 
 def _text(value: Any, label: str, *, nullable: bool = False) -> str | None:
-    if value is None and nullable:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise EvidenceValidationError(f"{label}: expected non-empty text")
-    return value
+    return _text_field(value, label, EvidenceValidationError, nullable=nullable, wording=': expected ')
 
 
 def _enum(value: Any, choices: frozenset[str], label: str) -> str:

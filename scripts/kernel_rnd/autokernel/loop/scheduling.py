@@ -6,6 +6,8 @@ supplied by a future trusted consumer can account actual held service.
 """
 from __future__ import annotations
 
+from .field_validation import text_field as _text_field
+
 from .immutable_values import thaw as _plain
 
 import hashlib
@@ -110,11 +112,7 @@ class AccountingPreview:
 
 
 def _text(value: Any, label: str, *, nullable: bool = False) -> str | None:
-    if value is None and nullable:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise SchedulingRefused(f"{label} must be non-empty text")
-    return value
+    return _text_field(value, label, SchedulingRefused, nullable=nullable, wording=' must be ')
 
 
 def _integer(value: Any, label: str, *, minimum: int = 0) -> int:
