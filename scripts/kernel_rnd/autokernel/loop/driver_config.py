@@ -1,5 +1,7 @@
 """Unified driver config record and document loader, split verbatim from unified_driver.py (code-budget split)."""
 from __future__ import annotations
+
+from .field_validation import canonical_json as _canonical_json
 import json
 import os
 from dataclasses import dataclass
@@ -17,11 +19,7 @@ class DriverRefused(RuntimeError):
 
 
 def _canonical(value: Any) -> bytes:
-    try:
-        return json.dumps(value, sort_keys=True, separators=(",", ":"),
-                          allow_nan=False).encode()
-    except (TypeError, ValueError) as exc:
-        raise DriverRefused(f"value is not finite canonical JSON: {exc}") from exc
+    return _canonical_json(value, DriverRefused, 'value is not finite canonical JSON', detail=True)
 
 
 def _mapping(value: Any, label: str) -> Mapping[str, Any]:

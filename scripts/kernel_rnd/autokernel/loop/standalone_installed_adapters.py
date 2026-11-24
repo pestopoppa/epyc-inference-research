@@ -1,5 +1,7 @@
 """Installed scientific adapter enumeration, split verbatim from standalone_inputs.py (code-budget split)."""
 from __future__ import annotations
+
+from .field_validation import canonical_json as _canonical_json
 import json
 from typing import Any, Mapping
 
@@ -12,11 +14,7 @@ class StandaloneInputsRefused(RuntimeError):
 
 
 def _canonical(value: Any) -> bytes:
-    try:
-        return json.dumps(value, sort_keys=True, separators=(",", ":"),
-                          allow_nan=False).encode()
-    except (TypeError, ValueError) as exc:
-        raise StandaloneInputsRefused("startup manifest is not canonical JSON") from exc
+    return _canonical_json(value, StandaloneInputsRefused, 'startup manifest is not canonical JSON')
 
 
 def _mapping(value: Any, label: str) -> Mapping[str, Any]:

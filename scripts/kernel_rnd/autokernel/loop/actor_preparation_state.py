@@ -1,6 +1,8 @@
 """Closed native state machine for selected actor-preparation accounting."""
 from __future__ import annotations
 
+from .field_validation import canonical_json as _canonical_json
+
 from dataclasses import dataclass, field
 import hashlib
 import json
@@ -27,11 +29,7 @@ class ActorStateRefused(ValueError):
 
 
 def _canonical(value: Any) -> bytes:
-    try:
-        return json.dumps(value, sort_keys=True, separators=(",", ":"),
-                          allow_nan=False).encode()
-    except (TypeError, ValueError) as exc:
-        raise ActorStateRefused("actor state is not canonical finite JSON") from exc
+    return _canonical_json(value, ActorStateRefused, 'actor state is not canonical finite JSON')
 
 
 def digest(value: Any) -> str:

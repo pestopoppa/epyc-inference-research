@@ -5,6 +5,8 @@ creates keep, validation, release, or production authority.
 """
 from __future__ import annotations
 
+from .field_validation import canonical_json as _canonical_json
+
 from .immutable_values import thaw as _plain
 
 import hashlib
@@ -37,11 +39,7 @@ class DiscoveryScreenRefused(RuntimeError):
 
 
 def _canonical(value: Any) -> bytes:
-    try:
-        return json.dumps(value, sort_keys=True, separators=(",", ":"),
-                          allow_nan=False).encode()
-    except (TypeError, ValueError) as exc:
-        raise DiscoveryScreenRefused(f"value is not finite canonical JSON: {exc}") from exc
+    return _canonical_json(value, DiscoveryScreenRefused, 'value is not finite canonical JSON', detail=True)
 
 
 def _digest(value: Any) -> str:

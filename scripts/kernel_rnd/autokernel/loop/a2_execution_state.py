@@ -5,6 +5,8 @@ worker, replay-attestation, evidence, or nomination authority.
 """
 from __future__ import annotations
 
+from .field_validation import canonical_json as _canonical_json
+
 import hashlib
 import json
 from dataclasses import dataclass
@@ -25,11 +27,7 @@ class A2ExecutionStateRefused(RuntimeError):
 
 
 def _canonical(value: Any) -> bytes:
-    try:
-        return json.dumps(value, sort_keys=True, separators=(",", ":"),
-                          allow_nan=False).encode()
-    except (TypeError, ValueError) as exc:
-        raise A2ExecutionStateRefused(f"value is not canonical JSON: {exc}") from exc
+    return _canonical_json(value, A2ExecutionStateRefused, 'value is not canonical JSON', detail=True)
 
 
 def _digest(value: Any) -> str:
