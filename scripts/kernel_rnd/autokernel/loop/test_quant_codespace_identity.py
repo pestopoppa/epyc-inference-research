@@ -207,13 +207,16 @@ def _q6k_mixed_block(sc_hi=127, sc_lo=1, d_bits=0x3C00, seed=0):
 
 
 def _sim_q8_0_requant(qt, f):
-    """Mimic iqk_convert_q6_k_q8_0_r8 on one block: per 32-block, int8 codes under one fp16 scale M/127."""
+    """Mimic iqk_convert_q6_k_q8_0_r8 on one block: per 32-block, all_s = d*M/127 stored as ONE fp16 (so a tiny d
+    lands in the fp16 subnormal range), codes rint(v * (1/(M/127))) in float32."""
     e = qt.elements(f)
-    v = (e["sc"].astype(np.uint8).view(np.int8).astype(np.int64) * (e["q"] - 32)).reshape(8, 32).astype(np.float64)
-    m = np.abs(v).max(axis=1, keepdims=True)
-    d8 = (m / 127.0).astype(np.float16).astype(np.float64)
-    code = np.rint(v / np.where(d8 > 0, d8, 1.0))
-    return (code * d8 * float(np.array([f["d"][0, 0]], dtype=np.uint16).view(np.float16)[0])).ravel()
+    v = (e["sc"].astype(np.uint8).view(np.int8).astype(np.int64) * (e["q"] - 32)).reshape(8, 32).astype(np.float32)
+    mx = (np.abs(v).max(axis=1, keepdims=True) / np.float32(127)).astype(np.float32)
+    d = np.float32(np.array([f["d"][0, 0]], dtype=np.uint16).view(np.float16)[0])
+    s16 = (d * mx).astype(np.float16).astype(np.float64)
+    inv = np.where(mx > 1e-9, np.float32(1) / np.where(mx > 0, mx, 1), 0).astype(np.float32)
+    code = np.rint((v * inv).astype(np.float32))
+    return (code * s16).ravel()
 
 
 class Q6KRequantClass(unittest.TestCase):
@@ -230,8 +233,11 @@ class Q6KRequantClass(unittest.TestCase):
         f["q"][:, :] = 0                       # |sc*(q-32)| = 127*32 = 4064 in the sc_hi half
         scale = qc.q6k_block32_scale(qt, f, qt.elements(f))
         self.assertTrue(np.all(scale == 4064.0))
-        # 127 * 4064 * REQUANT_REL = 127 * (16 + 1) = 2159 (16 = half int8 step of 32, 1 = fp16 slack)
-        self.assertAlmostEqual(127.0 * 4064.0 * qc.REQUANT_REL, 2159.0, places=6)
+        # s = 4064/127 = 32: 0.5*32 (half int8 step) + 127*32*2^-11 (fp16 half-ulp x max code) + 32*2^-10 (GEMM tail)
+        self.assertAlmostEqual(127.0 * float(qc.requant_bound(4064.0)), 127.0 * (16 + 1.984375 + 0.03125), places=6)
+        # fp16-subnormal s (tiny d): the fp16 term is a fixed 127 * 2^-25, not relative
+        tiny = 3.2782554626464844e-06 * 300.0             # d ~ 3.3e-6 (harvested), M = 300: s ~ 7.7e-9 < 2^-14
+        self.assertAlmostEqual(float(qc.requant_bound(tiny)), 0.5 * tiny / 127 + 127 * 2.0 ** -25 + tiny / 127 * 2.0 ** -10, places=15)
 
     def test_simulated_requant_is_inside_the_bound(self):
         worst = 0.0
@@ -240,16 +246,30 @@ class Q6KRequantClass(unittest.TestCase):
             qt, f, blk = _q6k_mixed_block(sc_hi=hi, sc_lo=lo, seed=seed)
             ref = qt.decode(blk).ravel().astype(np.float64)
             got = _sim_q8_0_requant(qt, f) * 127.0
-            bound = 127.0 * qc.q6k_block32_scale(qt, f, qt.elements(f)) * qc.REQUANT_REL
+            bound = 127.0 * qc.requant_bound(qc.q6k_block32_scale(qt, f, qt.elements(f)))
             err = np.abs(got - ref * 127.0)
             self.assertTrue(np.all(err <= bound), (seed, float((err - bound).max())))
             worst = max(worst, float((err / bound).max()))
         self.assertGreater(worst, 0.3)         # the model is not vacuous: the simulated loss really uses the budget
 
+    def test_simulated_requant_with_fp16_subnormal_scale_is_inside_the_bound(self):
+        # ak-q6k-qdec-confirm-cpu-20261124: d ~ 3e-6 puts d*M/127 below 2^-14; the old relative bound failed these 7.57x
+        worst = 0.0
+        for seed, d_bits in enumerate((0x0037, 0x003A, 0x0100, 0x8025, 0x03FF, 0x0400)):
+            hi = int(np.random.default_rng(seed).integers(40, 128)); lo = int(np.random.default_rng(seed + 7).integers(1, 20))
+            qt, f, blk = _q6k_mixed_block(sc_hi=hi, sc_lo=lo, d_bits=d_bits, seed=seed)
+            ref = qt.decode(blk).ravel().astype(np.float64)
+            got = _sim_q8_0_requant(qt, f) * 127.0
+            bound = 127.0 * qc.requant_bound(qc.q6k_block32_scale(qt, f, qt.elements(f)))
+            err = np.abs(got - ref * 127.0)
+            self.assertTrue(np.all(err <= bound), (seed, hex(d_bits), float((err - bound).max())))
+            worst = max(worst, float((err / bound).max()))
+        self.assertGreater(worst, 0.3)
+
     def test_mixed_sc_block_at_the_bound_passes_and_beyond_stays_unexplained(self):
         qt, f, blk = _q6k_mixed_block()
         scale = qc.q6k_block32_scale(qt, f, qt.elements(f))
-        bound = 127.0 * scale * qc.REQUANT_REL
+        bound = 127.0 * qc.requant_bound(scale)
         res, *_ = self._judge("mul_mat:CPU", bound * 0.999)   # every element just inside its own bound
         self.assertEqual(res["verdict"], "pass"); self.assertEqual(res["mismatches"], 0)
         self.assertGreater(res["classes"]["iqk_q6k_q8_0_requant"], 0)
@@ -262,7 +282,7 @@ class Q6KRequantClass(unittest.TestCase):
     def test_class_is_offered_to_the_wide_cpu_leg_only(self):
         qt, f, blk = _q6k_mixed_block()
         scale = qc.q6k_block32_scale(qt, f, qt.elements(f))
-        delta = 127.0 * scale * qc.REQUANT_REL * 0.5
+        delta = 127.0 * qc.requant_bound(scale) * 0.5
         for leg in ("mul_mat_n32:CPU", "mul_mat_dq0:CPU", "mul_mat_iqk0:CPU", "mul_mat_tight:CPU"):
             res, *_ = self._judge(leg, delta)
             self.assertEqual(res["verdict"], "fail", leg); self.assertFalse(res["requant_class"])

@@ -967,13 +967,31 @@ def _hex32(v: float) -> str:
 #:                        iqk requantises Q6_K weights to Q8_0_R8 when the activation has >= 64 columns (the probe's
 #:                        B = onehot * I has 256), under ONE fp16 scale per 32-element block. A 32-block spans two Q6_K
 #:                        sub-blocks (sc) so the low-sc half loses precision: upstream design, not a decode defect. With
-#:                        M = max |sc*(q-32)| over the element's 32-block the int8 step is M/127, so an element is benign
-#:                        iff |got - onehot*ref| <= onehot*|d|*M * (0.5 + 2^-10 * 32)/127 (half-step rounding plus the
-#:                        fp16 rounding of the block scale). Worst case M = 4064, d = 1: 2032 + fp16 slack. The class is
+#:                        M = max |sc*(q-32)| over the element's 32-block, iqk stores s16 = fp16(s), s = d*M/127
+#:                        (iqk_gemm_kquants.cpp iqk_convert_q6_k_q8_0_r8: all_s = d*max, then one fp16 per 32-block)
+#:                        and the code c = rint(v*127/M), |c| <= 127. With ref = d*v = s*(v*127/M):
+#:                          got - ref = (s16 - s)*c + s*(c - v*127/M)
+#:                        so |got - ref| <= 127*|s16 - s| + 0.5*|s|. |s16 - s| is half an fp16 ulp of s: <= |s|*2^-11
+#:                        for a normal s, but a FIXED 2^-25 once s is fp16-subnormal (|s| < 2^-14, i.e. tiny Q6_K d --
+#:                        the harvested served d go down to ~3e-6, where s16 carries only a few significant bits).
+#:                        Bound per element (requant_bound): onehot * (0.5*s + 127*max(s*2^-11, 2^-25) + s*2^-10), the
+#:                        last term covering the f32 GEMM tail (offset-127 product minus 127*bsum, fmadd accumulate).
+#:                        The first bound (2026-11-24 f5816dfaa: s*(0.5 + 2^-10*32)) gave the fp16 term 32 half-ulps
+#:                        instead of up to 127 and treated it as relative, so it failed fp16-subnormal s by up to 7.57x
+#:                        (ak-q6k-qdec-confirm-cpu-20261124: 106175 elements, all reproduced bit-exactly by a numpy
+#:                        model of the iqk conversion -- the conversion is correct, the bound was not). The class is
 #:                        offered only to the wide default-path leg: the <= 32-column leg, GGML_IQK_DEQUANT=0 and
 #:                        GGML_IQK=0 legs are judged WITHOUT it (the tight model, zero tolerance beyond the other classes).
 FP16_SCALE_REL = 2.0 ** -10
-REQUANT_REL = (0.5 + FP16_SCALE_REL * 32) / 127.0
+FP16_HALF_ULP_REL = 2.0 ** -11        # half an fp16 ulp, relative, normal range
+FP16_HALF_ULP_SUBNORMAL = 2.0 ** -25  # half an fp16 ulp, absolute, subnormal range (ulp 2^-24)
+REQUANT_GEMM_REL = 2.0 ** -10
+
+
+def requant_bound(dm):
+    """Per element bound on |got/onehot - ref| for iqk's Q6_K -> Q8_0_R8 requant; dm = |d|*M (q6k_block32_scale)."""
+    s = np.abs(np.asarray(dm, dtype=np.float64)) / 127.0
+    return 0.5 * s + 127.0 * np.maximum(s * FP16_HALF_ULP_REL, FP16_HALF_ULP_SUBNORMAL) + s * REQUANT_GEMM_REL
 REQUANT_LEG = "mul_mat:CPU"
 FP16_MAX = 65504.0
 FP16_MIN_NORMAL = 2.0 ** -14
@@ -1027,7 +1045,7 @@ def classify_identity(ref, got, magnitude, onehot, *, d=None, dmin=None, e=None,
         else:
             ood = ftz16 = zeros
         if requant_scale is not None and not gpu:
-            rq_bound = onehot * np.asarray(requant_scale, dtype=np.float64) * REQUANT_REL
+            rq_bound = onehot * requant_bound(requant_scale)
             rq = mis & ~overflow & ~ftz & ~ftz_out & ~i8 & ~rnd & np.isfinite(g) & (err <= rq_bound)
             rq_ratio = err / np.where(rq_bound > 0, rq_bound, np.nan)
         else:
