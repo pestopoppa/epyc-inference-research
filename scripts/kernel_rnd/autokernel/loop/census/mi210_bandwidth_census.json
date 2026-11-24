@@ -112,7 +112,7 @@
      "pct": "10-20"
     }
    ],
-   "source": "intake-2868 (arXiv 2611.30027), H200, operator-approved"
+   "source": "intake-2870 (arXiv 2611.30027), H200, operator-approved"
   },
   "note": "Ceilings (operator 2026-11-24, one per device): MI210 1500 GB/s, CPU quarter-24t 129 GB/s, CPU full host 520 GB/s. Shares: 27B per 45.7 ms round (C18 trace), A3B GPU per 34 ms busy step (C14), CPU per census step. Operator 2026-11-24: A3B GPU tracked as served (second GPU).",
   "ops": [
@@ -432,14 +432,14 @@
    },
    "cuda-flashdecode": {
     "basis": "% of HBM peak (H200 measured; upper bracket H100/B200)",
-    "cite": "MEASURED, intake-2868 (arXiv 2611.30027): FA4 FP8 decode attention 85-89% of peak at batch>=8 on H200; plain device copy of the same bytes 87-89% on H200 (copy ceiling); ref = 88% midpoint of FA4 FP8 and the copy ceiling. Upper bracket: FlashInfer BF16 decode >90% on H100/B200 (FOSCAR, arXiv 2611.09722, intake-2877). Operator-approved figures.",
+    "cite": "MEASURED, intake-2870 (arXiv 2611.30027): FA4 FP8 decode attention 85-89% of peak at batch>=8 on H200; plain device copy of the same bytes 87-89% on H200 (copy ceiling); ref = 88% midpoint of FA4 FP8 and the copy ceiling. Upper bracket: FlashInfer BF16 decode >90% on H100/B200 (FOSCAR, arXiv 2611.09722, intake-2879). Operator-approved figures.",
     "pct": 88,
     "status": "measured",
     "upper_bracket_pct": 90
    },
    "cuda-flashdecode-q4kv": {
     "basis": "% of HBM peak (H200 measured, batched)",
-    "cite": "MEASURED, intake-2868 (arXiv 2611.30027): best 4-bit KV attention kernel 67-75% of peak at batch 32-128 on H200; ref = 71% midpoint of 67-75%. Deployed vLLM NVFP4 only 10-20% on H200. Operator-approved figures. Benchmarks row ak-gvfattn-q4kv-gpu-20261124.",
+    "cite": "MEASURED, intake-2870 (arXiv 2611.30027): best 4-bit KV attention kernel 67-75% of peak at batch 32-128 on H200; ref = 71% midpoint of 67-75%. Deployed vLLM NVFP4 only 10-20% on H200. Operator-approved figures. Benchmarks row ak-gvfattn-q4kv-gpu-20261124.",
     "pct": 71,
     "range_pct": [
      67,
