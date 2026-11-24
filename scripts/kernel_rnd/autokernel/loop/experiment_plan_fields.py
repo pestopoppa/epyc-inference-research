@@ -8,6 +8,7 @@ from typing import Any, Mapping, cast
 
 from .. import schemas
 from .immutable_values import thaw as _thaw
+from .field_validation import exact as _shared_exact
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -21,17 +22,7 @@ class UnsupportedStoppingRule(PlanValidationError):
 
 
 def _exact(obj: Mapping[str, Any], fields: set[str], label: str) -> None:
-    if not isinstance(obj, Mapping):
-        raise PlanValidationError(f"{label}: expected object")
-    missing = fields - set(obj)
-    extra = set(obj) - fields
-    if missing or extra:
-        bits = []
-        if missing:
-            bits.append("missing " + ", ".join(sorted(missing)))
-        if extra:
-            bits.append("unknown " + ", ".join(sorted(extra)))
-        raise PlanValidationError(f"{label}: {'; '.join(bits)}")
+    return _shared_exact(obj, fields, label, PlanValidationError)
 
 
 def _text(value: Any, label: str, *, nullable: bool = False) -> str | None:

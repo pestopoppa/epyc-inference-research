@@ -16,6 +16,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from .. import schemas
 from .immutable_values import thaw as _thaw
+from .field_validation import exact as _shared_exact
 
 
 CLAIM_KEY_SCHEMA = "epyc.autokernel.scoped_claim_key.v1"
@@ -58,16 +59,7 @@ class EvidenceValidationError(ValueError):
 
 
 def _exact(obj: Mapping[str, Any], fields: set[str], label: str) -> None:
-    if not isinstance(obj, Mapping):
-        raise EvidenceValidationError(f"{label}: expected object")
-    missing, extra = fields - set(obj), set(obj) - fields
-    if missing or extra:
-        parts = []
-        if missing:
-            parts.append("missing " + ", ".join(sorted(missing)))
-        if extra:
-            parts.append("unknown " + ", ".join(sorted(extra)))
-        raise EvidenceValidationError(f"{label}: {'; '.join(parts)}")
+    return _shared_exact(obj, fields, label, EvidenceValidationError)
 
 
 def _text(value: Any, label: str, *, nullable: bool = False) -> str | None:
