@@ -126,6 +126,27 @@ def test_op_perf_one_cell_regression_fails_and_unmeasured_is_harness(tmp_path):
     assert r["verdict"].startswith("FUTILITY_HARNESS_INSTRUMENT") and "polar" not in r
 
 
+def test_op_perf_reads_a_journal_key_only_candidate_and_keeps_the_legacy_form(tmp_path):
+    """Defect 20 wiring: the stage resolves the candidate's class through journal_keys.op_perf_class, so a candidate that
+    carries ONLY a journal_key screens exactly the cells its equivalent legacy shape_class screens (k/m carry over)."""
+    legacy = {"op_family": "MUL_MAT", "dims": {"k": [5120], "m": [1024, 6144]}}
+    only_key = cand(tmp_path, journal_key={"op_family": "dense-q8-gemv", "device": "gpu", "shape_class": {"k": 5120}})
+    only_key.pop("shape_class")                                              # a journal_key and NO shape_class
+    r = run(only_key, tmp_path, ("build", "op-perf"))["op-perf"][0]
+    assert "MISSING_INPUT" not in r["verdict"] and r["verdict"].startswith("FUTILITY_SCREEN_ONLY_NO_KEEP")
+    keyed = {x["key"] for x in r["op_perf_screen"]["cells"]}
+    assert keyed and all(k.endswith(tuple(f"@n{n}" for n in range(1, 9))) for k in keyed)
+    # the equivalent legacy class (k=5120, m wildcard) screens the same cells
+    wild = run(cand(tmp_path, shape_class={"op_family": "MUL_MAT", "dims": {"k": [5120]}}), tmp_path,
+               ("build", "op-perf"))["op-perf"][0]
+    assert keyed == {x["key"] for x in wild["op_perf_screen"]["cells"]}
+    # the legacy form is accepted unchanged, and a candidate with neither is still refused
+    assert run(cand(tmp_path, shape_class=legacy), tmp_path, ("build", "op-perf"))["op-perf"][0]["screen_pass"]
+    nothing = cand(tmp_path)
+    nothing.pop("shape_class")
+    assert "MISSING_INPUT" in run(nothing, tmp_path, ("build", "op-perf"))["op-perf"][0]["verdict"]
+
+
 def test_op_perf_needs_shape_class_and_a_served_shape_lane(tmp_path):
     r = run(cand(tmp_path, shape_class=None), tmp_path, ("build", "op-perf"))["op-perf"][0]
     assert "MISSING_INPUT" in r["verdict"]

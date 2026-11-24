@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from . import census_coverage as cc
+from . import journal_keys
 from . import op_perf_screen as ops
 from . import sampling_axis
 from . import served_shape_cases as ssc
@@ -481,7 +482,7 @@ def stage_op_perf(cand, prim: Primitives, *, test_mode: bool) -> dict:
     A passing screen is filed FUTILITY (no polar), so gate_eval can never read it as a keep or a gate PASS."""
     r = _base("op-perf", cand)
     b = _require_built(cand)
-    spec, sc = resolve_path(cand), cand.get("shape_class")
+    spec, sc = resolve_path(cand), journal_keys.op_perf_class(cand)
     if not isinstance(sc, Mapping):
         raise StageRefused("FUTILITY_HARNESS_MISSING_INPUT", "candidate carries no shape_class")
     lane = ssc.lane_for_model(spec["gguf"]) or ssc.dense_lane_for_model(spec["gguf"])
