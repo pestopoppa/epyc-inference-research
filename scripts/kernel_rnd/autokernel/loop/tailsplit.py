@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+from . import journal_keys
 from . import loop as loop_mod
 
 CANDIDATE_SCHEMA = "epyc.akloop.candidate.v1"   # == epyc-root akloop/chain.py CANDIDATE_SCHEMA
@@ -80,8 +81,29 @@ def snapshot_commit(worktree: Path, base: str, paths: Iterable[str], message: st
         return _git(worktree, "commit-tree", tree, "-p", base, "-m", message, env=env)
 
 
+def _field(h: Any, name: str) -> Any:
+    return h.get(name) if isinstance(h, Mapping) else getattr(h, name, None)
+
+
+def candidate_key(hypothesis: Any, statement: Any = None, inbox: str | Path | None = None) -> dict | None:
+    """The candidate's JOURNAL KEY (census family + shape_class ranges), by precedence: the hypothesis' own `journal_key`,
+    the `<!-- journal-key: -->` comment in its statement, the key of the BWS seed it cites (stub in `inbox`). None = unkeyed."""
+    k = _field(hypothesis, "journal_key")
+    if not isinstance(k, dict):
+        k = journal_keys.parse_key(str(statement or ""))
+    if not isinstance(k, dict) and inbox:
+        from .census_inbox import seed_key
+        k = seed_key(inbox, _field(hypothesis, "mechanism_id") or _field(hypothesis, "hypothesis_id"), statement)
+    return k if isinstance(k, dict) and not journal_keys.problems(k) else None
+
+
+class SuppressedByNegative(loop_mod.TailRefused):
+    """The candidate's journal key overlaps a measured negative (`journal_keys.suppressed_by`); it is not handed off."""
+
+
 def candidate_record(*, base: str, patch: str, hypothesis: Any, paths: Sequence[str], lane: str,
-                     predicted_effect: str | None = None, inbox: str | Path | None = None, **extra) -> dict[str, Any]:
+                     predicted_effect: str | None = None, inbox: str | Path | None = None,
+                     negatives: Mapping[str, Any] | None = None, **extra) -> dict[str, Any]:
     hid = (getattr(hypothesis, "mechanism_id", None) or getattr(hypothesis, "hypothesis_id", None)
            or (hypothesis.get("mechanism_id") if isinstance(hypothesis, Mapping) else None) or "unnamed")
     eff = predicted_effect
@@ -101,11 +123,18 @@ def candidate_record(*, base: str, patch: str, hypothesis: Any, paths: Sequence[
                          else hypothesis.get("statement")),
            "emitted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     rec.update({k: v for k, v in extra.items() if v is not None})
-    if inbox and not rec.get("shape_class"):   # RSL-R5: a candidate citing a BWS seed inherits the seed's op-perf shape class
-        from .census_inbox import seed_shape_class
-        sc = seed_shape_class(inbox, hid, rec["statement"])
-        if sc:
-            rec["shape_class"] = sc
+    key = rec.get("journal_key") if isinstance(rec.get("journal_key"), dict) else candidate_key(hypothesis, rec["statement"], inbox)
+    if key:   # defect 20: ONE vocabulary. The record carries the journal key; op-perf's grid class is DERIVED from it.
+        rec["journal_key"] = key
+        if not rec.get("shape_class"):   # RSL-R5: a candidate with its own (legacy op-perf) shape_class keeps it
+            sc = journal_keys.op_perf_class(key)
+            if sc:
+                rec["shape_class"] = sc
+        if inbox or negatives is not None:   # measured negatives live in <store>/journal_keys.json; inbox = <store>/inbox
+            neg = negatives if negatives is not None else journal_keys.load(Path(inbox).parent)
+            hit = journal_keys.suppressed_by({**key, "reopens": list(key.get("reopens") or []) + list(_field(hypothesis, "reopens") or [])}, neg)
+            if hit:
+                rec["suppressed_by"] = hit
     return rec
 
 
@@ -228,6 +257,11 @@ class EmittingTail:
                                 f"akloop candidate {hid} (lane {o.worker.name}, base {o.base[:12]})")
             rec = candidate_record(base=o.base, patch=patch, hypothesis=self.h, paths=paths, lane=o.worker.name,
                                    inbox=o.inbox)
+            if rec.get("suppressed_by"):   # a measured negative covers this key: refuse BEFORE the chain scaffold, publish nothing
+                exc = SuppressedByNegative(f"candidate {rec['id']} suppressed by measured negative {rec['suppressed_by']} "
+                                           f"(journal key {rec.get('journal_key')}); declare `reopens` with new evidence to override")
+                exc.hypothesis = self.h
+                raise exc
             done = o._handoff(rec)
             o.log.append(done)
             exc = HandedOff(f"handed off as candidate {rec['id']} (patch {patch[:12]} on base {o.base[:12]}); "

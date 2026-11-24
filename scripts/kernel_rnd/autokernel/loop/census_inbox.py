@@ -56,9 +56,7 @@ def spool_hypotheses(spool: str | Path | None) -> set[str]:
     return out
 
 
-OP_PERF_FAMILIES = {"dense-q8-gemv": "MUL_MAT", "dense-iq4xs-gemv": "MUL_MAT", "lm-head-gemv": "MUL_MAT",
-                    "mmid-moe": "MUL_MAT_ID"}   # census family -> the ggml op op_perf_screen.grid matches on
-OP_PERF_DIMS = ("k", "m")                       # the only journal-key dims op_perf_screen.grid accepts
+OP_PERF_FAMILIES, OP_PERF_DIMS = journal_keys.OP_PERF_FAMILIES, journal_keys.OP_PERF_DIMS   # one vocabulary: journal_keys
 
 
 def surface_key(s: dict) -> dict:
@@ -77,22 +75,23 @@ def surface_key(s: dict) -> dict:
 
 
 def op_perf_shape_class(key: dict):
-    """The candidate `shape_class` ({op_family: ggml op, dims: {dim: [v]}}) a surface key implies, or None when its family
-    has no served-shape grid (flash-attn, router, ...). Only scalar k/m dims carry over; the rest stay a whole-family grid."""
-    op = OP_PERF_FAMILIES.get(key.get("op_family"))
-    dims = {d: [int(v)] for d, v in (key.get("shape_class") or {}).items()
-            if d in OP_PERF_DIMS and isinstance(v, (int, float)) and not isinstance(v, bool)}
-    return {"op_family": op, "dims": dims} if op else None
+    """Back-compat alias of the single mapping function `journal_keys.op_perf_class`."""
+    return journal_keys.op_perf_class(key)
 
 
-def seed_shape_class(inbox: str | Path, *hypothesis_texts: object):
-    """shape_class for a candidate that cites a BWS seed (its id in mechanism_id/statement, a file in `inbox`), else None."""
+def seed_key(inbox: str | Path, *hypothesis_texts: object):
+    """The journal key of the BWS seed a candidate cites (its id in mechanism_id/statement, a file in `inbox`), else None."""
     for tok in re.findall(r"BWS-[A-Za-z0-9_-]+", " ".join(str(t or "") for t in hypothesis_texts)):
         for cand in dict.fromkeys((tok, tok.rstrip("-_"))):
             key = journal_keys.parse_key(_read(Path(inbox) / (cand + ".md")))
             if key and not journal_keys.problems(key):
-                return op_perf_shape_class(key)
+                return key
     return None
+
+
+def seed_shape_class(inbox: str | Path, *hypothesis_texts: object):
+    """op-perf shape_class for a candidate that cites a BWS seed, else None (via `journal_keys.op_perf_class`)."""
+    return journal_keys.op_perf_class(seed_key(inbox, *hypothesis_texts) or {})
 
 
 def plan(census: dict, inbox: str | Path, spool: str | Path | None = None) -> dict:

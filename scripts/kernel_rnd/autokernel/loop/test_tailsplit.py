@@ -200,6 +200,37 @@ def test_candidate_citing_a_bws_seed_gets_its_shape_class(tmp_path):
     assert _rec(tmp_path, "BWS-LM")["shape_class"] == {"op_family": "MUL_MAT", "dims": {"k": [5120], "m": [248320]}}
 
 
+def test_candidate_carries_the_journal_key_and_its_op_perf_class_derives_from_it(tmp_path):
+    rec = _rec(tmp_path, "BWS-LM")
+    assert rec["journal_key"] == {"op_family": "lm-head-gemv", "device": "gpu", "shape_class": {"m": 248320, "k": 5120}}
+    assert rec["shape_class"] == tailsplit.journal_keys.op_perf_class(rec["journal_key"])
+
+
+def test_candidate_own_journal_key_beats_statement_and_seed(tmp_path):
+    own = {"op_family": "mmid-moe", "shape_class": {"k": 2048}}
+    h = {"mechanism_id": "BWS-LM", "statement": '<!-- journal-key: {"op_family": "dense-q8-gemv"} -->', "journal_key": own}
+    assert tailsplit.candidate_record(base="b", patch="p" * 9, hypothesis=h, paths=[], lane="l",
+                                      inbox=_seed_inbox(tmp_path))["journal_key"] == own
+    h.pop("journal_key")   # statement comment is next
+    assert tailsplit.candidate_record(base="b", patch="p" * 9, hypothesis=h, paths=[], lane="l")["journal_key"]["op_family"] == "dense-q8-gemv"
+
+
+def test_candidate_overlapping_a_measured_negative_is_marked_and_refused_unless_it_reopens(tmp_path):
+    inbox = _seed_inbox(tmp_path)   # <store>/inbox; the negatives sidecar lives in <store>
+    tailsplit.journal_keys.key_entry(tmp_path, "akm-lm-null", {"op_family": "lm-head-gemv", "shape_class": {"m": [200000, 300000]}})
+    assert _rec(tmp_path, "BWS-LM")["suppressed_by"] == "akm-lm-null"
+    h = {"mechanism_id": "BWS-LM", "statement": "s", "reopens": ["akm-lm-null"]}
+    assert "suppressed_by" not in tailsplit.candidate_record(base="b", patch="p" * 9, hypothesis=h, paths=[], lane="l", inbox=inbox)
+    handed = []
+    tail = tailsplit.EmittingTail(worker=type("W", (), {"worktree": ".", "name": "l"})(), base="b" * 40, inbox=inbox,
+                                  handoff=handed.append, snapshot=lambda *a: "p" * 40)
+    h2 = loop.Hypothesis("BWS-LM", "statement", "f", "ggml/src/ggml-cuda/a.cu", "sym")
+    with pytest.raises(tailsplit.SuppressedByNegative, match="akm-lm-null"):
+        with tail(h2, ["a"]):
+            pass
+    assert handed == []   # nothing reached the chain scaffold
+
+
 def test_candidate_with_its_own_shape_class_keeps_it(tmp_path):
     own = {"op_family": "MUL_MAT", "dims": {"k": [1]}}
     assert _rec(tmp_path, "BWS-LM", shape_class=own)["shape_class"] == own

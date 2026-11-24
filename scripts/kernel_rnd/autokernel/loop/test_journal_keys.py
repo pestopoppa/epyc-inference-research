@@ -17,6 +17,28 @@ def K(**kw):
     return {"op_family": "flash-attn-verify", **kw}
 
 
+class OpPerfClass(unittest.TestCase):
+    """Defect 20: the ONE mapping from a journal key to op_perf_screen.grid's shape_class."""
+    KEY = {"op_family": "lm-head-gemv", "device": "gpu", "shape_class": {"m": 248320, "k": [5120, 5122], "n": 4}}
+
+    def test_key_maps_k_m_only_ranges_expand_family_becomes_the_ggml_op(self):
+        self.assertEqual(jk.op_perf_class(self.KEY), {"op_family": "MUL_MAT", "dims": {"m": [248320], "k": [5120, 5121, 5122]}})
+        self.assertEqual(jk.op_perf_class({"journal_key": self.KEY}), jk.op_perf_class(self.KEY))   # candidate form
+
+    def test_legacy_op_perf_class_is_accepted_unchanged_and_wins(self):
+        legacy = {"op_family": "MUL_MAT_ID", "dims": {"k": [2048]}}
+        self.assertIs(jk.op_perf_class({"shape_class": legacy, "journal_key": self.KEY}), legacy)
+
+    def test_family_without_a_grid_or_junk_is_none(self):
+        self.assertIsNone(jk.op_perf_class({"op_family": "flash-attn-verify", "shape_class": {"kv": 1}}))
+        self.assertIsNone(jk.op_perf_class(None))
+
+    def test_mapped_class_is_accepted_by_op_perf_screen_grid(self):
+        from autokernel.loop import op_perf_screen as ops
+        shapes = [{"name": "lm", "op": "MUL_MAT", "k": 5120, "m": 248320, "n_mats": 1, "n_used": 1}]
+        self.assertEqual([c["key"] for c in ops.grid(jk.op_perf_class(self.KEY), shapes, [4])], ["lm@n4"])
+
+
 class Overlap(unittest.TestCase):
     def test_other_model_overlapping_range_is_suppressed(self):  # the model is not in the key
         self.assertEqual(jk.suppressed_by(K(shape_class={"kv": [65536, 200000]}, model="a3b"), NEG), "akm-x")

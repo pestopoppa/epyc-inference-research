@@ -110,6 +110,28 @@ def served_n(registry: dict | None = None, grid=MEASURED_N) -> frozenset:
     return n
 
 
+def n_report(registry: dict | None = None, grid=MEASURED_N) -> dict:
+    """Per-path admitted n, computed from the registry on every call (RSL-R1; never at import): for each served (live or
+    planned) path, the grid values <= slots x (draft_max+1), keyed by CENSUS MODEL. {by_model, fallback, fallback_n}.
+    `fallback` is None, or WHY the fail-open set (FALLBACK_N) is in force -- the caller journals it, stderr alone is lost.
+    A model the registry gives no draft_max for is named in `fallback` and falls back to FALLBACK_N; the rest stay derived."""
+    reg = registry if registry is not None else load_registry()
+    out = {"by_model": {}, "fallback": None, "fallback_n": sorted(FALLBACK_N)}
+    if not reg:
+        return {**out, "fallback": "registry-unreadable"}
+    bad = []
+    for (model, _dev), e in sorted(served_set(reg).items()):
+        if e["path"] is None:
+            continue
+        if e["n_batch_max"] is None:   # a PLANNED path with no live twin has no draft_max by construction: not a fallback
+            bad += [model] if e["status"] == "live" else []
+            continue
+        out["by_model"][model] = out["by_model"].get(model, frozenset()) | frozenset(g for g in grid if g <= e["n_batch_max"])
+    if bad or not out["by_model"]:
+        out["fallback"] = ("no draft_max for " + ", ".join(bad)) if bad else "no served path"
+    return out
+
+
 def coverage(census: dict, served: dict) -> dict:
     """Pure. `served` = served_set(...). Returns
 

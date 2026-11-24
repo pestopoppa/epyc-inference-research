@@ -34,6 +34,85 @@ class Base(unittest.TestCase):
     def run_(self, p, row=None):
         return cu.run(p, row, self.census, self.prog, self.doc, os.path.join(self.d, "stubs"))
 
+class RunReportsCoverageAndN(Base):
+    """Defects 9 + 11: run() puts coverage violations / annotate exceptions / the n-set fallback on the BW-CENSUS report and journal."""
+    def _env(self, registry):
+        import yaml
+        from autokernel.loop import census_coverage as cc
+        p = os.path.join(self.d, "reg.yaml")
+        if registry is not None:
+            yaml.safe_dump(registry, open(p, "w"))
+        old = os.environ.get(cc.REGISTRY_ENV)
+        os.environ[cc.REGISTRY_ENV] = p
+        self.addCleanup(lambda: os.environ.pop(cc.REGISTRY_ENV) if old is None else os.environ.__setitem__(cc.REGISTRY_ENV, old))
+
+    def test_violations_are_reported_and_journaled_once_then_standing(self):
+        self._env({"server_mode": {"h": {"model_role": "qwen38_27b_q8_local", "device": "ROCm0", "slots": 1,
+                                         "acceleration": {"draft_max": 3}}}})
+        r1 = self.run_(self.res("r.json", {"row": "fx-v", "at": "2026-11-22T00:00:00Z", "op": {"cells_us": {}}}))
+        self.assertIn("27b-q8_0|mi210: served path has zero census records", r1["coverage_violations"])
+        self.assertIn("coverage violations 0 -> ", open(self.prog).read())
+        self.assertIsNone(r1["n_fallback"])
+        r2 = self.run_(self.res("r2.json", {"row": "fx-v2", "at": "2026-11-22T00:00:00Z", "op": {"cells_us": {}}}))
+        self.assertEqual(r2["coverage_violations"], r1["coverage_violations"])   # standing: reported again ...
+        self.assertEqual(open(self.prog).read().count("coverage violations"), 1)  # ... journaled only when it changes
+
+    def test_unreadable_registry_journals_the_exception_cause_and_the_n_fallback(self):
+        self._env(None)
+        rep = self.run_(self.res("r.json", {"row": "fx-u", "at": "2026-11-22T00:00:00Z", "op": {"cells_us": {}}}))
+        self.assertEqual(rep["n_fallback"], "registry-unreadable")
+        self.assertTrue(any("registry-unreadable" in v and "missing, unparsable" in v for v in rep["coverage_violations"]))
+        j = open(self.prog).read()
+        self.assertIn("census n-set FALLBACK (registry-unreadable): fail-open [1, 3, 4, 8, 16]", j)
+        self.assertIn("coverage unavailable: registry-unreadable", j)
+
+    def test_n_is_derived_per_path_per_run(self):
+        reg = {"server_mode": {"g": {"model_role": "qwen38_27b_q8_local", "device": "ROCm0", "slots": 1, "acceleration": {"draft_max": 2}}}}
+        self._env(reg)   # 27B: slots x (draft_max+1) = 3 -> n in {1, 3}; n=8 cell dropped
+        from autokernel.loop import census_coverage as cc
+        self.assertEqual({o["n"] for o in cu.extract(q8_result(90.41), cc.n_report(reg))}, set())
+        reg["server_mode"]["g"]["acceleration"]["draft_max"] = 7   # registry changes -> next run's n follows, no reimport
+        self.assertEqual({o["n"] for o in cu.extract(q8_result(90.41), cc.n_report(reg))}, {8})
+
+    def test_n_report_names_a_path_with_no_draft_max_and_falls_back_for_it_only(self):
+        from autokernel.loop import census_coverage as cc
+        rep = cc.n_report({"server_mode": {"g": {"model_role": "qwen38_27b_q8_local", "device": "ROCm0", "slots": 1}}})
+        self.assertIn("27b-q8_0", rep["fallback"])
+        self.assertEqual({o["n"] for o in cu.extract(q8_result(90.41), rep)}, {8})   # FALLBACK_N admits it (fail-open)
+
+
+class BackfillStamps(Base):
+    """Defect 21: committed-file one-shot; the live file converges through reconcile because a stamped record beats an unstamped one."""
+    def _rec(self, row, sha):
+        return {"source_row": row, "result_sha256": sha, "measured_at": "", "us_per_call": 1.0}
+
+    def test_stamps_from_the_sha_verified_result_only(self):
+        from autokernel.loop import census_reconcile
+        root = os.path.join(self.d, "rows")
+        os.makedirs(os.path.join(root, "rowA", "out"))
+        rp = os.path.join(root, "rowA", "out", "RESULT.json")
+        json.dump({"row": "rowA", "updated_utc": "2026-11-23T01:02:03Z"}, open(rp, "w"))
+        good = cu.sha256(rp)
+        c = {"records": {"a": self._rec("rowA", good), "b": self._rec("rowA", "0" * 64), "c": self._rec("rowMissing", good),
+                         "d": dict(self._rec("rowA", None)), "e": dict(self._rec("rowA", good), measured_at="2026-01-01")},
+             "time_only": {"t": self._rec("rowA", good)}}
+        live = json.loads(json.dumps(c))
+        self.assertEqual(cu.backfill_stamps(c, root), ["records:a", "time_only:t"])
+        self.assertEqual((c["records"]["a"]["measured_at"], c["records"]["a"]["measured_at_basis"]), ("2026-11-23T01:02:03Z", "updated_utc"))
+        for k in "bcd":
+            self.assertEqual(c["records"][k]["measured_at"], "")   # unverifiable / unsourced: never invented
+        self.assertEqual(c["records"]["e"]["measured_at"], "2026-01-01")
+        self.assertEqual(cu.backfill_stamps(c, root), [])   # idempotent
+        live.update(applied=[]), c.update(applied=[])
+        self.assertIn("records", census_reconcile.reconcile(live, c))   # stamped committed beats unstamped live
+        self.assertEqual(live["records"]["a"]["measured_at"], "2026-11-23T01:02:03Z")
+
+    def test_committed_census_has_no_unstamped_record_that_a_result_could_stamp(self):
+        c = json.load(open(cu.CENSUS))
+        left = [k for s in ("records", "time_only") for k, v in c[s].items() if not v.get("measured_at")]
+        self.assertEqual(left, [])
+
+
 class Idempotency(Base):
     def test_same_result_twice_changes_nothing(self):
         p = self.res("r.json", q8_result(90.41))

@@ -9,9 +9,9 @@ import json
 import os
 import re
 
-from .census_coverage import served_n
+from .census_coverage import FALLBACK_N, served_n
 
-SERVED_N = set(served_n())  # registry-derived (census_coverage); fallback {1,3,4,8,16} if the registry is unreadable
+SERVED_N = set(served_n())  # LEGACY import-time union (seed-linking default); extraction takes the per-run per-path census_coverage.n_report
 Q8_SHAPE_CLASS = {  # 27B Qwen3.8 Q8_0 tensor shapes -> (class name, calls per verify forward)
     "17408x5120": ("ffn_gate_up", 128), "5120x17408": ("ffn_down", 64), "10240x5120": ("gdn_attn_qkv", 48),
     "6144x5120": ("gdn_attn_gate", 48), "5120x6144": ("ssm_out+attn_output", 64), "12288x5120": ("attn_q", 16),
@@ -40,15 +40,23 @@ UBENCH_CLASS = {("mmid", "base"): ("MUL_MAT_ID:exps_gate_up@ubench", 40), ("shex
 
 
 
-def extract(res: dict) -> list[dict]:
-    """Pure: RESULT dict -> census observations (no I/O)."""
+def _n_ok(model: str, n: int, rep: dict | None) -> bool:
+    """n admitted for this census model: `rep` = census_coverage.n_report() (per-path, per run); model absent from it ->
+    FALLBACK_N (fail-open, journaled by the caller). No `rep` -> the import-time SERVED_N (legacy callers)."""
+    if rep is None:
+        return n in SERVED_N
+    return n in (rep.get("by_model") or {}).get(model, FALLBACK_N)
+
+
+def extract(res: dict, rep: dict | None = None) -> list[dict]:
+    """Pure: RESULT dict -> census observations (no I/O). `rep` = census_coverage.n_report() (per-path n, per run)."""
     out = []
     op = res.get("op") or {}
     cells = op.get("cells_us") or {}
     for key in sorted(cells):
         m = re.fullmatch(r"(\d+)x(\d+):n(\d+)", key)
         arms = cells[key]
-        if not m or int(m.group(3)) not in SERVED_N or not isinstance(arms, dict):
+        if not m or not _n_ok("27b-q8_0", int(m.group(3)), rep) or not isinstance(arms, dict):
             continue
         arm = next((a for a in ("V", "ON", "N", "OFF") if isinstance(arms.get(a), (int, float))), None)
         if arm is None:
@@ -64,7 +72,7 @@ def extract(res: dict) -> list[dict]:
     for key in sorted(table):
         m = re.fullmatch(r"([a-z_]+):n(\d+)", key)
         row = table[key]
-        if not m or int(m.group(2)) not in SERVED_N or not isinstance(row, dict):
+        if not m or not _n_ok("a3b-q8_0", int(m.group(2)), rep) or not isinstance(row, dict):
             continue
         us, g = row.get("us_on"), row.get("gbps_on")
         if not isinstance(us, (int, float)) or not isinstance(g, (int, float)):
@@ -72,10 +80,10 @@ def extract(res: dict) -> list[dict]:
         cls, calls = MMID_CLASS.get(m.group(1), ("mmid_" + m.group(1), 1))
         out.append({"model": "a3b-q8_0", "kernel_class": cls, "shape": m.group(1), "n": int(m.group(2)), "arm": "ON",
                     "bytes_per_call": int(round(g * us * 1e3)), "us_per_call": float(us), "calls_per_round": calls})
-    return out + extract_trace(res) + extract_time_only(res) + extract_vattn_ipb(res)
+    return out + extract_trace(res, rep) + extract_time_only(res) + extract_vattn_ipb(res)
 
 
-def extract_trace(res: dict) -> list[dict]:
+def extract_trace(res: dict, rep: dict | None = None) -> list[dict]:
     """Pure: GPU *trace* RESULT (`summary` block, no `op`) -> observations. Only values the RESULT states directly:
     - `summary.tbo_gbps["<M>x<K>:n<N>"]` = tbo Q8_0 MUL_MAT GB/s (27B V5I rows); bytes M*K*34/32, arm V.
     - `summary.dense_OFF|dense_ON.apparent_gbps_mean` = A3B dense verify aggregate at n=4 over TRACE_DENSE_BYTES.
@@ -88,7 +96,7 @@ def extract_trace(res: dict) -> list[dict]:
     for key in sorted(tbo) if isinstance(tbo, dict) else []:
         m = re.fullmatch(r"(\d+)x(\d+):n(\d+)", key)
         g = tbo[key]
-        if not m or int(m.group(3)) not in SERVED_N or not isinstance(g, (int, float)) or g <= 0:
+        if not m or not _n_ok("27b-q8_0", int(m.group(3)), rep) or not isinstance(g, (int, float)) or g <= 0:
             continue
         shape = f"{m.group(1)}x{m.group(2)}"
         cls, calls = TRACE_Q8_CLASS.get(shape, (f"dense_q8_{shape}_v5i", 1))

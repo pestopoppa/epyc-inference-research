@@ -64,7 +64,9 @@ class Coverage(unittest.TestCase):
             cu.annotate(c, hypotheses_dir=None)
         finally:
             os.environ.pop(cc.REGISTRY_ENV) if old is None else os.environ.__setitem__(cc.REGISTRY_ENV, old)
-        self.assertEqual(c["coverage"], {"status": "registry-unreadable"})
+        self.assertEqual(c["coverage"]["status"], "registry-unreadable")
+        self.assertIn("missing", c["coverage"]["error"])   # the cause is kept, not swallowed (defect 9)
+        self.assertTrue(any("registry-unreadable" in v and c["coverage"]["error"] in v for v in c["coverage"]["violations"]))
         self.assertEqual(c["family_rank"], [])
         self.assertTrue(cu.coverage_violations(c))
         json.dumps(c)

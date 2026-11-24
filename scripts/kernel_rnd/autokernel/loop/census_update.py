@@ -99,6 +99,25 @@ def result_stamp(res: dict) -> tuple[str, str]:
     return "", "missing"
 
 
+def backfill_stamps(c: dict, results_root: str) -> list[str]:
+    """ONE-SHOT (defect 21): stamp every record/time_only entry that has no `measured_at` with the timestamp its OWN RESULT
+    carries (`result_stamp`). The RESULT is found at <results_root>/<source_row>/out/RESULT.json and used ONLY when its
+    sha256 equals the entry's `result_sha256` -- a RESULT that moved or vanished leaves the entry unstamped; nothing is
+    invented, and an entry with no sha (hand-seeded) is never touched. Returns the keys stamped ("section:key")."""
+    done = []
+    for sec in ("records", "time_only"):
+        for k, r in sorted((c.get(sec) or {}).items()):
+            p = os.path.join(results_root, str(r.get("source_row")), "out", "RESULT.json") if isinstance(r, dict) else ""
+            if not isinstance(r, dict) or r.get("measured_at") or not r.get("result_sha256") or not os.path.isfile(p) \
+                    or sha256(p) != r["result_sha256"]:
+                continue
+            stamp, basis = result_stamp(json.load(open(p)))
+            if stamp:
+                r.update(measured_at=stamp, measured_at_basis=basis)
+                done.append(f"{sec}:{k}")
+    return done
+
+
 def empty_census() -> dict:
     return {"cpu": json.loads(json.dumps(CPU_DEFAULTS)), "schema": "epyc.autokernel.bw_census.v1", "floor_gbps": FLOOR, "target_gbps": TARGET,
             "ceiling_gbps": CEILING, "noise_frac": NOISE, "records": {}, "seeds": {}, "seed_stubs": [],
@@ -591,9 +610,11 @@ def annotate(c: dict, registry: dict | None = None, hypotheses_dir: str | None =
         x.setdefault("family", cf.op_family(x["path"], x["op"]))
     try:
         reg = registry if registry is not None else cc.load_registry()
-        c["coverage"] = {"status": "ok", **cc.coverage(c, cc.served_set(reg))} if reg else {"status": "registry-unreadable"}
-    except Exception:  # noqa: BLE001 -- coverage must never crash a census write
-        c["coverage"] = {"status": "registry-unreadable"}
+        c["coverage"] = ({"status": "ok", **cc.coverage(c, cc.served_set(reg))} if reg else
+                         {"status": "registry-unreadable", "error": "registry file missing, unparsable or not a mapping"})
+    except Exception as e:  # noqa: BLE001 -- coverage must never crash a census write, but the cause is KEPT (defect 9)
+        c["coverage"] = {"status": "registry-unreadable", "error": f"{type(e).__name__}: {e}"}
+    c["coverage"]["violations"] = coverage_violations(c)
     try:
         hyps = jk.hypothesis_entries(hypotheses_dir) if hypotheses_dir else []
     except OSError:
@@ -606,7 +627,7 @@ def coverage_violations(c: dict) -> list[str]:
     Reads c['coverage'] (annotate output); [] only when the registry was readable and every served path has a record."""
     cov = c.get("coverage") or {}
     if cov.get("status") != "ok":
-        return [f"coverage unavailable: {cov.get('status', 'missing')}"]
+        return [f"coverage unavailable: {cov.get('status', 'missing')}" + (f" ({cov['error']})" if cov.get("error") else "")]
     have = {r.get("op_path") for r in (c.get("records") or {}).values() if isinstance(r, dict)}
     out = [f"{k}: served path has zero census records" for k, v in sorted((cov.get("paths") or {}).items())
            if v["path"] not in have]
@@ -819,13 +840,15 @@ def run(result: str | None, row: str | None, census: str, program: str | None, d
         dry_run: bool = False, merge_static_from: str | None = None, spec: str | None = None) -> dict:
     """seeds_out gets per-surface stubs (preview only). Surface seeds for commit: --surface-seeds-out."""
     merged = None
+    from . import census_coverage as cc
+    reg = cc.load_registry()  # ONE read per run: n-set, coverage and violations all see the same registry
     if merge_static_from and os.path.exists(merge_static_from) and os.path.exists(census):
         live, src = json.load(open(census)), json.load(open(merge_static_from))
         merged = sorted(set(merge_static(live, src)) | set(reconcile(live, src)))  # census_reconcile: union, newer measured_at wins
         before = json.dumps(live, sort_keys=True)
         rerank(live)
         derive_surfaces(live)
-        annotate(live)
+        annotate(live, reg)
         if json.dumps(live, sort_keys=True) != before:
             merged = sorted(set(merged) | {"surfaces"})
         if merged and not dry_run:
@@ -833,7 +856,7 @@ def run(result: str | None, row: str | None, census: str, program: str | None, d
         if program and not dry_run:
             write_surfaces_block(program, live)
         if result is None and not doc:
-            return {"merge_static": merged}
+            return {"merge_static": merged, "coverage_violations": live["coverage"]["violations"]}
     if result is None:  # render-only: regenerate the doc block from the committed census
         c = json.load(open(census))
         return {"render_only": True, "doc_changed": write_doc(doc, c) if doc else False}
@@ -841,7 +864,8 @@ def run(result: str | None, row: str | None, census: str, program: str | None, d
     row = row or res.get("row") or os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(result))))
     sha = sha256(result)
     c = json.load(open(census)) if os.path.exists(census) else empty_census()
-    obs = extract(res) + extract_cpu(res, result)
+    nrep = cc.n_report(reg)  # per-path n from draft_max x slots, THIS run (defect 11)
+    obs = extract(res, nrep) + extract_cpu(res, result)
     fresh = not any(a["sha256"] == sha for a in c["applied"])
     stamp, basis = result_stamp(res)
     lines = apply(c, obs, row, sha, stamp, basis)
@@ -849,8 +873,17 @@ def run(result: str | None, row: str | None, census: str, program: str | None, d
         if not c.get("surfaces"):
             derive_surfaces(c)
         lines += mark_stale(c, with_spec_target(res, spec), row, sha)
-    annotate(c)
-    rep = {"row": row, "sha256": sha[:12], "observations": len(obs), "journal_lines": len(lines), "changed": False}
+    prev_viol = (c.get("coverage") or {}).get("violations") or []
+    annotate(c, reg)
+    viol = c["coverage"]["violations"]
+    n_kernel = len(lines)   # `journal_lines` stays the kernel-move count; the coverage/n-set lines below are reported as `status_lines`
+    if fresh:
+        tag = f"- `{row}` ({sha[:12]}):"
+        if nrep["fallback"]:
+            lines.append(f"{tag} census n-set FALLBACK ({nrep['fallback']}): fail-open {nrep['fallback_n']}")
+        if viol != prev_viol:  # change-gated: a standing violation is reported on the BW-CENSUS line every run, journaled once
+            lines.append(f"{tag} coverage violations {len(prev_viol)} -> {len(viol)}: " + ("; ".join(viol) or "cleared"))
+    rep = {"coverage_violations": viol, "n_fallback": nrep["fallback"], "row": row, "sha256": sha[:12], "observations": len(obs), "journal_lines": n_kernel, "status_lines": len(lines) - n_kernel, "changed": False}
     if merged is not None:
         rep["merge_static"] = merged
     if dry_run:
@@ -890,7 +923,17 @@ def main(argv=None) -> int:
                     help="write the per-surface seed file (loop/seeds/hypotheses format) from --census and exit; "
                          "committing it is a reviewed commit, never a run-end write")
     ap.add_argument("--date", default=None, help="date stamp for --surface-seeds-out")
+    ap.add_argument("--backfill-stamps", metavar="RESULTS_ROOT", default=None,
+                    help="one-shot: stamp --census entries lacking measured_at from their sha-verified RESULT (the COMMITTED file only; "
+                         "the live file converges through --merge-static-from because a stamped record beats an unstamped one)")
     a = ap.parse_args(argv)
+    if a.backfill_stamps:
+        c = json.load(open(a.census))
+        done = backfill_stamps(c, a.backfill_stamps)
+        if done and not a.dry_run:
+            open(a.census, "w").write(json.dumps(c, indent=1, sort_keys=True) + "\n")
+        print("BW-CENSUS " + json.dumps({"backfilled": len(done), "keys": done}))
+        return 0
     if a.surface_seeds_out:
         c = json.load(open(a.census))
         rerank(c)
