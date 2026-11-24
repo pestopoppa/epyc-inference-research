@@ -1,0 +1,8 @@
+{
+ "min_vram_gib": 20,
+ "port": 28082,
+ "row": "ak-27b-served-np4-floor-gpu-20261124",
+ "seed": 2026112411,
+ "task": "autokernel-akx-program.md:AKX-P2d",
+ "workload": "W1S"
+}
