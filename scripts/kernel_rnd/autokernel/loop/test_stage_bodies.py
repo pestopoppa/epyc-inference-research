@@ -17,7 +17,8 @@ REF = "ak/champion/llama-cpp-ffc1bac82eec"
 def cand(tmp_path, **kw):
     c = {"id": "cand-x-bbbbbbbbb", "base_sha": BASE, "patch_sha": PATCH, "hypothesis_id": "AK-X",
          "predicted_effect": "+2%", "champion_ref": REF, "build_root": str(tmp_path),
-         "test_refs": {REF: BASE}, "test_parents": {PATCH: BASE}, "stage_results": {}}
+         "test_refs": {REF: BASE}, "test_parents": {PATCH: BASE}, "stage_results": {},
+         "shape_class": {"op_family": "MUL_MAT", "dims": {"k": [5120], "m": [1024, 6144]}}}
     c.update(kw)
     return c
 
@@ -44,8 +45,9 @@ def test_happy_chain_files_zero_llm_and_lands_keep(tmp_path):
     c = cand(tmp_path)
     log = []
     out, prim = run_all(c, tmp_path, lineage=log)
-    assert [out[s]["polar"] for s in sb.STAGES] == ["PASS"] * 4
-    for st, r in out.items():
+    gated = [s for s in sb.STAGES if s != "op-perf"]   # op-perf is a screen: it never carries a polar PASS (RSL-R3)
+    assert [out[s]["polar"] for s in gated] == ["PASS"] * 4 and "polar" not in out["op-perf"]
+    for st, r in {s: out[s] for s in gated}.items():
         verdict, decided = filed(r, f"akc-ak-x-{st}-20261121")
         assert verdict == "PASS" and decided, (st, verdict)
     assert prim.paths["refs"][REF] == PATCH

@@ -232,6 +232,20 @@ LANE_PROFILES: dict[str, MoeProfile] = {
 }
 
 
+#: DENSE lanes (RSL-R3): a served dense GGUF has no MoE profile, so it stays OUT of `LANE_PROFILES` / `SERVED_SHAPES`
+#: (calibrated manifests and the correctness corpus are unchanged) and feeds only `lane_served_shapes` / the op-perf grid.
+#: Header read 2026-11-24 of `/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf` (arch qwen35, 65 blocks, hidden 5120, every
+#: weight Q8_0): the distinct 2-D matmul weights as (name, k=ne[0], m=ne[1]); `nextn.*` (MTP head, unused by the served
+#: DFlash2 drafter) and `token_embd` (a get_rows, not a matmul) are excluded. `test_dense_lane_matches_gguf_header`
+#: re-derives this set from the file.
+DENSE_PROFILES: dict[str, tuple[str, tuple[tuple[str, int, int], ...]]] = {
+    "q38_27b": ("/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf", (
+        ("ffn_gate_up", 5120, 17408), ("ffn_down", 17408, 5120), ("attn_qkv", 5120, 10240),
+        ("attn_gate", 5120, 6144), ("attn_q", 5120, 12288), ("attn_kv", 5120, 1024),
+        ("proj_out", 6144, 5120), ("ssm_ab", 5120, 48), ("lm_head", 5120, 248320))),
+}
+
+
 def candidate_experts(profile: MoeProfile) -> int:
     """The CANDIDATE corpus' test expert count: 8, or the next power of two that still
     routes `expert_used` DISTINCT experts per token (Q38FN: 10 used -> 16).
@@ -347,7 +361,9 @@ def lane_served_shapes(lane: str) -> tuple[ServedShape, ...]:
     """Round-15 partition: the candidate corpus a lane measures -- its OWN served shapes
     plus any other lane's shape with the identical (op, k, m), i.e. a shape this lane's
     selection routes reach with the same kernels (none today: DS41 5120x2304 and Q38FN
-    2560x640 share no dims)."""
+    2560x640 share no dims). A DENSE lane (RSL-R3) is its own shapes only."""
+    if lane in DENSE_PROFILES:
+        return tuple(ServedShape(f"{lane}_{n}", "MUL_MAT", k=k, m=m) for n, k, m in DENSE_PROFILES[lane][1])
     own = _lane_served_shapes(LANE_PROFILES[lane])
     dims = {(shape.op, shape.k, shape.m) for shape in own}
     shared = tuple(shape for other, profile in LANE_PROFILES.items() if other != lane
@@ -417,6 +433,13 @@ def lane_for_model(model) -> "str | None":
                 os.path.dirname(real) == os.path.dirname(os.path.realpath(profile.model)):
             return lane
     return None
+
+
+def dense_lane_for_model(model) -> "str | None":
+    """The DENSE lane whose GGUF is exactly `model` (resolved path; separate from `lane_for_model`, which gates use)."""
+    import os
+    real = os.path.realpath(str(model)) if model is not None else None
+    return next((n for n, (g, _) in DENSE_PROFILES.items() if os.path.realpath(g) == real), None)
 
 
 def _served_types(types: set, direction: str) -> tuple[str, ...]:

@@ -7,7 +7,15 @@
   "chunks": 16,
   "models": {
     "q38_27b": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
-    "q38fn": "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
+    "q38fn": "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+    "a3b": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf"
+  },
+  "paths_note": "RSL-R8: one entry per served path (census_coverage.served_set key `model|device`, live and planned). A path is `gated` iff a decisive clause for its (backend, model) exists in `backends`; otherwise stage_bodies reports `quality-ungated`. The A3B entries carry floor null / needs-floor-row: no A3B KLD floor has been measured or ratified (the 27B/Q38FN floors above are operator-ratified, RATIFY-AK-GRAPH-KLD-THRESHOLDS-20261118; none was derived for A3B). Setting one is a measurement row plus an operator ratification.",
+  "paths": {
+    "27b-q8_0|mi210": {"model": "q38_27b", "backend": "gpu"},
+    "q38fn-ud-iq4xs-cpu|cpu": {"model": "q38fn", "backend": "cpu"},
+    "a3b-q8_0-cpu|cpu": {"model": "a3b", "backend": "cpu", "floor": null, "status": "needs-floor-row"},
+    "a3b-q8_0|mi210": {"model": "a3b", "backend": "gpu", "floor": null, "status": "needs-floor-row", "planned": true}
   },
   "backends": {
     "gpu": [

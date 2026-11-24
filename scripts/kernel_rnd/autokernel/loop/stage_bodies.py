@@ -15,6 +15,7 @@ check_complete.py contract):
 
     build       verdict PASS_BUILT / FUTILITY_CANDIDATE_COMPILE / FUTILITY_HARNESS_*      polar PASS|FAIL
     oracle-kld  verdict PASS_ORACLE / FAIL_CORRECTNESS + graph_kld model blocks       polar PASS|FAIL (L2 decides)
+    op-perf     SCREEN ONLY (RSL-R3): FAIL_OP_PERF_* polar FAIL | FUTILITY_SCREEN_ONLY_NO_KEEP, never a polar PASS
     ab-timing   verdict PASS_FASTER / FAIL_NO_GAIN + speed{surface,effect_pct,pairs,model}     polar PASS|FAIL (L2 decides)
     fold-check  verdict KEEP_LANDED / FUTILITY_HARNESS_STALE_BASE / FAIL_*            polar PASS|FAIL
 
@@ -44,19 +45,27 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from . import census_coverage as cc
+from . import op_perf_screen as ops
 from . import sampling_axis
+from . import served_shape_cases as ssc
 
 SCHEMA = "epyc.autokernel.stage_result.v1"
-STAGES = ("build", "oracle-kld", "ab-timing", "fold-check")
+STAGES = ("build", "oracle-kld", "op-perf", "ab-timing", "fold-check")
 CANONICAL_TREE = Path("/mnt/raid0/llm/llama.cpp")
 PRODUCTION_BRANCH_RX = re.compile(r"(^|/)production-consolidated-v\d+")
 ALLOWED_REF_RX = re.compile(r"^(refs/heads/)?(ak/champion/|llama\.cpp-experimental)")
 GPU_HOST_CPUS = frozenset(range(72, 96)) | frozenset(range(168, 192))  # q3 cores + siblings (MI210 host threads)
-GPU_STAGES = frozenset({"oracle-kld", "ab-timing", "fold-check"})
+GPU_STAGES = frozenset({"oracle-kld", "op-perf", "ab-timing", "fold-check"})
+#: Stages whose device is the candidate PATH's (RSL-R6): a cpu path runs them on the cpu lane (the served host's own
+#: topology), never in a GPU grant; the legacy default path is the 27B on the MI210.
+PATH_STAGES = frozenset({"op-perf", "ab-timing"})
+DEFAULT_PATH = "27b-q8_0|mi210"
+LOOP_STORE = Path("/mnt/raid0/llm/autokernel/loop-memory")
+QUALITY_UNGATED = "quality-ungated"
+_SERVING_KEYS = ("port", "slots", "ngl", "no_mmap", "cache_ram", "numa_instances", "numa_ports", "serving_shape", "recipe")
 #: Default work area for per-candidate source trees and builds (never the canonical tree).
 WORK_ROOT = Path("/mnt/raid0/llm/tmp/akchain-work")
-TIMING_SURFACE = "tg128"
-TIMING_MODEL = "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf"
 
 
 class StageRefused(RuntimeError):
@@ -77,9 +86,9 @@ def _git(repo: Path | str, *args: str) -> str:
 
 # ---- hard-rule guards -----------------------------------------------------------------------------------------
 
-def guard_device(stage: str, lane: str, env: dict) -> None:
-    """HIP_VISIBLE_DEVICES=-1 outside a GPU grant. Mutates `env` (normally os.environ)."""
-    if lane != "gpu" or stage not in GPU_STAGES:
+def guard_device(stage: str, lane: str, env: dict, need: str | None = None) -> None:
+    """HIP_VISIBLE_DEVICES=-1 outside a GPU grant. Mutates `env` (normally os.environ). `need` is the path's device."""
+    if lane != "gpu" or stage not in GPU_STAGES or need == "cpu":
         env["HIP_VISIBLE_DEVICES"] = "-1"
         env["ROCR_VISIBLE_DEVICES"] = "-1"
 
@@ -146,6 +155,7 @@ class Primitives:
     parent_of: Callable[[str], str]
     lineage: Callable[[Mapping[str, Any]], dict]
     paths: dict = field(default_factory=dict)
+    op_perf: Callable[..., dict] | None = None
 
 
 def _live_source_tree(cand: Mapping[str, Any]) -> Path:
@@ -214,14 +224,22 @@ def _live_timing(cand: Mapping[str, Any], anchor_build: Path, cand_build: Path) 
     """Alternating paired A/B, n >= bench.MIN_PAIRS, on the candidate's measured surface (quiet grant)."""
     from . import bench
     pairs = max(int(cand.get("pairs") or bench.MIN_PAIRS), bench.MIN_PAIRS)
-    model = Path(cand.get("timing_model") or TIMING_MODEL)
+    spec = cand["path_spec"]
+    if spec["lane"] != "gpu":   # a CPU cell needs the served host's topology (spec["serving"]); no live runner yet
+        raise StageRefused("FUTILITY_HARNESS_INSTRUMENT", f"no live CPU timing runner for {spec['key']}")
+    model = Path(spec["gguf"])
     c = bench.compare(bench.Arm("anchor", anchor_build / "bin" / "llama-bench"),
                       bench.Arm("candidate", cand_build / "bin" / "llama-bench"), model,
-                      pp=0, tg=128, pairs=pairs, surface=TIMING_SURFACE)
+                      pp=0, tg=128, pairs=pairs, surface=spec["surface"])
     return {"effect_pct": float(c.effect), "pairs": int(c.pairs), "decisive": c.decisive,
             "noise_floor_pct": c.noise_floor_pct, "device_seconds": c.device_seconds,
             "anchor_samples": list(c.anchor_samples), "candidate_samples": list(c.candidate_samples),
             "model": str(model)}
+
+
+def _live_op_perf(cand: Mapping[str, Any], anchor_build: Path, cand_build: Path, cells: list) -> dict:
+    """Needs paired `test-backend-ops perf` cells, a per-cell A/A floor and census weights: a measurement row, not code."""
+    raise StageRefused("FUTILITY_HARNESS_INSTRUMENT", "no live op-perf runner (needs per-cell floors + census weights)")
 
 
 def _live_cas(ref: str, new: str, old: str) -> None:
@@ -243,7 +261,7 @@ def live_primitives() -> Primitives:
                       champion_head=lambda ref: _git(champ, "rev-parse", ref if ref.startswith("refs/") else
                                                      f"refs/heads/{ref}"),
                       cas=_live_cas, parent_of=lambda sha: _git(champ, "rev-parse", f"{sha}^"),
-                      lineage=_live_lineage)
+                      lineage=_live_lineage, op_perf=_live_op_perf)
 
 
 def trigger_lineage(event: Mapping[str, Any], *, out_root: Path | None = None,
@@ -266,6 +284,74 @@ def trigger_lineage(event: Mapping[str, Any], *, out_root: Path | None = None,
         rc = int(e.code or 0)
     (out / "event.json").write_text(json.dumps(dict(event), indent=1, sort_keys=True) + "\n")
     return {"lineage_out": str(out), "lineage_rc": rc, "refused": rc == 3}
+
+
+# ---- served paths (RSL-R6 / R8): model GGUF, device and serving contract come from the registry, not constants -------
+
+def path_specs(registry: Mapping[str, Any]) -> dict[str, dict]:
+    """{"model|device": spec} for every path `census_coverage.served_set` names (live and planned; DS41 has none).
+    `gguf`/`serving` are read off the registry's non-alias host of the path's model_role + device. A PLANNED path
+    has no served host yet: it borrows the role's GGUF and carries serving=None (no argv invented for it)."""
+    hosts: dict = {}
+    for name, e in sorted((registry.get("server_mode") or {}).items()):
+        if isinstance(e, dict) and e.get("model_role") and not e.get("alias_of"):
+            hosts.setdefault((e["model_role"], cc._device(e)), (name, e))
+    out = {}
+    for (model, dev), s in cc.served_set(registry).items():
+        name, e = hosts.get((s["model_role"], dev)) or next(
+            (h for (r, _), h in hosts.items() if r == s["model_role"]), (None, {}))
+        acc = e.get("acceleration") if isinstance(e.get("acceleration"), dict) else {}
+        serving = None
+        if s["status"] == "live":
+            serving = {k: e[k] for k in _SERVING_KEYS if e.get(k) is not None}
+            serving.update({k: acc[k] for k in ("spec_type", "draft_max", "draft_model") if k in acc})
+        gguf = next((g for g in (e.get("model_path"), e.get("model")) if isinstance(g, str) and os.path.isabs(g)), None)
+        out[f"{model}|{dev}"] = {"key": f"{model}|{dev}", "model": model, "device": dev, "status": s["status"],
+                                 "model_role": s["model_role"], "host": name, "gguf": gguf, "serving": serving,
+                                 "n": sorted(s["n"]), "lane": "gpu" if dev == "mi210" else "cpu",
+                                 "surface": "tg128"}  # greedy decode cell: the surface family bench.floor_rows keys
+    return out
+
+
+def resolve_path(cand: Mapping[str, Any]) -> dict:
+    """The candidate's served path spec (`serving_path`, default the 27B on the MI210). Refuses, never guesses."""
+    reg = cand.get("test_registry") or cc.load_registry()
+    if not reg:
+        raise StageRefused("FUTILITY_HARNESS_MISSING_INPUT", "model registry unreadable: no served set")
+    specs, key = path_specs(reg), str(cand.get("serving_path") or DEFAULT_PATH)
+    if key not in specs or not specs[key]["gguf"]:
+        raise StageRefused("FUTILITY_HARNESS_MISSING_INPUT", f"{key} is not a served path with a GGUF; served: {sorted(specs)}")
+    return specs[key]
+
+
+def timing_floor(spec: Mapping[str, Any], cand: Mapping[str, Any]) -> bool:
+    """True iff this path has its OWN A/A floor (bench.floor_rows keys floors by surface AND model, never borrowed)."""
+    if cand.get("test_registry"):   # fixture mode: the candidate names the paths that have a floor cell
+        return spec["key"] in (cand.get("test_floor_paths") or [])
+    from . import bench
+    return bench.floor_rows(spec["surface"], spec["gguf"], Path(cand.get("store") or LOOP_STORE)) is not None
+
+
+def quality_status(key: str, policy: Mapping[str, Any]) -> dict:
+    """graph_kld_policy `paths[key]` -> gated iff a decisive clause for its (backend, model) exists; else QUALITY_UNGATED
+    (no entry, or an entry with floor null / needs-floor-row). Never invents a floor."""
+    e = (policy.get("paths") or {}).get(key)
+    if not e:
+        return {"path": key, "status": QUALITY_UNGATED, "reason": "no-policy-entry"}
+    ok = any(c.get("model") == e.get("model") and c.get("decisive")
+             for c in (policy.get("backends") or {}).get(e.get("backend"), []))
+    return {"path": key, "status": "gated" if ok else QUALITY_UNGATED, "model": e.get("model"),
+            "backend": e.get("backend"), "reason": None if ok else e.get("status") or "needs-floor-row"}
+
+
+def coverage_report(registry: Mapping[str, Any], policy: Mapping[str, Any], cand: Mapping[str, Any] | None = None) -> dict:
+    """Per served path: timing cell / `ungated`, quality `gated` / `quality-ungated`, op-perf grid / `ungated` (for /loop)."""
+    cand = cand or {}
+    return {k: {"status": s["status"], "device": s["device"],
+                "timing": "cell" if timing_floor(s, cand) else "ungated",
+                "quality": quality_status(k, policy)["status"],
+                "op_perf": "grid" if ssc.lane_for_model(s["gguf"]) or ssc.dense_lane_for_model(s["gguf"]) else "ungated"}
+            for k, s in path_specs(registry).items()}
 
 
 # ---- stage bodies -----------------------------------------------------------------------------------------------
@@ -321,6 +407,18 @@ def _require_built(cand) -> dict:
 
 
 def stage_oracle(cand, prim: Primitives, *, test_mode: bool) -> dict:
+    """The 27B-anchored gate decides a FAIL as before; a PASS on a path with no policy floor is non-deciding (RSL-R8)."""
+    r = _stage_oracle(cand, prim, test_mode=test_mode)
+    from . import gate_eval
+    q = quality_status(resolve_path(cand)["key"], gate_eval.load_policy())
+    r["quality"] = q
+    if q["status"] == QUALITY_UNGATED and r.get("polar") == "PASS":   # another model's clauses never keep this path
+        r.pop("polar")
+        r["verdict"] = f"FUTILITY_QUALITY_UNGATED ({q['path']} {q['reason']}; oracle {r['verdict']} on the 27B/Q38FN clauses is non-deciding)"
+    return r
+
+
+def _stage_oracle(cand, prim: Primitives, *, test_mode: bool) -> dict:
     r = _base("oracle-kld", cand)
     b = _require_built(cand)
     anchor = Path(cand.get("anchor_build") or _build_dir(cand, "anchor"))
@@ -345,9 +443,42 @@ def stage_oracle(cand, prim: Primitives, *, test_mode: bool) -> dict:
     return r
 
 
+def stage_op_perf(cand, prim: Primitives, *, test_mode: bool) -> dict:
+    """RSL-R3 SCREEN, never a gate: served-shape grid x registry n-set, futility-only per cell, weighted aggregate.
+    A passing screen is filed FUTILITY (no polar), so gate_eval can never read it as a keep or a gate PASS."""
+    r = _base("op-perf", cand)
+    b = _require_built(cand)
+    spec, sc = resolve_path(cand), cand.get("shape_class")
+    if not isinstance(sc, Mapping):
+        raise StageRefused("FUTILITY_HARNESS_MISSING_INPUT", "candidate carries no shape_class")
+    lane = ssc.lane_for_model(spec["gguf"]) or ssc.dense_lane_for_model(spec["gguf"])
+    r["op_perf_path"] = spec["key"]
+    if lane is None:
+        return {**r, "ungated": spec["key"],
+                "verdict": f"FUTILITY_HARNESS_INSTRUMENT (op-perf ungated: no served-shape lane for {spec['key']})"}
+    try:
+        cells = ops.grid(sc, ssc.lane_served_shapes(lane), spec["n"])
+    except (ValueError, KeyError, TypeError) as e:
+        raise StageRefused("FUTILITY_HARNESS_INPUT", f"bad shape_class: {e}")
+    anchor = Path(cand.get("anchor_build") or _build_dir(cand, "anchor"))
+    m = prim.op_perf(cand, anchor, Path(b["build_dir"]), cells)
+    res = ops.polar_result(ops.decide(m["cells"], m["weights"]), r)
+    res["stage"] = "op-perf"
+    if res.get("polar") == "PASS":
+        res.pop("polar")
+        res.update(screen_pass=True, verdict="FUTILITY_SCREEN_ONLY_NO_KEEP " + res["verdict"].replace("PASS_OP_PERF_SCREEN", "(op-perf screen passed)", 1))
+    return res
+
+
 def stage_timing(cand, prim: Primitives, *, test_mode: bool) -> dict:
     r = _base("ab-timing", cand)
     b = _require_built(cand)
+    spec = resolve_path(cand)
+    r["timing_path"] = {k: spec[k] for k in ("key", "status", "device", "host", "gguf")}
+    if not timing_floor(spec, cand):   # no cell with its own A/A floor: never timed against a borrowed floor
+        return {**r, "ungated": spec["key"],
+                "verdict": f"FUTILITY_HARNESS_INSTRUMENT (ungated: no A/A floor cell for {spec['key']}; needs-aa-floor-row)"}
+    cand = {**cand, "timing_model": spec["gguf"], "path_spec": spec}
     anchor = Path(cand.get("anchor_build") or _build_dir(cand, "anchor"))
     t = prim.timing(cand, anchor, Path(b["build_dir"]))
     from . import bench
@@ -356,8 +487,8 @@ def stage_timing(cand, prim: Primitives, *, test_mode: bool) -> dict:
         return r
     eff = float(t["effect_pct"])
     gmin = float(cand.get("geomean_min") or 1.0)
-    r.update(backend="gpu", speed={"surface": TIMING_SURFACE, "effect_pct": eff, "pairs": int(t["pairs"]),
-                                   "model": str(t.get("model") or TIMING_MODEL)},
+    r.update(backend="gpu", speed={"surface": spec["surface"], "effect_pct": eff, "pairs": int(t["pairs"]),
+                                   "model": str(t.get("model") or spec["gguf"])},
              geomean=round(1.0 + eff / 100.0, 6), rule={"geomean_min": gmin}, timing=t)
     win = eff > 0 and bool(t.get("decisive", True))
     r.update(verdict="PASS_FASTER" if win else f"FAIL_NO_GAIN (effect {eff:+.3f}%)", polar="PASS" if win else "FAIL")
@@ -404,7 +535,7 @@ def stage_fold_check(cand, prim: Primitives, *, test_mode: bool) -> dict:
     return r
 
 
-BODIES = {"build": stage_build, "oracle-kld": stage_oracle, "ab-timing": stage_timing, "fold-check": stage_fold_check}
+BODIES = {"build": stage_build, "oracle-kld": stage_oracle, "op-perf": stage_op_perf, "ab-timing": stage_timing, "fold-check": stage_fold_check}
 
 
 # ---- test-mode primitives ---------------------------------------------------------------------------------------
@@ -435,7 +566,7 @@ def test_primitives(cand: Mapping[str, Any], *, fixture_repo: Path | None = None
     def timing(c, a, bd):
         o = oc("ab-timing")
         return {"effect_pct": 2.0 if o == "pass" else -0.4, "pairs": 5 if o != "harness" else 2, "decisive": True,
-                "model": TIMING_MODEL}
+                "model": c.get("timing_model")}
 
     if fixture_repo is not None:
         head = lambda ref: _git(fixture_repo, "rev-parse", ref if ref.startswith("refs/") else f"refs/heads/{ref}")
@@ -462,9 +593,15 @@ def test_primitives(cand: Mapping[str, Any], *, fixture_repo: Path | None = None
                 f.write(json.dumps(dict(ev), sort_keys=True) + "\n")
         return {"lineage_out": "test-mode", "lineage_rc": 0, "refused": False}
 
+    def op_perf(c, a, bd, cells):
+        o = oc("op-perf")   # fail: the first cell regresses beyond its floor while every other cell wins
+        mk = lambda i, x: {"key": x["key"], "anchor": [100.0] * 5, "floor_pct": 1.0,
+                           "candidate": [] if o == "harness" else [110.0 if o == "fail" and i == 0 else 95.0] * 5}
+        return {"cells": [mk(i, x) for i, x in enumerate(cells)], "weights": {x["key"]: 1.0 for x in cells}}
+
     return Primitives(source_tree=lambda c: Path(c.get("test_src") or "/nonexistent-test-src"), compile=compile_,
                       oracle=oracle, timing=timing, champion_head=head, cas=cas, parent_of=parent_of,
-                      lineage=lineage, paths={"refs": refs})
+                      lineage=lineage, paths={"refs": refs}, op_perf=op_perf)
 
 
 # ---- driver -----------------------------------------------------------------------------------------------------
@@ -474,9 +611,17 @@ def run_stage(stage: str, cand: Mapping[str, Any], *, lane: str, prim: Primitive
     if stage not in BODIES:
         raise ValueError(f"unknown stage {stage!r}")
     env = os.environ if env is None else env
-    guard_device(stage, lane, env)
-    if stage in GPU_STAGES and lane != "gpu":
-        return {**_base(stage, cand), "verdict": "FUTILITY_HARNESS_WRONG_GRANT (gpu stage on a non-gpu lane)"}
+    need = None   # the device a PATH stage's served path lives on; a CPU path is refused on the gpu lane and vice versa
+    if stage in PATH_STAGES:
+        try:
+            need = resolve_path(cand)["lane"]
+        except StageRefused as e:
+            guard_device(stage, lane, env, "cpu")
+            return {**_base(stage, cand), "verdict": f"{e.token} ({e})"}
+    guard_device(stage, lane, env, need)
+    if (stage in GPU_STAGES and need != "cpu" and lane != "gpu") or (need == "cpu" and lane != "cpu"):
+        return {**_base(stage, cand), "verdict": f"FUTILITY_HARNESS_WRONG_GRANT ({need or 'gpu'} stage on the {lane} lane"
+                + ("; a cpu path needs the served host's topology" if need == "cpu" else "") + ")"}
     if prim is None and test_mode:
         fx = cand.get("test_fixture_repo")
         prim = test_primitives(cand, fixture_repo=Path(fx) if fx else None)
