@@ -11933,12 +11933,18 @@ roles:
         # snapshot per slot that no draft can use: 4 x 149.625 MiB = 0.58 GiB. 7 still covers
         # every rollback: n_rollback = draft.size() + 1 - accepted <= 7 = n_rs_seq
         # (server-context.cpp:4141-4162), so the checkpoint fallback stays off.
-        # ⚠ The canonical recipe below still says draft_n_max 8 and is LEFT AS IS: it is the
-        # AutoKernel measurement identity (ctx 16384, f16 KV, split; serving-floor identity
-        # tests pin it), not the production shape, and at block_size 8 it drafts the same 7.
+        # 2026-11-24 (STACKCHG-27B-SERVED-RECIPE-20261124): `recipe:` repointed to the SERVED
+        # revision (research 3898a8b9c), which restates THIS row's serving_shape (ctx 393216,
+        # q8_0 KV, kv_unified, draft_n_max 7, batch/ubatch 512, no_mmap, ctx-checkpoints 32,
+        # cache-ram 65536, no-cache-idle-slots). Floor: ak-27b-served-np4-floor-gpu-20261124
+        # CALIBRATED (data/ak-27b-served-np4-floor-gpu-20261124/, 3.37 % serving floor).
+        # The ORIGINAL recipe artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json
+        # (draft_n_max 8, ctx 16384, f16 KV, split) is LEFT AS IS and is NOT a served shape: it is the
+        # AutoKernel measurement identity (recipe_hash keys the standing serving floor and sealed
+        # rows; serving-floor identity tests pin it) and AK's DEFAULT_RECIPE still names it.
         draft_max: 7
         ngld: 99
-        recipe: artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json
+        recipe: artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4-served.json
         min_kernel: production-consolidated-v10   # 5c278648a "champion: admit DFlash2" is in ffc1bac82
         operator_rulings:
         - "2026-08-27 epyc-root handoffs/active/autokernel-champion-aggregate.md ruling 3: DFlash2 for Qwen3.8-27B, rest of stack on MTP; lean compiler selects per role"
