@@ -1,0 +1,162 @@
+{
+ "schema": "spec-stop-eq7-1.v1",
+ "step1": {
+  "model": "C(K)=a+b*K+c*E_union(K), ms, 24 threads, CAFE-2 r2",
+  "a_ms": 46.39976275102282,
+  "b_ms": 10.983098204470647,
+  "c_ms_per_expert": -0.3591743545775933,
+  "r2_medians": 0.9796328607073338,
+  "r2_cells": 0.08356674886218796,
+  "n_cells": 220,
+  "cells_coef": [
+   71.18972812471385,
+   16.0308175821975,
+   -1.4538424641854328
+  ],
+  "median_ms": [
+   41.091291,
+   55.964698999999996,
+   62.352320500000005,
+   71.387794,
+   84.99577550000001,
+   96.4115785,
+   103.453776,
+   103.768495,
+   125.8772635
+  ],
+  "e_union": {
+   "1": 8.0,
+   "2": 13.1,
+   "3": 15.35,
+   "4": 16.7,
+   "5": 17.925,
+   "6": 23.35,
+   "7": 28.425,
+   "8": 31.225,
+   "9": 34.375
+  },
+  "futility": false
+ },
+ "calibration": {
+  "s": 1.161065666298473,
+  "d_ms": 5.3531330935196735,
+  "r2": 0.9880845396915758,
+  "n_requests": 120
+ },
+ "temps": {
+  "0.3": {
+   "n_tasks": 15,
+   "n_heldout": 7,
+   "n_rounds_heldout": 597,
+   "modelled_tok_s": {
+    "eq7": 30.688577081479185,
+    "0.0": 24.910165058584443,
+    "0.5": 29.90685223148183,
+    "0.75": 30.33688577750205
+   },
+   "eq7_K_hist": [
+    39,
+    211,
+    123,
+    59,
+    165
+   ],
+   "vs_fixed": {
+    "p_min=0.0": {
+     "ratio": 1.231970041519392,
+     "gain_pct": 23.197004151939193,
+     "ci95": [
+      1.116969300646118,
+      1.3336954634800606
+     ]
+    },
+    "p_min=0.5": {
+     "ratio": 1.026138653574998,
+     "gain_pct": 2.6138653574997894,
+     "ci95": [
+      1.008933197831521,
+      1.0425039457243028
+     ]
+    },
+    "p_min=0.75": {
+     "ratio": 1.0115928611313805,
+     "gain_pct": 1.1592861131380472,
+     "ci95": [
+      0.989710114468408,
+      1.0392856024307688
+     ]
+    }
+   },
+   "fixed_model_check_P05_over_A0": 1.200588280372532,
+   "fixed_model_check_P075_over_A0": 1.217851656388261
+  },
+  "1.0": {
+   "n_tasks": 15,
+   "n_heldout": 10,
+   "n_rounds_heldout": 976,
+   "modelled_tok_s": {
+    "eq7": 28.079793357282853,
+    "0.0": 21.77338498812279,
+    "0.5": 27.327114295980802,
+    "0.75": 28.559515853395503
+   },
+   "eq7_K_hist": [
+    65,
+    398,
+    244,
+    94,
+    175
+   ],
+   "vs_fixed": {
+    "p_min=0.0": {
+     "ratio": 1.2896383990178908,
+     "gain_pct": 28.96383990178908,
+     "ci95": [
+      1.2146291022758011,
+      1.354676510378847
+     ]
+    },
+    "p_min=0.5": {
+     "ratio": 1.0275433056395842,
+     "gain_pct": 2.754330563958418,
+     "ci95": [
+      1.0158828459457507,
+      1.0400775368381672
+     ]
+    },
+    "p_min=0.75": {
+     "ratio": 0.9832027090873946,
+     "gain_pct": -1.67972909126054,
+     "ci95": [
+      0.9614592336040347,
+      1.005798315027003
+     ]
+    }
+   },
+   "fixed_model_check_P05_over_A0": 1.2550696325301522,
+   "fixed_model_check_P075_over_A0": 1.311670916992213
+  }
+ },
+ "inputs": {
+  "/mnt/raid0/llm/tmp/inf50-runs-20261107/cafe2-verify-cost-native-r2/out/RESULT.json": "0b1d47aec8f1d26832b105bc335214b35dc5caa3a482344c456651ab2428aaa1",
+  "/mnt/raid0/llm/tmp/inf50-runs-20261107/cafe2-verify-cost-native-r2/out/results.jsonl": "bf165d3383ca06fd13093330baa183e09b994cfb617120a419b125910726a8d0",
+  "/mnt/raid0/llm/tmp/ak-cafe1-served-t-cpu-20261123-r2/out/results.jsonl": "51d0750935595a6d57e97fede0ac120201297c05bbc2cfd49269314ac4933fcb",
+  "/mnt/raid0/llm/tmp/ak-cafe1-served-t-cpu-20261123-r2/out/capture/cap-dist-b0-T0.3-A0.jsonl": "00a6bfe2b5819d623c71c65bdb77f2f00e265db7d7af46692af74e55e4536089",
+  "/mnt/raid0/llm/tmp/ak-cafe1-served-t-cpu-20261123-r2/out/capture/cap-dist-b1-T0.3-A0.jsonl": "33bb85bb5a7cf0aefe98191860038aaf025519147551bc7799ffc352060dddaf",
+  "/mnt/raid0/llm/tmp/ak-cafe1-served-t-cpu-20261123-r2/out/capture/cap-dist-b2-T0.3-A0.jsonl": "1d455b389805f0d27923ed2f286963d75a237f44601a95bf56eaacdafe9e61ab",
+  "/mnt/raid0/llm/tmp/ak-cafe1-served-t-cpu-20261123-r2/out/capture/cap-dist-b3-T0.3-A0.jsonl": "ad0674ea52abe214f208c57e26957ec53172417ec989f422bb7d7343a14faaed",
+  "/mnt/raid0/llm/tmp/ak-cafe1-served-t-cpu-20261123-r2/out/capture/cap-dist-b4-T0.3-A0.jsonl": "925543b85718a8cd6f4e624577079239cd4d9293969d5a8c103a705cb9c87a6e",
+  "/mnt/raid0/llm/tmp/ak-cafe1-served-t-cpu-20261123-r2/out/capture/cap-dist-b0-T1.0-A0.jsonl": "cdc9e9ce7be0fba148c2d084d4233955e5d347df1c57804ca9a6ed3ef5e622aa",
+  "/mnt/raid0/llm/tmp/ak-cafe1-served-t-cpu-20261123-r2/out/capture/cap-dist-b1-T1.0-A0.jsonl": "8187800faa715b1d8654609e0a4649475094b0c5d51129ca7b5b6562c5776a4a",
+  "/mnt/raid0/llm/tmp/ak-cafe1-served-t-cpu-20261123-r2/out/capture/cap-dist-b2-T1.0-A0.jsonl": "0296e444f5556c8c7d035643c3076a17727c79a83df7f694a8f97653a7c15ff5",
+  "/mnt/raid0/llm/tmp/ak-cafe1-served-t-cpu-20261123-r2/out/capture/cap-dist-b3-T1.0-A0.jsonl": "8d21c6d37e3d80ee645d9d19e118836937a5ddf438609ed3557057a7be44ab4f",
+  "/mnt/raid0/llm/tmp/ak-cafe1-served-t-cpu-20261123-r2/out/capture/cap-dist-b4-T1.0-A0.jsonl": "9101b071584e914a7079cafc576631c20a6cd813a5c844722d1ca29aa211bff0"
+ },
+ "verdict": "INCONCLUSIVE",
+ "verdict_basis": "vs the strongest fixed p_min per T (min ratio)",
+ "limits": [
+  "C(K) shape from one frozen 7-token prompt (CAFE-2 r2), scaled to served context by s fitted on CAFE-1 time requests",
+  "acceptance replay assumes the A0 greedy MTP chain prefix is the chain any shorter K would draft (true for greedy chain drafting)",
+  "modelled, not measured, tok/s; per-round draft cost d is a fitted constant"
+ ]
+}
