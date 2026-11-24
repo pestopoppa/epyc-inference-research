@@ -404,3 +404,54 @@ class RealResultFixtures(Base):
 
 def rid_of(o):
     return cu.rid(o)
+
+
+class MergeStatic(Base):
+    def committed(self):
+        return {"parity": {"ops": [], "refs": {}, "note": "n"}, "time_only": {"x": {"us_per_call": 1.0}}, "newkey": {"a": 1},
+                "records": {"R": {"gbps": 1}}, "applied": [{"row": "z", "sha256": "z"}], "seeds": {"S": {}}}
+
+    def live(self):
+        c = cu.empty_census()
+        c["records"] = {"L": {"gbps": 9}}
+        c["applied"] = [{"row": "a", "sha256": "a"}]
+        c["seeds"] = {"LS": {"status": "open"}}
+        return c
+
+    def test_adds_new_and_static_keys(self):
+        live = self.live()
+        ch = cu.merge_static(live, self.committed())
+        self.assertEqual(ch, ["newkey", "parity", "time_only"])
+        self.assertEqual(live["parity"], self.committed()["parity"])
+        self.assertEqual(live["newkey"], {"a": 1})
+
+    def test_records_applied_seeds_preserved(self):
+        live, before = self.live(), self.live()
+        cu.merge_static(live, self.committed())
+        for k in ("records", "applied", "seeds", "cpu", "floor_gbps"):
+            self.assertEqual(live[k], before[k])
+
+    def test_idempotent(self):
+        live = self.live()
+        cu.merge_static(live, self.committed())
+        snap = json.dumps(live, sort_keys=True)
+        self.assertEqual(cu.merge_static(live, self.committed()), [])
+        self.assertEqual(json.dumps(live, sort_keys=True), snap)
+
+    def test_cli_flag_merges_file_and_is_idempotent(self):
+        src = os.path.join(self.d, "src.json")
+        json.dump(self.committed(), open(src, "w"))
+        json.dump(self.live(), open(self.census, "w"))
+        self.assertEqual(cu.run(None, None, self.census, None, None, None, merge_static_from=src)["merge_static"],
+                         ["newkey", "parity", "time_only"])
+        self.assertEqual(cu.run(None, None, self.census, None, None, None, merge_static_from=src)["merge_static"], [])
+        self.assertIn("parity", json.load(open(self.census)))
+
+    def test_merge_then_apply_keeps_parity(self):
+        src = os.path.join(self.d, "src.json")
+        json.dump(self.committed(), open(src, "w"))
+        json.dump(cu.empty_census(), open(self.census, "w"))
+        cu.run(self.res("r.json", q8_result(90.41)), None, self.census, self.prog, self.doc, None, merge_static_from=src)
+        c = json.load(open(self.census))
+        self.assertIn("parity", c)
+        self.assertTrue(c["records"])

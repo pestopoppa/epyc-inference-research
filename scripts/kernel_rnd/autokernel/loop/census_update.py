@@ -334,8 +334,33 @@ def write_stubs(d: str, c: dict) -> int:
     return n
 
 
-def run(result: str, row: str | None, census: str, program: str | None, doc: str | None, seeds_out: str | None,
-        dry_run: bool = False) -> dict:
+STATIC_KEYS = ("parity", "time_only")  # committed-authored sections the live file never produces itself
+NEVER_MERGE = ("records", "applied", "seeds")
+
+
+def merge_static(live: dict, committed: dict) -> list[str]:
+    """Copy into `live` every committed key absent from it, plus the static sections (parity, time_only), which the
+    committed census owns. records/applied/seeds are never touched. Idempotent. Returns the keys changed."""
+    changed = []
+    for k, v in committed.items():
+        if k in NEVER_MERGE or (k in live and k not in STATIC_KEYS):
+            continue
+        if live.get(k) != v:
+            live[k] = json.loads(json.dumps(v))
+            changed.append(k)
+    return sorted(changed)
+
+
+def run(result: str | None, row: str | None, census: str, program: str | None, doc: str | None, seeds_out: str | None,
+        dry_run: bool = False, merge_static_from: str | None = None) -> dict:
+    merged = None
+    if merge_static_from and os.path.exists(merge_static_from) and os.path.exists(census):
+        live, src = json.load(open(census)), json.load(open(merge_static_from))
+        merged = merge_static(live, src)
+        if merged and not dry_run:
+            open(census, "w").write(json.dumps(live, indent=1, sort_keys=True) + "\n")
+        if result is None and not doc:
+            return {"merge_static": merged}
     if result is None:  # render-only: regenerate the doc block from the committed census
         c = json.load(open(census))
         return {"render_only": True, "doc_changed": write_doc(doc, c) if doc else False}
@@ -346,6 +371,8 @@ def run(result: str, row: str | None, census: str, program: str | None, doc: str
     obs = extract(res) + extract_cpu(res, result)
     lines = apply(c, obs, row, sha, str(res.get("at", "")))
     rep = {"row": row, "sha256": sha[:12], "observations": len(obs), "journal_lines": len(lines), "changed": False}
+    if merged is not None:
+        rep["merge_static"] = merged
     if dry_run:
         rep["lines"] = lines
         return rep
@@ -373,8 +400,10 @@ def main(argv=None) -> int:
     ap.add_argument("--doc", default=None)
     ap.add_argument("--seeds-out", default=None)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--merge-static-from", metavar="PATH", default=None,
+                    help="committed census whose absent/static (parity, time_only) sections are merged into --census")
     a = ap.parse_args(argv)
-    rep = run(a.result, a.row, a.census, a.program, a.doc, a.seeds_out, a.dry_run)
+    rep = run(a.result, a.row, a.census, a.program, a.doc, a.seeds_out, a.dry_run, a.merge_static_from)
     print("BW-CENSUS " + json.dumps(rep, sort_keys=True))
     return 0
 
