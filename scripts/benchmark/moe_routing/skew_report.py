@@ -112,7 +112,71 @@ def subsets(t: tio.Trace) -> dict:
     return {"prefill": t.phase == 0, "decode": t.phase == 1}
 
 
-def analyse(results_dir, domains, gate: float, fracs=(0.10, 0.25)) -> dict:
+def residency_coverage(counts: dict, doms: list, L: int, t0, frac: float, cover_gate: float) -> dict:
+    """CDR-RT9-COVER-1: cumulative selection coverage of a resident top-n expert set, n = ceil(frac * E), per layer.
+
+    same-domain = held-out: ranking learned on even windows scored on odd windows and vice versa (mean of both), so the
+    in-sample optimum is not read as a drafter's hit rate. cross-domain = ranking learned on all of domain A, scored on all of
+    domain B, averaged over the sources A != B for each target B. Verdict: CLOSE the resident-expert drafter idea when the
+    same-domain coverage (mean over layers) is below cover_gate on every workload, else RECORD for the HBM allotment decision."""
+    res: dict = {"fraction": frac, "cover_gate": cover_gate, "phases": {}}
+    for ph in ("prefill", "decode"):
+        have = [d for d in doms if (d, ph) in counts]
+        if not have:
+            continue
+        rows = []
+        for l in range(L):
+            E = int(t0.n_experts[l])
+            n = top_n(frac, E)
+            row: dict = {"layer": l, "n_resident": n, "chance": n / E}
+            for b in have:
+                cb, ce, co = counts[(b, ph)][0][l], counts[(b, ph)][1][l], counts[(b, ph)][2][l]
+                row[f"{b}_in_sample"] = share_top(cb, n)
+                if ce.sum() and co.sum():
+                    row[f"{b}_same"] = 0.5 * (heldout_share(ce, co, n) + heldout_share(co, ce, n))
+                cross = [heldout_share(counts[(a, ph)][0][l], cb, n) for a in have if a != b]
+                if cross:
+                    row[f"{b}_cross"] = float(np.mean(cross))
+            rows.append(row)
+        summ: dict = {}
+        for b in have:
+            for k in ("in_sample", "same", "cross"):
+                v = [r[f"{b}_{k}"] for r in rows if f"{b}_{k}" in r]
+                if v:
+                    summ[f"{b}_{k}_mean"] = float(np.mean(v))
+                    summ[f"{b}_{k}_min"] = float(np.min(v))
+                    summ[f"{b}_{k}_max"] = float(np.max(v))
+                    if k == "same":
+                        summ[f"{b}_same_layers_ge_gate"] = int(sum(x >= cover_gate for x in v))
+        res["phases"][ph] = {"summary": summ, "per_layer": rows}
+    same = {f"{d}/{ph}": s["summary"][f"{d}_same_mean"] for ph, s in res["phases"].items() for d in doms
+            if f"{d}_same_mean" in s["summary"]}
+    met = [k for k, v in same.items() if v >= cover_gate]
+    res["verdict"] = {"rule": f"CLOSE if same-domain held-out coverage at {frac:g} residency < {cover_gate} on every workload/phase, else RECORD",
+                      "same_domain_mean": same, "meeting_gate": met, "verdict": "RECORD" if met else "CLOSE"}
+    return res
+
+
+def residency_markdown(rz: dict) -> str:
+    L = ["", f"## Resident-expert coverage at {rz['fraction']:g} residency (CDR-RT9-COVER-1)", "",
+         f"Verdict rule: {rz['verdict']['rule']}. Verdict: **{rz['verdict']['verdict']}** (meeting gate: {rz['verdict']['meeting_gate'] or 'none'}).", ""]
+    for ph, d in rz["phases"].items():
+        doms = sorted({k[:-len("_same_mean")] for k in d["summary"] if k.endswith("_same_mean")})
+        L += [f"### {ph}", "", "| workload | same-domain held-out mean [min-max] | layers >= gate | cross-domain mean [min-max] | in-sample mean |", "|---|---|---|---|---|"]
+        s = d["summary"]
+        for b in doms:
+            cr = f"{s[b + '_cross_mean']:.4f} [{s[b + '_cross_min']:.3f}-{s[b + '_cross_max']:.3f}]" if b + "_cross_mean" in s else ""
+            L.append(f"| {b} | {s[b + '_same_mean']:.4f} [{s[b + '_same_min']:.3f}-{s[b + '_same_max']:.3f}] | {s[b + '_same_layers_ge_gate']}/{len(d['per_layer'])} | {cr} | {s[b + '_in_sample_mean']:.4f} |")
+        L += ["", "| layer | n | chance | " + " | ".join(f"{b} same | {b} cross" for b in doms) + " |",
+              "|---|---|---|" + "---|---|" * len(doms)]
+        for r in d["per_layer"]:
+            L.append(f"| {r['layer']} | {r['n_resident']} | {r['chance']:.3f} | " +
+                     " | ".join(f"{r.get(b + '_same', float('nan')):.3f} | {r.get(b + '_cross', float('nan')):.3f}" for b in doms) + " |")
+        L.append("")
+    return "\n".join(L)
+
+
+def analyse(results_dir, domains, gate: float, fracs=(0.10, 0.25), residency: float = 0.0, cover_gate: float = 0.60) -> dict:
     data = {d: tio.load_domain(results_dir, d) for d in domains}
     t0 = next(iter(data.values()))
     L = t0.L
@@ -202,6 +266,8 @@ def analyse(results_dir, domains, gate: float, fracs=(0.10, 0.25)) -> dict:
                 ceil += [jaccard(np.argsort(-ce[l], kind="stable")[:n10[l]], np.argsort(-co[l], kind="stable")[:n10[l]]) for l in range(L)]
         out["overlap"][ph] = {"pairs": pairs, "within_domain_even_odd_jaccard_mean": float(np.mean(ceil)) if ceil else None,
                               "random_set_jaccard": float(np.mean([jaccard_chance(int(t0.n_experts[l]), n10[l]) for l in range(L)]))}
+    if residency:
+        out["residency"] = residency_coverage(counts, doms, L, t0, residency, cover_gate)
     # RT-5 verdict, applied literally to whatever model the traces came from
     v: dict = {"rule": f"top-10% share >= {gate} on >= 2 workloads", "per_workload": {}}
     for dom in doms:
@@ -257,13 +323,16 @@ def main(argv=None) -> int:
     ap.add_argument("--gate", type=float, default=0.60)
     ap.add_argument("--title", default="RT-5 expert-skew report")
     ap.add_argument("--beliefs", action="store_true", help="also write the belief-kernel sidecar next to the outputs (needs EPYC_ROOT)")
+    ap.add_argument("--residency", type=float, default=0.0,
+                    help="also report per-layer coverage of a resident top-ceil(f*E) expert set, same- vs cross-domain (e.g. 0.125)")
+    ap.add_argument("--cover-gate", type=float, default=0.60, help="same-domain coverage gate for the --residency verdict")
     a = ap.parse_args(argv)
     doms = [d for d in a.domains.split(",") if d] or sorted(tio.discover(a.results_dir))
-    r = analyse(a.results_dir, doms, a.gate)
+    r = analyse(a.results_dir, doms, a.gate, residency=a.residency, cover_gate=a.cover_gate)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / "skew_report.json").write_text(json.dumps(r, indent=1) + "\n")
-    md = to_markdown(r, a.title)
+    md = to_markdown(r, a.title) + (residency_markdown(r["residency"]) if "residency" in r else "")
     (out / "skew_report.md").write_text(md)
     print(md)
     return tio.emit_beliefs(out, "moe_routing/skew_report.py") if a.beliefs else 0
