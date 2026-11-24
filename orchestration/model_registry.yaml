@@ -2951,7 +2951,13 @@ roles:
       allowed_categories: [web, file, data]
     generation_defaults:
       n_tokens: -1
-      temperature: 0.3
+      # OFFICIAL-SAMPLING-20261124 (qwen36_nonthinking; was `temperature: 0.3`, no cited rationale): https://huggingface.co/Qwen/Qwen3.6-35B-A3B (Instruct/non-thinking) + GGUF general.sampling.* carries thinking values
+      temperature: 0.7
+      top_p: 0.8
+      top_k: 20
+      min_p: 0.0
+      presence_penalty: 1.5
+      repeat_penalty: 1.0
     system_prompt_suffix: |
       Provide clear, user-friendly explanations.
       Elaborate on specialist outputs when presenting to users.
@@ -3177,7 +3183,13 @@ roles:
     benchmark_date: null  # 2026-07-31 model swap: 2026-05-04 was the 35B's bench date
     generation_defaults:
       n_tokens: -1
-      temperature: 0.2
+      # OFFICIAL-SAMPLING-20261124 (qwen38_thinking; was `temperature: 0.2`, no cited rationale): https://huggingface.co/Qwen/Qwen3.8-27B (thinking) == GGUF general.sampling temp 1.0/top_p 0.95/top_k 20
+      temperature: 1.0
+      top_p: 0.95
+      top_k: 20
+      min_p: 0.0
+      presence_penalty: 0.0
+      repeat_penalty: 1.0
     system_prompt_suffix: |
       Output code only. No explanations unless requested.
       Include minimal inline comments. No boilerplate or filler.
@@ -3355,7 +3367,13 @@ roles:
       pinned: true
     generation_defaults:
       n_tokens: -1
-      temperature: 0.2
+      # OFFICIAL-SAMPLING-20261124 (qwen38_thinking; was `temperature: 0.2`, no cited rationale): https://huggingface.co/Qwen/Qwen3.8-27B (thinking) == GGUF general.sampling temp 1.0/top_p 0.95/top_k 20
+      temperature: 1.0
+      top_p: 0.95
+      top_k: 20
+      min_p: 0.0
+      presence_penalty: 0.0
+      repeat_penalty: 1.0
     system_prompt_suffix: |
       Synthesize key points from the provided documents.
       Use structured headings for organization.
@@ -3495,7 +3513,13 @@ roles:
       reason: "87 GiB model is memory-bound, benefits from block prefetching"
     generation_defaults:
       n_tokens: -1
-      temperature: 0.1
+      # OFFICIAL-SAMPLING-20261124 (qwen38fn_thinking; was `temperature: 0.1`, no cited rationale): https://huggingface.co/Qwen/Qwen3.8-Flash-Next (thinking, default) == GGUF general.sampling
+      temperature: 1.0
+      top_p: 0.95
+      top_k: 20
+      min_p: 0.0
+      presence_penalty: 0.0
+      repeat_penalty: 1.0
     system_prompt_suffix: |
       Be maximally concise. Use bullet points, not prose.
       Output structured plans, not narrative.
@@ -3668,7 +3692,13 @@ roles:
       reason: "2026-07-31: the 69GB host-RAM-bandwidth rationale was the 122B's. The 27B is VRAM-resident under -ngl all; revisit only with GPU-side evidence."
     generation_defaults:
       n_tokens: -1
-      temperature: 0.1
+      # OFFICIAL-SAMPLING-20261124 (qwen38_thinking; was `temperature: 0.1`, no cited rationale): https://huggingface.co/Qwen/Qwen3.8-27B (thinking) == GGUF general.sampling temp 1.0/top_p 0.95/top_k 20
+      temperature: 1.0
+      top_p: 0.95
+      top_k: 20
+      min_p: 0.0
+      presence_penalty: 0.0
+      repeat_penalty: 1.0
     system_prompt_suffix: |
       Attack the plan, do not improve it.
       Name fatal flaws and unstated assumptions, not stylistic objections.
@@ -6625,7 +6655,13 @@ roles:
       forbidden_tools: [write_file]
     generation_defaults:
       n_tokens: -1
-      temperature: 0.3
+      # OFFICIAL-SAMPLING-20261124 (qwen36_nonthinking; was `temperature: 0.3`, no cited rationale): https://huggingface.co/Qwen/Qwen3.6-35B-A3B (Instruct/non-thinking) + GGUF general.sampling.* carries thinking values
+      temperature: 0.7
+      top_p: 0.8
+      top_k: 20
+      min_p: 0.0
+      presence_penalty: 1.5
+      repeat_penalty: 1.0
   worker_math:
     tier: C
     description: Edge cases, invariants, property-test generation
@@ -6677,10 +6713,25 @@ roles:
       pinned: true
     generation_defaults:
       n_tokens: -1
-      temperature: 0.0
+      # OFFICIAL-SAMPLING-20261124 (qwen36_nonthinking; was `temperature: 0.0`, no cited rationale): https://huggingface.co/Qwen/Qwen3.6-35B-A3B (Instruct/non-thinking) + GGUF general.sampling.* carries thinking values
+      temperature: 0.7
+      top_p: 0.8
+      top_k: 20
+      min_p: 0.0
+      presence_penalty: 1.5
+      repeat_penalty: 1.0
     system_prompt_suffix: |
       Output final answer on last line.
   worker_vision:
+    # OFFICIAL-SAMPLING-20261124: Qwen3-VL-30B-A3B-Instruct generation_config.json (https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct/raw/main/generation_config.json); previously absent -> backend greedy fallback 0.0
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.7
+      top_p: 0.8
+      top_k: 20
+      min_p: 0.0
+      presence_penalty: 0.0
+      repeat_penalty: 1.0
     # 2026-07-31 VISION UNIFICATION. Weights swapped Qwen2.5-VL-7B Q4_K_M ->
     # Qwen3-VL-30B-A3B-Instruct Q4_K_M; the process moved CPU -> MI210 (ROCm0). worker_vision is
     # the PRIMARY; vision_escalation is an ALIAS on this same port and process.
@@ -6965,7 +7016,13 @@ roles:
       single-pass summarization cases that don't trigger the three-stage pipeline.
     generation_defaults:
       n_tokens: -1
-      temperature: 0.2
+      # OFFICIAL-SAMPLING-20261124 (qwen36_nonthinking; was `temperature: 0.2`, no cited rationale): https://huggingface.co/Qwen/Qwen3.6-35B-A3B (Instruct/non-thinking) + GGUF general.sampling.* carries thinking values
+      temperature: 0.7
+      top_p: 0.8
+      top_k: 20
+      min_p: 0.0
+      presence_penalty: 1.5
+      repeat_penalty: 1.0
     system_prompt_suffix: |
       Produce concise summaries. Focus on key points.
       For document QA, cite specific sections.
@@ -7021,7 +7078,13 @@ roles:
       pinned: true
     generation_defaults:
       n_tokens: -1
-      temperature: 0.2
+      # OFFICIAL-SAMPLING-20261124 (qwen36_nonthinking; was `temperature: 0.2`, no cited rationale): https://huggingface.co/Qwen/Qwen3.6-35B-A3B (Instruct/non-thinking) + GGUF general.sampling.* carries thinking values
+      temperature: 0.7
+      top_p: 0.8
+      top_k: 20
+      min_p: 0.0
+      presence_penalty: 1.5
+      repeat_penalty: 1.0
     system_prompt_suffix: |
       Summarize tool output briefly. Focus on actionable results.
       Propose next command if appropriate.
