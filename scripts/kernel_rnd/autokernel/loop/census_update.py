@@ -557,9 +557,45 @@ def derive_surfaces(c: dict) -> list[dict]:
             x.update(stale=True, stale_since=e["stale_since"], stale_row=e["stale_row"])
         elif e:
             st.pop(skey(x))  # the committed parity op changed since the KEEP: the static value was refreshed
+    from .census_families import op_family  # lazy: census_families imports this module
+    for x in out:
+        x["family"] = op_family(x["path"], x["op"])
     c["surface_groups"] = groups
     c["surfaces"] = out
     return out
+
+
+HYPOTHESES_DIR = os.path.join(HERE, "seeds", "hypotheses")
+
+
+def annotate(c: dict, registry: dict | None = None, hypotheses_dir: str | None = HYPOTHESES_DIR) -> None:
+    """RSL-R1/R4/R7: write `coverage` (registry-derived, fail soft) and `family_rank` (surfaces + knob arms + keyed hypotheses) into c.
+    Weights and knob arms come from c['model_weights'] / c['knob_arms'] when a campaign sets them; nothing is invented."""
+    from . import census_coverage as cc, census_families as cf, journal_keys as jk
+    for x in c.get("surfaces") or []:
+        x.setdefault("family", cf.op_family(x["path"], x["op"]))
+    try:
+        reg = registry if registry is not None else cc.load_registry()
+        c["coverage"] = {"status": "ok", **cc.coverage(c, cc.served_set(reg))} if reg else {"status": "registry-unreadable"}
+    except Exception:  # noqa: BLE001 -- coverage must never crash a census write
+        c["coverage"] = {"status": "registry-unreadable"}
+    try:
+        hyps = jk.hypothesis_entries(hypotheses_dir) if hypotheses_dir else []
+    except OSError:
+        hyps = []
+    c["family_rank"] = cf.rank(c.get("surfaces") or [], c.get("model_weights"), c.get("knob_arms"), hyps)
+
+
+def coverage_violations(c: dict) -> list[str]:
+    """Served (live or planned) paths with zero census records, plus parity ops claiming served for a path the registry lacks.
+    Reads c['coverage'] (annotate output); [] only when the registry was readable and every served path has a record."""
+    cov = c.get("coverage") or {}
+    if cov.get("status") != "ok":
+        return [f"coverage unavailable: {cov.get('status', 'missing')}"]
+    have = {r.get("op_path") for r in (c.get("records") or {}).values() if isinstance(r, dict)}
+    out = [f"{k}: served path has zero census records" for k, v in sorted((cov.get("paths") or {}).items())
+           if v["path"] not in have]
+    return out + [f"{m['path']}/{m['op']}: parity op claims served, path absent from registry" for m in cov.get("mismatch") or []]
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -591,12 +627,27 @@ def surfaces_md(c: dict, top: int = SURF_TOP) -> list[str]:
            f"CPU quarter-24t {cpu.get('quarter-24t', 129.0):.0f} GB/s, CPU full host {cpu.get('full-host', 520.0):.0f} GB/s. "
            "saving = step_ms x share x max(0, 1 - ours/target). Owner **none** = no box/row/seed works it: propose there first. "
            "STALE = a KEEP touched a parity-only surface; its ours % predates that KEEP, re-measure before ranking on it.",
-           "", "| # | Op · path | Share | Ours % | Saving ms/step | Owner | Status | Step source |", "|---|---|---|---|---|---|---|---|"]
+           "", "| # | Op · path | Family | Share | Ours % | Saving ms/step | Owner | Status | Step source |", "|---|---|---|---|---|---|---|---|---|"]
     for i, s in enumerate(pick, 1):
         st = s["status"] + (f" STALE since {s['stale_since']} ({s['stale_row']})" if s.get("stale") else "")
-        out.append(f"| {i} | {s['op']} · {s['path']} | {f(s['share_of_step'], '.1%')} | "
+        out.append(f"| {i} | {s['op']} · {s['path']} | {s.get('family') or '-'} | {f(s['share_of_step'], '.1%')} | "
                    f"{f(s['ours_pct'], '.1f')}{'' if s['ours_measured'] or s['ours_pct'] is None else ' (placeholder)'} | "
                    f"{f(s['saving_ms_per_step'], '.2f')} | {s.get('covered_by') or '**none**'} | {st} | {s.get('step_source') or '-'} |")
+    out += _family_rank_md(c, f)
+    return out
+
+
+def _family_rank_md(c: dict, f) -> list[str]:
+    fr = c.get("family_rank") or []
+    if not fr:
+        return []
+    out = ["", "Family rank (score = sum of weight x saving ms/step over every path; `-` = unpriced, never guessed; "
+           "knob = serving-knob arm, hypothesis = hand-written idea priced from census rows on every device it touches):",
+           "", "| # | Family | Kind | Score ms/step | Paths | Unpriced |", "|---|---|---|---|---|---|"]
+    for i, r in enumerate(fr[:SURF_TOP + 8], 1):
+        paths = sorted({m["path"] for m in r["members"] if m.get("path")} | ({r["path"]} if r.get("path") else set()))
+        out.append(f"| {i} | {r['family']} | {r['kind']} | {f(r['score'], '.2f')} | {', '.join(paths) or '-'} | "
+                   f"{r.get('n_unpriced', 0 if r['status'] == 'priced' else 1)} |")
     return out
 
 
@@ -759,6 +810,7 @@ def run(result: str | None, row: str | None, census: str, program: str | None, d
         before = json.dumps(live, sort_keys=True)
         rerank(live)
         derive_surfaces(live)
+        annotate(live)
         if json.dumps(live, sort_keys=True) != before:
             merged = sorted(set(merged) | {"surfaces"})
         if merged and not dry_run:
@@ -781,6 +833,7 @@ def run(result: str | None, row: str | None, census: str, program: str | None, d
         if not c.get("surfaces"):
             derive_surfaces(c)
         lines += mark_stale(c, with_spec_target(res, spec), row, sha)
+    annotate(c)
     rep = {"row": row, "sha256": sha[:12], "observations": len(obs), "journal_lines": len(lines), "changed": False}
     if merged is not None:
         rep["merge_static"] = merged
