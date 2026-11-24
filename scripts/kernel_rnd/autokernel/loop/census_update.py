@@ -687,6 +687,9 @@ def _op_sig(c: dict, s: dict) -> str:
     return hashlib.sha256(json.dumps(o, sort_keys=True).encode()).hexdigest()[:16]
 
 
+SPEC_ROOT = "/mnt/raid0/llm/tmp/"  # published_from is followed only under the row-dir root
+
+
 def with_spec_target(res: dict, spec: str | None) -> dict:
     """RESULT names no target -> fall back to the row spec's target_surface[s] (AutoKernel 2026-11-24: spec.json is
     per-row and AK-owned; RESULT emission is the D9-gated shared harness). RESULT wins when it names one."""
@@ -697,6 +700,14 @@ def with_spec_target(res: dict, spec: str | None) -> dict:
     except (OSError, ValueError):
         return res
     t = sp.get("target_surfaces") or sp.get("target_surface")
+    pf = sp.get("published_from")  # ready/<id>.json is a published copy; the row's own spec.json may be newer
+    if not t and isinstance(pf, str) and pf.endswith("/spec.json") and os.path.realpath(pf).startswith(SPEC_ROOT) \
+            and os.path.exists(pf):
+        try:
+            rs = json.load(open(pf))
+            t = rs.get("target_surfaces") or rs.get("target_surface")
+        except (OSError, ValueError):
+            t = None
     return {**res, "target_surfaces": [t] if isinstance(t, str) else list(t)} if t else res
 
 

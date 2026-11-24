@@ -652,3 +652,19 @@ class SpecTargetFallback(unittest.TestCase):
         self.assertEqual(cu.with_spec_target({"verdict": "KEEP"}, sp)["target_surfaces"], ["27b-df2-mi210/launch-bound tail"])
         self.assertEqual(cu.with_spec_target({"verdict": "KEEP", "target_surface": "x/y"}, sp), {"verdict": "KEEP", "target_surface": "x/y"})
         self.assertEqual(cu.with_spec_target({"verdict": "KEEP"}, None), {"verdict": "KEEP"})
+
+
+class PublishedFromFallback(unittest.TestCase):
+    def test_manifest_without_target_follows_published_from(self):
+        d = os.path.realpath(tempfile.mkdtemp())
+        old = cu.SPEC_ROOT
+        cu.SPEC_ROOT = d
+        self.addCleanup(setattr, cu, "SPEC_ROOT", old)
+        row = os.path.join(d, "spec.json")
+        json.dump({"target_surface": "27b-df2-mi210/q4_0 KV attention (gv_fattn, q4_0 KV)"}, open(row, "w"))
+        man = os.path.join(d, "ready.json")
+        json.dump({"published_from": row}, open(man, "w"))
+        self.assertEqual(cu.with_spec_target({"verdict": "KEEP"}, man)["target_surfaces"],
+                         ["27b-df2-mi210/q4_0 KV attention (gv_fattn, q4_0 KV)"])
+        json.dump({"published_from": "/etc/spec.json"}, open(man, "w"))
+        self.assertEqual(cu.with_spec_target({"verdict": "KEEP"}, man), {"verdict": "KEEP"})
