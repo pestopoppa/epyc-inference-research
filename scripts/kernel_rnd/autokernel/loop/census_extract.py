@@ -88,7 +88,7 @@ def extract(res: dict, rep: dict | None = None) -> list[dict]:
         cls, calls = MMID_CLASS.get(m.group(1), ("mmid_" + m.group(1), 1))
         out.append({"model": "a3b-q8_0", "kernel_class": cls, "shape": m.group(1), "n": int(m.group(2)), "arm": "ON",
                     "bytes_per_call": int(round(g * us * 1e3)), "us_per_call": float(us), "calls_per_round": calls})
-    return out + extract_trace(res, rep) + extract_time_only(res) + extract_vattn_ipb(res) + extract_verify_roofline(res, rep)
+    return out + extract_trace(res, rep) + extract_time_only(res) + extract_vattn_ipb(res) + extract_verify_roofline(res, rep) + extract_served_profile(res)
 
 
 def extract_trace(res: dict, rep: dict | None = None) -> list[dict]:
@@ -434,4 +434,21 @@ def extract_verify_roofline(res: dict, rep: dict | None = None) -> list[dict]:
                             "calls_per_round": int(round(p["calls"])),
                             "bytes_basis": "row bytes (rocprof FETCH_SIZE+WRITE_SIZE, HBM side), pooled over the class's launches",
                             "calls_basis": f"summed row `calls` of {p['kernels']} kernel entries per verify step"})
+    return out
+
+
+def extract_served_profile(res: dict) -> list[dict]:
+    """Served 27B decode profile (`arms.OFF` = the served V5I q8mf arm; ak-27b-served-decode-profile-gpu-20261125). The RESULT has
+    no per-kernel byte basis, so each kernel family (plus idle and the whole step) is a TIME-ONLY observation (us per step, share of
+    step); the one byte basis it states, `compare.weight_bytes_per_step` (target + drafter GGUF bytes), backs ONE weight-GEMV aggregate."""
+    a, b = (res.get("arms") or {}).get("OFF"), (res.get("compare") or {}).get("weight_bytes_per_step")
+    if "served-decode-profile" not in str(res.get("row") or "") or not isinstance(a, dict) or _model_of(res) != "27b-q8_0":
+        return []
+    fam, sh, srv = {**(a.get("family_ms_per_step") or {}), "idle": a.get("idle_ms_per_step"), "step": a.get("step_ms")}, a.get("family_share_of_step") or {}, {"served": True, "arm": "OFF"}
+    out = [_t("27b-q8_0", f"served_{f}", "served-v5i", 8, ms * 1e3, "served profile states family ms per step only", share_of_round=sh.get(f), **srv)
+           for f, ms in sorted(fam.items()) if _num(ms)]
+    if _num(b) and b > 0 and _num(a.get("weight_gemv_ms_per_step")):
+        out.append({"model": "27b-q8_0", "kernel_class": "served_weight_gemv_v5i", "shape": "served-v5i", "n": 8, "bytes_per_call": int(b),
+                    "us_per_call": round(a["weight_gemv_ms_per_step"] * 1e3, 3), "calls_per_round": 1, **srv,
+                    "bytes_basis": "RESULT compare.weight_bytes_per_step (target GGUF + drafter GGUF x drafter fwd/step) / weight GEMV ms"})
     return out

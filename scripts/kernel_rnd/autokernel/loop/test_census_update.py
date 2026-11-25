@@ -309,12 +309,14 @@ class UnitRule(unittest.TestCase):
 FX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "testdata", "census")
 
 class CpuCeiling(unittest.TestCase):
-    """Operator 2026-11-24: one ceiling per device -- MI210 1500, CPU quarter-24t 129, CPU full host 520 GB/s."""
+    """One ceiling per device -- MI210 1638 (operator 2026-11-25, was 1500 on 2026-11-24), CPU quarter-24t 129, CPU full host 520 GB/s."""
 
     def test_quarter_ceiling_is_operator_set_with_provenance(self):
         self.assertEqual(cu.CPU_DEFAULTS["ceiling_gbps"]["quarter-24t"], 129.0)
         self.assertEqual(cu.CPU_DEFAULTS["ceiling_gbps"]["full-host"], 520.0)
-        self.assertEqual(cu.CEILINGS_GBPS, {"mi210": 1500.0, "cpu-quarter-24t": 129.0, "cpu-full-host": 520.0})
+        self.assertEqual(cu.CEILINGS_GBPS, {"mi210": 1638.0, "cpu-quarter-24t": 129.0, "cpu-full-host": 520.0})
+        self.assertEqual(cu.CEILING, 1638.0)
+        self.assertAlmostEqual(cu.RIDGE_FLOP_PER_BYTE["gpu"], 181e12 / 1638e9)
         src = cu.CPU_DEFAULTS["ceiling_source"]["quarter-24t"]
         self.assertTrue(src.startswith("operator 2026-11-24"))
         self.assertIn("9e379493", src)  # the superseded measurement stays cited
@@ -334,7 +336,7 @@ class CpuCeiling(unittest.TestCase):
     def test_committed_census_is_reranked_against_measured_ceiling(self):
         c = json.load(open(cu.CENSUS))
         self.assertEqual(c["cpu"]["ceiling_gbps"]["quarter-24t"], 129.0)
-        self.assertEqual(c["ceiling_gbps"], 1500.0)
+        self.assertEqual(c["ceiling_gbps"], 1638.0)
         self.assertEqual(c["cpu"]["ceiling_source"]["quarter-24t"], cu.CPU_DEFAULTS["ceiling_source"]["quarter-24t"])
         q = [r for r in c["records"].values() if r.get("device") == "cpu" and r.get("config") == "quarter-24t"]
         self.assertTrue(q)
@@ -586,15 +588,18 @@ class Surfaces(unittest.TestCase):
             if x["saving_ms_per_step"] is not None:
                 want = x["step_ms"] * x["share_of_step"] * max(0.0, 1 - x["ours_pct"] / 88.0)
                 self.assertAlmostEqual(x["saving_ms_per_step"], want, places=2)
-        sv = [x["saving_ms_per_step"] for x in s]
-        known = [v for v in sv if v is not None]
-        self.assertEqual(known, sorted(known, reverse=True))
-        self.assertTrue(all(v is None for v in sv[len(known):]))  # nulls sink
+        served = [x["served"] for x in s]
+        self.assertEqual(served, sorted(served, reverse=True))  # served surfaces first; the candidate lane after
+        for grp in (True, False):
+            sv = [x["saving_ms_per_step"] for x in s if x["served"] is grp]
+            known = [v for v in sv if v is not None]
+            self.assertEqual(known, sorted(known, reverse=True))
+            self.assertTrue(all(v is None for v in sv[len(known):]))  # nulls sink
 
     def test_sanity_anchors(self):
         by = {(x["path"], x["op"]): x for x in self.committed()["surfaces"]}
-        for key, want in ((("a3b-mtp-mi210", "dense MMVQ (attn, GDN proj, shexp, lm_head)"), 7.6),
-                          (("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)"), 4.8),  # 6.5 was the 1638 nameplate
+        for key, want in ((("a3b-mtp-mi210", "dense MMVQ (attn, GDN proj, shexp, lm_head)"), 7.7),
+                          (("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)"), 6.5),  # 4.8 at the superseded 1500
                           (("a3b-mtp-mi210", "router mul_mat_f F32 [2048,256]"), 4.5),
                           (("27b-df2-mi210", "gv_fattn + merge (verify FA)"), 2.8)):
             self.assertAlmostEqual(by[key]["saving_ms_per_step"], want, delta=0.15)
@@ -614,7 +619,7 @@ class Surfaces(unittest.TestCase):
         self.assertIsNone(v["ref_pct"])
         self.assertIsNone(v["gap_pp"])  # null ref -> null gap, never 0
         self.assertTrue(v["ours_measured"])
-        self.assertEqual(len(v["census_rows"]), 31)
+        self.assertEqual(len(v["census_rows"]), 32)  # + the served-profile weight-GEMV aggregate
 
     def test_rollup_is_never_a_surface(self):
         c = self.committed()
@@ -631,7 +636,7 @@ class Surfaces(unittest.TestCase):
         c = self.committed()
         g = [r for r in c["records"].values() if cu.dev_of(r) == "gpu"]
         self.assertTrue(all(r.get("share_of_round") is not None for r in g))
-        self.assertTrue(all(o["roofline_gbps"] in (1500.0, 129.0) for o in c["parity"]["ops"]))
+        self.assertTrue(all(o["roofline_gbps"] in (1638.0, 129.0) for o in c["parity"]["ops"]))
 
     def test_keeps_old_keys(self):
         c = self.committed()
@@ -815,3 +820,74 @@ class DeviceContract(unittest.TestCase):
     def test_committed_census_has_no_gpu_device(self):
         c = json.load(open(cu.CENSUS))
         self.assertEqual({r.get("device") for sec in ("records", "time_only") for r in c[sec].values()} - {None}, {"mi210", "cpu"})
+
+
+def served_profile_result(row="ak-27b-served-decode-profile-gpu-20261125"):
+    """The shape of the served 27B decode profile RESULT (Q8-SERVED-PROFILE-1): arms.OFF = served V5I q8mf, no per-kernel bytes."""
+    return {"row": row, "task": "rocm-kernel-authoring.md:Q8-SERVED-PROFILE-1", "utc": "2026-11-25T09:07:05Z", "complete": True,
+            "arms": {"OFF": {"step_ms": 64.23, "idle_ms_per_step": 14.99, "weight_gemv_ms_per_step": 30.02, "weight_gemv_share": 0.467,
+                             "family_ms_per_step": {"gemv_q8mf": 28.25, "copy": 3.89, "gemv_q8sk": 1.70},
+                             "family_share_of_step": {"gemv_q8mf": 0.4398, "copy": 0.0605, "gemv_q8sk": 0.0264}},
+                     "ON": {"step_ms": 65.99, "family_ms_per_step": {"gemv_q8wp": 28.46}}},
+            "compare": {"weight_bytes_per_step": 33159915552.0}}
+
+
+class ServedBaseline(Base):
+    """AK-BW-CENSUS-GPU-SERVED-BASELINE: the served 27B profile is ingested, stock-path 27B classes are not_served, A3B GPU is a candidate lane."""
+
+    def test_served_profile_shape_is_ingested(self):
+        obs = cu.extract(served_profile_result())
+        agg = [o for o in obs if o["bytes_per_call"] is not None]
+        self.assertEqual([o["kernel_class"] for o in agg], ["served_weight_gemv_v5i"])
+        self.assertEqual(agg[0]["bytes_per_call"], 33159915552)
+        self.assertEqual(agg[0]["us_per_call"], 30020.0)
+        tonly = {o["kernel_class"]: o for o in obs if o["bytes_per_call"] is None}
+        self.assertEqual(sorted(tonly), ["served_copy", "served_gemv_q8mf", "served_gemv_q8sk", "served_idle", "served_step"])
+        self.assertEqual(tonly["served_gemv_q8mf"]["us_per_call"], 28250.0)
+        self.assertEqual(tonly["served_gemv_q8mf"]["share_of_round"], 0.4398)
+        self.assertTrue(all(o["served"] and o["arm"] == "OFF" for o in obs))  # the ON (q8wp) arm serves nothing
+        self.assertEqual(cu.extract(served_profile_result(row="ak-other-row")), [])
+        self.run_(self.res("s.json", served_profile_result()))
+        c = json.load(open(self.census))
+        r = c["records"]["27b-q8_0|served_weight_gemv_v5i|served-v5i|n8"]
+        self.assertEqual((r["gbps"], r["lane"], r["status"], r["rank"]), (1104.6, "served", "ok", 1))
+        self.assertEqual(len(c["time_only"]), 5)
+        self.assertEqual(r["op"], "verify dense Q8 GEMV/GEMM (q8mf6, V5I)")
+
+    @staticmethod
+    def rec(model, cls, gbps, rec_ms):
+        return {"model": model, "kernel_class": cls, "shape": "s", "n": 8, "bytes_per_call": gbps * 1e6, "us_per_call": 1e3,
+                "calls_per_round": 1, "source_row": "fx", "recoverable_ms_per_round": rec_ms}
+
+    def test_stock_path_unranked_and_a3b_candidate_after_served(self):
+        c = cu.empty_census()
+        c["parity"] = {"ops": [{"path": "a3b-mtp-mi210", "op": "router mul_mat_f F32 [2048,256]", "served": True, "roofline_gbps": 1500.0, "ref": "none", "share_of_step": 0.1,
+                                "covered_by": "", "refresh_c21": False, "source": "fx"},
+                               {"path": "27b-df2-mi210", "op": "lm_head 248320x5120", "served": True, "roofline_gbps": 1500.0, "ref": "none", "share_of_step": 0.1,
+                                "covered_by": "", "refresh_c21": False, "source": "fx"}],
+                       "refs": {}, "note": "Ceilings: MI210 1500 GB/s, CPU quarter-24t 129 GB/s."}
+        for cls, g in (("vk_dense_q8wv", 100.0), ("vk_dense_mmvq", 200.0), ("ffn_down_v5i", 1100.0)):
+            c["records"][f"27b-q8_0|{cls}|s|n8"] = self.rec("27b-q8_0", cls, g, 0)
+        c["records"]["a3b-q8_0|router_mul_mat_f32|s|n8"] = self.rec("a3b-q8_0", "router_mul_mat_f32", 10.0, 0)
+        cu.rerank(c)
+        cu.derive_surfaces(c)
+        R = c["records"]
+        for cls in ("vk_dense_q8wv", "vk_dense_mmvq"):
+            self.assertEqual((R[f"27b-q8_0|{cls}|s|n8"]["rank"], R[f"27b-q8_0|{cls}|s|n8"]["status"]), (None, "not_served"))
+        self.assertEqual(R["27b-q8_0|ffn_down_v5i|s|n8"]["rank"], 1)   # the served record outranks every stock-path one
+        self.assertEqual(R["a3b-q8_0|router_mul_mat_f32|s|n8"]["rank"], 2)  # candidate lane: after every served record
+        self.assertEqual(R["a3b-q8_0|router_mul_mat_f32|s|n8"]["lane"], "candidate")
+        md = cu.table_md(c)
+        self.assertNotIn("vk_dense_q8wv", md)
+        self.assertIn("vs 1.638 TB/s", md)
+        self.assertIn("open_surface (candidate)", md)
+        self.assertTrue(all(o["roofline_gbps"] == 1638.0 for o in c["parity"]["ops"]))
+        self.assertIn("MI210 1638 GB/s", c["parity"]["note"])
+        a3b = next(s for s in c["surfaces"] if s["path"] == "a3b-mtp-mi210")
+        self.assertFalse(a3b["served"])
+        order = [x["path"] for x in c["surfaces"]]
+        self.assertIsNotNone(a3b["saving_ms_per_step"])
+        self.assertLess(order.index("27b-df2-mi210"), order.index("a3b-mtp-mi210"))  # even an unpriced served surface ranks first
+        dense = [s for s in c["surfaces"] if s["op"] == "verify dense Q8 GEMV/GEMM (q8mf6, V5I)"]
+        self.assertEqual(dense[0]["census_rows"], ["27b-q8_0|ffn_down_v5i|s|n8"])  # not_served rows measure no served surface
+

@@ -83,7 +83,7 @@ class FamilyRank(unittest.TestCase):
         self.assertEqual([s["family"] for s in c["surfaces"]],
                          ["flash-attn-verify", "dense-q8-gemv", "flash-attn-verify", "lm-head-gemv"])
         fr = {r["family"]: r for r in c["family_rank"]}
-        self.assertEqual(fr["flash-attn-verify"]["score"], 3.5)  # 2.0 on 27B + 1.5 on A3B, one family across two paths
+        self.assertEqual(fr["flash-attn-verify"]["score"], 2.0)  # 2.0 on 27B; A3B-on-MI210 is a candidate lane, weight 0 unless a campaign sets one
         self.assertIsNone(fr["lm-head-gemv"]["score"])           # unpriced stays null, ranked last
         self.assertEqual(c["family_rank"][-1]["family"], "lm-head-gemv")
 
@@ -125,7 +125,8 @@ class FamilyRank(unittest.TestCase):
             text = loop.program_text(j)
         self.assertIn("| Family |", text)
         self.assertIn("Family rank", text)
-        self.assertIn("| 1 | flash-attn-verify | family | 3.50 |", text)
+        self.assertIn("| 1 | dense-q8-gemv | family | 3.00 |", text)  # A3B-on-MI210 FA (1.5) is candidate lane, weight 0
+        self.assertIn("| 2 | flash-attn-verify | family | 2.00 |", text)
         self.assertIn("| lm-head-gemv | family | - |", text)
 
 

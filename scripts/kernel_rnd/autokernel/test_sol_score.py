@@ -120,7 +120,7 @@ def test_spearman_and_ties():
 def test_retro_over_synthetic_campaign(tmp_path):
     model = write_gguf(tmp_path / "m.gguf", {}, [("blk.0.w.weight", (4096, 4096), 8)])   # ~17.8 MB
     census = tmp_path / "census.json"
-    census.write_text(json.dumps({"ceiling_gbps": 1500.0, "cpu": {"ceiling_gbps": {
+    census.write_text(json.dumps({"ceiling_gbps": 1638.0, "cpu": {"ceiling_gbps": {
         "half-48t": 100.0, "quarter-24t": 50.0}}}))
     db_dir = tmp_path / "camp" / "store"
     db_dir.mkdir(parents=True)
