@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import unittest
+from pathlib import Path
 
 from autokernel import bnsig_planner as bp
 from autokernel.loop import census_update as cu
@@ -63,7 +64,7 @@ class PlannerView(unittest.TestCase):
     def test_off_and_empty(self):
         self.assertEqual(bp.planner_view(self.c, mode="off"), {"status": "off"})
         self.assertEqual(bp.render({"status": "off"}), [])
-        self.assertEqual(bp.planner_view(cu.empty_census())["status"], "unavailable")
+        self.assertEqual(bp.planner_view(cu.empty_census()), {"status": "off"})
         with self.assertRaises(ValueError):
             bp.planner_view(self.c, mode="refuse")
 
@@ -137,11 +138,11 @@ class Gate(unittest.TestCase):
         row = bp.assess(body("sig:over_fetch"), {"status": "observed", "mode": "advisory", "hotspots": [{"kernel": None}]})
         self.assertEqual(row["verdict"], "error")
 
-    def test_hypothesis_carries_assessment_out_of_to_dict(self):
+    def test_hypothesis_carries_assessment_into_to_dict(self):
         row = bp.assess(body("sig:over_fetch"), self.view)
         h = Hypothesis("m", "s", "f", "x", "gemv_q8mf", signature_assessment=row)
         self.assertEqual(h.signature_assessment["verdict"], "signature_conflict")
-        self.assertNotIn("signature_assessment", h.to_dict())
+        self.assertIn("signature_assessment", h.to_dict())
 
     def test_proposal_from_raw_attaches_warn_without_refusing(self):
         from autokernel.loop import actors
@@ -157,3 +158,88 @@ class Gate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def run_build_context(census_path, store, *, prune="advisory"):
+    """The REAL run._build_context (the planner's context builder) on the legacy GPU path, heavy readers stubbed."""
+    import inspect
+    from unittest import mock
+    from autokernel.loop import run
+    args = argparse.Namespace(store=Path(store), model=Path("m.gguf"), surface="s", amdahl_prune="off", gpu_counters=None,
+                              shared_history_root=None, no_measurement_alarm_n=3, keep_rate_alarm_window=5,
+                              frozen_prompts=None, signature_prune=prune, signature_census=census_path)
+    kw = {n: mock.MagicMock() for n in inspect.signature(run._build_context).parameters}
+    kw["recipe"].to_dict.return_value = {}
+    kw["planner_backend"].describe.return_value = "planner"
+    kw["critic_backend"].describe.return_value = "critic"
+    kw["feedback"].context.return_value = None
+    kw["census"].quant_label = "Q8_0"
+    kw.update(args=args, pending_view=[()], history_view=[None], cpu_launch=lambda: False, direct_launch=lambda: False,
+              screen_state=None, screen_hint=None, experimental=False, latest=[], hotspot_rows=[], source_instrument=None,
+              longctx_surface=None, operator_unblocks=None, selected_identity=None, runtime_probe_enabled=False)
+    with mock.patch.object(run, "pending_hypotheses_view", return_value=()), \
+            mock.patch.object(run, "history_comparability", return_value=None), \
+            mock.patch.object(run, "prior_experiments", return_value=[]), \
+            mock.patch.object(run, "accumulator_keeps", return_value=None), \
+            mock.patch.object(run.status, "pool_health_signal", return_value=None), \
+            mock.patch.object(run.inbox, "read_inbox", return_value=[]), \
+            mock.patch.object(run.loop, "program_text", return_value="PROGRAM"):
+        return run._build_context(**kw)
+
+
+class RealContextPath(unittest.TestCase):
+    """D1 golden: through run._build_context -> actors.render_context, zero signed records = byte-identical prompt."""
+
+    def setUp(self):
+        from autokernel.loop import actors
+        self.render = actors.render_context
+        self.tmp = tempfile.mkdtemp()
+        self.unsigned = os.path.join(self.tmp, "unsigned.json")
+        c = signed_census()
+        for r in c["records"].values():
+            r.pop("signature", None)
+        json.dump(c, open(self.unsigned, "w"))
+        self.signed = os.path.join(self.tmp, "signed.json")
+        json.dump(signed_census(), open(self.signed, "w"))
+
+    def prompt(self, path, **kw):
+        return self.render(run_build_context(path, self.tmp, **kw))
+
+    def test_zero_signed_records_prompt_is_byte_identical_to_no_hook(self):
+        from unittest import mock
+        with mock.patch.object(bp, "context_entry", return_value={}):
+            golden = self.prompt(self.unsigned)
+        got = self.prompt(self.unsigned)
+        self.assertEqual(got, golden)
+        self.assertNotIn("AK-BNSIG", got)
+        self.assertEqual(self.prompt(self.unsigned, prune="off"), golden)
+        self.assertEqual(self.prompt(os.path.join(self.tmp, "absent.json")), golden)   # unreadable census: no block
+
+    def test_signed_census_reaches_prompt_through_run_hook(self):
+        ctx = run_build_context(self.signed, self.tmp)
+        self.assertEqual(ctx[bp.CONTEXT_KEY]["status"], "observed")
+        self.assertIn("| `gemv_q8mf` | issue_bound |", self.render(ctx))
+
+
+class DemoteAndJournal(unittest.TestCase):
+    def test_to_dict_carries_assessment_and_roundtrips(self):
+        row = bp.assess(body("sig:over_fetch"), bp.planner_view(signed_census()))
+        h = Hypothesis("m", "s", "f", "x", "gemv_q8mf", signature_assessment=row)
+        d = h.to_dict()
+        self.assertEqual(d["signature_assessment"]["verdict"], "signature_conflict")
+        self.assertEqual(Hypothesis(**d), h)                           # resume readers rebuild it
+        self.assertNotIn("signature_assessment", Hypothesis("m", "s", "f", "x", "y").to_dict())   # old rows keep shape
+
+    def test_tail_demote_consumes_signature_demote(self):
+        from autokernel.loop import run
+        view = dict(bp.planner_view(signed_census()), mode="demote")
+        h = Hypothesis("m", "s", "f", "x", "gemv_q8mf", signature_assessment=bp.assess(body("sig:over_fetch"), view))
+        args = argparse.Namespace(amdahl_prune="off", signature_prune="demote", store=None)
+        gw = run._gate_wrappers(args, False)
+        demote = next(v for v in vars(gw).values() if callable(v) and getattr(v, "__name__", "") == "<lambda>")
+        self.assertTrue(demote(h))
+        ok = Hypothesis("m", "s", "f", "x", "gemv_q8mf", signature_assessment=bp.assess(body("sig:issue_bound"), view))
+        self.assertFalse(demote(ok))
+        self.assertIsNone(next((v for v in vars(run._gate_wrappers(
+            argparse.Namespace(amdahl_prune="off", signature_prune="advisory"), False)).values()
+            if getattr(v, "__name__", "") == "<lambda>"), None))   # advisory default: no tail reorder

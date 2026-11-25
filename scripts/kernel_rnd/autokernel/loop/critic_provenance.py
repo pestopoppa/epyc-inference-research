@@ -48,7 +48,7 @@ class Hypothesis:
     #: carried to the attempt row's `reflexion.expected_outcome` and linted there. Omitted from
     #: `to_dict` unless declared, so every existing row and identity digest keeps its shape.
     expected_outcome: Any = None
-    signature_assessment: Any = None  # AK-BNSIG P2: bnsig_planner.assess row, in memory only (never in to_dict)
+    signature_assessment: Any = None  # AK-BNSIG P2: bnsig_planner.assess row; in to_dict only when set
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "relies_on_claims", tuple(self.relies_on_claims or ()))
@@ -80,6 +80,8 @@ class Hypothesis:
             row["lane"] = self.lane
         if self.expected_outcome is not None:
             row["expected_outcome"] = self.expected_outcome
+        if self.signature_assessment is not None:  # AK-BNSIG: journal + critic input; absent when not assessed
+            row["signature_assessment"] = self.signature_assessment
         return row
 
 

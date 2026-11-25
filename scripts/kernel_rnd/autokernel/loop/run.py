@@ -8894,7 +8894,8 @@ def _gate_wrappers(args, cpu_launch):
     """The one gate-feature list every lane shares (gate_wrappers.GateWrappers)."""
     # AK-AMDAHL-PRUNE: every candidate's e2e ceiling is logged at tail admission
     # (<store>/amdahl-ceilings.jsonl); `demote` mode times below-bar ones last.
-    demote = not cpu_launch and getattr(args, "amdahl_prune", "off") != "off"
+    demote = not cpu_launch and (getattr(args, "amdahl_prune", "off") != "off"
+                                 or getattr(args, "signature_prune", "off") == "demote")  # AK-BNSIG demote
     return gate_wrappers.GateWrappers(
         _exact_judge_factory(args) if getattr(args, "exact_lane_config", None) else None,
         _isa_check_factory(args) if getattr(args, "isa_claims_gate", "off") != "off" else None,
@@ -8983,7 +8984,7 @@ def _amdahl_assessor(args) -> "amdahl.Assessor":
 def _amdahl_tail_demote(args, hypothesis) -> bool:
     row = _amdahl_assessor(args).record(getattr(hypothesis, "target_symbol", None),
                                         mechanism_id=getattr(hypothesis, "mechanism_id", None))
-    return bool(row and row.get("demoted"))
+    return bool(row and row.get("demoted")) or bnsig_planner.demoted(getattr(hypothesis, "signature_assessment", None))
 
 def _main_exporting_tail_timing(actual: list[str], stores) -> int:
     """`_main`, then (AK parallel loop P0) merge this run's per-stage durations and tail

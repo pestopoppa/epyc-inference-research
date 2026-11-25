@@ -84,15 +84,14 @@ def planner_view(census: Mapping[str, Any] | None, *, mode: str = DEFAULT_MODE, 
     if mode == "off":
         return {"status": "off"}
     hs = hotspots(census or {})
-    if not hs:
-        return {"status": "unavailable", "mode": mode, "reason": "no census record carries a signature"}
+    if not hs:  # nothing signed: no block at all, so today's prompt stays byte-identical
+        return {"status": "off"}
     return {"status": "observed", "mode": mode, "hotspots": hs[:limit], "lever_map": lever_map()}
 
 
 def render(view: Mapping[str, Any]) -> list[str]:
     if view.get("status") != "observed":
-        return [] if view.get("status") in (None, "off") else \
-            ["", f"## Bottleneck signatures (AK-BNSIG): {view.get('status')} -- {view.get('reason', '')}"]
+        return []
     lines = ["", "## Bottleneck signatures (AK-BNSIG, counters vs stream refs S16/S64)",
              "| kernel | primary | classes | marginal | ruled out | band positions (0=S16, 1=S64) | lever |",
              "|---|---|---|---|---|---|---|"]
@@ -158,8 +157,10 @@ def context_entry(args: Any, cpu: bool) -> dict[str, Any]:
     try:
         census = json.loads(Path(path).read_text())
     except (OSError, ValueError) as exc:
-        return {CONTEXT_KEY: {"status": "unavailable", "mode": mode, "reason": f"census unreadable: {exc}"}}
-    return {CONTEXT_KEY: planner_view(census, mode=mode)}
+        LOG.warning("AK-BNSIG census unreadable, no signature block: %s", exc)
+        return {}
+    view = planner_view(census, mode=mode)
+    return {CONTEXT_KEY: view} if view.get("status") == "observed" else {}
 
 
 def add_arguments(parser) -> None:
