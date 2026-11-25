@@ -1148,6 +1148,94 @@
    "shape": "1024x5120",
    "share_basis": "parity op share_of_step (share of the op this row measures)",
    "share_of_round": 0.0142,
+   "signature": {
+    "axes": {
+     "ea_req_per_kb": 16.3852,
+     "fetch_over_bytes": 1.024,
+     "issue_busy": 0.129,
+     "lds_per_kb": 12.2353,
+     "mem_busy": 0.3572,
+     "mem_stalled": 0.3388,
+     "tcp_pending_stall": 0.1909,
+     "valu_per_kb": 64.0,
+     "wait_any": 0.5126,
+     "wait_inst": 0.383
+    },
+    "band_position": {
+     "ea_req_per_kb": null,
+     "fetch_over_bytes": null,
+     "issue_busy": null,
+     "lds_per_kb": null,
+     "mem_busy": 0.4434,
+     "mem_stalled": 0.5251,
+     "tcp_pending_stall": null,
+     "valu_per_kb": null,
+     "wait_any": 1.1246,
+     "wait_inst": 0.9263
+    },
+    "build": "gpu-20261124-98ff8a42a-c21",
+    "class": "over_subscribed",
+    "classes": [
+     "over_subscribed"
+    ],
+    "counter_set_sha256": null,
+    "marginal": [
+     "over_subscribed"
+    ],
+    "measured_at": "2026-11-25T22:21:03Z",
+    "oversub_legs": {
+     "mem_stalled": true,
+     "wait_any": true
+    },
+    "reference_check": {
+     "S16": "healthy_bw",
+     "S64": "over_subscribed",
+     "incoherent_axes": [],
+     "ok": true
+    },
+    "refs": {
+     "S16": {
+      "ea_req_per_kb": 16.0042,
+      "fetch_over_bytes": 1.0003,
+      "issue_busy": 0.0952,
+      "lds_per_kb": 0.0,
+      "mem_busy": 0.1774,
+      "mem_stalled": 0.0434,
+      "tcp_pending_stall": 0.7153,
+      "valu_per_kb": 9.3186,
+      "wait_any": 0.9622,
+      "wait_inst": 0.0098
+     },
+     "S16_id": "S16",
+     "S64": {
+      "ea_req_per_kb": 16.0043,
+      "fetch_over_bytes": 1.0003,
+      "issue_busy": 0.073,
+      "lds_per_kb": 0.0,
+      "mem_busy": 0.5829,
+      "mem_stalled": 0.606,
+      "tcp_pending_stall": 0.7114,
+      "valu_per_kb": 8.4106,
+      "wait_any": 0.5624,
+      "wait_inst": 0.4127
+     },
+     "S64_id": "S64",
+     "row": "ak-bnsig-census-topn-gpu-20261126-r2",
+     "s16_gbps": 1453.5,
+     "s64_gbps": 1323.4
+    },
+    "result_sha256": "78eb75d0716297c213d50e25e335d3f6cf10ad2cb7d55411c34a1307e78109fe",
+    "rule": "mem_stalled band position >= 0.5 (marginal below 0.75); wait_any support only",
+    "ruled_out": [
+     "over_fetch",
+     "issue_bound",
+     "latency_bound"
+    ],
+    "schema": "epyc.autokernel.bottleneck_signature.v1",
+    "source_row": "ak-bnsig-census-topn-gpu-20261126-r2",
+    "stale_vs_timing": false,
+    "timing_sha256": "5f363b7aa30249f6fd09a985ee75a21f3c3fbe4c1f0a3f0aa9a0f789baad7416"
+   },
    "source_row": "ak-c18-27b-df2-v5i-trace-gpu-20261122",
    "status": "open_surface",
    "unit": "GB/s",
@@ -9726,6 +9814,12 @@
    "target_gbps": 97.42500000000001
   }
  },
+ "signature_applied": [
+  {
+   "row": "ak-bnsig-census-topn-gpu-20261126-r2",
+   "sha256": "78eb75d0716297c213d50e25e335d3f6cf10ad2cb7d55411c34a1307e78109fe"
+  }
+ ],
  "surface_groups": [
   {
    "census_rows": [
@@ -10254,6 +10348,9 @@
    "served": true,
    "share_ms": 0.65,
    "share_of_step": 0.0142,
+   "signature_classes": {
+    "over_subscribed": 1
+   },
    "source": "C18 trace",
    "status": "covered",
    "step_ms": 45.7,
