@@ -294,6 +294,53 @@ def test_ab_timing_backend_follows_the_path_lane_and_a3b_needs_both_cells(tmp_pa
     assert g["backend"] == "gpu"
 
 
+def test_missing_decisive_is_fail_closed_not_a_win(tmp_path):   # N4
+    t = {"effect_pct": 3.0, "pairs": 5, "regressed_cells": [], "ungated_cells": [], "picked_cell": "solo"}   # no "decisive" key
+    r = _timed_stage(tmp_path, t)
+    assert r["polar"] == "FAIL" and r["verdict"].startswith("FAIL_NO_GAIN")
+    assert _timed_stage(tmp_path, {**t, "decisive": True})["polar"] == "PASS"
+
+
+def test_gpu_timing_cell_needs_the_floor_for_this_pair_count(tmp_path, monkeypatch):   # N5
+    from autokernel.loop import bench
+    spec = sb.path_specs(REG)[K27]
+    monkeypatch.setattr(bench, "floor_rows", lambda *a, **k: {9: 1.0})   # a floor table exists, but not for 5 pairs
+    assert sb.timing_floor(spec, {"store": str(tmp_path)}) is False
+    assert sb.timing_floor(spec, {"store": str(tmp_path), "pairs": 9}) is True
+    monkeypatch.setattr(bench, "floor_rows", lambda *a, **k: None)
+    assert sb.timing_floor(spec, {"store": str(tmp_path), "pairs": 9}) is False
+
+
+def _floor_file(store, spec, cells, **kw):
+    from autokernel.loop import bench, op_perf_runner as opr
+    rec = {"schema": opr.FLOOR_SCHEMA, "path": spec["key"], "backend": "ROCm0" if spec["lane"] == "gpu" else "CPU",
+           "gguf_stem": Path(spec["gguf"]).stem, "unit": bench.FLOOR_UNIT, "n_pairs": opr.CALIBRATION_MIN_PAIRS, "cells": cells} | kw
+    p = opr.floor_path(store, spec["key"])
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(rec))
+
+
+def test_op_perf_status_is_no_lane_grid_no_floor_or_floored_and_only_floored_is_gated(tmp_path):   # N2
+    spec = sb.path_specs(REG)[K27]
+    assert sb.op_perf_status({**spec, "gguf": "/m/no-such-lane.gguf"}, {}) == "no-lane"
+    st = {"store": str(tmp_path)}
+    assert sb.op_perf_status(spec, st) == "grid-no-floor"                       # a served-shape lane, but no floor file: NOT gated
+    _floor_file(tmp_path, spec, {})
+    assert sb.op_perf_status(spec, st) == "grid-no-floor"                       # the file exists and has no cells
+    _floor_file(tmp_path, spec, {"x@n1": {"floor_pct": {"9": 1.5}}})
+    assert sb.op_perf_status(spec, st) == "grid-no-floor"                       # cells, but none at this pair count
+    assert sb.op_perf_status(spec, {**st, "pairs": 9}) == "floored"
+    _floor_file(tmp_path, spec, {"x@n1": {"floor_pct": {"5": 1.5}}}, backend="CPU")
+    assert sb.op_perf_status(spec, st) == "grid-no-floor"                       # a floor for another backend never counts
+    _floor_file(tmp_path, spec, {"x@n1": {"floor_pct": {"5": 1.5}}})
+    assert sb.op_perf_status(spec, st) == "floored"
+    rep = sb.coverage_report(REG, POLICY, st)
+    assert rep[K27]["op_perf"] == "floored" and {r["op_perf"] for r in rep.values()} <= {"no-lane", "grid-no-floor", "floored"}
+    assert rep[A3B]["op_perf"] == "no-lane" and rep[FN]["op_perf"] == "grid-no-floor"
+    fx = sb.coverage_report(REG, POLICY, cand(tmp_path, test_op_perf_floor_paths=[FN]))   # fixture mode names the floored paths
+    assert fx[FN]["op_perf"] == "floored" and fx[K27]["op_perf"] == "grid-no-floor" and fx[A3B]["op_perf"] == "no-lane"
+
+
 def test_a3b_cpu_oracle_runs_nothing_and_stays_quality_ungated(tmp_path):
     prim = sb.test_primitives(cand(tmp_path, path=A3B))
     prim.oracle = lambda *a: pytest.fail("an ungated path must not run the oracle")
@@ -355,11 +402,12 @@ def test_serving_screen_qualify_is_no_keep_never_pass_and_never_a_fold_input(tmp
     assert v["verdict"] == "FUTILITY" and not ge.policy_decided(v)
 
 
-def test_serving_screen_no_qualifier_and_guard_failure_are_polar_fail(tmp_path):
-    out = _screen(_screen_cand(tmp_path, 161))   # +0.6% against a 15.6% floor
-    assert out["polar"] == "FAIL" and "below-screen-floor" in out["verdict"] and out["screen"]["best_arm"] is None
-    out = _screen(_screen_cand(tmp_path, 200, oom="CUDA out of memory"))   # the only arm fails a guard
-    assert out["polar"] == "FAIL" and "guard failures" in out["verdict"] and out["screen"]["rejected"]
+def test_serving_screen_no_winner_is_futility_and_only_all_arm_guard_failure_is_polar_fail(tmp_path):
+    out = _screen(_screen_cand(tmp_path, 161))   # +0.6% against a 15.6% floor: indistinguishable arms are FUTILITY, not a negative (N7)
+    assert "polar" not in out and out["verdict"].startswith("FUTILITY_SCREEN_NO_WINNER") and "below-screen-floor" in out["verdict"]
+    assert out["screen"]["best_arm"] is None and ge.evaluate(out, ended={"rc": "0", "reason": "complete"}, row="akc-ak-x-serving-screen-20261124")["verdict"] == "FUTILITY"
+    out = _screen(_screen_cand(tmp_path, 200, oom="CUDA out of memory"))   # the only arm fails a guard: the one polar FAIL
+    assert out["polar"] == "FAIL" and out["verdict"].startswith("FAIL_SCREEN (guard failure on every arm") and out["screen"]["rejected"]
 
 
 def test_serving_screen_refuses_missing_inputs_and_follows_the_path_lane(tmp_path):

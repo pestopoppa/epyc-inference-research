@@ -74,6 +74,8 @@ import json
 from pathlib import Path
 from typing import Mapping
 
+from . import sampling_axis
+
 MANIFEST_SCHEMA = "epyc.autokernel.served_shape_manifest.v1"
 
 #: Must stay identical to `gates.PPL_CONTRACT_SERVED_WIDTHS` (decode n=1, verify
@@ -191,6 +193,14 @@ class ServedShape:
             raise ValueError(f"{self.name}: n_used must be in [1, n_mats]")
 
 
+def _role_temperature(role: str) -> float | None:
+    """The registry role's generation_defaults.temperature, READ (never typed); None when the registry cannot say."""
+    try:
+        return sampling_axis.role_temperatures().get(role)
+    except Exception:  # noqa: BLE001 -- an unreadable registry means "cannot say"
+        return None
+
+
 @dataclass(frozen=True)
 class MoeProfile:
     """One lane's served MoE FFN, as its GGUF header states it."""
@@ -227,7 +237,7 @@ LANE_PROFILES: dict[str, MoeProfile] = {
         "Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf", expert_count=512, expert_used=10,
         hidden=2560, expert_ff=640, shexp_ff=640,
         gate_up_types=("IQ3_S", "IQ4_XS"), down_types=("IQ4_NL", "Q8_0"),
-        served_temperature=0.1,  # registry role architect_general (generation_defaults.temperature)
+        served_temperature=_role_temperature("architect_general"),
         extra_types=("Q6_K",)),
 }
 

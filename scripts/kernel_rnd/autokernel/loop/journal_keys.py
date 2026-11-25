@@ -88,6 +88,25 @@ def suppressed_by(candidate, negatives: dict):
     return None
 
 
+def negatives(store_root=None) -> dict:
+    """The measured negatives a candidate is checked against: the keyed seeded ones (seeds/negatives.json) overlaid by the
+    store's sidecar, so suppression holds before `seed.install` has run and never depends on a store being passed."""
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "seeds", "negatives.json"), encoding="utf-8") as f:
+            recs = json.load(f)["records"]
+    except (OSError, ValueError, KeyError):
+        recs = []
+    seeded = {r["mechanism_id"]: {k: r[k] for k in ("op_family", "shape_class", "device", "status") if k in r} for r in recs if key_of(r)}
+    return {**seeded, **(load(store_root) if store_root else {})}
+
+
+def suppress(key, reopens=(), *, store_root=None, known=None):
+    """suppressed_by for a candidate's journal key, called UNCONDITIONALLY: `known` (else `negatives(store_root)`) is the
+    negatives table and `reopens` extends the key's own. Returns the blocking mechanism_id or None (an unkeyed key is never blocked)."""
+    return suppressed_by({**key, "reopens": [*(key.get("reopens") or []), *reopens]} if key else key,
+                         negatives(store_root) if known is None else known)
+
+
 #: census family -> the ggml op op_perf_screen.grid matches on; the ONLY place this map lives (defect 20).
 OP_PERF_FAMILIES = {"dense-q8-gemv": "MUL_MAT", "dense-iq4xs-gemv": "MUL_MAT", "lm-head-gemv": "MUL_MAT", "mmid-moe": "MUL_MAT_ID",
                    "flash-attn-verify": "FLASH_ATTN_EXT"}

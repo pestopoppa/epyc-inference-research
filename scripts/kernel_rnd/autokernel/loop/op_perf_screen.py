@@ -10,8 +10,9 @@ measurement-sufficiency rules:
     never proves a win by itself;
   * the verdict is on the weights-weighted AGGREGATE (weight = calls_per_round x share), and any marked
     cell rejects the screen (a one-cell win cannot pay for a regression elsewhere);
-  * fail-closed: a weighted cell without a valid measurement (too few pairs, non-finite sample, no
-    floor, no weight) rejects as UNMEASURED, never as a silent skip.
+  * a MEASURED regression rejects even when other cells are unmeasured (a regression is evidence; the
+    gaps cannot un-measure it); otherwise a weighted cell without a valid measurement (too few pairs,
+    non-finite sample, no floor, no weight) is UNMEASURED, never a silent skip.
 
 Direction: samples are TIME per call (us/run, lower is better), like `test-backend-ops perf`.
 `effect_pct` = speedup = median(anchor) / median(candidate) - 1, so POSITIVE is better and a
@@ -133,12 +134,13 @@ def decide(cells: Sequence[Mapping[str, Any]], weights: Mapping[str, float]) -> 
                            "unmeasured": unmeasured, "aggregate_effect_pct": None, "aggregate_floor_pct": None}
     if not rows:
         return {**out, "screen": UNMEASURED, "reason": "no cells (empty grid or class matched no served shape)"}
-    if unmeasured:
+    if unmeasured and not regressed:
         return {**out, "screen": UNMEASURED,
                 "reason": f"{len(unmeasured)}/{len(rows)} cells unmeasured: {unmeasured[0]} ({next(r['reason'] for r in rows if r['key'] == unmeasured[0])})"}
-    total = sum(r["weight"] for r in rows)
-    agg = sum(r["weight"] * r["effect_pct"] for r in rows) / total
-    agg_floor = sum(r["weight"] * r["floor_pct"] for r in rows) / total
+    live = [r for r in rows if r["status"] != UNMEASURED]   # N1: a measured regression decides over the unmeasured gaps
+    total = sum(r["weight"] for r in live)
+    agg = sum(r["weight"] * r["effect_pct"] for r in live) / total
+    agg_floor = sum(r["weight"] * r["floor_pct"] for r in live) / total
     out.update(aggregate_effect_pct=agg, aggregate_floor_pct=agg_floor, weight_total=total)
     if regressed:
         return {**out, "screen": REJECT,

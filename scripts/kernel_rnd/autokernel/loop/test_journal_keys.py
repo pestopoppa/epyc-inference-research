@@ -195,5 +195,35 @@ class R7Review(unittest.TestCase):
             self.assertEqual(jk.problems(r), [])
 
 
+class UnconditionalSuppression(unittest.TestCase):
+    """R7: the candidate path calls suppressed_by whether or not a store/inbox exists (journal_keys.suppress)."""
+    FA = {"op_family": "flash-attn-verify", "device": "gpu", "shape_class": {"n": 1, "kv": 131072}}
+
+    def test_seeded_negatives_apply_with_no_store(self):
+        self.assertIn("akm-c9-gv-fattn-more-splits", jk.negatives())
+        self.assertEqual(jk.suppress(self.FA), "akm-c13-favec-combine-tail-split")
+        self.assertIsNone(jk.suppress({**self.FA, "shape_class": {"n": 36, "kv": 131072}}))
+        self.assertIsNone(jk.suppress(None))   # an unkeyed candidate is never blocked
+
+    def test_reopens_and_the_store_sidecar_compose(self):
+        reopen = ["akm-c13-favec-combine-tail-split", "akm-c8-fa-vec-longctx-pb", "akm-c9-gv-fattn-more-splits"]
+        self.assertIsNone(jk.suppress(self.FA, reopen))
+        self.assertIsNone(jk.suppress({**self.FA, "reopens": reopen}))
+        with tempfile.TemporaryDirectory() as tmp:
+            jk.key_entry(tmp, "akm-store-only", {"op_family": "lm-head-gemv", "device": "gpu", "shape_class": {"m": 7}})
+            self.assertEqual(jk.suppress({"op_family": "lm-head-gemv", "shape_class": {"m": 7}}, store_root=tmp), "akm-store-only")
+            self.assertIn("akm-c9-gv-fattn-more-splits", jk.negatives(tmp))
+        self.assertIsNone(jk.suppress(self.FA, known={}))   # an explicit empty table blocks nothing
+
+    def test_i8gemm_prefill_null_is_keyed_and_the_unkeyed_set_is_the_documented_one(self):
+        d = json.loads((seed.SEEDS / "negatives.json").read_text(encoding="utf-8"))
+        unkeyed = sorted(r["mechanism_id"] for r in d["records"] if not r.get("op_family"))
+        self.assertEqual(len(unkeyed), 12)
+        self.assertTrue(all(m in " ".join(d["_comment"]) for m in unkeyed))   # each is named, with its reason, in the file
+        gemm = {"op_family": "dense-q8-gemv", "device": "gpu", "shape_class": {"m": 5120, "n": 2048, "k": 6144}}
+        self.assertEqual(jk.suppress(gemm), "akm-i8gemm-perchannel-prefill")
+        self.assertIsNone(jk.suppress({**gemm, "shape_class": {"m": 5120, "n": 64, "k": 6144}}))
+
+
 if __name__ == "__main__":
     unittest.main()

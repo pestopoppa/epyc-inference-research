@@ -23,6 +23,16 @@ def test_one_cell_win_with_regression_elsewhere_is_rejected():
     assert r["polar"] == "FAIL" and r["verdict"].startswith("FAIL_OP_PERF_REGRESSION")
 
 
+def test_measured_regression_rejects_even_when_other_cells_are_unmeasured():   # N1: the regression is checked BEFORE UNMEASURED
+    d = ops.decide([_cell("a", 0.50), _cell("b", -0.05)], {"a": 1, "b": 1, "ghost": 1})   # "ghost" is weighted and never measured
+    assert d["unmeasured"] == ["ghost"] and d["regressed"] == ["b"] and d["screen"] == ops.REJECT
+    r = ops.polar_result(d)
+    assert r["polar"] == "FAIL" and r["verdict"].startswith("FAIL_OP_PERF_REGRESSION")
+    nowt = ops.decide([_cell("a", 0.50), _cell("b", -0.05)], {"a": 1, "b": 1, "ghost": 1} | {"a": None})   # an unweighted cell too
+    assert nowt["screen"] == ops.REJECT
+    assert ops.decide([_cell("a", 0.5)], {"a": 1, "ghost": 1})["screen"] == ops.UNMEASURED   # no regression: still UNMEASURED
+
+
 def test_regression_inside_its_own_floor_does_not_mark_the_cell():
     d = ops.decide([_cell("a", 0.30), _cell("b", -0.005, floor=1.0)], {"a": 1, "b": 1})
     assert d["regressed"] == [] and d["screen"] == ops.PASS

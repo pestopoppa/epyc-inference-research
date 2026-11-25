@@ -36,6 +36,7 @@ every path that decides what lands.
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import os
 import re
@@ -131,17 +132,8 @@ def guard_build_cpus(cpus: set[int], *, test_mode: bool) -> str:
 
 
 def _cpu_list(cpus: set[int]) -> str:
-    out, run = [], []
-    for c in sorted(cpus):
-        if run and c == run[-1] + 1:
-            run.append(c)
-            continue
-        if run:
-            out.append(f"{run[0]}-{run[-1]}" if len(run) > 1 else str(run[0]))
-        run = [c]
-    if run:
-        out.append(f"{run[0]}-{run[-1]}" if len(run) > 1 else str(run[0]))
-    return ",".join(out)
+    runs = [list(g) for _, g in itertools.groupby(sorted(cpus), key=lambda c, i=itertools.count(): c - next(i))]
+    return ",".join(f"{r[0]}-{r[-1]}" if len(r) > 1 else str(r[0]) for r in runs)
 
 
 # ---- primitives (live = existing loop code paths; test = fixture outcomes) --------------------------------------
@@ -351,9 +343,22 @@ def timing_floor(spec: Mapping[str, Any], cand: Mapping[str, Any]) -> bool:
     if cand.get("test_registry"):   # fixture mode: the candidate names the paths that have a floor cell
         return spec["key"] in (cand.get("test_floor_paths") or [])
     from . import bench, cpu_timing_runner as ctr
+    pairs, store = max(int(cand.get("pairs") or bench.MIN_PAIRS), bench.MIN_PAIRS), Path(cand.get("store") or LOOP_STORE)
     if spec["lane"] == "cpu":   # keyed per model AND topology (cpu_aa_calibration), never the GPU floor file
-        return bool(ctr.gated_cells(spec, Path(cand.get("store") or LOOP_STORE), max(int(cand.get("pairs") or bench.MIN_PAIRS), bench.MIN_PAIRS)))
-    return bench.floor_rows(spec["surface"], spec["gguf"], Path(cand.get("store") or LOOP_STORE)) is not None
+        return bool(ctr.gated_cells(spec, store, pairs))
+    return (bench.floor_rows(spec["surface"], spec["gguf"], store) or {}).get(pairs) is not None   # N5: THIS pair count's floor
+
+
+def op_perf_status(spec: Mapping[str, Any], cand: Mapping[str, Any]) -> str:
+    """N2: `no-lane` (no served-shape lane for the GGUF) / `grid-no-floor` (a lane, but no usable op-perf-aa floor cells at this
+    pair count: the screen can never decide) / `floored`. Only `floored` counts as gated."""
+    if not (ssc.lane_for_model(spec["gguf"]) or ssc.dense_lane_for_model(spec["gguf"])):
+        return "no-lane"
+    if cand.get("test_registry"):   # fixture mode: the candidate names the paths whose op-perf floor file has cells
+        return "floored" if spec["key"] in (cand.get("test_op_perf_floor_paths") or []) else "grid-no-floor"
+    from . import bench, op_perf_runner as opr
+    pairs = max(int(cand.get("pairs") or bench.MIN_PAIRS), bench.MIN_PAIRS)
+    return "floored" if opr.load_floors(Path(cand.get("store") or LOOP_STORE), spec, "ROCm0" if spec["lane"] == "gpu" else "CPU", pairs) else "grid-no-floor"
 
 
 def quality_status(key: str, policy: Mapping[str, Any]) -> dict:
@@ -369,12 +374,12 @@ def quality_status(key: str, policy: Mapping[str, Any]) -> dict:
 
 
 def coverage_report(registry: Mapping[str, Any], policy: Mapping[str, Any], cand: Mapping[str, Any] | None = None) -> dict:
-    """Per served path: timing cell / `ungated`, quality `gated` / `quality-ungated`, op-perf grid / `ungated` (for /loop)."""
+    """Per served path: timing cell / `ungated`, quality `gated` / `quality-ungated`, op-perf `no-lane` / `grid-no-floor` / `floored` (for /loop)."""
     cand = cand or {}
     return {k: {"status": s["status"], "device": s["device"],
                 "timing": "cell" if timing_floor(s, cand) else "ungated",
                 "quality": quality_status(k, policy)["status"],
-                "op_perf": "grid" if ssc.lane_for_model(s["gguf"]) or ssc.dense_lane_for_model(s["gguf"]) else "ungated"}
+                "op_perf": op_perf_status(s, cand)}
             for k, s in path_specs(registry).items()}
 
 
@@ -529,7 +534,7 @@ def stage_timing(cand, prim: Primitives, *, test_mode: bool) -> dict:
     r.update(backend=spec["lane"], speed={"surface": spec["surface"], "effect_pct": eff, "pairs": int(t["pairs"]),
                                    "model": str(t.get("model") or spec["gguf"])},
              geomean=round(1.0 + eff / 100.0, 6), rule={"geomean_min": gmin}, timing=t)
-    win = eff > 0 and bool(t.get("decisive", True)) and not t.get("regressed_cells")
+    win = eff > 0 and bool(t.get("decisive", False)) and not t.get("regressed_cells")
     why = f" [cell {t['picked_cell']}; regressed {t['regressed_cells']}]" if t.get("regressed_cells") else ""
     if t.get("ungated_cells"):
         r["ungated_cells"] = t["ungated_cells"]   # a cell with no floor: not timed, not borrowed
@@ -579,9 +584,9 @@ def stage_fold_check(cand, prim: Primitives, *, test_mode: bool) -> dict:
 
 def stage_serving_screen(cand, prim: Primitives, *, test_mode: bool) -> dict:
     """Serving-knob SCREEN (never a gate, never a PASS, never a fold input): `serving_knob_measure.screen_stage` over the
-    candidate's steady_results / arm_map / burst_results / floor_result and the registry. No arm qualifies, or every arm
-    fails a guard -> polar FAIL; an arm clears the screen -> FUTILITY_SCREEN_ONLY_NO_KEEP with no polar (confirm with a
-    paired A/B). The backend is the path's lane."""
+    candidate's steady_results / arm_map / burst_results / floor_result and the registry. Every arm fails a guard -> polar
+    FAIL; no winner (below the screen floor, control leads) -> FUTILITY_SCREEN_NO_WINNER, no polar; an arm clears the
+    screen -> FUTILITY_SCREEN_ONLY_NO_KEEP, no polar (confirm with a paired A/B). The backend is the path's lane."""
     from . import serving_knob_measure as skm
     from .serving_knobs import KnobError
     r = {**_base("serving-screen", cand), "backend": resolve_path(cand)["lane"], "screening_only": True}
@@ -599,9 +604,11 @@ def stage_serving_screen(cand, prim: Primitives, *, test_mode: bool) -> dict:
     if s["best_arm"]:
         r["verdict"] = (f"FUTILITY_SCREEN_ONLY_NO_KEEP (arm {s['best_arm']} clears the screen floor; a screen is not a gate: "
                         "confirm with a paired A/B)")
-    else:
-        r.update(verdict=f"FAIL_SCREEN (no arm qualifies: {s['best_arm_why']}"
-                 + (f"; guard failures {rej}" if rej else "") + ")", polar="FAIL")
+    elif rej and len(s["ranking"]) == 1:   # N7: only a guard failure on EVERY arm is a candidate negative
+        r.update(verdict=f"FAIL_SCREEN (guard failure on every arm: {rej})", polar="FAIL")
+    else:   # below the floor / control leads / no floor: arms are indistinguishable, which is futility, never a polar FAIL
+        r["verdict"] = (f"FUTILITY_SCREEN_NO_WINNER ({s['best_arm_why']}" + (f"; guard failures {rej}" if rej else "")
+                        + "; an indistinguishable arm is not a negative)")
     return r
 
 

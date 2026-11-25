@@ -7,7 +7,15 @@
   "cross-epoch record stale and render_context prints 'STALE EPOCH ... the NUMBER is not",
   "comparable' -- which is exactly right: these were measured on a different anchor and a",
   "different build recipe, so the MECHANISM knowledge transfers and the magnitude does not.",
-  "A seeded negative is a reason to say what is different, never a reason not to look."
+  "A seeded negative is a reason to say what is different, never a reason not to look.",
+  "",
+  "RSL-R7 keys (op_family + shape_class + device) are on every op-level record. These 12 stay UNKEYED on purpose",
+  "(reviewed 2026-11-24, not op-level): akm-hist-graph-opt, akm-hist-graph-shape-key, akm-hist-mmq-row-grouping,",
+  "akm-c6-rocm-10-1-llamacpp-build, akm-c9-dspine-b16-drafter, akm-c10-dflash2-hybrid-tree-verify-port,",
+  "akm-c9-q38fn-48t-smt-threads, akm-c10-h15-premise-c17c18, akm-gdn-wide-cols-small-grids,",
+  "akm-gate-maxdev-band-small-effects, akm-df2-drafter-precision-arms, akm-dtree-t12-27b. Reasons: graph/build/toolchain,",
+  "drafting scheme, serving knob, premise or methodology findings, a mixed result that must not block a shipped dispatch,",
+  "or no census family for the surface. Unkeyed entries are reported, never suppressed."
  ],
  "epoch_anchor_commit": "v7-candidate-20260711",
  "epoch_build_recipe": {
@@ -469,7 +477,14 @@
    "target_surface": "asm_retarget i8gemm",
    "target_symbol": "GGML_HIP_Q8_PC",
    "effect_fraction": -0.179,
-   "reason": "MEASURED FUTILITY_OP: 0.821x, 68.5 vs 83.3 TFLOP/s at m5120 n2048 k6144 (compute-bound; judge TFLOP/s). Row ak-asm-i8gemm-perchannel-gpu-20261122. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md"
+   "reason": "MEASURED FUTILITY_OP: 0.821x, 68.5 vs 83.3 TFLOP/s at m5120 n2048 k6144 (compute-bound; judge TFLOP/s). Row ak-asm-i8gemm-perchannel-gpu-20261122. Source: epyc-root progress/2026-11/2026-11-23-autokernel.md",
+   "op_family": "dense-q8-gemv",
+   "device": "gpu",
+   "shape_class": {
+    "m": 5120,
+    "n": 2048,
+    "k": 6144
+   }
   },
   {
    "status": "measured_null",
