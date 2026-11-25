@@ -58,12 +58,10 @@ def _n_ok(model: str, n: int, rep: dict | None) -> bool:
 
 def extract(res: dict, rep: dict | None = None) -> list[dict]:
     """Pure: RESULT dict -> census observations (no I/O). `rep` = census_coverage.n_report() (per-path n, per run)."""
-    out = []
-    op = res.get("op") or {}
+    out, op = [], res.get("op") or {}
     cells = op.get("cells_us") or {}
     for key in sorted(cells):
-        m = re.fullmatch(r"(\d+)x(\d+):n(\d+)", key)
-        arms = cells[key]
+        m, arms = re.fullmatch(r"(\d+)x(\d+):n(\d+)", key), cells[key]
         if not m or not _n_ok("27b-q8_0", int(m.group(3)), rep) or not isinstance(arms, dict):
             continue
         arm = next((a for a in ("V", "ON", "N", "OFF") if isinstance(arms.get(a), (int, float))), None)
@@ -71,15 +69,12 @@ def extract(res: dict, rep: dict | None = None) -> list[dict]:
             continue
         shape = f"{m.group(1)}x{m.group(2)}"
         cls, calls = Q8_SHAPE_CLASS.get(shape, (f"dense_q8_{shape}", 1))
-        us = float(arms[arm])
-        b = int(m.group(1)) * int(m.group(2)) * 34 // 32
-        out.append({"model": "27b-q8_0", "kernel_class": cls + ("_v5i" if arm == "V" else ""), "shape": shape,
-                    "n": int(m.group(3)), "arm": arm, "bytes_per_call": b, "us_per_call": us,
-                    "calls_per_round": calls})
+        us, b = float(arms[arm]), int(m.group(1)) * int(m.group(2)) * 34 // 32
+        out.append({"model": "27b-q8_0", "kernel_class": cls + ("_v5i" if arm == "V" else ""), "shape": shape, "n": int(m.group(3)),
+                    "arm": arm, "bytes_per_call": b, "us_per_call": us, "calls_per_round": calls})
     table = op.get("table") or {}
     for key in sorted(table):
-        m = re.fullmatch(r"([a-z_]+):n(\d+)", key)
-        row = table[key]
+        m, row = re.fullmatch(r"([a-z_]+):n(\d+)", key), table[key]
         if not m or not _n_ok("a3b-q8_0", int(m.group(2)), rep) or not isinstance(row, dict):
             continue
         us, g = row.get("us_on"), row.get("gbps_on")
@@ -102,8 +97,7 @@ def extract_trace(res: dict, rep: dict | None = None) -> list[dict]:
         return out
     tbo = s.get("tbo_gbps")
     for key in sorted(tbo) if isinstance(tbo, dict) else []:
-        m = re.fullmatch(r"(\d+)x(\d+):n(\d+)", key)
-        g = tbo[key]
+        m, g = re.fullmatch(r"(\d+)x(\d+):n(\d+)", key), tbo[key]
         if not m or not _n_ok("27b-q8_0", int(m.group(3)), rep) or not isinstance(g, (int, float)) or g <= 0:
             continue
         shape = f"{m.group(1)}x{m.group(2)}"
@@ -141,8 +135,7 @@ def cpu_config(result_path: str | None, cfg: str) -> str:
 def extract_cpu(res: dict, result_path: str | None = None) -> list[dict]:
     """CPU gap-census rows: configs[<cfg>].ranked_families at one row per step (plain decode only; MTP steps carry
     a row-dependent byte count and are skipped, deterministically)."""
-    out = []
-    rid_ = str(res.get("id") or res.get("row") or "")
+    out, rid_ = [], str(res.get("id") or res.get("row") or "")
     if isinstance(res.get("table"), dict) and res.get("quarter"):
         return extract_ubench(res)
     if isinstance(res.get("per_family_by_unit"), dict):
@@ -235,8 +228,7 @@ def _model_of(res: dict) -> str | None:
 def extract_gdn(res: dict) -> list[dict]:
     """GDN op microbench `cells["svS:nsN:ntT:KK:dtype"]{us_<arm>: us}` (fused OFF/ON, dispatch r3/disp, colwidth c1/c2/c4) or
     verify-base `{us_per_layer}`. Time only: the cell key carries no head count, so the state bytes are not derivable."""
-    out = []
-    cells = res.get("cells")
+    out, cells = [], res.get("cells")
     for key in sorted(cells) if isinstance(cells, dict) else []:
         m, c = GDN_CELL.fullmatch(key), cells[key]
         if not m or not isinstance(c, dict):
@@ -435,6 +427,18 @@ def extract_verify_roofline(res: dict, rep: dict | None = None) -> list[dict]:
                             "bytes_basis": "row bytes (rocprof FETCH_SIZE+WRITE_SIZE, HBM side), pooled over the class's launches",
                             "calls_basis": f"summed row `calls` of {p['kernels']} kernel entries per verify step"})
     return out
+
+
+def flag_implausible_bytes(res: dict) -> list[dict]:
+    """No-LLM verify-roofline bytes check: flag a row whose GB/s exceeds the census HBM peak, or whose dense-weight bytes/launch is off
+    every analytic Q8_0 footprint (34 B/32 w, x2 for a fused gate+up launch) of its launch count by more than 2x. No footprint: peak only."""
+    fp, peak = {}, float(res.get("peak_gbps") or 1638.0)
+    for s, (_, n) in {**Q8_SHAPE_CLASS, **TRACE_Q8_CLASS}.items():
+        fp.setdefault(n, []).extend(m * int.__mul__(*map(int, s.split("x"))) * 34 / 32 for m in (1, 2))
+    rows = [(o, o["bytes_per_call"], o["bytes_per_call"] / (o["us_per_call"] * 1e3)) for o in extract_verify_roofline(res)]
+    return [{k: o[k] for k in ("kernel_class", "shape", "n", "bytes_per_call", "us_per_call")} | {"flag": f"over_peak {g:.0f}>{peak:.0f} GB/s" if g > peak else "off_footprint >2x"}
+            for o, b, g in rows if g > peak or (o["kernel_class"] in ("vk_dense_mmvq", "vk_dense_q8wv", "vk_lm_head")
+            and o["calls_per_round"] in fp and not any(0.5 <= b / f <= 2 for f in fp[o["calls_per_round"]]))]
 
 
 def extract_served_profile(res: dict) -> list[dict]:
