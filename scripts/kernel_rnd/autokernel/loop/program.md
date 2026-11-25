@@ -633,7 +633,7 @@ Every MI210 GPU kernel candidate and every GPU result record reports these numbe
   per 32 weights);
 - **measured µs per call** and **calls per round**;
 - **effective GB/s** = bytes / time;
-- the **gap to the 1 TB/s floor** and the **gap to the ~1.5 TB/s stream ceiling** (HBM peak ~1.6 TB/s);
+- the **gap to the 1 TB/s floor** and the **gap to the 1.638 TB/s MI210 ceiling** (operator 2026-11-25);
 - **share of round wall time** on the served path: 27B DFlash2 with the V5I env, or A3B MTP;
 - **recoverable ms per round** if the kernel were lifted to 1.2 TB/s.
 
@@ -942,7 +942,7 @@ and `progress/2026-11/2026-11-2{0,1}-autokernel.md` (wrap-ups 5-10).
   post-hoc pass as inconclusive, then rerun.
 - **Choose the profiling unit by arithmetic intensity.** Compute-bound prefill GEMMs are judged in TFLOP/s and
   decode/GEMV in GB/s. The I8GEMM row's "effective_GBps" field was actually TFLOP/s (root 8341cdad7).
-  **Rule:** AI = FLOP/byte; ridge = peak compute / peak BW (MI210 ~121 FLOP/B = 181 TFLOP/s / 1500 GB/s; CPU
+  **Rule:** AI = FLOP/byte; ridge = peak compute / peak BW (MI210 ~110 FLOP/B = 181e12 / 1638e9 (181 TFLOP/s / 1638 GB/s); CPU
   half-48t ~32). AI >= ridge is compute-bound: report TFLOP/s; below it memory-bound: GB/s. Never put one unit
   in a field named for the other. Census records carry an explicit `unit` (`GB/s`|`TFLOP/s`, null on old rows) and
   `census_update.validate_unit` rejects a compute-bound record whose unit is GB/s (enforced in `apply`).

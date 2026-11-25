@@ -154,6 +154,7 @@ def apply_ceilings(c: dict) -> None:
         o.update(roofline_gbps=CEILINGS_GBPS[device_of(o["path"])], **({"served": False, "lane": "candidate"} if o["path"] in CANDIDATE_PATHS else {}))
     if p.get("note"):
         p["note"] = re.sub(r"MI210 \d+ GB/s", f"MI210 {CEILINGS_GBPS['mi210']:.0f} GB/s", p["note"])
+        p["note"] = re.sub(r"operator 2026-11-24, one", "operator 2026-11-25, one", re.sub(r"Operator 2026-11-24: A3B GPU tracked as served \(second GPU\)\.", "A3B GPU is a candidate lane, not served (operator 2026-11-25).", p["note"]))
     cpu = c.setdefault("cpu", json.loads(json.dumps(CPU_DEFAULTS)))
     for k in ("quarter-24t", "full-host"):
         cpu.setdefault("ceiling_gbps", {})[k] = CPU_DEFAULTS["ceiling_gbps"][k]
