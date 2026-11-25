@@ -1,0 +1,52 @@
+0.01.830.461 I common_memory_breakdown_print: |   - ROCm0 (MI210)      | 65520 = 60496 + (47208 = 25972 +   17844 +    3392) +      -42184 |
+0.03.096.323 I load_tensors:        ROCm0 model buffer size = 25972.29 MiB
+0.03.096.324 I load_tensors:    ROCm_Host model buffer size =  1288.28 MiB
+0.05.183.859 I llama_kv_cache:      ROCm0 KV buffer size = 13056.00 MiB
+0.05.370.105 I llama_memory_recurrent:      ROCm0 RS buffer size =  4788.00 MiB
+0.05.370.118 I sched_reserve: reserving ...
+0.05.613.699 I sched_reserve:      ROCm0 compute buffer size =  3392.33 MiB
+0.05.613.706 I sched_reserve:  ROCm_Host compute buffer size =  1616.34 MiB
+0.05.613.706 I sched_reserve: graph nodes  = 4855
+0.05.613.706 I sched_reserve: graph splits = 2
+0.05.613.707 I sched_reserve: reserve took 243.59 ms, sched copies = 1
+0.06.038.872 I load_tensors:        ROCm0 model buffer size =  1950.71 MiB
+0.06.175.436 I llama_kv_cache:      ROCm0 KV buffer size =   200.00 MiB
+0.06.175.638 I sched_reserve: reserving ...
+0.06.394.368 I sched_reserve:      ROCm0 compute buffer size =  2143.68 MiB
+0.06.394.375 I sched_reserve:  ROCm_Host compute buffer size =  1980.17 MiB
+0.06.394.375 I sched_reserve: graph nodes  = 953 (with bs=2048), 731 (with bs=1)
+0.06.394.375 I sched_reserve: graph splits = 4 (with bs=2048), 2 (with bs=1)
+0.06.394.377 I sched_reserve: reserve took 218.74 ms, sched copies = 1
+0.37.980.805 I sched_reserve: reserving ...
+0.38.426.268 I sched_reserve:      ROCm0 compute buffer size =  3592.33 MiB
+0.38.426.273 I sched_reserve:  ROCm_Host compute buffer size =  1616.34 MiB
+0.38.426.274 I sched_reserve: graph nodes  = 4855
+0.38.426.274 I sched_reserve: graph splits = 2
+0.38.426.276 I sched_reserve: reserve took 445.46 ms, sched copies = 1
+10.02.410.442 I common_memory_breakdown_print: |   - ROCm0 (MI210)      | 65520 = 12599 + (47408 = 25972 +   17844 +    3592) +        5511 |
+0.00.957.955 I common_memory_breakdown_print: |   - ROCm0 (MI210)      | 65520 = 60496 + (45816 = 25972 +   17844 +    2000) +      -40792 |
+0.02.278.583 I load_tensors:        ROCm0 model buffer size = 25972.29 MiB
+0.02.278.584 I load_tensors:    ROCm_Host model buffer size =  1288.28 MiB
+0.04.331.279 I llama_kv_cache:      ROCm0 KV buffer size = 13056.00 MiB
+0.04.517.681 I llama_memory_recurrent:      ROCm0 RS buffer size =  4788.00 MiB
+0.04.517.697 I sched_reserve: reserving ...
+0.04.627.560 I sched_reserve:      ROCm0 compute buffer size =  2000.28 MiB
+0.04.627.567 I sched_reserve:  ROCm_Host compute buffer size =   404.28 MiB
+0.04.627.567 I sched_reserve: graph nodes  = 4855
+0.04.627.567 I sched_reserve: graph splits = 2
+0.04.627.569 I sched_reserve: reserve took 109.87 ms, sched copies = 1
+0.05.057.987 I load_tensors:        ROCm0 model buffer size =  1950.71 MiB
+0.05.194.538 I llama_kv_cache:      ROCm0 KV buffer size =   170.00 MiB
+0.05.194.714 I sched_reserve: reserving ...
+0.05.252.009 I sched_reserve:      ROCm0 compute buffer size =   537.14 MiB
+0.05.252.015 I sched_reserve:  ROCm_Host compute buffer size =   493.54 MiB
+0.05.252.016 I sched_reserve: graph nodes  = 953 (with bs=512), 731 (with bs=1)
+0.05.252.016 I sched_reserve: graph splits = 4 (with bs=512), 2 (with bs=1)
+0.05.252.018 I sched_reserve: reserve took 57.30 ms, sched copies = 1
+0.36.027.119 I sched_reserve: reserving ...
+0.36.204.709 I sched_reserve:      ROCm0 compute buffer size =  2050.28 MiB
+0.36.204.717 I sched_reserve:  ROCm_Host compute buffer size =   404.28 MiB
+0.36.204.718 I sched_reserve: graph nodes  = 4855
+0.36.204.718 I sched_reserve: graph splits = 2
+0.36.204.719 I sched_reserve: reserve took 177.59 ms, sched copies = 1
+10.26.542.843 I common_memory_breakdown_print: |   - ROCm0 (MI210)      | 65520 = 15659 + (45866 = 25972 +   17844 +    2050) +        3993 |

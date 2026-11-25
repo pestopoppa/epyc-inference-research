@@ -1,0 +1,2923 @@
+{
+ "complete": true,
+ "verdict": "SCREENED",
+ "cells": {
+  "B512@40": {
+   "n_repeats": 2,
+   "saturated_any": false,
+   "drain_capped_any": false,
+   "n_measured": 24,
+   "tok_s_mean": 30.86510466760808,
+   "tok_s_p95": 49.92767708930961,
+   "tok_s_p05": 9.65673197211362,
+   "itl_p95_s": 0.13867778122075824,
+   "ttft_p50_s": 14.528906737745274,
+   "ttft_p95_s": 37.98500339136807,
+   "latency_p50_s": 27.24745214905124,
+   "latency_p95_s": 58.533511251420705,
+   "aggregate_tok_s": 6.708759019172619,
+   "itl_p50_s": 1.4125020243227482e-05,
+   "short_ttft_p50_s": 13.274868992040865,
+   "long_ttft_p50_s": 29.31554832193069
+  },
+  "B512@25": {
+   "n_repeats": 2,
+   "saturated_any": false,
+   "drain_capped_any": false,
+   "n_measured": 24,
+   "tok_s_mean": 23.570041512846892,
+   "tok_s_p95": 47.02506131825592,
+   "tok_s_p05": 8.853424125604901,
+   "itl_p95_s": 0.5681413614249321,
+   "ttft_p50_s": 19.43930315459147,
+   "ttft_p95_s": 44.27840040212031,
+   "latency_p50_s": 39.608360936981626,
+   "latency_p95_s": 60.3838854219066,
+   "aggregate_tok_s": 10.742390038524068,
+   "itl_p50_s": 1.4800287317484617e-05,
+   "short_ttft_p50_s": 14.107894317014143,
+   "long_ttft_p50_s": 35.96042028453667
+  },
+  "B512@15": {
+   "n_repeats": 2,
+   "saturated_any": false,
+   "drain_capped_any": false,
+   "n_measured": 24,
+   "tok_s_mean": 11.983064877795204,
+   "tok_s_p95": 26.05861298184582,
+   "tok_s_p05": 4.544039381197804,
+   "itl_p95_s": 1.0410904392832885,
+   "ttft_p50_s": 42.56805850373348,
+   "ttft_p95_s": 60.64007032364607,
+   "latency_p50_s": 67.83033546101069,
+   "latency_p95_s": 104.87103847673862,
+   "aggregate_tok_s": 15.897432822184598,
+   "itl_p50_s": 1.3240263797342777e-05,
+   "short_ttft_p50_s": 40.784680113429204,
+   "long_ttft_p50_s": 57.34960930154193
+  },
+  "B512@8": {
+   "n_repeats": 2,
+   "saturated_any": true,
+   "drain_capped_any": false,
+   "n_measured": 23,
+   "tok_s_mean": 9.56429925385255,
+   "tok_s_p95": 19.32065270909685,
+   "tok_s_p05": 4.609567902925014,
+   "itl_p95_s": 1.0174507140356581,
+   "ttft_p50_s": 75.22224854951492,
+   "ttft_p95_s": 132.29449137050543,
+   "latency_p50_s": 113.27983110531932,
+   "latency_p95_s": 151.3349835864792,
+   "aggregate_tok_s": 14.043624792776278,
+   "itl_p50_s": 1.3857439626008272e-05,
+   "short_ttft_p50_s": 77.11106863321038,
+   "long_ttft_p50_s": 70.03424022148829
+  },
+  "B2048@40": {
+   "n_repeats": 2,
+   "saturated_any": false,
+   "drain_capped_any": false,
+   "n_measured": 24,
+   "tok_s_mean": 33.88271600048048,
+   "tok_s_p95": 47.836952202715494,
+   "tok_s_p05": 12.653134513744455,
+   "itl_p95_s": 0.12827103196177622,
+   "ttft_p50_s": 8.324280807748437,
+   "ttft_p95_s": 27.6231163209246,
+   "latency_p50_s": 19.157072707195766,
+   "latency_p95_s": 43.77874717672821,
+   "aggregate_tok_s": 6.952818364597311,
+   "itl_p50_s": 1.4095508959144354e-05,
+   "short_ttft_p50_s": 5.889241609489545,
+   "long_ttft_p50_s": 25.37990171299316
+  },
+  "B2048@25": {
+   "n_repeats": 2,
+   "saturated_any": false,
+   "drain_capped_any": false,
+   "n_measured": 24,
+   "tok_s_mean": 26.46446941695227,
+   "tok_s_p95": 45.897595353253074,
+   "tok_s_p05": 8.97626120694227,
+   "itl_p95_s": 0.15319276319351047,
+   "ttft_p50_s": 11.850093846267555,
+   "ttft_p95_s": 30.301336838910355,
+   "latency_p50_s": 28.61956572777126,
+   "latency_p95_s": 52.974677670648084,
+   "aggregate_tok_s": 11.305804497632588,
+   "itl_p50_s": 1.426279777660966e-05,
+   "short_ttft_p50_s": 7.067015909473412,
+   "long_ttft_p50_s": 28.234002195531502
+  },
+  "B2048@15": {
+   "n_repeats": 2,
+   "saturated_any": false,
+   "drain_capped_any": false,
+   "n_measured": 24,
+   "tok_s_mean": 14.982254251054979,
+   "tok_s_p95": 24.649697160732927,
+   "tok_s_p05": 7.726902398761358,
+   "itl_p95_s": 0.2007958285685162,
+   "ttft_p50_s": 26.308406475232914,
+   "ttft_p95_s": 55.148543840140334,
+   "latency_p50_s": 57.291468883981,
+   "latency_p95_s": 84.6587707446015,
+   "aggregate_tok_s": 17.581255807025126,
+   "itl_p50_s": 1.1695199646055698e-05,
+   "short_ttft_p50_s": 24.55435747199226,
+   "long_ttft_p50_s": 42.32266095955856
+  },
+  "B2048@8": {
+   "n_repeats": 2,
+   "saturated_any": false,
+   "drain_capped_any": false,
+   "n_measured": 24,
+   "tok_s_mean": 9.675619547506132,
+   "tok_s_p95": 22.10621360102965,
+   "tok_s_p05": 4.4844963424883435,
+   "itl_p95_s": 0.2987539913563523,
+   "ttft_p50_s": 57.046169711393304,
+   "ttft_p95_s": 106.57927982973051,
+   "latency_p50_s": 105.93530891521368,
+   "latency_p95_s": 127.73590584699996,
+   "aggregate_tok_s": 16.29985013284802,
+   "itl_p50_s": 1.3075245078653097e-05,
+   "short_ttft_p50_s": 59.902035811915994,
+   "long_ttft_p50_s": 54.190303610870615
+  }
+ },
+ "crossover": {
+  "tok_s_mean": {
+   "beats": [
+    {
+     "iat_s": 40,
+     "b512": 30.86510466760808,
+     "b2048": 33.88271600048048,
+     "ratio": 1.0977677336710698,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 25,
+     "b512": 23.570041512846892,
+     "b2048": 26.46446941695227,
+     "ratio": 1.1228011373050728,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 15,
+     "b512": 11.983064877795204,
+     "b2048": 14.982254251054979,
+     "ratio": 1.2502856659665855,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 8,
+     "b512": 9.56429925385255,
+     "b2048": 9.675619547506132,
+     "ratio": 1.0116391479081692,
+     "b2048_beats": true,
+     "repeats_agree": false
+    }
+   ],
+   "status": "BEATS_ALL"
+  },
+  "tok_s_p95": {
+   "beats": [
+    {
+     "iat_s": 40,
+     "b512": 49.92767708930961,
+     "b2048": 47.836952202715494,
+     "ratio": 0.9581249317316671,
+     "b2048_beats": false,
+     "repeats_agree": false
+    },
+    {
+     "iat_s": 25,
+     "b512": 47.02506131825592,
+     "b2048": 45.897595353253074,
+     "ratio": 0.9760241468400777,
+     "b2048_beats": false,
+     "repeats_agree": false
+    },
+    {
+     "iat_s": 15,
+     "b512": 26.05861298184582,
+     "b2048": 24.649697160732927,
+     "ratio": 0.945932816067592,
+     "b2048_beats": false,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 8,
+     "b512": 19.32065270909685,
+     "b2048": 22.10621360102965,
+     "ratio": 1.1441752995550332,
+     "b2048_beats": true,
+     "repeats_agree": false
+    }
+   ],
+   "status": "NON_MONOTONE",
+   "stops_at_iat_s": 40
+  },
+  "tok_s_p05": {
+   "beats": [
+    {
+     "iat_s": 40,
+     "b512": 9.65673197211362,
+     "b2048": 12.653134513744455,
+     "ratio": 1.3102915717536474,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 25,
+     "b512": 8.853424125604901,
+     "b2048": 8.97626120694227,
+     "ratio": 1.0138745280463988,
+     "b2048_beats": true,
+     "repeats_agree": false
+    },
+    {
+     "iat_s": 15,
+     "b512": 4.544039381197804,
+     "b2048": 7.726902398761358,
+     "ratio": 1.7004479386189992,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 8,
+     "b512": 4.609567902925014,
+     "b2048": 4.4844963424883435,
+     "ratio": 0.9728669664769867,
+     "b2048_beats": false,
+     "repeats_agree": false
+    }
+   ],
+   "status": "CROSSOVER",
+   "stops_at_iat_s": 8,
+   "bracket_iat_s": [
+    15,
+    8
+   ],
+   "interp_iat_s": 8.251608207953417
+  },
+  "itl_p95_s": {
+   "beats": [
+    {
+     "iat_s": 40,
+     "b512": 0.13867778122075824,
+     "b2048": 0.12827103196177622,
+     "ratio": 0.9249573423559775,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 25,
+     "b512": 0.5681413614249321,
+     "b2048": 0.15319276319351047,
+     "ratio": 0.2696384625285756,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 15,
+     "b512": 1.0410904392832885,
+     "b2048": 0.2007958285685162,
+     "ratio": 0.19287068730239115,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 8,
+     "b512": 1.0174507140356581,
+     "b2048": 0.2987539913563523,
+     "ratio": 0.29362993925412095,
+     "b2048_beats": true,
+     "repeats_agree": true
+    }
+   ],
+   "status": "BEATS_ALL"
+  },
+  "ttft_p50_s": {
+   "beats": [
+    {
+     "iat_s": 40,
+     "b512": 14.528906737745274,
+     "b2048": 8.324280807748437,
+     "ratio": 0.5729461244404872,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 25,
+     "b512": 19.43930315459147,
+     "b2048": 11.850093846267555,
+     "ratio": 0.6095945802187163,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 15,
+     "b512": 42.56805850373348,
+     "b2048": 26.308406475232914,
+     "ratio": 0.6180316274684104,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 8,
+     "b512": 75.22224854951492,
+     "b2048": 57.046169711393304,
+     "ratio": 0.7583683127185803,
+     "b2048_beats": true,
+     "repeats_agree": true
+    }
+   ],
+   "status": "BEATS_ALL"
+  },
+  "ttft_p95_s": {
+   "beats": [
+    {
+     "iat_s": 40,
+     "b512": 37.98500339136807,
+     "b2048": 27.6231163209246,
+     "ratio": 0.7272111058229321,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 25,
+     "b512": 44.27840040212031,
+     "b2048": 30.301336838910355,
+     "ratio": 0.6843367547997363,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 15,
+     "b512": 60.64007032364607,
+     "b2048": 55.148543840140334,
+     "ratio": 0.9094406313482726,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 8,
+     "b512": 132.29449137050543,
+     "b2048": 106.57927982973051,
+     "ratio": 0.805621448978124,
+     "b2048_beats": true,
+     "repeats_agree": true
+    }
+   ],
+   "status": "BEATS_ALL"
+  },
+  "latency_p50_s": {
+   "beats": [
+    {
+     "iat_s": 40,
+     "b512": 27.24745214905124,
+     "b2048": 19.157072707195766,
+     "ratio": 0.7030775795990458,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 25,
+     "b512": 39.608360936981626,
+     "b2048": 28.61956572777126,
+     "ratio": 0.7225637479244863,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 15,
+     "b512": 67.83033546101069,
+     "b2048": 57.291468883981,
+     "ratio": 0.844629006986299,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 8,
+     "b512": 113.27983110531932,
+     "b2048": 105.93530891521368,
+     "ratio": 0.9351647851303977,
+     "b2048_beats": true,
+     "repeats_agree": false
+    }
+   ],
+   "status": "BEATS_ALL"
+  },
+  "latency_p95_s": {
+   "beats": [
+    {
+     "iat_s": 40,
+     "b512": 58.533511251420705,
+     "b2048": 43.77874717672821,
+     "ratio": 0.7479262091194918,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 25,
+     "b512": 60.3838854219066,
+     "b2048": 52.974677670648084,
+     "ratio": 0.8772982609600254,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 15,
+     "b512": 104.87103847673862,
+     "b2048": 84.6587707446015,
+     "ratio": 0.8072654945948647,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 8,
+     "b512": 151.3349835864792,
+     "b2048": 127.73590584699996,
+     "ratio": 0.8440606581491863,
+     "b2048_beats": true,
+     "repeats_agree": true
+    }
+   ],
+   "status": "BEATS_ALL"
+  },
+  "aggregate_tok_s": {
+   "beats": [
+    {
+     "iat_s": 40,
+     "b512": 6.708759019172619,
+     "b2048": 6.952818364597311,
+     "ratio": 1.0363792088413384,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 25,
+     "b512": 10.742390038524068,
+     "b2048": 11.305804497632588,
+     "ratio": 1.05244777531704,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 15,
+     "b512": 15.897432822184598,
+     "b2048": 17.581255807025126,
+     "ratio": 1.1059179179226208,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 8,
+     "b512": 14.043624792776278,
+     "b2048": 16.29985013284802,
+     "ratio": 1.1606583324009265,
+     "b2048_beats": true,
+     "repeats_agree": true
+    }
+   ],
+   "status": "BEATS_ALL"
+  }
+ },
+ "correctness": {
+  "b512_shas": [
+   "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58"
+  ],
+  "b2048_shas": [
+   "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58"
+  ],
+  "identical": true,
+  "garbage": []
+ },
+ "headline": {
+  "per_user_decode_tok_s_mean": {
+   "beats": [
+    {
+     "iat_s": 40,
+     "b512": 30.86510466760808,
+     "b2048": 33.88271600048048,
+     "ratio": 1.0977677336710698,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 25,
+     "b512": 23.570041512846892,
+     "b2048": 26.46446941695227,
+     "ratio": 1.1228011373050728,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 15,
+     "b512": 11.983064877795204,
+     "b2048": 14.982254251054979,
+     "ratio": 1.2502856659665855,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 8,
+     "b512": 9.56429925385255,
+     "b2048": 9.675619547506132,
+     "ratio": 1.0116391479081692,
+     "b2048_beats": true,
+     "repeats_agree": false
+    }
+   ],
+   "status": "BEATS_ALL"
+  },
+  "total_latency_p50": {
+   "beats": [
+    {
+     "iat_s": 40,
+     "b512": 27.24745214905124,
+     "b2048": 19.157072707195766,
+     "ratio": 0.7030775795990458,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 25,
+     "b512": 39.608360936981626,
+     "b2048": 28.61956572777126,
+     "ratio": 0.7225637479244863,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 15,
+     "b512": 67.83033546101069,
+     "b2048": 57.291468883981,
+     "ratio": 0.844629006986299,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 8,
+     "b512": 113.27983110531932,
+     "b2048": 105.93530891521368,
+     "ratio": 0.9351647851303977,
+     "b2048_beats": true,
+     "repeats_agree": false
+    }
+   ],
+   "status": "BEATS_ALL"
+  },
+  "total_latency_p95": {
+   "beats": [
+    {
+     "iat_s": 40,
+     "b512": 58.533511251420705,
+     "b2048": 43.77874717672821,
+     "ratio": 0.7479262091194918,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 25,
+     "b512": 60.3838854219066,
+     "b2048": 52.974677670648084,
+     "ratio": 0.8772982609600254,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 15,
+     "b512": 104.87103847673862,
+     "b2048": 84.6587707446015,
+     "ratio": 0.8072654945948647,
+     "b2048_beats": true,
+     "repeats_agree": true
+    },
+    {
+     "iat_s": 8,
+     "b512": 151.3349835864792,
+     "b2048": 127.73590584699996,
+     "ratio": 0.8440606581491863,
+     "b2048_beats": true,
+     "repeats_agree": true
+    }
+   ],
+   "status": "BEATS_ALL"
+  }
+ },
+ "witness": {
+  "b_ub_per_unit": {
+   "r0-i40-B512-1795605721": [
+    "512",
+    "512"
+   ],
+   "r0-i40-B2048-1795606347": [
+    "2048",
+    "2048"
+   ],
+   "r0-i25-B2048-1795606950": [
+    "2048",
+    "2048"
+   ],
+   "r0-i25-B512-1795607492": [
+    "512",
+    "512"
+   ],
+   "r0-i15-B512-1795608037": [
+    "512",
+    "512"
+   ],
+   "r0-i15-B2048-1795608277": [
+    "2048",
+    "2048"
+   ],
+   "r0-i8-B2048-1795608513": [
+    "2048",
+    "2048"
+   ],
+   "r0-i8-B512-1795608723": [
+    "512",
+    "512"
+   ],
+   "r1-i40-B2048-1795608952": [
+    "2048",
+    "2048"
+   ],
+   "r1-i40-B512-1795609462": [
+    "512",
+    "512"
+   ],
+   "r1-i25-B512-1795609976": [
+    "512",
+    "512"
+   ],
+   "r1-i25-B2048-1795610240": [
+    "2048",
+    "2048"
+   ],
+   "r1-i15-B2048-1795610490": [
+    "2048",
+    "2048"
+   ],
+   "r1-i15-B512-1795610754": [
+    "512",
+    "512"
+   ],
+   "r1-i8-B512-1795611049": [
+    "512",
+    "512"
+   ],
+   "r1-i8-B2048-1795611269": [
+    "2048",
+    "2048"
+   ]
+  }
+ },
+ "units": [
+  {
+   "arm": "B512",
+   "iat": 40,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "512",
+     "-ub",
+     "512",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B512",
+    "load_s": 6.015853643417358,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r0-i40-B512-1795605721.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 51338338304,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 52458283008,
+     "resident": true
+    },
+    "uid": "r0-i40-B512-1795605721",
+    "witness_b_ub": [
+     "512",
+     "512"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 0,
+   "unit_id": "r0-i40-B512-1795605721",
+   "utc": "2026-11-25T11:32:27Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 6.823217781596123,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.3094977475702763e-05,
+    "itl_p95_s": 0.17490569187793864,
+    "latency_p50_s": 40.4804469140945,
+    "latency_p95_s": 75.50635109670692,
+    "long_ttft_p50_s": 29.61281982786022,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 20.145815327065066,
+    "tok_s_mean": 26.5121754492103,
+    "tok_s_p05": 6.322986215744654,
+    "tok_s_p95": 49.85316768894246,
+    "ttft_p50_s": 22.646638265927322,
+    "ttft_p95_s": 46.412583589309335
+   },
+   "flags": {
+    "arrival_span_s": 545.7868056029547,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     45.2854158540449,
+     77.30677878572553,
+     138.9145500341823,
+     149.61027671100211,
+     178.61193673968896,
+     392.30868644171494,
+     417.1007797813262,
+     431.7136071027213,
+     476.5112693949226,
+     498.43830396307476,
+     505.3168923083367,
+     523.1914336144895,
+     528.842297827627,
+     545.7862687121188
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B2048",
+   "iat": 40,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "2048",
+     "-ub",
+     "2048",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B2048",
+    "load_s": 8.004428625106812,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r0-i40-B2048-1795606347.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 54513426432,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 55663853568,
+     "resident": true
+    },
+    "uid": "r0-i40-B2048-1795606347",
+    "witness_b_ub": [
+     "2048",
+     "2048"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 0,
+   "unit_id": "r0-i40-B2048-1795606347",
+   "utc": "2026-11-25T11:42:30Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 7.247982959119894,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.4225486665964127e-05,
+    "itl_p95_s": 0.15611580197000877,
+    "latency_p50_s": 26.51044149592053,
+    "latency_p95_s": 51.3090765532921,
+    "long_ttft_p50_s": 26.88119419501163,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 7.321900903945789,
+    "tok_s_mean": 27.85023633181689,
+    "tok_s_p05": 10.284098497963502,
+    "tok_s_p95": 41.952903519170015,
+    "ttft_p50_s": 11.99823206756264,
+    "ttft_p95_s": 30.736328818008765
+   },
+   "flags": {
+    "arrival_span_s": 545.7867905749008,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     45.2854158540449,
+     77.30677878572553,
+     138.9145500341823,
+     149.61027671100211,
+     178.61193673968896,
+     392.30868644171494,
+     417.1007797813262,
+     431.7136071027213,
+     476.5112693949226,
+     498.43830396307476,
+     505.3168923083367,
+     523.1914336144895,
+     528.842297827627,
+     545.7862687121188
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B2048",
+   "iat": 25,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "2048",
+     "-ub",
+     "2048",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B2048",
+    "load_s": 8.004693746566772,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r0-i25-B2048-1795606950.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 54513426432,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 55681417216,
+     "resident": true
+    },
+    "uid": "r0-i25-B2048-1795606950",
+    "witness_b_ub": [
+     "2048",
+     "2048"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 0,
+   "unit_id": "r0-i25-B2048-1795606950",
+   "utc": "2026-11-25T11:51:32Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 6.533311634003909,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.476507168263197e-05,
+    "itl_p95_s": 0.1376229324261658,
+    "latency_p50_s": 16.0495886830613,
+    "latency_p95_s": 43.10894355404889,
+    "long_ttft_p50_s": 29.537207515910268,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 5.152450788998976,
+    "tok_s_mean": 32.94387031361686,
+    "tok_s_p05": 12.323608779607433,
+    "tok_s_p95": 53.83850738632785,
+    "ttft_p50_s": 6.569040449569002,
+    "ttft_p95_s": 29.5927249874454
+   },
+   "flags": {
+    "arrival_span_s": 520.7984149758704,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     2.953566756048449,
+     12.587142679468126,
+     62.090469884482616,
+     131.99024313775948,
+     226.45050258303917,
+     276.7577596231147,
+     285.6757184806547,
+     308.957580540559,
+     391.7813026419408,
+     394.6415266188123,
+     431.10776148148875,
+     448.9270503197318,
+     461.6667669675378,
+     520.7978868466782
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B512",
+   "iat": 25,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "512",
+     "-ub",
+     "512",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B512",
+    "load_s": 8.05702805519104,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r0-i25-B512-1795607492.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 51338338304,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 52162396160,
+     "resident": true
+    },
+    "uid": "r0-i25-B512-1795607492",
+    "witness_b_ub": [
+     "512",
+     "512"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 0,
+   "unit_id": "r0-i25-B512-1795607492",
+   "utc": "2026-11-25T12:00:37Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 6.500537320298609,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.4750519767403603e-05,
+    "itl_p95_s": 0.14301319509977475,
+    "latency_p50_s": 24.208435368025675,
+    "latency_p95_s": 51.036330033570984,
+    "long_ttft_p50_s": 36.73091479996219,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 8.40861056605354,
+    "tok_s_mean": 30.25835793682908,
+    "tok_s_p05": 12.073516365785814,
+    "tok_s_p95": 51.16321806301525,
+    "ttft_p50_s": 8.83098814508412,
+    "ttft_p95_s": 39.61159676423994
+   },
+   "flags": {
+    "arrival_span_s": 520.7983441888355,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     2.953566756048449,
+     12.587142679468126,
+     62.090469884482616,
+     131.99024313775948,
+     226.45050258303917,
+     276.7577596231147,
+     285.6757184806547,
+     308.957580540559,
+     391.7813026419408,
+     394.6415266188123,
+     431.10776148148875,
+     448.9270503197318,
+     461.6667669675378,
+     520.7978868466782
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B512",
+   "iat": 15,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "512",
+     "-ub",
+     "512",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B512",
+    "load_s": 8.004658699035645,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r0-i15-B512-1795608037.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 51338338304,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 52144832512,
+     "resident": true
+    },
+    "uid": "r0-i15-B512-1795608037",
+    "witness_b_ub": [
+     "512",
+     "512"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 0,
+   "unit_id": "r0-i15-B512-1795608037",
+   "utc": "2026-11-25T12:04:37Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 16.381122382739406,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.2295553460717201e-05,
+    "itl_p95_s": 1.0263309325440786,
+    "latency_p50_s": 52.17529393360019,
+    "latency_p95_s": 72.01675446591106,
+    "long_ttft_p50_s": 39.642332206945866,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 26.913282233057544,
+    "tok_s_mean": 14.305312458656175,
+    "tok_s_p05": 4.888695367693564,
+    "tok_s_p95": 27.43454293879153,
+    "ttft_p50_s": 27.77685361006297,
+    "ttft_p95_s": 41.762187885621096
+   },
+   "flags": {
+    "arrival_span_s": 194.43365389388055,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     9.724030928903803,
+     26.943317514666013,
+     43.26649467887924,
+     54.33181690853899,
+     61.18567097817745,
+     78.63543439192898,
+     94.27755419575858,
+     109.8769853878899,
+     111.43384548900042,
+     132.48784853767938,
+     167.22195196546588,
+     181.46828461003312,
+     193.4347531656312,
+     194.43313200032904
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B2048",
+   "iat": 15,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "2048",
+     "-ub",
+     "2048",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B2048",
+    "load_s": 8.004533529281616,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r0-i15-B2048-1795608277.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 54513426432,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 55685095424,
+     "resident": true
+    },
+    "uid": "r0-i15-B2048-1795608277",
+    "witness_b_ub": [
+     "2048",
+     "2048"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 0,
+   "unit_id": "r0-i15-B2048-1795608277",
+   "utc": "2026-11-25T12:08:33Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 16.815176277937596,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.2069940567016602e-05,
+    "itl_p95_s": 0.16625319018494336,
+    "latency_p50_s": 37.16918441141024,
+    "latency_p95_s": 57.947108904109335,
+    "long_ttft_p50_s": 34.9840250890702,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 19.09655227791518,
+    "tok_s_mean": 18.205102719782897,
+    "tok_s_p05": 11.11227820122598,
+    "tok_s_p95": 25.73678107428275,
+    "ttft_p50_s": 21.47326500096824,
+    "ttft_p95_s": 36.951479422021656
+   },
+   "flags": {
+    "arrival_span_s": 194.43367184395902,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     9.724030928903803,
+     26.943317514666013,
+     43.26649467887924,
+     54.33181690853899,
+     61.18567097817745,
+     78.63543439192898,
+     94.27755419575858,
+     109.8769853878899,
+     111.43384548900042,
+     132.48784853767938,
+     167.22195196546588,
+     181.46828461003312,
+     193.4347531656312,
+     194.43313200032904
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B2048",
+   "iat": 8,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "2048",
+     "-ub",
+     "2048",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B2048",
+    "load_s": 8.004193305969238,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r0-i8-B2048-1795608513.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 54513426432,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 55645765632,
+     "resident": true
+    },
+    "uid": "r0-i8-B2048-1795608513",
+    "witness_b_ub": [
+     "2048",
+     "2048"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 0,
+   "unit_id": "r0-i8-B2048-1795608513",
+   "utc": "2026-11-25T12:12:03Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 15.913344719031658,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.2950040400028229e-05,
+    "itl_p95_s": 0.27975905404891815,
+    "latency_p50_s": 100.87465538049582,
+    "latency_p95_s": 124.96948860052507,
+    "long_ttft_p50_s": 45.27148482389748,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 51.23669180786237,
+    "tok_s_mean": 8.993271153308516,
+    "tok_s_p05": 4.426780994667177,
+    "tok_s_p95": 18.107456486541906,
+    "ttft_p50_s": 48.254088315879926,
+    "ttft_p95_s": 100.24128956154455
+   },
+   "flags": {
+    "arrival_span_s": 86.54103482794017,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     1.9291606467139892,
+     2.3441043881102086,
+     6.726726639099269,
+     25.45122073968916,
+     46.77116444356963,
+     56.71518755069165,
+     58.00394992839676,
+     62.63534596639639,
+     62.82125410695516,
+     64.80530331482359,
+     65.19651348217465,
+     76.56670068664319,
+     79.07211279791677,
+     86.54047616838346
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B512",
+   "iat": 8,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "512",
+     "-ub",
+     "512",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B512",
+    "load_s": 8.004075050354004,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r0-i8-B512-1795608723.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 51338338304,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 52181270528,
+     "resident": true
+    },
+    "uid": "r0-i8-B512-1795608723",
+    "witness_b_ub": [
+     "512",
+     "512"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 0,
+   "unit_id": "r0-i8-B512-1795608723",
+   "utc": "2026-11-25T12:15:52Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 14.447343085460098,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.3464945368468761e-05,
+    "itl_p95_s": 1.0114300188492051,
+    "latency_p50_s": 96.89307508652564,
+    "latency_p95_s": 146.9646264060284,
+    "long_ttft_p50_s": 58.25686829700135,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 66.73675650497898,
+    "tok_s_mean": 10.453804568030495,
+    "tok_s_p05": 4.982899886706248,
+    "tok_s_p95": 19.706722033400077,
+    "ttft_p50_s": 65.18698096799199,
+    "ttft_p95_s": 126.8484630340361
+   },
+   "flags": {
+    "arrival_span_s": 86.54102176986635,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     1.9291606467139892,
+     2.3441043881102086,
+     6.726726639099269,
+     25.45122073968916,
+     46.77116444356963,
+     56.71518755069165,
+     58.00394992839676,
+     62.63534596639639,
+     62.82125410695516,
+     64.80530331482359,
+     65.19651348217465,
+     76.56670068664319,
+     79.07211279791677,
+     86.54047616838346
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B2048",
+   "iat": 40,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "2048",
+     "-ub",
+     "2048",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B2048",
+    "load_s": 8.00444483757019,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r1-i40-B2048-1795608952.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 54513426432,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 55681417216,
+     "resident": true
+    },
+    "uid": "r1-i40-B2048-1795608952",
+    "witness_b_ub": [
+     "2048",
+     "2048"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 1,
+   "unit_id": "r1-i40-B2048-1795608952",
+   "utc": "2026-11-25T12:24:22Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 6.657653770074728,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.3965531252324581e-05,
+    "itl_p95_s": 0.10042626195354368,
+    "latency_p50_s": 11.803703918471001,
+    "latency_p95_s": 36.24841780016432,
+    "long_ttft_p50_s": 23.87860923097469,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 4.456582315033302,
+    "tok_s_mean": 39.91519566914407,
+    "tok_s_p05": 15.02217052952541,
+    "tok_s_p95": 53.72100088626097,
+    "ttft_p50_s": 4.650329547934234,
+    "ttft_p95_s": 24.509903823840432
+   },
+   "flags": {
+    "arrival_span_s": 490.05202115513384,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     0.6422243608019308,
+     27.239495186270144,
+     38.38759393054004,
+     80.42651415282131,
+     135.09942322968354,
+     191.17223391782647,
+     196.92856943778102,
+     291.64477060012297,
+     313.39134354649343,
+     347.02751220280885,
+     362.0268267412313,
+     392.1196396579202,
+     457.6205540983513,
+     490.05153276923744
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B512",
+   "iat": 40,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "512",
+     "-ub",
+     "512",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B512",
+    "load_s": 8.004218578338623,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r1-i40-B512-1795609462.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 51338338304,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 52152885248,
+     "resident": true
+    },
+    "uid": "r1-i40-B512-1795609462",
+    "witness_b_ub": [
+     "512",
+     "512"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 1,
+   "unit_id": "r1-i40-B512-1795609462",
+   "utc": "2026-11-25T12:32:56Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 6.594300256749115,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.5155063010752201e-05,
+    "itl_p95_s": 0.10244987056357785,
+    "latency_p50_s": 14.014457384007983,
+    "latency_p95_s": 41.560671406134496,
+    "long_ttft_p50_s": 29.018276816001162,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 6.403922657016665,
+    "tok_s_mean": 35.218033886005855,
+    "tok_s_p05": 12.990477728482587,
+    "tok_s_p95": 50.00218648967676,
+    "ttft_p50_s": 6.4111752095632255,
+    "ttft_p95_s": 29.557423193426803
+   },
+   "flags": {
+    "arrival_span_s": 490.05204944708385,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     0.6422243608019308,
+     27.239495186270144,
+     38.38759393054004,
+     80.42651415282131,
+     135.09942322968354,
+     191.17223391782647,
+     196.92856943778102,
+     291.64477060012297,
+     313.39134354649343,
+     347.02751220280885,
+     362.0268267412313,
+     392.1196396579202,
+     457.6205540983513,
+     490.05153276923744
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B512",
+   "iat": 25,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "512",
+     "-ub",
+     "512",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B512",
+    "load_s": 8.048461675643921,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r1-i25-B512-1795609976.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 51338338304,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 52159176704,
+     "resident": true
+    },
+    "uid": "r1-i25-B512-1795609976",
+    "witness_b_ub": [
+     "512",
+     "512"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 1,
+   "unit_id": "r1-i25-B512-1795609976",
+   "utc": "2026-11-25T12:37:20Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 14.984242756749527,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.4850054867565632e-05,
+    "itl_p95_s": 0.9932695277500894,
+    "latency_p50_s": 55.008286505937576,
+    "latency_p95_s": 69.7314408102422,
+    "long_ttft_p50_s": 35.18992576911114,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 19.807178067974746,
+    "tok_s_mean": 16.8817250888647,
+    "tok_s_p05": 5.6333318854239876,
+    "tok_s_p95": 42.886904573496594,
+    "ttft_p50_s": 30.04761816409882,
+    "ttft_p95_s": 48.945204040000675
+   },
+   "flags": {
+    "arrival_span_s": 200.5333196860738,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     0.44541971748758835,
+     0.4704159677475337,
+     49.47131640449335,
+     67.48181937098164,
+     75.4372716638534,
+     86.72259997989805,
+     102.2463858907424,
+     145.09801089399875,
+     165.6554783481131,
+     167.81949160749517,
+     179.15853312714157,
+     181.37690244680965,
+     196.6916997633557,
+     200.53269396985942
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B2048",
+   "iat": 25,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "2048",
+     "-ub",
+     "2048",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B2048",
+    "load_s": 8.03455662727356,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r1-i25-B2048-1795610240.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 54513426432,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 55700291584,
+     "resident": true
+    },
+    "uid": "r1-i25-B2048-1795610240",
+    "witness_b_ub": [
+     "2048",
+     "2048"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 1,
+   "unit_id": "r1-i25-B2048-1795610240",
+   "utc": "2026-11-25T12:41:30Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 16.078297361261267,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.3760523870587349e-05,
+    "itl_p95_s": 0.16876259396085513,
+    "latency_p50_s": 41.18954277248122,
+    "latency_p95_s": 62.84041178724728,
+    "long_ttft_p50_s": 26.930796875152737,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 8.981581029947847,
+    "tok_s_mean": 19.98506852028768,
+    "tok_s_p05": 5.628913634277109,
+    "tok_s_p95": 37.9566833201783,
+    "ttft_p50_s": 17.131147242966108,
+    "ttft_p95_s": 31.00994869037531
+   },
+   "flags": {
+    "arrival_span_s": 200.5331838869024,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     0.44541971748758835,
+     0.4704159677475337,
+     49.47131640449335,
+     67.48181937098164,
+     75.4372716638534,
+     86.72259997989805,
+     102.2463858907424,
+     145.09801089399875,
+     165.6554783481131,
+     167.81949160749517,
+     179.15853312714157,
+     181.37690244680965,
+     196.6916997633557,
+     200.53269396985942
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B2048",
+   "iat": 15,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "2048",
+     "-ub",
+     "2048",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B2048",
+    "load_s": 8.003961086273193,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r1-i15-B2048-1795610490.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 54513426432,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 55698194432,
+     "resident": true
+    },
+    "uid": "r1-i15-B2048-1795610490",
+    "witness_b_ub": [
+     "2048",
+     "2048"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 1,
+   "unit_id": "r1-i15-B2048-1795610490",
+   "utc": "2026-11-25T12:45:54Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 18.347335336112657,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.1320458725094795e-05,
+    "itl_p95_s": 0.23533846695208901,
+    "latency_p50_s": 77.41375335655175,
+    "latency_p95_s": 111.37043258509365,
+    "long_ttft_p50_s": 49.66129683004692,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 30.012162666069344,
+    "tok_s_mean": 11.759405782327063,
+    "tok_s_p05": 4.341526596296736,
+    "tok_s_p95": 23.56261324718311,
+    "ttft_p50_s": 31.143547949497588,
+    "ttft_p95_s": 73.345608258259
+   },
+   "flags": {
+    "arrival_span_s": 214.52274066605605,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     22.749522449293103,
+     79.75564721970512,
+     86.10459676768299,
+     86.43715939817353,
+     109.75008032477606,
+     109.91367263160562,
+     110.17757000841058,
+     110.277456137298,
+     114.28353554605097,
+     134.31887062127112,
+     168.55803855775207,
+     203.07832359986546,
+     206.80593558239696,
+     214.52223304975274
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B512",
+   "iat": 15,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "512",
+     "-ub",
+     "512",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B512",
+    "load_s": 8.004438877105713,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r1-i15-B512-1795610754.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 51338338304,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 52174979072,
+     "resident": true
+    },
+    "uid": "r1-i15-B512-1795610754",
+    "witness_b_ub": [
+     "512",
+     "512"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 1,
+   "unit_id": "r1-i15-B512-1795610754",
+   "utc": "2026-11-25T12:50:49Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 15.41374326162979,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.4184974133968353e-05,
+    "itl_p95_s": 1.0558499460224986,
+    "latency_p50_s": 83.4853769884212,
+    "latency_p95_s": 137.72532248756616,
+    "long_ttft_p50_s": 75.056886396138,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 54.656077993800864,
+    "tok_s_mean": 9.660817296934233,
+    "tok_s_p05": 4.199383394702043,
+    "tok_s_p95": 24.682683024900108,
+    "ttft_p50_s": 57.35926339740399,
+    "ttft_p95_s": 79.51795276167104
+   },
+   "flags": {
+    "arrival_span_s": 214.52270144689828,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     22.749522449293103,
+     79.75564721970512,
+     86.10459676768299,
+     86.43715939817353,
+     109.75008032477606,
+     109.91367263160562,
+     110.17757000841058,
+     110.277456137298,
+     114.28353554605097,
+     134.31887062127112,
+     168.55803855775207,
+     203.07832359986546,
+     206.80593558239696,
+     214.52223304975274
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B512",
+   "iat": 8,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "512",
+     "-ub",
+     "512",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B512",
+    "load_s": 8.004318952560425,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r1-i8-B512-1795611049.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 51338338304,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 52193517568,
+     "resident": true
+    },
+    "uid": "r1-i8-B512-1795611049",
+    "witness_b_ub": [
+     "512",
+     "512"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 1,
+   "unit_id": "r1-i8-B512-1795611049",
+   "utc": "2026-11-25T12:54:29Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 13.639906500092456,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.4249933883547783e-05,
+    "itl_p95_s": 1.023471409222111,
+    "latency_p50_s": 129.666587124113,
+    "latency_p95_s": 155.70534076693002,
+    "long_ttft_p50_s": 81.81161214597523,
+    "measured_tokens": 2816,
+    "n_long": 3,
+    "n_measured": 11,
+    "n_short": 8,
+    "short_ttft_p50_s": 87.48538076144177,
+    "tok_s_mean": 8.674793939674606,
+    "tok_s_p05": 4.23623591914378,
+    "tok_s_p95": 18.934583384793626,
+    "ttft_p50_s": 85.25751613103785,
+    "ttft_p95_s": 137.74051970697474
+   },
+   "flags": {
+    "arrival_span_s": 66.39050795300864,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     1.0481663122313896,
+     3.4835646520937393,
+     3.708828182560188,
+     14.973463733681381,
+     22.047604071737684,
+     22.086026689441585,
+     32.377051923860655,
+     41.30794945958962,
+     42.228886085602454,
+     45.4079179940486,
+     47.97883657017479,
+     60.44319131067654,
+     62.19392109075271,
+     66.3903680413414
+    ],
+    "saturated": true,
+    "sent": 14,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  },
+  {
+   "arm": "B2048",
+   "iat": 8,
+   "info": {
+    "alive": true,
+    "argv": [
+     "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+     "-m",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+     "--host",
+     "127.0.0.1",
+     "--port",
+     "27203",
+     "-np",
+     "4",
+     "-c",
+     "393216",
+     "-t",
+     "8",
+     "-b",
+     "2048",
+     "-ub",
+     "2048",
+     "--flash-attn",
+     "on",
+     "--jinja",
+     "-ctk",
+     "q8_0",
+     "-ctv",
+     "q8_0",
+     "--kv-unified",
+     "--no-mmap",
+     "-ngl",
+     "all",
+     "--cache-ram",
+     "65536",
+     "--ctx-checkpoints",
+     "32",
+     "--chat-template-file",
+     "/mnt/raid0/llm/models/chat-templates/sha256/1443ea9ab4bb0a2663b1002a5d4baad970e9f0b2f42ca4ec12b4683838284551.jinja",
+     "--no-cache-idle-slots",
+     "-md",
+     "/mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+     "-ngld",
+     "99",
+     "--spec-type",
+     "draft-dflash",
+     "--spec-draft-n-max",
+     "7",
+     "--device",
+     "ROCm0",
+     "--slot-save-path",
+     "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/kv_slots",
+     "--device-draft",
+     "ROCm0",
+     "-lv",
+     "4"
+    ],
+    "arm": "B2048",
+    "load_s": 8.078790187835693,
+    "log": "/mnt/raid0/llm/tmp/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/out/servers/r1-i8-B2048-1795611269.log",
+    "oom_line": null,
+    "oom_line_post": null,
+    "ready": true,
+    "residency": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 54513426432,
+     "resident": true
+    },
+    "residency_post": {
+     "hip_libs": [
+      "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0"
+     ],
+     "own_vram_b": 55647862784,
+     "resident": true
+    },
+    "uid": "r1-i8-B2048-1795611269",
+    "witness_b_ub": [
+     "2048",
+     "2048"
+    ]
+   },
+   "invalid_why": [],
+   "kind": "unit",
+   "rep": 1,
+   "unit_id": "r1-i8-B2048-1795611269",
+   "utc": "2026-11-25T12:57:46Z",
+   "valid": true,
+   "metrics": {
+    "aggregate_tok_s": 16.686355546664384,
+    "bad_predicted_n": [],
+    "itl_p50_s": 1.3200449757277966e-05,
+    "itl_p95_s": 0.31774892866378646,
+    "latency_p50_s": 110.99596244993154,
+    "latency_p95_s": 130.50232309347484,
+    "long_ttft_p50_s": 63.10912239784375,
+    "measured_tokens": 3072,
+    "n_long": 3,
+    "n_measured": 12,
+    "n_short": 9,
+    "short_ttft_p50_s": 68.56737981596962,
+    "tok_s_mean": 10.357967941703748,
+    "tok_s_p05": 4.542211690309511,
+    "tok_s_p95": 26.104970715517396,
+    "ttft_p50_s": 65.83825110690668,
+    "ttft_p95_s": 112.91727009791647
+   },
+   "flags": {
+    "arrival_span_s": 66.39093330595642,
+    "drain_capped": false,
+    "offsets": [
+     0.0,
+     1.0481663122313896,
+     3.4835646520937393,
+     3.708828182560188,
+     14.973463733681381,
+     22.047604071737684,
+     22.086026689441585,
+     32.377051923860655,
+     41.30794945958962,
+     42.228886085602454,
+     45.4079179940486,
+     47.97883657017479,
+     60.44319131067654,
+     62.19392109075271,
+     66.3903680413414
+    ],
+    "saturated": false,
+    "sent": 15,
+    "stopped": false
+   },
+   "probe": {
+    "garbage": null,
+    "sha256": "0a97533d5486ec46af3bf10f00b14dfcf23cfbd38b615ddf22a9d6e1c6f7aa58",
+    "text": "1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31\n1 is not prime because it has only one positive divisor (itself), whereas a prime number must have exactly"
+   }
+  }
+ ],
+ "row": "ak-27b-served-ub-arrival-sweep-gpu-20261125-r2",
+ "utc": "2026-11-25T12:57:46Z",
+ "n_invalid": 0,
+ "server_binary": "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+ "iat_s": [
+  40,
+  25,
+  15,
+  8
+ ],
+ "repeats": 2,
+ "n_warm": 3,
+ "n_meas": 12,
+ "max_tokens": 256
+}

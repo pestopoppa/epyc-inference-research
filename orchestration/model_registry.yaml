@@ -1627,8 +1627,19 @@ server_mode:
       # ubatch is ALSO a VRAM fact: the KQ mask [n_kv, n_ubatch, 1, 1] f16 lives in
       # vram_non_kv_gib below, which names the ubatch it was derived at (vram_non_kv_ubatch);
       # the compiler refuses a mismatch, and refuses ubatch > batch (K4).
-      batch: 512
-      ubatch: 512
+      # ── 2026-11-25 (STACKCHG-27B-UB2048-20261125, operator-approved via AskUserQuestion): ──
+      #    -b/-ub 512 -> 2048. Evidence: row ak-27b-served-ub-arrival-sweep-gpu-20261125-r2
+      #    (SCREENED; data/ak-27b-served-ub-arrival-sweep-gpu-20261125-r2/RESULT.json),
+      #    open-loop Poisson arrivals at mean IAT 40/25/15/8 s on this exact served argv, v10 binary,
+      #    2 paired repeats: B2048 beats B512 on every headline at every rate (BEATS_ALL) —
+      #    per-user decode tok/s mean 30.87->33.88 / 23.57->26.46 / 11.98->14.98 / 9.56->9.68,
+      #    total latency p50 27.25->19.16 / 39.61->28.62 / 67.83->57.29 / 113.28->105.94 s,
+      #    p95 58.53->43.78 / 60.38->52.97 / 104.87->84.66 / 151.33->127.74 s; greedy outputs
+      #    byte-identical (sha 0a97533d...). SCOPE: prompts 3.6k/16k tokens; the KVU-16b stall
+      #    above was measured at 240-310k occupied cells, which this sweep did NOT exercise.
+      # (was, 2026-10-04 .. 2026-11-25) batch: 512 / ubatch: 512
+      batch: 2048
+      ubatch: 2048
       # ── UNIFIED KV POOL — DECLARED 2026-09-24 (stack-change-kvu, operator-signed) ──
       # true -> launcher emits `--kv-unified`; false would emit `--no-kv-unified`;
       # absent -> nothing (kernel default = split whenever -np is explicit).
@@ -1749,11 +1760,22 @@ server_mode:
       #    unattributed: legacy ggml-cuda pool, compute-buffer realloc, BLAS workspaces). At
       #    -ub 512 the reserved mask is 1.125 GiB smaller; whether the growth shrinks too is
       #    unmeasured. Margins against the 62.00 GiB gate: PACKAGE section 4.
-      # (was, -ub 2048, DERIVED + load-confirmed) vram_non_kv_gib: 39.15
+      # ── 2026-11-25 (STACKCHG-27B-UB2048-20261125): 38.03 -> 39.15, back to the -ub 2048 figure. ──
+      #    39.15 was DERIVED and load-confirmed at -ub 2048 (KFD pid 1703677, 51.694 GiB vs 51.90).
+      #    Re-confirmed by the arrival sweep's -lv 4 server logs (16 launches, v10, same argv):
+      #      target ROCm0 compute buffer 2050.28 MiB @512 -> 3592.33 MiB @2048   (+1542)
+      #      DFlash2 drafter compute buffer 537.14 -> 2143.68 MiB                 (+1607)
+      #      drafter KV 170 -> 200 MiB                                            (+30)
+      #      device used at end of serving (common_memory_breakdown, 65520 - free):
+      #        B512 ~49,560 MiB = 48.40 GiB;  B2048 ~52,916 MiB = 51.68 GiB  (+3.28 GiB)
+      #    51.68 GiB measured <= 39.15 + 12.75 KV = 51.90 declared. Prompts <= 16k tokens, so
+      #    runtime growth at deep occupancy (51.69 -> 59.77 GiB at -ub 2048, KVU-16b §3) is NOT
+      #    re-measured here: watch KFD after bring-up (PACKAGE §4).
+      # (was, -b/-ub 512, 2026-10-04 .. 2026-11-25, DERIVED) vram_non_kv_gib: 38.03
       # (was, DFlash2 d8 @196608, MEASURED pid 3737649) vram_non_kv_gib: 37.92
-      vram_non_kv_gib: 38.03
+      vram_non_kv_gib: 39.15
       vram_non_kv_drafter: dflash2
-      vram_non_kv_ubatch: 512
+      vram_non_kv_ubatch: 2048
       # (was, MTP d4, live-confirmed 2026-10-03) vram_non_kv_gib: 32.80
       # superseded provenance, kept for audit:
       # (was) vram_non_kv_gib: 27.33 # 29.36 GiB resident (/sys/class/kfd, pid 2019908, 2026-08-02)
