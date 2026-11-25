@@ -143,27 +143,6 @@ def _v2_completion_chain(request: Mapping[str, Any], completion: ps.StageComplet
                     "completion": _completion_value(completion)})
 
 
-class _ParentUnitEvidenceProtocol(Protocol):
-    """Parent-owned evidence checks; lifecycle itself retains admission authority."""
-
-    def complete(self, *, start: "WorkerStart", sequence: int,
-                 fence: ps.StageFence,
-                 observation: Mapping[str, Any]) -> ps.StageCompletion: ...
-
-    def verify_continuation(self, *, start: "WorkerStart", raw: ep.RawUnit,
-                            plan: ep.ExperimentPlan,
-                            prompts: ps.FrozenPromptManifest,
-                            previous_lineage_id: str) -> bool: ...
-
-    def observation_binding(self, *, start: "WorkerStart", sequence: int,
-                            unit: ep.UnitSpec, fence: ps.StageFence,
-                            recipe_identity_digest: str
-                            ) -> ob.ObservationUnitBinding: ...
-
-    def observation_target(self, *, start: "WorkerStart", sequence: int,
-                           unit: ep.UnitSpec, fence: ps.StageFence,
-                           pid: int) -> Mapping[str, Any]: ...
-
 
 def _finite(value: Any, label: str, *, positive: bool = False) -> float:
     if (not isinstance(value, (int, float)) or isinstance(value, bool)

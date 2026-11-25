@@ -14,14 +14,215 @@ from autokernel import journal as journal_module
 from autokernel.loop import scoped_evidence as evidence
 from autokernel.loop.journal_feed_owner import FeedOwnerError
 from autokernel.loop.evidence_feed import (
-    BoundedJournalTail,
+    READER_ID,
     DrainLimits,
     EvidenceFeed,
     EvidenceFeedWorker,
     FeedError,
     OwnedTailBatch,
+    TailBatch,
     TailError,
+    _entry,
+    _journal_snapshot_lock,
+    _last_complete_line,
 )
+from typing import Any, Callable, Mapping
+
+
+# Fixture-only raw reader moved here from evidence_feed.py (no production caller; production EvidenceFeed uses
+# JournalFeedOwner). Kept verbatim so the fault-comparison tests below still exercise it.
+class BoundedJournalTail:
+    """Fixture-only raw reader retained for fault comparison.
+
+    Production ``EvidenceFeed`` uses :class:`JournalFeedOwner`; this helper
+    deliberately has no successful-fsync publication authority.
+    """
+
+    def __init__(self, journal: journal_module.Journal, reader_id: str = READER_ID,
+                 *, clock: Callable[[], float] = time.monotonic) -> None:
+        self.journal = journal
+        self.reader_id = reader_id
+        self.clock = clock
+        # A consumer never creates a source journal.  An absent source is not a
+        # healthy empty campaign.
+        self.journal.shards()
+        self.journal.register_reader(reader_id)
+        self._cached_cursor_seq: int | None = None
+        self._cached_position: tuple[int, int, int] | None = None
+        self._cached_identity: tuple[int, int] | None = None
+
+    def _frontier(self, max_record_bytes: int) -> int:
+        # Mirror Journal's append-side bounded tail lookup; do not call
+        # read_all merely to report lag.
+        for shard in reversed(self.journal.shards()):
+            raw = _last_complete_line(shard.path, max_record_bytes)
+            if raw is not None:
+                return _entry(raw, shard.index, -1).seq
+        return 0
+
+    def _locate(self, last_seq: int, max_record_bytes: int, *,
+                shards: list[Any] | None = None) -> tuple[int, int, int]:
+        """One initialization/validation scan to the exact cursor boundary."""
+        shards = self.journal.shards() if shards is None else shards
+        if last_seq == 0:
+            return shards[0].index, 0, 0
+        previous = 0
+        for shard in shards:
+            offset = 0
+            line_number = 0
+            with open(shard.path, "rb") as handle:
+                while True:
+                    raw = handle.readline(max_record_bytes + 1)
+                    if not raw:
+                        break
+                    if len(raw) > max_record_bytes:
+                        raise TailError(
+                            f"journal record exceeds max_bytes={max_record_bytes}")
+                    line_number += 1
+                    if not raw.endswith(b"\n"):
+                        if shard.index == shards[-1].index:
+                            break
+                        raise TailError("non-final shard has a torn tail")
+                    row = _entry(raw[:-1], shard.index, line_number)
+                    if row.seq != previous + 1:
+                        raise TailError(
+                            f"journal sequence discontinuity {previous} -> {row.seq}")
+                    previous = row.seq
+                    offset += len(raw)
+                    if row.seq == last_seq:
+                        stat_result = os.fstat(handle.fileno())
+                        self._cached_identity = (stat_result.st_dev, stat_result.st_ino)
+                        return shard.index, offset, line_number
+                    if row.seq > last_seq:
+                        raise TailError(f"cursor {last_seq} is not present in the journal")
+        raise TailError(f"cursor {last_seq} is beyond source frontier {previous}")
+
+    def read(self, limits: DrainLimits) -> TailBatch:
+        deadline = self.clock() + limits.max_seconds
+        # Hold append exclusion only while capturing the small control snapshot.
+        # Cursor recovery/location and bounded record reads can be expensive and
+        # deliberately run after the writer lock is released.
+        with _journal_snapshot_lock(self.journal):
+            cursor = self.journal.cursor(self.reader_id)
+            if cursor is None:
+                raise TailError(f"registered cursor {self.reader_id!r} disappeared")
+            if (cursor.reader_id != self.reader_id
+                    or not isinstance(cursor.last_seq, int)
+                    or isinstance(cursor.last_seq, bool) or cursor.last_seq < 0):
+                raise TailError("registered cursor identity/position is malformed")
+            shards = self.journal.shards()
+            source_frontier = self._frontier(limits.max_bytes)
+        by_index = {shard.index: shard for shard in shards}
+        cached_ok = False
+        if self._cached_cursor_seq == cursor.last_seq and self._cached_position is not None:
+            cached_shard = by_index.get(self._cached_position[0])
+            if cached_shard is not None:
+                current = os.stat(cached_shard.path, follow_symlinks=False)
+                cached_ok = (self._cached_identity == (current.st_dev, current.st_ino)
+                             and current.st_size >= self._cached_position[1])
+        if cached_ok:
+            start_shard, start_offset, start_line = self._cached_position
+        else:
+            start_shard, start_offset, start_line = self._locate(
+                cursor.last_seq, limits.max_bytes, shards=shards)
+            self._cached_cursor_seq = cursor.last_seq
+            self._cached_position = (start_shard, start_offset, start_line)
+        rows: list[journal_module.JournalEntry] = []
+        positions: list[tuple[int, int, int]] = []
+        used = 0
+        expected = cursor.last_seq + 1
+        for shard in shards:
+            if shard.index < start_shard:
+                continue
+            offset = start_offset if shard.index == start_shard else 0
+            line_number = start_line if shard.index == start_shard else 0
+            with open(shard.path, "rb") as handle:
+                handle.seek(offset)
+                while (len(rows) < limits.max_events and self.clock() <= deadline
+                       and expected <= source_frontier):
+                    remaining = limits.max_bytes - used
+                    if remaining <= 0:
+                        break
+                    raw = handle.readline(remaining + 1)
+                    if not raw:
+                        break
+                    if len(raw) > remaining:
+                        if not rows:
+                            raise TailError(
+                                f"next journal record exceeds max_bytes={limits.max_bytes}")
+                        break
+                    if not raw.endswith(b"\n"):
+                        if shard.index != shards[-1].index:
+                            raise TailError("non-final shard has a torn tail")
+                        break
+                    line_number += 1
+                    row = _entry(raw[:-1], shard.index, line_number)
+                    if row.seq != expected:
+                        raise TailError(
+                            f"journal sequence discontinuity {expected - 1} -> {row.seq}")
+                    rows.append(row)
+                    used += len(raw)
+                    positions.append((shard.index, handle.tell(), line_number))
+                    expected += 1
+                if (len(rows) >= limits.max_events or used >= limits.max_bytes
+                        or self.clock() > deadline or expected > source_frontier):
+                    break
+        return TailBatch(tuple(rows), tuple(positions), used,
+                         source_frontier, cursor.last_seq)
+
+    def frontier(self, max_record_bytes: int) -> int:
+        """Read the visible complete-line frontier while excluding append."""
+        with _journal_snapshot_lock(self.journal):
+            return self._frontier(max_record_bytes)
+
+    def ack(self, seq: int, position: tuple[int, int, int]) -> None:
+        """Update the in-process offset only after Journal cursor durability."""
+        self._cached_cursor_seq = seq
+        self._cached_position = position
+        shard = next(item for item in self.journal.shards() if item.index == position[0])
+        stat_result = os.stat(shard.path, follow_symlinks=False)
+        self._cached_identity = (stat_result.st_dev, stat_result.st_ino)
+
+    def restore(self, seq: int, checkpoint: Mapping[str, Any]) -> None:
+        expected = {"shard", "offset", "line", "device", "inode"}
+        if (not isinstance(checkpoint, Mapping) or set(checkpoint) != expected
+                or any(not isinstance(checkpoint[name], int)
+                       or isinstance(checkpoint[name], bool) or checkpoint[name] < 0
+                       for name in expected)):
+            raise TailError("persisted tail position is malformed")
+        shard = next((item for item in self.journal.shards()
+                      if item.index == checkpoint["shard"]), None)
+        if shard is None:
+            raise TailError("persisted tail shard is unavailable")
+        stat_result = os.stat(shard.path, follow_symlinks=False)
+        if ((stat_result.st_dev, stat_result.st_ino)
+                != (checkpoint["device"], checkpoint["inode"])
+                or stat_result.st_size < checkpoint["offset"]):
+            raise TailError("persisted tail shard identity/size changed")
+        if seq:
+            window = min(checkpoint["offset"], 4 * 1024 * 1024)
+            with open(shard.path, "rb") as handle:
+                handle.seek(checkpoint["offset"] - window)
+                raw = handle.read(window)
+            if not raw.endswith(b"\n"):
+                raise TailError("persisted tail offset is not a record boundary")
+            prior = raw.rfind(b"\n", 0, len(raw) - 1)
+            if prior < 0 and checkpoint["offset"] > window:
+                raise TailError("persisted tail record exceeds validation bound")
+            row = _entry(raw[prior + 1:-1], checkpoint["shard"], checkpoint["line"])
+            if row.seq != seq:
+                raise TailError("persisted tail position disagrees with cursor")
+        self._cached_cursor_seq = seq
+        self._cached_position = (
+            checkpoint["shard"], checkpoint["offset"], checkpoint["line"])
+        self._cached_identity = (checkpoint["device"], checkpoint["inode"])
+
+    def checkpoint(self) -> dict[str, int] | None:
+        if self._cached_position is None or self._cached_identity is None:
+            return None
+        return {"shard": self._cached_position[0], "offset": self._cached_position[1],
+                "line": self._cached_position[2], "device": self._cached_identity[0],
+                "inode": self._cached_identity[1]}
 
 
 def _root_repo() -> Path:

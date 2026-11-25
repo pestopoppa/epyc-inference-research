@@ -97,16 +97,6 @@ def test_confirm_measure_uses_current_comparison_callback():
     assert observed == ['new']
 
 
-def test_resume_settlement_failure_does_not_lose_outcome(monkeypatch, tmp_path, capsys):
-    from types import SimpleNamespace
-
-    def unavailable(_store):
-        raise OSError('ledger unavailable')
-    monkeypatch.setattr(run.resume_mod, 'ClaimLedger', unavailable)
-    outcome = SimpleNamespace(resumed_from='checkpoint', status='measured_null', reasons=[])
-    run._settle_resume(SimpleNamespace(store=tmp_path), [object()], ['anchor'], outcome)
-    assert 'ledger unavailable' in capsys.readouterr().err
-
 
 def test_bundle_judge_reads_current_launch(monkeypatch, tmp_path):
     from types import SimpleNamespace
@@ -196,24 +186,6 @@ def test_stale_rebaseline_uses_cpu_comparison_for_a_serving_launch():
     assert result == 'comparison'
     assert calls == [(Path('/tmp/cor'), Path('/tmp/anchor'), {'rebind_feedback': False})]
 
-
-def test_reservation_registry_closes_on_failure(monkeypatch, tmp_path):
-    from types import SimpleNamespace
-
-    closed = []
-    def fail(*args, **kwargs):
-        raise RuntimeError('reservation unavailable')
-    registry = SimpleNamespace(reserve=fail, close=lambda: closed.append(True))
-    monkeypatch.setattr(run, '_git', lambda *args: '')
-    monkeypatch.setattr(run.dispatch_guard, 'attempt_identity', lambda **kwargs: 'identity')
-    monkeypatch.setattr(run.dispatch_guard, 'Registry', lambda _store: registry)
-    args = SimpleNamespace(store=tmp_path, serving_pairs=1, pairs=1,
-                           model=tmp_path / 'model', surface='tg128')
-    recipe = SimpleNamespace(cmake_defines=lambda: ())
-    worker = SimpleNamespace(worktree=tmp_path)
-    with pytest.raises(RuntimeError, match='reservation unavailable'):
-        run._reserve_pooled(['anchor'], recipe, lambda: None, args, 0, 128, None, worker, None, [])
-    assert closed == [True]
 
 
 def test_cpu_acquisition_latches_even_if_marker_fails(monkeypatch):

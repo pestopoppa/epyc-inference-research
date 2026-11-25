@@ -2440,47 +2440,6 @@ def _anchor_gate(anchor_build, anchor_gate_cache, local_op_correctness, op):
     return anchor_gate_cache[key]
 
 
-def _settle_resume(args, resume_queue, current_anchor_commit, outcome) -> None:
-    # Lineage for the claim; a ledger fault never costs the durable row.
-    if outcome.resumed_from is None or resume_queue[0] is None:
-        return
-    try:
-        with resume_mod.ClaimLedger(args.store) as ledger:
-            # A validity outcome consumes the claim; an infrastructure
-            # lane_error releases it for a bounded retry (resume.py).
-            disposition = ledger.settle_outcome(
-                outcome.resumed_from, current_anchor_commit[0],
-                result_status=outcome.status,
-                detail=(outcome.reasons[0][:2000] if outcome.reasons else None))
-        if disposition in {"released", "exhausted"}:
-            print(f"resume    {outcome.resumed_from}: {outcome.status} is an "
-                  f"infrastructure fault -> claim {disposition}"
-                  + (" (the next launch retries it)" if disposition == "released"
-                     else " (infrastructure retry budget spent; consumed)"),
-                  flush=True)
-    except Exception as exc:      # noqa: BLE001
-        print(f"warning: resume claim settle failed: {type(exc).__name__}: {exc}",
-              file=sys.stderr)
-
-
-def _retain_critic2(args, lanes_by_name, outcome, attempt) -> None:
-    """A critic2 checkpoint points at the patch its lane holds NOW (resume.py).
-
-    Recording happens before the lane's next reset, so the authored diff that
-    critic pass 2 never judged is still there: retain it (the same immutable
-    store as every gate-refused patch) or drop the checkpoint when the lane
-    holds no diff. DS41 runs 10d/10e lost such patches three times."""
-    checkpoints = attempt.get("resume_checkpoints")
-    if not checkpoints:
-        return
-    worker = lanes_by_name.get(str(outcome.branch_id or "").partition(":")[2])
-    resume_mod.retain_checkpoint_patches(
-        checkpoints, lambda mechanism: None if worker is None else
-        archive.retain_patch(args.store, worker.worktree, lane=worker.name,
-                             mechanism_id=mechanism))
-    if not checkpoints:
-        attempt.pop("resume_checkpoints", None)
-
 
 def _reset_retained(args, worker):
     # STOP before the gate, or a hard interruption during authoring, leaves
@@ -2548,20 +2507,6 @@ def _publish_lineage(args, epoch, anchor_commit, observed, run_artifact=None):
         return
     publish_lineage_taxonomy(args.store, source_revision)
 
-
-def _record_resume_rejected(args, census, cpu_launch, recipe, screen_state, epoch, attempt) -> None:
-    """A checkpoint that failed re-validation before reaching a lane."""
-    attempt["research_scope"] = archive.original_research_scope(
-        attempt, model=args.model, quant=census.quant_label,
-        backend="cpu" if cpu_launch() else "gpu", build_recipe=recipe.to_dict(),
-        surface=args.surface)
-    if screen_state is not None:
-        attempt["cpu_screen"] = dict(screen_state)
-        attempt["research_scope"]["cpu_screen"] = dict(screen_state)
-    archive.record(args.store, attempt, epoch=epoch, recorded_at=loop._now(),
-                   campaign_id="ak-loop")
-    print(f"resume    rejected {attempt.get('mechanism_id') or '-'} "
-          f"({attempt.get('resumed_from')}): {attempt.get('reason')}", flush=True)
 
 
 def _longctx_keep_gate(cpu_compare, anchor_build, longctx_compare, worker, hypothesis, comparison, *, measured_row=None) -> dict:
@@ -2751,60 +2696,6 @@ def _measure_rebaseline(cpu_compare, cor_build, anchor_build, direct_launch,
                 args.model, pp=pp, tg=tg, pairs=args.pairs,
                 noise_floor_pct=bench_floor, surface=bench_surface, ubatch=ubatch,
                 calibrated=bench_floor is not None))
-
-def _validate_pooled(census, pp, tg, ubatch, current_anchor_commit, recipe, direct_launch,
-                     args, candidate_integrity, integrity_evidence, worker, hypothesis, paths):
-    # A byte-bounded or otherwise partial census legitimately has no
-    # dominant quant.  Candidate integrity must still inspect the full
-    # patch and bench-shape literals; an absent optional type constraint
-    # is not a malformed candidate (and must never become a lane error).
-    quant_tokens = _candidate_quant_tokens(census.dominant_quant)
-    oracle_shape = {"op_ids": ["MUL_MAT", "GGML_OP_MUL_MAT"],
-                    "types": quant_tokens}
-    bench_shape = {"dims": [value for value in (pp, tg, ubatch) if value],
-                   "types": quant_tokens}
-    checked = integrity.validate_candidate(
-        worker.worktree, paths, oracle_shape=oracle_shape,
-        bench_shape=bench_shape, expected_head=getattr(worker, "reset_base", None))
-    base = _git(worker.worktree, "rev-parse", "HEAD")
-    attempt = dispatch_guard.attempt_identity(
-        diff=_git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--"),
-        champion=current_anchor_commit[0], cmake_defines=recipe.cmake_defines(),
-        bench_recipe={"pairs": args.serving_pairs if direct_launch() else args.pairs,
-                      "pp": pp, "tg": tg, "ubatch": ubatch},
-        model=str(args.model), surface=args.surface)
-    key = integrity.evidence_key(lane=worker.name, attempt_id=attempt,
-                                 base_commit=base, paths=paths)
-    evidence = checked.to_dict()
-    evidence["evidence_key"] = key
-    evidence["attempt_identity"] = attempt
-    candidate_integrity[worker.name] = (checked, key)
-    integrity_evidence[key] = evidence
-    # loop.py retains this exact mutable mapping on the Outcome. Confirm
-    # evidence added later is therefore visible to status and the journal.
-    return evidence
-
-
-def _reserve_pooled(current_anchor_commit, recipe, direct_launch, args, pp, tg, ubatch,
-                    worker, _hypothesis, _paths, resume_point=None):
-    diff = _git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--")
-    diff_sha256 = hashlib.sha256(
-        dispatch_guard.normalized_diff(diff).encode()).hexdigest()
-    identity = dispatch_guard.attempt_identity(
-        diff=diff, champion=current_anchor_commit[0],
-        cmake_defines=recipe.cmake_defines(),
-        bench_recipe={"pairs": args.serving_pairs if direct_launch() else args.pairs,
-                      "pp": pp, "tg": tg, "ubatch": ubatch},
-        model=str(args.model), surface=args.surface)
-    registry = dispatch_guard.Registry(args.store)
-    try:
-        # A resumed BUILD re-dispatches a claimed checkpoint's exact bytes;
-        # its claim, not the one-retry bound, governs (dispatch_guard.reserve).
-        reservation = registry.reserve(identity, resumed=resume_point is not None)
-        return dispatch_guard.Reservation(
-            reservation.identity, reservation.dispatch_count, diff_sha256)
-    finally:
-        registry.close()
 
 
 def _native_cpu_acquired(acquired, out, scheduler_selection, selected_identity):
