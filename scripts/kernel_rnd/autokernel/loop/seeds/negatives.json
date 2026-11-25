@@ -15,7 +15,8 @@
   "akm-c9-q38fn-48t-smt-threads, akm-c10-h15-premise-c17c18, akm-gdn-wide-cols-small-grids,",
   "akm-gate-maxdev-band-small-effects, akm-df2-drafter-precision-arms, akm-dtree-t12-27b. Reasons: graph/build/toolchain,",
   "drafting scheme, serving knob, premise or methodology findings, a mixed result that must not block a shipped dispatch,",
-  "or no census family for the surface. Unkeyed entries are reported, never suppressed."
+  "or no census family for the surface. Unkeyed entries are reported, never suppressed.",
+  "2026-11-25 (autokernel wrap-up) added 12 more UNKEYED: akm-c22-q8-wg-count-throttle, akm-c22-q8-w8-designs-1-4, akm-c22-q8ip-det1-serving, akm-cpu-a3b-barrier-elide, akm-q38fn-cpu-conv-state-fwd, akm-q38fn-cpu-moe-upgate-slab, akm-c22-vattn-rf5-rf6, akm-c22-misc-1125-nulls, akm-c22-kv-head-contig-repack, akm-27b-tail-fuse2-g2-g6, akm-q38fn-rowexact-lossless, akm-mmq-pr32921-served. Reasons: knob/harness/serving-policy findings, design-level nulls with no single served shape, a paused (not refuted) lever, or a source-answered upstream PR; keying them would risk suppressing the open q8wt/knee-batch/DET2/RF7 levers that share their families. Key them when a box owner reviews shapes."
  ],
  "epoch_anchor_commit": "v7-candidate-20260711",
  "epoch_build_recipe": {
@@ -504,6 +505,114 @@
     ],
     "mech": 1
    }
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c22-q8-wg-count-throttle",
+   "statement": "Throttling the served V5I q8 GEMV workgroup count raises HBM efficiency by keeping in-flight bytes under the knee.",
+   "falsifier": "Any WG count beats 416 by more than CI.",
+   "target_surface": "ggml/src/ggml-cuda (mmq-q8-mf.cu V5I gemv_q8mf)",
+   "target_symbol": "GGML_HIP_Q8_MF WG count",
+   "reason": "MEASURED NULL: gain vs 416 WGs = 1.003 (208), 0.993 (312), 0.851 (104); V5I ~1150-1200 GB/s at every count. HBM knee is 16 KB/CU in flight (stream 1512-1536 GB/s = 92-94% of 1638; -29% at 64 KB/CU); GEMV-sized buffers reach 89% at 67 MB. Per-WG depth, not WG count, sets in-flight: the open lever is a 16 KB/CU kernel (design-6 q8wt). Row ak-q8-hbm-knee-map-gpu-20261125; /mnt/raid0/llm/tmp/q8-gemv-85pct-strategy-20261125.md. Source: epyc-root progress/2026-11/2026-11-25-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c22-q8-w8-designs-1-4",
+   "statement": "Q8 w8 GEMV designs 1-4 beat the served V5I GEMV at n=8.",
+   "falsifier": "Design reaches >=1.05x served op time.",
+   "target_surface": "ggml/src/ggml-cuda (q8 w8 GEMV)",
+   "target_symbol": "q8wv w8 designs 1-4",
+   "reason": "MEASURED NULL: design 4 FUTILITY_OP_BELOW_1_05 (MW2 0.478x, MW4 0.304x). Designs targeted stock q8wv while production serves V5I (~62-71% of peak already). Measure the served baseline first. Source: epyc-root progress/2026-11/2026-11-25-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c22-q8ip-det1-serving",
+   "statement": "DET1 deterministic reduction in V5 q8ip is usable for serving.",
+   "falsifier": "FIX/BASE ms/round within 1% at zero mismatches.",
+   "target_surface": "ggml/src/ggml-cuda (mmq-q8-mf.cu V5 float atomics)",
+   "target_symbol": "GGML_*Q8IP_DET=1",
+   "reason": "MEASURED: correctness fixed (0 vs 9 two-context mismatches; cause = float atomics with >=3 contributors, the 'second context' was a red herring) but FIX/BASE 0.939 [0.934,0.945], -6.1% -> FAIL_PERF_REGRESS. Serve on atomics; use DET=1 only in identity/AA test arms. Open: DET2 (cheaper deterministic reduction), row ak-c22-q8ipdet2-gate-gpu-20261125. Row ak-c22-q8ip-det-gate-gpu-20261125-r2; /mnt/raid0/llm/tmp/q8ip-second-ctx-mechanism-20261125.md. Source: epyc-root progress/2026-11/2026-11-25-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-cpu-a3b-barrier-elide",
+   "statement": "GGML_TINY_SOLO_MAX=32768 barrier elision speeds A3B CPU decode.",
+   "falsifier": "ON/OFF CI excludes 1 on the fresh-server-per-visit harness.",
+   "target_surface": "ggml/src/ggml-cpu (threadpool barrier)",
+   "target_symbol": "GGML_TINY_SOLO_MAX",
+   "reason": "MEASURED NULL: r5 on fixed harness ON/OFF 0.9993 [0.9962,1.0024]; the r2-r4 +0.6-0.8% was per-instance arm bias (one resident server per arm). Row ak-cpu-a3b-barrier-elide-20261125-r5. Source: epyc-root progress/2026-11/2026-11-25-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-q38fn-cpu-conv-state-fwd",
+   "statement": "GGML_CONV_STATE_FWD=1 speeds Q38FN CPU decode (~+0.5%).",
+   "falsifier": "ON/OFF CI excludes 1.",
+   "target_surface": "ggml/src/ggml-cpu (ssm conv state)",
+   "target_symbol": "GGML_CONV_STATE_FWD",
+   "reason": "NO GAIN SHOWN: ON/OFF 0.943 [0.870,1.023], sd 0.128 (host contention); earlier +0.5% was on the biased harness. Not retried; reopen only with a quiet-host run. Row ak-q38fn-cpu-conv-state-fwd-20261125. Source: epyc-root progress/2026-11/2026-11-25-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-q38fn-cpu-moe-upgate-slab",
+   "statement": "GGML_MOE_UPGATE_SLAB speeds Q38FN CPU MoE decode.",
+   "falsifier": "CI excludes 1 under greedy or MTP.",
+   "target_surface": "ggml/src/ggml-cpu (mul_mat_id up/gate)",
+   "target_symbol": "GGML_MOE_UPGATE_SLAB",
+   "reason": "MEASURED NULL: greedy 1.0028 [0.9968,1.0088], MTP 1.0025 [0.9944,1.0107]. Rows ak-q38fn-cpu-upgate-slab-{greedy,mtp}-20261125. (skinny-balance: greedy KEEP +0.4% [1.0006,1.0074], MTP DROP 1.0033 [0.9941,1.0126].) Source: epyc-root progress/2026-11/2026-11-25-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c22-vattn-rf5-rf6",
+   "statement": "RF5/RF6 verify-attention rewrites lift the long-kv plateau (Little's-law in-flight model).",
+   "falsifier": "Op speedup >=1.2x / 1.5x.",
+   "target_surface": "ggml/src/ggml-cuda (fattn verify)",
+   "target_symbol": "RF5, RF6",
+   "reason": "MEASURED NULL: FUTILITY_OP_BELOW_1_2 and _1_5; plateau ~350-400 GB/s at kv>=32k (21-24% of 1638); the Little's-law in-flight-bytes model is refuted. Open: RF7 wave-independent split-K streaming. Source: epyc-root progress/2026-11/2026-11-25-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c22-misc-1125-nulls",
+   "statement": "actquant fuse, stochastic acceptance, qmatch and q4_0 KV pay on the served 27B.",
+   "falsifier": "Any gate KEEP.",
+   "target_surface": "served 27B GPU (various)",
+   "target_symbol": "actquant, stoch-accept, qmatch, q4_0 KV",
+   "reason": "MEASURED NULL (each its own row, all did not pay). Source: epyc-root progress/2026-11/2026-11-25-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c22-kv-head-contig-repack",
+   "statement": "Repacking KV head-contiguous recovers wasted fetched bytes in verify attention.",
+   "falsifier": "fetched/useful bytes > 1.1.",
+   "target_surface": "ggml/src/ggml-cuda (KV layout)",
+   "target_symbol": "KV head-contig repack",
+   "reason": "NOT BUILT: fetched/useful bytes measured 1.00-1.01, nothing to recover. Source: epyc-root progress/2026-11/2026-11-25-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-27b-tail-fuse2-g2-g6",
+   "statement": "27B tail fusion groups G2/G6 give a served speedup.",
+   "falsifier": "Gate KEEP with witness firing.",
+   "target_surface": "ggml/src/ggml-cuda (fusion)",
+   "target_symbol": "TF2 G2/G6",
+   "reason": "PAUSED, NOT REFUTED: r3 FUTILITY_WITNESS (test-backend-ops abort), r4 FUTILITY_WITNESS from a row witness-parser bug (84 fusion witness lines present). Two-strike pause; G3 is kept in C22 small-op fusion. Reopen after the parser fix. Rows ak-27b-tail-fuse2-gate-gpu-20261124-r3/r4. Source: epyc-root progress/2026-11/2026-11-25-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-q38fn-rowexact-lossless",
+   "statement": "ROWEXACT_N makes Q38FN spec greedy-lossless at acceptable cost.",
+   "falsifier": "spec speed >=0.99x.",
+   "target_surface": "ggml/src/ggml-cpu (row-exact reduction)",
+   "target_symbol": "ROWEXACT_N",
+   "reason": "COST_FAIL: RX32/RX64 lossless but spec 0.937x/0.946x. Operator 2026-11-25: FASTER, not lossless -- do not propose lossless-at-cost variants. Row ak-q38fn-rowexact-variants-cpu-20261125. Source: epyc-root progress/2026-11/2026-11-25-autokernel.md"
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-mmq-pr32921-served",
+   "statement": "Upstream PR #32921 (MMQ stream-K change) helps served shapes.",
+   "falsifier": "Its dispatch condition fires at any served shape.",
+   "target_surface": "ggml/src/ggml-cuda (mmq.cu)",
+   "target_symbol": "PR #32921",
+   "reason": "ANSWERED FROM SOURCE: never fires at served shapes (AK-MMQ-SK2-CENSUS). Source: epyc-root commit d8be2ecfe."
   }
  ]
 }

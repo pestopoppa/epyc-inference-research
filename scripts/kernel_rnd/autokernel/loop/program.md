@@ -1323,6 +1323,33 @@ real work; they are simply not what this loop can build, gate and A/B:
   what GLM-5.2 already uses and saves zero bandwidth while adding per-weight work. A
   quality-at-equal-bpw play mis-framed as a speed play.
 
+## Learnings 2026-11-25 (autokernel) — distilled, not a log
+
+Dead ends from this day are seeded in `seeds/negatives.json` (`akm-c22-*`, `akm-cpu-a3b-barrier-elide`,
+`akm-q38fn-*`, `akm-27b-tail-fuse2-g2-g6`, `akm-mmq-pr32921-served`). The rules and open levers:
+
+- **MI210 ceiling is 1638 GB/s everywhere** (operator ruling). HBM knee: **16 KB/CU in flight** (stream 92-94 %,
+  -29 % at 64 KB/CU); GEMV-sized buffers reach 89 % at 67 MB. **WG-count throttling is dead**; per-WG depth sets
+  in-flight. Open lever: a 16 KB/CU weight-GEMV kernel (design-6 **q8wt**) and a **knee-batch** kernel (both being built).
+  Strategy: `/mnt/raid0/llm/tmp/q8-gemv-85pct-strategy-20261125.md`.
+- **V5 q8ip nondeterminism = float atomics with >= 3 contributors**; "second context" was a red herring. DET1 fixes
+  it at **-6.1 %** (FAIL_PERF_REGRESS): serve on atomics, **use DET=1 in identity/AA test arms**. DET2 (cheaper
+  deterministic reduction) is pending (`ak-c22-q8ipdet2-gate-gpu-20261125`).
+- **Harness arm bias:** one resident server per arm gives a +-0.4-0.8 % per-instance offset confounded with the arm.
+  **A fresh server per visit (warm-up, parity gate, balance diagnostic) is now required** for any sub-1 % claim; the
+  shared `ak_gate` + `mk_ak_row gate new` generator does this — hand-built gate rows failed most smokes.
+- **Closed-loop screens mislead for served-shape knobs.** Screen them with Poisson arrivals, and check **max stall and
+  >2 s gap count**, not only p95: ub2048 won every Poisson headline but its max stall is 6.87 s vs 3.87 s (127 vs 6
+  gaps > 2 s). No ub2048 stack change until `ak-27b-served-ub-deepctx-gpu-20261125`.
+- **Measure the served baseline before kernel work** (w8 designs 1-4 targeted stock q8wv; production serves V5I).
+- **Q38FN host depth:** `llama_kv_cache::get_prev_tokens` walks every used KV cell per ubatch, O(context): 0.07 -> 3.73
+  ms/step d1k -> d32k. Fix in flight (root handoff Q38FN-CPU-HOST-DEPTH-1, fix 7816502dc); gate it before folding.
+- **PR #32921 never fires at served shapes** (answered from source).
+- **Keeps not yet folded into C22** (fold waits until all lever rows are filed; list:
+  `/mnt/raid0/llm/tmp/c22-keep-list-20261125.md`): small-op fusion KEEP_ALL+F1 (1.031x), Q38FN CPU skinny-balance
+  greedy (+0.4 %, MTP DROP).
+- ROWEXACT is "faster, not lossless" (operator): do not propose lossless-at-cost variants.
+
 ## Settled — do not re-open without new evidence
 
 - **Loop-champion per-commit attribution is inflated.** The 36 commit subjects on
