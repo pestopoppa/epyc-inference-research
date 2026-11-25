@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 
 from ..controller import rung_confirm
+from .. import bnsig_planner
 from . import (accumulate, actor_opencode_config, actor_passthrough, actors, amdahl,
                belief_context, bench, bestof, champion, cpu_window, floor_registry,
                gpu_window, isa_claims, loop, pipeline, planner_only, pool, scratch,
@@ -28,6 +29,7 @@ def build_parser(original_argv, *, description, run_module):
     parser.add_argument("--anchor-build", type=Path, required="--planner-only" not in original_argv)
     planner_only.add_arguments(parser)
     amdahl.add_arguments(parser)
+    bnsig_planner.add_arguments(parser)
     parser.add_argument("--cor-build", type=Path,
                         help="original champion-of-record build when it differs from the current anchor")
     parser.add_argument("--resume-run", type=Path,

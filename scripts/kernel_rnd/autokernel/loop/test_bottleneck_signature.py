@@ -22,7 +22,7 @@ class Classifier(unittest.TestCase):
         d = bs.from_result(r, "v5i", gbps=r["summary"]["v5i_n8_geomean_gbps"])
         self.assertEqual(d["schema"], "epyc.autokernel.bottleneck_signature.v1")
         self.assertEqual(d["class"], "issue_bound")
-        self.assertEqual(d["lever"], "cut instructions per byte")
+        self.assertEqual(d["lever"], "fewer instructions per byte")
         self.assertEqual(d["refs"]["S16_id"], "S16")
         self.assertEqual(d["refs"]["row"], "ak-c22-q8wt-op-diag-gpu-20261125")
         self.assertAlmostEqual(d["axes"]["issue_busy"], 0.4645)

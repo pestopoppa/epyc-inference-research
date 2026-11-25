@@ -36,6 +36,7 @@ from .census_extract import (  # noqa: F401  re-exported: callers/tests address 
     A3B_CPU_FAMILY_BYTES, CPU_MODEL_ALIAS, CPU_MODEL_BY_ID, MMID_CLASS, Q8_SHAPE_CLASS, SERVED_N, TRACE_DENSE_BYTES,
     TRACE_Q8_CLASS, UBENCH_CLASS, cpu_config, extract, extract_cpu, extract_time_only, extract_trace)
 from .census_reconcile import reconcile
+from .. import bnsig_planner  # AK-BNSIG P2 seed lines (outside loop/: code budget)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CENSUS = os.path.join(HERE, "census", "mi210_bandwidth_census.json")
@@ -759,7 +760,7 @@ def surface_seed_section(s: dict, c: dict) -> list[str]:
             f"step_ms x share x (1 - ours/target); step source: {s.get('step_source') or '-'}; ours from {src}).",
             f"**Falsifier:** an op-level variant at the served shape cannot beat {s['ours_pct']:.1f} % by more than the lane "
             "noise floor, or the end-to-end step does not move by > noise -> close and journal.",
-            f"Effort: M (unknown until the author reads the kernel). target_surface: {skey(s)}", ""]
+            f"Effort: M (unknown until the author reads the kernel). target_surface: {skey(s)}", ""] + bnsig_planner.seed_lines(s, c)
 
 
 def surface_seeds_md(c: dict, date: str) -> str:

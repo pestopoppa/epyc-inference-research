@@ -35,7 +35,7 @@ from typing import Any
 
 from ..controller import (anchor_integrity, build_recipe, experiments, inbox, rung_confirm,
                           workload_contract)
-from .. import codegen_summary, custody
+from .. import bnsig_planner, codegen_summary, custody
 HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
 HEARTBEAT_STOP_TIMEOUT_S = 10
 #: `--cpu-measurement-gpu-quiet`: the CPU/GPU measurement quiet window. DEFAULT "lock"
@@ -3127,6 +3127,7 @@ def _build_context(
         # AK-AMDAHL-PRUNE: per-kernel e2e ceilings from the AKX-ALL-16 shares file.
         **({"amdahl_ceilings": _amdahl_assessor(args).planner_view()}
            if not cpu_launch() and args.amdahl_prune != "off" else {}),
+        **bnsig_planner.context_entry(args, cpu_launch()),  # AK-BNSIG P2: limiter classes for the planner
         **({"gpu_counters": gpu_counter_signals.load_observation(args.gpu_counters)}
            if args.gpu_counters and not cpu_launch() else {}),
         **({"long_context": longctx.planner_context(

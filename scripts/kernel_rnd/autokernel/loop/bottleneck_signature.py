@@ -39,9 +39,9 @@ AXES = ("fetch_over_bytes", "ea_req_per_kb", "mem_stalled", "mem_busy", "wait_an
         "valu_per_kb", "lds_per_kb", "tcp_pending_stall")
 OVERSUB_AXES = ("mem_stalled", "wait_any")
 REQUIRED = ("fetch_over_bytes", "ea_req_per_kb", "mem_stalled", "mem_busy", "wait_any", "wait_inst", "issue_busy")
-LEVER = {"over_fetch": "layout / coalescing", "over_subscribed": "throttle in-flight (WG count, fewer fronts)",
-         "issue_bound": "cut instructions per byte", "latency_bound": "deeper pipeline / more waves",
-         "not_in_flight": "launch / tail / persistence"}
+LEVER = {"over_fetch": "layout / bytes per weight", "over_subscribed": "in-flight shaping, fewer WGs",
+         "issue_bound": "fewer instructions per byte", "latency_bound": "occupancy / pipelining",
+         "not_in_flight": "more loads in flight"}
 P_RX = re.compile(r"ILi(\d+)E")
 # rocprofv3 pmc passes for a signature (C3 MemUnit* dropped: reads 0 here). Re-exported as
 # gpu_counter_signals.SIGNATURE_PASSES, the loop's counter-declaration surface.

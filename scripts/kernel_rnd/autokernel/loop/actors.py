@@ -51,6 +51,7 @@ from typing import Any, Callable, Mapping, Sequence
 import uuid
 
 from ..custody import append_rows, sync_path as _sync_path
+from .. import bnsig_planner
 from . import actor_metrics, belief_context, call_budget, gpu_counter_signals, history_fields, hotspots, integrity, procguard, scratch
 from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
                    Review, RunAborted)
@@ -3408,6 +3409,7 @@ class AgentPlanner:
                                         str(body["mechanism_id"]))
                           if "runtime_treatment" in body else None),
             **({"planner_report_source": report_source} if report_source else {}),
+            signature_assessment=bnsig_planner.assess(body, context.get(bnsig_planner.CONTEXT_KEY)),  # AK-BNSIG P2: WARN only
             # AK-PM-17: optional and unprompted today; carried verbatim, linted downstream.
             **({"expected_outcome": body["expected_outcome"]}
                if body.get("expected_outcome") is not None else {})), declared

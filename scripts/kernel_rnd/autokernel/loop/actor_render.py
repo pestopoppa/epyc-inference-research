@@ -468,6 +468,9 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12,
         lines.extend(amdahl.render(context["amdahl_ceilings"]))
     if not cpu and context.get("gpu_counters"):   # RVP-CTR-1: counter-grounded planner signals
         lines.extend(gpu_counter_signals.render(context["gpu_counters"], limit=limit))
+    if not cpu and context.get("bottleneck_signatures"):   # AK-BNSIG P2: limiter class per hotspot
+        from .. import bnsig_planner
+        lines.extend(bnsig_planner.render(context["bottleneck_signatures"]))
     if cpu and context.get("long_context"):
         lines.extend(_render_long_context(context["long_context"], limit=limit))
 
