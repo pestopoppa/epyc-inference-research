@@ -1,0 +1,185 @@
+{
+ "applied": [
+  {
+   "row": "fx-a",
+   "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  {
+   "row": "fx-b",
+   "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+ ],
+ "ceiling_gbps": 1638.0,
+ "cpu": {
+  "ceiling_gbps": {
+   "full-host": 520.0,
+   "half-48t": 259.8,
+   "q0q2": 387.0,
+   "quarter-24t": 129.0
+  },
+  "ceiling_source": {
+   "full-host": "operator 2026-11-24: 520 GB/s",
+   "half-48t": "measured: q38p1-c13-20261117-r4 same-window bench_readbw read-sum",
+   "q0q2": "derived 2026-11-24: 3 x quarter-24t 129 GB/s (72t on cores 0-71, --interleave=0,1,2)",
+   "quarter-24t": "operator 2026-11-24: 129 GB/s (was measured 112.9, AK-CPU-QUARTER-READCEIL 9e379493 q2)"
+  },
+  "flag_frac": 0.75,
+  "target_frac": 0.8
+ },
+ "floor_gbps": 1000.0,
+ "noise_frac": 0.03,
+ "records": {
+  "27b-q8_0|ffn_gate_up_v5i|17408x5120|n8": {
+   "arm": "V",
+   "bytes_per_call": 94699520,
+   "calls_per_round": 128,
+   "gbps": 1352.9,
+   "history": [
+    [
+     "fx-a",
+     1047.4
+    ],
+    [
+     "fx-b",
+     1352.9
+    ]
+   ],
+   "kernel_class": "ffn_gate_up_v5i",
+   "lane": "served",
+   "measured_at": "2026-11-23T00:00:00Z",
+   "measured_at_basis": "at",
+   "model": "27b-q8_0",
+   "n": 8,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "op_path": "27b-df2-mi210",
+   "rank": 2,
+   "recoverable_ms_per_round": 0.0,
+   "result_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "shape": "17408x5120",
+   "source_row": "fx-b",
+   "status": "ok",
+   "unit": "GB/s",
+   "us_per_call": 70.0
+  },
+  "27b-q8_0|gdn_attn_gate_v5i|6144x5120|n8": {
+   "arm": "V",
+   "bytes_per_call": 33423360,
+   "calls_per_round": 48,
+   "gbps": 939.1,
+   "history": [
+    [
+     "fx-a",
+     939.1
+    ]
+   ],
+   "kernel_class": "gdn_attn_gate_v5i",
+   "lane": "served",
+   "measured_at": "2026-11-22T00:00:00Z",
+   "measured_at_basis": "at",
+   "model": "27b-q8_0",
+   "n": 8,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "op_path": "27b-df2-mi210",
+   "rank": 1,
+   "recoverable_ms_per_round": 0.371,
+   "result_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "shape": "6144x5120",
+   "source_row": "fx-a",
+   "status": "open_surface",
+   "unit": "GB/s",
+   "us_per_call": 35.59
+  }
+ },
+ "schema": "epyc.autokernel.bw_census.v1",
+ "seed_stubs": [
+  {
+   "gbps": 939.1,
+   "record": "27b-q8_0|gdn_attn_gate_v5i|6144x5120|n8",
+   "source_row": "fx-a"
+  }
+ ],
+ "seeds": {},
+ "surface_groups": [
+  {
+   "census_rows": [],
+   "class_share_sum": 0,
+   "covered_by": "",
+   "members": 0,
+   "note": "roll-up of the per-class surfaces below, never ranked itself; the parity share and the class-share sum do not reconcile and neither is vouched for",
+   "op": "forward m1 dense (UD-IQ4_XS)",
+   "parity_share_of_step": null,
+   "path": "flash-next-cpu",
+   "rollup_pct": null,
+   "unreconciled": true
+  }
+ ],
+ "surfaces": [
+  {
+   "best_pct": 82.6,
+   "census_rows": [
+    "27b-q8_0|ffn_gate_up_v5i|17408x5120|n8",
+    "27b-q8_0|gdn_attn_gate_v5i|6144x5120|n8"
+   ],
+   "covered_by": "",
+   "d32k_pct": null,
+   "device": "mi210",
+   "family": "dense-q8-gemv",
+   "gap_pp": null,
+   "group": null,
+   "latest_pct": 82.6,
+   "measured_ms": null,
+   "measured_ms_source": null,
+   "n_runs": 3,
+   "op": "verify dense Q8 GEMV/GEMM (q8mf6, V5I)",
+   "ours_measured": true,
+   "ours_pct": 82.6,
+   "ours_pct_placeholder": null,
+   "path": "27b-df2-mi210",
+   "ref": "cpu-avx512-gemv",
+   "ref_pct": null,
+   "ref_status": null,
+   "refresh_c21": false,
+   "saving_ms_per_step": null,
+   "served": true,
+   "share_ms": null,
+   "share_of_step": null,
+   "source": "census rows (no parity op)",
+   "status": "open",
+   "step_ms": 45.7,
+   "step_source": "fixed: 27B C18 verify round"
+  },
+  {
+   "best_pct": null,
+   "census_rows": [],
+   "covered_by": "",
+   "d32k_pct": null,
+   "device": "cpu-quarter-24t",
+   "family": "dense-iq4xs-gemv",
+   "gap_pp": null,
+   "group": null,
+   "latest_pct": null,
+   "measured_ms": null,
+   "measured_ms_source": null,
+   "n_runs": 0,
+   "op": "forward m1 dense (UD-IQ4_XS)",
+   "ours_measured": false,
+   "ours_pct": null,
+   "ours_pct_placeholder": null,
+   "path": "flash-next-cpu",
+   "ref": null,
+   "ref_pct": null,
+   "ref_status": null,
+   "refresh_c21": true,
+   "saving_ms_per_step": null,
+   "served": true,
+   "share_ms": null,
+   "share_of_step": null,
+   "source": "roll-up with no per-class census rows yet; parity share None not ranked (unreconciled)",
+   "status": "needs_measurement",
+   "step_ms": null,
+   "step_source": null
+  }
+ ],
+ "target_gbps": 1200.0,
+ "target_pct": 88.0
+}

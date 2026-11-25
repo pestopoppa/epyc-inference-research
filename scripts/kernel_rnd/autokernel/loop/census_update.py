@@ -259,6 +259,8 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str, basis:
             continue
         rec = dict(old or {}, **o, source_row=row, result_sha256=sha, measured_at=measured_at, measured_at_basis=basis)
         rec.pop("stale", None)
+        if rec.get("signature"):  # AK-BNSIG: a timing update keeps the signature but flags it once the timing warrant moved
+            rec["signature"] = dict(rec["signature"], stale_vs_timing=rec["signature"].get("timing_sha256") != sha)
         if quiet_over_contended:  # same op/shape: the guarded quiet-host value supersedes, the old one is kept as invalid
             rec["superseded"] = list(old.get("superseded") or []) + [{
                 "validity": "contention_invalid", "source_row": old["source_row"], "result_sha256": old["result_sha256"],
@@ -286,6 +288,34 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str, basis:
     lines += [f"- `{row}` ({sha[:12]}): BYTES-IMPLAUSIBLE {o['kernel_class']} {o['shape']} n={o['n']}: {'; '.join(o['bytes_flags'])}"
               for o in obs if o.get("bytes_flags")]  # VKRC-BYTES-PLAUSIBLE: flagged rows print beside the ranking, never filtered
     return lines + ([f"- `{row}` ({sha[:12]}): {tmoved} time-only records (bytes unknown) stored under census time_only"] if tmoved else [])
+
+
+def apply_signature(c: dict, sigs: dict, row: str, sha: str, at: str, build: str | None = None) -> list[str]:
+    """AK-BNSIG: attach bottleneck signatures ({record id: bottleneck_signature doc}) to existing records, each with its
+    OWN warrant (row, RESULT sha256, build): a signature may come from a different row than the record's timing.
+    Idempotent on sha via c['signature_applied'] (separate from c['applied'], so the same RESULT can still carry
+    timings). Records that do not exist are reported, never created. rerank never touches the field."""
+    if not sha:
+        raise ValueError("apply_signature: result_sha256 is empty; a signature without its RESULT's sha has no warrant")
+    led = c.setdefault("signature_applied", [])
+    if any(a["sha256"] == sha for a in led):
+        return []
+    lines = []
+    for k in sorted(sigs):
+        d, r = sigs[k], c["records"].get(k)
+        if r is None:
+            lines.append(f"- `{row}` ({sha[:12]}): signature for unknown record {k} skipped")
+            continue
+        r["signature"] = {"class": d.get("class"), "rule": d.get("rule"), "axes": d.get("axes") or {},
+                          "ruled_out": list(d.get("ruled_out") or []), "oversub_legs": d.get("oversub_legs") or {},
+                          "refs": d.get("refs") or {}, "reference_check": d.get("reference_check") or {},
+                          "schema": d.get("schema"), "counter_set_sha256": d.get("counter_set_sha256"),
+                          "source_row": row, "result_sha256": sha, "build": build, "measured_at": at,
+                          "timing_sha256": r.get("result_sha256"), "stale_vs_timing": False}
+        lines.append(f"- `{row}` ({sha[:12]}): {k} signature {d.get('class')} ({d.get('rule')})")
+    led.append({"row": row, "sha256": sha})
+    derive_surfaces(c)
+    return lines
 
 
 def tgt(c: dict, r: dict) -> float:
@@ -552,6 +582,12 @@ def derive_surfaces(c: dict) -> list[dict]:
             "ref": ref_key, "ref_pct": ref_pct, "ref_status": ref.get("status") if ref_key else None,
             "gap_pp": None if ours is None or ref_pct is None else round(max(0.0, ref_pct - ours), 1), "status": status,
             "covered_by": covered, "refresh_c21": bool(o.get("refresh_c21")), "source": o.get("source") or ("census rows (no parity op)" if recs else None)})
+        sig_classes = {}
+        for r in recs:  # AK-BNSIG rollup; the key is absent (not empty) when no record carries a signature
+            if (r.get("signature") or {}).get("class"):
+                sig_classes[r["signature"]["class"]] = sig_classes.get(r["signature"]["class"], 0) + 1
+        if sig_classes:
+            out[-1]["signature_classes"] = dict(sorted(sig_classes.items()))
     out.sort(key=lambda s: (not s["served"], s["saving_ms_per_step"] is None, -(s["saving_ms_per_step"] or 0), s["path"], s["op"]))
     for g in sorted(GROUP_ROLLUPS):
         o = ops.get(g, {})

@@ -103,6 +103,38 @@ METRICS: dict[str, tuple[str, tuple[str, ...], Any, str]] = {
 
 ROCPROFV3 = "/mnt/raid0/llm/tools/rocprofiler-sdk-6.2.0-66/opt/rocm-6.2.0/bin/rocprofv3"
 
+# AK-BNSIG: the bottleneck-signature counter set (bottleneck_signature.py), declared here so the loop has ONE
+# counter-declaration surface. Kept separate from PASSES/METRICS on purpose: folding it in would change
+# counter_set_sha256() and make load_observation refuse every stored RVP-CTR-1 observation. Pass C3
+# (MemUnitBusy/MemUnitStalled) is dropped: both read 0 per dispatch on this host, so mem_busy/mem_stalled come
+# from the raw TA counters of C7. NOTE the name: `mem_stalled_ta` (TA_ADDR_STALLED_BY_TC_CYCLES_sum) is a
+# different counter from METRICS' `mem_unit_stalled_pct` (TCP_TCP_TA_DATA_STALL_CYCLES).
+# The pass table lives in the pure, vendorable bottleneck_signature.py (row job dirs copy it); it is re-exported here.
+from .bottleneck_signature import PASSES_SIG as SIGNATURE_PASSES  # noqa: E402
+SIGNATURE_AXES: dict[str, str] = {
+    "fetch_over_bytes": "FETCH_SIZE*1024/bytes_moved",
+    "ea_req_per_kb": "TCC_EA_RDREQ/(bytes_moved/1024)",
+    "mem_stalled_ta": "TA_ADDR_STALLED_BY_TC_CYCLES_sum/(CU_NUM*C7.GRBM_GUI_ACTIVE) (MemUnitStalled reads 0 here)",
+    "mem_busy_ta": "TA_BUSY_avr/C7.GRBM_GUI_ACTIVE (MemUnitBusy reads 0 here)",
+    "wait_any": "SQ_WAIT_ANY/SQ_WAVE_CYCLES",
+    "wait_inst": "SQ_WAIT_INST_ANY/SQ_WAVE_CYCLES",
+    "issue_busy": "4*SQ_ACTIVE_INST_ANY/(SIMD_NUM*C5.GRBM_GUI_ACTIVE)",
+    "valu_per_kb": "SQ_INSTS_VALU/(bytes_moved/1024)",
+    "lds_per_kb": "SQ_INSTS_LDS/(bytes_moved/1024)",
+}
+
+
+def signature_counter_set_sha256() -> str:
+    body = {"passes": SIGNATURE_PASSES, "axes": SIGNATURE_AXES}
+    return hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+
+
+def signature_pass_input(name: str) -> str:
+    """rocprofv3 6.2 ``-i`` input text for one bottleneck-signature pass."""
+    if name not in SIGNATURE_PASSES:
+        raise KeyError(f"undeclared signature pass {name!r}")
+    return "pmc: " + " ".join(SIGNATURE_PASSES[name]) + "\n"
+
 
 def counter_set_sha256() -> str:
     body = {"passes": PASSES, "metrics": {k: [m[0], list(m[1]), m[3]] for k, m in METRICS.items()}}
