@@ -306,7 +306,8 @@ def apply_signature(c: dict, sigs: dict, row: str, sha: str, at: str, build: str
         if r is None:
             lines.append(f"- `{row}` ({sha[:12]}): signature for unknown record {k} skipped")
             continue
-        r["signature"] = {"class": d.get("class"), "rule": d.get("rule"), "axes": d.get("axes") or {},
+        r["signature"] = {"class": d.get("class"), "classes": list(d.get("classes") or []), "marginal": list(d.get("marginal") or []),
+                          "band_position": d.get("band_position") or {}, "rule": d.get("rule"), "axes": d.get("axes") or {},
                           "ruled_out": list(d.get("ruled_out") or []), "oversub_legs": d.get("oversub_legs") or {},
                           "refs": d.get("refs") or {}, "reference_check": d.get("reference_check") or {},
                           "schema": d.get("schema"), "counter_set_sha256": d.get("counter_set_sha256"),

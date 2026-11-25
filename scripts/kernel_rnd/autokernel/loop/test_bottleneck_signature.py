@@ -32,6 +32,30 @@ class Classifier(unittest.TestCase):
         # midpoint for V5I (the diag's inverted wait_any leg said "not over-subscribed")
         self.assertEqual(d["oversub_legs"], {"mem_stalled": True, "wait_any": True})
         self.assertIn("over_fetch", d["ruled_out"])
+        # every firing class is reported; over_subscribed is marginal (mem_stalled band position 0.53 < 0.75), so the
+        # primary is issue_bound
+        self.assertEqual((d["primary"], d["classes"], d["marginal"]), ("issue_bound", ["over_subscribed", "issue_bound"],
+                                                                       ["over_subscribed"]))
+        self.assertAlmostEqual(d["band_position"]["mem_stalled"], 0.5274)
+        self.assertIsNone(d["band_position"]["ea_req_per_kb"])      # references do not separate on it
+        self.assertEqual(set(d["levers"]), {"over_subscribed", "issue_bound"})
+
+    def test_issue_bound_needs_a_discriminator_the_stream_lacks(self):
+        g = load()["summary"]["signatures"]
+        b = bs.reference_bands(g["S16"], g["S64"])
+        k = dict(g["S64"], issue_busy=0.45, mem_stalled=g["S16"]["mem_stalled"])   # wait_inst 0.41 like S64, stream VALU
+        self.assertNotIn("issue_bound", bs.classify(k, g["S16"], b, 0.8, g["S64"])["classes"])
+        k["valu_per_kb"] = 29.0
+        self.assertIn("issue_bound", bs.classify(k, g["S16"], b, 0.8, g["S64"])["classes"])
+
+    def test_over_subscribed_leans_on_mem_stalled_not_wait_any(self):
+        g = load()["summary"]["signatures"]
+        b = bs.reference_bands(g["S16"], g["S64"])
+        k = dict(g["S16"], wait_any=g["S64"]["wait_any"])        # wait_any alone at S64: not over-subscribed
+        self.assertNotIn("over_subscribed", bs.classify(k, g["S16"], b, 1.0, g["S64"])["classes"])
+        k = dict(g["S16"], mem_stalled=g["S64"]["mem_stalled"])  # mem_stalled at S64, wait_any healthy: firm
+        r = bs.classify(k, g["S16"], b, 1.0, g["S64"])
+        self.assertEqual((r["primary"], r["marginal"]), ("over_subscribed", []))
 
     def test_wait_any_direction_from_refs(self):
         g = load()["summary"]["signatures"]
@@ -118,6 +142,7 @@ class CensusSignature(unittest.TestCase):
         self.assertEqual((s["class"], s["source_row"], s["result_sha256"], s["build"]),
                          ("issue_bound", "ak-diag", "d" * 64, "stream2:f4a48e00"))
         self.assertFalse(s["stale_vs_timing"])
+        self.assertEqual((s["classes"], s["marginal"]), (["over_subscribed", "issue_bound"], ["over_subscribed"]))
         self.assertTrue(any("unknown record" in ln for ln in lines))
         self.assertNotIn("nope|x|1x1|n1", self.c["records"])
         surf = next(x for x in self.c["surfaces"] if self.k in x["census_rows"])

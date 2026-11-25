@@ -30,7 +30,7 @@ NCU = 104
 SIMD_NUM = 416.0
 REJECT_MAX = 0.25
 TH = {"overfetch": 1.15, "ea_rel": 1.15, "issue": 0.60, "issue_soft": 0.40, "wait_inst_soft": 0.40,
-      "latency_wait": 0.50, "latency_issue_max": 0.40, "latency_busy_rel": 0.80, "oversub_mid": 0.5,
+      "latency_wait": 0.50, "latency_issue_max": 0.40, "latency_busy_rel": 0.80, "oversub_mid": 0.5, "oversub_firm": 0.75, "valu_rel": 2.0, "band_sep_rel": 0.25,
       "healthy_bw_frac": 0.90, "ref_min_sep": 0.05}
 CLASSES = ("harness", "reference_incoherent", "over_fetch", "issue_bound", "over_subscribed", "latency_bound",
            "not_in_flight", "healthy_bw", "unclassified")
@@ -152,48 +152,75 @@ def oversub_legs(axes: Mapping[str, Any], bands: Mapping[str, Any]) -> dict:
     return out
 
 
+def band_positions(axes: Mapping[str, Any], s16: Mapping[str, Any], s64: Mapping[str, Any]) -> dict:
+    """{axis: (v - S16) / (S64 - S16)}: 0 = at the healthy reference, 1 = at the over-subscribed one. None when unknown
+    or when the references do not separate on that axis (|S64 - S16| < band_sep_rel x max(|S16|, |S64|))."""
+    out = {}
+    for a in AXES:
+        v, lo, hi = axes.get(a), s16.get(a), s64.get(a)
+        sep = None if lo is None or hi is None else abs(hi - lo)
+        out[a] = None if v is None or not sep or sep < TH["band_sep_rel"] * max(abs(lo), abs(hi)) \
+            else round((v - lo) / (hi - lo), 4)
+    return out
+
+
+# Rule order = design note section 6 (over_fetch, over_subscribed, issue_bound, latency_bound). Every rule is evaluated
+# and EVERY firing class is reported (a combined limiter needs both levers); the order only picks `primary`, which is the
+# first NON-marginal firing class (else the first firing one). over_subscribed leans on mem_stalled alone: wait_any is
+# confounded with instruction density (an issue-heavy kernel waits less), so it is reported as support only.
 def classify(axes: Mapping[str, Any], s16: Mapping[str, Any], bands: Mapping[str, Any],
-             bw_frac: float | None = None) -> dict:
-    """{class, rule, ruled_out, oversub_legs}; first match wins. bw_frac = achieved GB/s / S16 GB/s."""
-    missing = [a for a in REQUIRED if axes.get(a) is None]
+             bw_frac: float | None = None, s64: Mapping[str, Any] | None = None) -> dict:
+    """{class (= primary), primary, classes, marginal, rules, ruled_out, band_position, oversub_legs}.
+    bw_frac = achieved GB/s / S16 GB/s."""
+    s64 = s64 or {}
     legs = oversub_legs(axes, bands)
+    pos = band_positions(axes, s16, s64)
+    missing = [a for a in REQUIRED if axes.get(a) is None]
     if missing:
-        return {"class": "harness", "rule": "missing_axes:" + ",".join(missing), "ruled_out": [], "oversub_legs": legs}
-    fired, ruled_out = None, []
-    ea_ref = s16.get("ea_req_per_kb")
+        return {"class": "harness", "primary": "harness", "classes": ["harness"], "marginal": [],
+                "rule": "missing_axes:" + ",".join(missing), "rules": {}, "ruled_out": [], "band_position": pos,
+                "oversub_legs": legs}
+    ea_ref, valu_ref, wi_ref = s16.get("ea_req_per_kb"), s16.get("valu_per_kb"), s64.get("wait_inst")
+    # issue_bound needs a discriminator the pure stream lacks: S64 itself has wait_inst 0.41 >= the old soft bar.
+    disc = bool(valu_ref and axes.get("valu_per_kb") is not None and axes["valu_per_kb"] >= TH["valu_rel"] * valu_ref) or \
+        bool(wi_ref is not None and axes["wait_inst"] > wi_ref)
+    ms = pos.get("mem_stalled")
     tests = [
         ("over_fetch", axes["fetch_over_bytes"] > TH["overfetch"] or
          bool(ea_ref and axes["ea_req_per_kb"] > TH["ea_rel"] * ea_ref),
          f"fetch_over_bytes>{TH['overfetch']} or ea_req_per_kb>{TH['ea_rel']}*S16"),
-        ("issue_bound", axes["issue_busy"] >= TH["issue"] or
-         (axes["issue_busy"] >= TH["issue_soft"] and axes["wait_inst"] >= TH["wait_inst_soft"]),
-         f"issue_busy>={TH['issue']} or (issue_busy>={TH['issue_soft']} and wait_inst>={TH['wait_inst_soft']})"),
-        ("over_subscribed", bool(legs) and all(v is True for v in legs.values()),
-         "every over-subscription axis past the S16/S64 midpoint toward S64 (direction from the references)"),
+        ("over_subscribed", ms is not None and bands["mem_stalled"].get("direction") == 1 and ms >= TH["oversub_mid"],
+         f"mem_stalled band position >= {TH['oversub_mid']} (marginal below {TH['oversub_firm']}); wait_any support only"),
+        ("issue_bound", axes["issue_busy"] >= TH["issue"] or (axes["issue_busy"] >= TH["issue_soft"] and disc),
+         f"issue_busy>={TH['issue']} or (issue_busy>={TH['issue_soft']} and (valu_per_kb>={TH['valu_rel']}*S16 "
+         "or wait_inst>S64))"),
         ("latency_bound", bool(s16.get("mem_busy")) and axes["mem_busy"] < TH["latency_busy_rel"] * s16["mem_busy"]
          and axes["wait_any"] >= TH["latency_wait"] and axes["issue_busy"] < TH["latency_issue_max"],
          f"mem_busy<{TH['latency_busy_rel']}*S16 and wait_any>={TH['latency_wait']} and issue_busy<{TH['latency_issue_max']}"),
     ]
-    for name, hit, rule in tests:
-        if hit and fired is None:
-            fired = (name, rule)
-        elif not hit:
-            ruled_out.append(name)
-    if fired is None:
-        if bw_frac is None:
-            fired = ("unclassified", "no limiter fired and achieved GB/s vs S16 unknown")
-        elif bw_frac >= TH["healthy_bw_frac"]:
-            fired = ("healthy_bw", f"no limiter fired and GB/s >= {TH['healthy_bw_frac']}*S16")
-        else:
-            fired = ("not_in_flight", f"no limiter fired and GB/s < {TH['healthy_bw_frac']}*S16")
-    return {"class": fired[0], "rule": fired[1], "ruled_out": ruled_out, "oversub_legs": legs}
+    classes = [n for n, hit, _r in tests if hit]
+    rules = {n: r for n, hit, r in tests if hit}
+    marginal = ["over_subscribed"] if "over_subscribed" in classes and ms < TH["oversub_firm"] else []
+    if not classes:
+        name = "unclassified" if bw_frac is None else "healthy_bw" if bw_frac >= TH["healthy_bw_frac"] else "not_in_flight"
+        rules = {name: f"no limiter fired; GB/s vs S16 {bw_frac} (healthy >= {TH['healthy_bw_frac']})"}
+        primary, classes = name, [name]
+    else:
+        primary = next((c for c in classes if c not in marginal), classes[0])
+    return {"class": primary, "primary": primary, "classes": classes, "marginal": marginal, "rule": rules[primary],
+            "rules": rules, "ruled_out": [n for n, hit, _r in tests if not hit], "band_position": pos,
+            "oversub_legs": legs}
 
 
 def self_check(s16: Mapping[str, Any], s64: Mapping[str, Any], s64_bw_frac: float | None = None) -> dict:
-    """S16 must classify healthy_bw and S64 over_subscribed against the bands they define."""
+    """S16 must classify healthy_bw and S64 over_subscribed against the bands they define.
+
+    Because bands are DERIVED from the two references, the classification half is close to tautological (S16 sits at
+    band position 0, S64 at 1, and a swap is self-consistent). The check's real content is the two ABSOLUTE anchors
+    below: mem_stalled must rise S16 -> S64, and S64's GB/s must not beat S16's; plus a minimum separation per axis."""
     bands = reference_bands(s16, s64)
-    got16 = classify(s16, s16, bands, 1.0)["class"]
-    got64 = classify(s64, s16, bands, s64_bw_frac)["class"]
+    got16 = classify(s16, s16, bands, 1.0, s64)["class"]
+    got64 = classify(s64, s16, bands, s64_bw_frac, s64)["class"]
     incoherent = [a for a, b in bands.items() if not b["coherent"]]
     # Direction-from-references is symmetric under an S16<->S64 swap, so one axis carries an ABSOLUTE anchor: the
     # TA address path stalled by TC must rise under over-subscription (that is what over-subscribed means), and a
@@ -223,16 +250,18 @@ def signature(kernel: str, axes: Mapping[str, Any], s16: Mapping[str, Any], s64:
            "bands": chk["bands"], "reference_check": {k: chk[k] for k in ("ok", "S16", "S64", "incoherent_axes")},
            "gbps": gbps, "bw_frac_of_s16": frac(gbps), "thresholds": dict(TH)}
     if rejected_frac is not None and rejected_frac > REJECT_MAX:
-        res = {"class": "harness", "rule": f"rejected_frac {rejected_frac} > {REJECT_MAX}", "ruled_out": [],
+        res = {"class": "harness", "primary": "harness", "classes": ["harness"], "marginal": [],
+               "rule": f"rejected_frac {rejected_frac} > {REJECT_MAX}", "ruled_out": [],
                "oversub_legs": oversub_legs(axes, chk["bands"])}
     elif not chk["ok"]:
-        res = {"class": "reference_incoherent",
+        res = {"class": "reference_incoherent", "primary": "reference_incoherent", "classes": ["reference_incoherent"],
+               "marginal": [],
                "rule": f"self-check: S16->{chk['S16']} (want healthy_bw), S64->{chk['S64']} (want over_subscribed)"
                        + (f", incoherent axes {chk['incoherent_axes']}" if chk["incoherent_axes"] else ""),
                "ruled_out": [], "oversub_legs": oversub_legs(axes, chk["bands"])}
     else:
-        res = classify(axes, s16, chk["bands"], frac(gbps))
-    doc.update(res, lever=LEVER.get(res["class"]))
+        res = classify(axes, s16, chk["bands"], frac(gbps), s64)
+    doc.update(res, lever=LEVER.get(res["class"]), levers={c: LEVER[c] for c in res.get("classes", []) if c in LEVER})
     return doc
 
 
