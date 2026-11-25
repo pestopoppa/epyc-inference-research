@@ -48,6 +48,10 @@ UNITS = ("GB/s", "TFLOP/s")
 RIDGE_FLOP_PER_BYTE = {"gpu": 181e12 / 1500e9, "cpu": 8.3e12 / 259.8e9}
 
 
+# The rank/ridge bucket of a record or seed. The STORED device is the Vidya adapter's {mi210, cpu} (absent = mi210); "gpu" is the bucket.
+def dev_of(r: dict) -> str: return "cpu" if r.get("device") == "cpu" else "gpu"  # noqa: E704
+
+
 def unit_for(flops: float, nbytes: float, device: str = "gpu") -> str:
     """TFLOP/s when arithmetic intensity >= ridge (compute-bound), else GB/s (memory-bound)."""
     return "TFLOP/s" if nbytes > 0 and flops / nbytes >= RIDGE_FLOP_PER_BYTE[device] else "GB/s"
@@ -60,9 +64,9 @@ def validate_unit(rec: dict) -> list[str]:
         errs.append(f"unit {unit!r} not in {UNITS}")
     f, b = rec.get("flops_per_call"), rec.get("bytes_per_call")
     if unit is not None and f and b:
-        want = unit_for(f, b, rec.get("device", "gpu"))
+        want = unit_for(f, b, dev_of(rec))
         if want != unit:
-            errs.append(f"intensity {f / b:.1f} FLOP/B vs ridge {RIDGE_FLOP_PER_BYTE[rec.get('device', 'gpu')]:.0f}: "
+            errs.append(f"intensity {f / b:.1f} FLOP/B vs ridge {RIDGE_FLOP_PER_BYTE[dev_of(rec)]:.0f}: "
                         f"must be judged in {want}, record says {unit}")
     return errs
 
@@ -153,6 +157,8 @@ def rerank(c: dict) -> None:
     apply_ceilings(c)
     cpu = c["cpu"]
     for r in recs.values():
+        if r.get("device") == "gpu":   # N8: every write path ranks first, so no record leaves here with the non-contract "gpu"
+            r["device"] = "mi210"
         if r.get("bytes_per_call") is None or r.get("us_per_call") is None:
             continue  # malformed/foreign record: leave untouched, never crash a merge
         r["gbps"] = gbps(r["bytes_per_call"], r["us_per_call"])
@@ -166,7 +172,7 @@ def rerank(c: dict) -> None:
                        else "open_surface" if r["gbps"] < floor else "ok")
         r["recoverable_ms_per_round"] = recoverable_ms(r, target) if target > 0 else 0.0
     for dev in ("gpu", "cpu"):  # ranks are per device
-        order = sorted((k for k in recs if recs[k].get("device", "gpu") == dev),
+        order = sorted((k for k in recs if dev_of(recs[k]) == dev),
                        key=lambda k: (-recs[k].get("recoverable_ms_per_round", 0.0), k))
         for i, k in enumerate(order, 1):
             recs[k]["rank"] = i
@@ -180,7 +186,7 @@ def link_seeds(c: dict) -> list[str]:
         linked = [r for k, r in recs.items() if all(r.get(f) == v for f, v in s.get("match", {}).items())
                   and r["n"] in s.get("n", sorted(SERVED_N))]
         bar = float(s.get("target_gbps", c["floor_gbps"]))
-        if s.get("device", "gpu") == "gpu":
+        if dev_of(s) == "gpu":
             bar = max(c["floor_gbps"], bar)
         if linked and s.get("status") != "done" and all(r["gbps"] >= bar for r in linked):
             s["status"] = "done"
@@ -318,7 +324,7 @@ def parity_md(c: dict) -> list[str]:
 
 def table_md(c: dict, top: int = 40) -> str:
     allr = sorted(c["records"].items(), key=lambda kv: kv[1]["rank"])
-    recs = [kv for kv in allr if kv[1].get("device", "gpu") == "gpu"][:top]
+    recs = [kv for kv in allr if dev_of(kv[1]) == "gpu"][:top]
     out = [BEGIN, "", "### GPU (MI210)", "", "| Rank | Model | Kernel class | Shape | n | MB/call | µs | GB/s | vs 1 TB/s | vs 1.5 TB/s | "
            "calls/round | recoverable ms/round @1.2 | Status | Seed | Source row |",
            "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -483,7 +489,7 @@ def derive_surfaces(c: dict) -> list[dict]:
         r["op_path"] = None if m is None else m[0]
         if m:
             rows_by.setdefault(m, []).append(k)
-            if r.get("device", "gpu") == "gpu" and m in ops and ops[m].get("share_of_step") is not None:
+            if dev_of(r) == "gpu" and m in ops and ops[m].get("share_of_step") is not None:
                 r["share_of_round"] = round(ops[m]["share_of_step"], 4)
                 r["share_basis"] = "parity op share_of_step (share of the op this row measures)"
     seeds = c.get("seeds", {})

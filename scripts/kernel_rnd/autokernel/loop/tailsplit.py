@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-from . import journal_keys
+from . import journal_keys, serving_knobs as sk, typed_planner as tp
 from . import loop as loop_mod
 
 CANDIDATE_SCHEMA = "epyc.akloop.candidate.v1"   # == epyc-root akloop/chain.py CANDIDATE_SCHEMA
@@ -44,6 +44,8 @@ CANDIDATE_SCHEMA = "epyc.akloop.candidate.v1"   # == epyc-root akloop/chain.py C
 SPOOL = Path(os.environ.get("AKCHAIN_SPOOL") or "/mnt/raid0/llm/tmp/akchain-spool")
 EPYC_ROOT = Path(os.environ.get("EPYC_ROOT", "/workspace"))
 CHAIN_PY = "scripts/coordination/akloop/chain.py"
+#: argv port of a knob candidate's rendered base recipe: the screening row launches its own servers, only differing flags matter.
+KNOB_PORT = 8083
 HANDED_OFF = loop_mod.HANDED_OFF
 #: Paths whose change moves what the A/B timing row measures (served decode/prefill kernels and their dispatch).
 #: A rebase whose diff vs the old base touches none of these re-runs the oracle only.
@@ -71,12 +73,8 @@ def snapshot_commit(worktree: Path, base: str, paths: Iterable[str], message: st
     with tempfile.TemporaryDirectory(prefix="ak-cand-idx-") as td:
         env = dict(os.environ, GIT_INDEX_FILE=os.path.join(td, "index"))
         _git(worktree, "read-tree", base, env=env)
-        for p in paths:
-            p = str(p)
-            if (Path(worktree) / p).exists():
-                _git(worktree, "add", "--", p, env=env)
-            else:
-                _git(worktree, "rm", "--cached", "--ignore-unmatch", "-q", "--", p, env=env)
+        for p in map(str, paths):
+            _git(worktree, *(("add", "--") if (Path(worktree) / p).exists() else ("rm", "--cached", "--ignore-unmatch", "-q", "--")), p, env=env)
         tree = _git(worktree, "write-tree", env=env)
         return _git(worktree, "commit-tree", tree, "-p", base, "-m", message, env=env)
 
@@ -88,13 +86,10 @@ def _field(h: Any, name: str) -> Any:
 def candidate_key(hypothesis: Any, statement: Any = None, inbox: str | Path | None = None) -> dict | None:
     """The candidate's JOURNAL KEY (census family + shape_class ranges), by precedence: the hypothesis' own `journal_key`,
     the `<!-- journal-key: -->` comment in its statement, the key of the BWS seed it cites (stub in `inbox`). None = unkeyed."""
-    k = _field(hypothesis, "journal_key")
-    if not isinstance(k, dict):
-        k = journal_keys.parse_key(str(statement or ""))
-    if not isinstance(k, dict) and inbox:
-        from .census_inbox import seed_key
-        k = seed_key(inbox, _field(hypothesis, "mechanism_id") or _field(hypothesis, "hypothesis_id"), statement)
-    return k if isinstance(k, dict) and not journal_keys.problems(k) else None
+    from .census_inbox import seed_key   # the cited seed is read only when `inbox` is given (precedence = tuple order)
+    k = next((k for k in (_field(hypothesis, "journal_key"), journal_keys.parse_key(str(statement or "")), inbox and seed_key(
+        inbox, _field(hypothesis, "mechanism_id") or _field(hypothesis, "hypothesis_id"), statement)) if isinstance(k, dict)), None)
+    return k if k and not journal_keys.problems(k) else None
 
 
 class SuppressedByNegative(loop_mod.TailRefused):
@@ -104,37 +99,29 @@ class SuppressedByNegative(loop_mod.TailRefused):
 def candidate_record(*, base: str, patch: str, hypothesis: Any, paths: Sequence[str], lane: str,
                      predicted_effect: str | None = None, inbox: str | Path | None = None,
                      negatives: Mapping[str, Any] | None = None, **extra) -> dict[str, Any]:
-    hid = (getattr(hypothesis, "mechanism_id", None) or getattr(hypothesis, "hypothesis_id", None)
-           or (hypothesis.get("mechanism_id") if isinstance(hypothesis, Mapping) else None) or "unnamed")
+    hid = _field(hypothesis, "mechanism_id") or _field(hypothesis, "hypothesis_id") or "unnamed"
     eff = predicted_effect
     if eff is None:
         for attr in ("predicted_effect", "expected_effect", "expected_gain_pct"):
-            v = getattr(hypothesis, attr, None) if not isinstance(hypothesis, Mapping) else hypothesis.get(attr)
+            v = _field(hypothesis, attr)
             if v not in (None, ""):
                 eff = f"{v}%" if isinstance(v, (int, float)) else str(v)
                 break
     slug = re.sub(r"[^a-z0-9]+", "-", str(hid).lower()).strip("-")[:40] or "cand"
     rec = {"schema": CANDIDATE_SCHEMA, "id": f"cand-{slug}-{patch[:9]}", "base_sha": base, "patch_sha": patch,
            "hypothesis_id": str(hid), "predicted_effect": str(eff or "unstated"),
-           "paths": [str(p) for p in paths], "lane": lane,
-           "target_symbol": getattr(hypothesis, "target_symbol", None) if not isinstance(hypothesis, Mapping)
-           else hypothesis.get("target_symbol"),
-           "statement": (getattr(hypothesis, "statement", None) if not isinstance(hypothesis, Mapping)
-                         else hypothesis.get("statement")),
-           "emitted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+           "paths": [str(p) for p in paths], "lane": lane, "target_symbol": _field(hypothesis, "target_symbol"),
+           "statement": _field(hypothesis, "statement"), "emitted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     rec.update({k: v for k, v in extra.items() if v is not None})
     key = rec.get("journal_key") if isinstance(rec.get("journal_key"), dict) else candidate_key(hypothesis, rec["statement"], inbox)
     if key:   # defect 20: ONE vocabulary. The record carries the journal key; op-perf's grid class is DERIVED from it.
         rec["journal_key"] = key
-        if not rec.get("shape_class"):   # RSL-R5: a candidate with its own (legacy op-perf) shape_class keeps it
-            sc = journal_keys.op_perf_class(key)
-            if sc:
-                rec["shape_class"] = sc
-        if inbox or negatives is not None:   # measured negatives live in <store>/journal_keys.json; inbox = <store>/inbox
-            neg = negatives if negatives is not None else journal_keys.load(Path(inbox).parent)
-            hit = journal_keys.suppressed_by({**key, "reopens": list(key.get("reopens") or []) + list(_field(hypothesis, "reopens") or [])}, neg)
-            if hit:
-                rec["suppressed_by"] = hit
+        sc = rec.get("shape_class") or journal_keys.op_perf_class(key)   # RSL-R5: a candidate with its own (legacy op-perf) shape_class keeps it
+        if sc:
+            rec["shape_class"] = sc
+    hit = journal_keys.suppress(key, _field(hypothesis, "reopens") or [], store_root=Path(inbox).parent if inbox else None, known=negatives)
+    if hit:
+        rec["suppressed_by"] = hit
     return rec
 
 
@@ -223,8 +210,7 @@ class ChainHandoff:
             rep = json.loads(r.stdout)
         except ValueError:
             rep = {"error": (r.stderr or r.stdout)[-400:]}
-        rep["rc"] = r.returncode
-        return rep
+        return {**rep, "rc": r.returncode}
 
 
 class EmittingTail:
@@ -237,10 +223,36 @@ class EmittingTail:
 
     def __init__(self, *, worker, base: str, handoff: Callable[[Mapping[str, Any]], dict],
                  snapshot: Callable[[Path, str, Sequence[str], str], str] = snapshot_commit,
-                 log: list | None = None, inbox: str | Path | None = None) -> None:
-        self.worker, self.base, self.inbox = worker, base, inbox
+                 log: list | None = None, inbox: str | Path | None = None, recipe: Any = None, registry: Any = None) -> None:
+        self.worker, self.base, self.inbox, self.recipe, self.registry = worker, base, inbox, recipe, registry
         self._handoff, self._snapshot = handoff, snapshot
         self.log = log if log is not None else []
+
+    def knob(self, h: Any) -> dict | None:
+        """AK-SURFACE-SERVING-1: the planner-turn route to a serving-knob candidate. A hypothesis whose mechanism_id is a knob
+        portfolio row (`serving-knob:<seed_id>:<arm_id>`, the id `serving_knobs.portfolio_rows` gives) goes the typed way: the seed
+        JSON in `inbox` -> portfolio_rows -> build_options -> parse_choice -> candidate_from_choice (rendered over the registry base
+        and the loop's serving `recipe`, champion_sha = this tail's `base`). The screening row fills the result paths (named
+        `@screening-row:*` placeholders). None for any other hypothesis; a missing input is refused, never defaulted."""
+        mid = str(_field(h, "mechanism_id") or "")
+        if not mid.startswith(sk.SEED_KIND + ":"):
+            return None
+        if self.recipe is None:
+            raise loop_mod.TailRefused(f"serving-knob choice {mid} needs the loop's serving recipe (--serving-recipe)")
+        _, sid, arm = mid.split(":", 2)
+        try:
+            seed = next(s for p in sorted(Path(self.inbox or "").glob("*" + sk.SEED_SUFFIX)) if (s := sk.load_seed(p))["seed_id"] == sid)
+            choice = tp.parse_choice({"choice": mid, "statement": _field(h, "statement") or seed["summary"],
+                                      "falsifier": _field(h, "falsifier") or seed["falsifier"]}, tp.build_options(sk.portfolio_rows(seed)))
+            cand = tp.candidate_from_choice(choice, base=sk.base_from_registry(seed["server"], self.registry), champion_sha=self.base,
+                                            base_recipe_hash=self.recipe.recipe_hash,
+                                            recipe_argv=self.recipe.server_argv(Path(self.worker.build_dir), KNOB_PORT))
+        except (ValueError, StopIteration) as exc:   # KnobError / TypedPlannerRefused / bad seed JSON / seed not in the inbox
+            raise loop_mod.TailRefused(f"serving-knob choice {mid}: {str(exc) or f'seed {sid!r} is not in {self.inbox}'}") from exc
+        row = "@screening-row:"
+        return {**{k: v for k, v in cand.items() if k != "schema"}, "arm_map": {sk.CONTROL: sk.CONTROL, arm: arm},
+                "steady_results": row + "steady_results", "floor_result": row + "floor_result",
+                "burst_results": {a: f"{row}burst_results:{a}" for a in (sk.CONTROL, arm)}}
 
     def __call__(self, hypothesis: Any = None, paths: Sequence[str] = ()):
         return self._Session(self, hypothesis, paths)
@@ -253,10 +265,11 @@ class EmittingTail:
             o = self.o
             paths = [str(p) for p in self.paths]
             hid = getattr(self.h, "mechanism_id", None) or "candidate"
-            patch = o._snapshot(Path(o.worker.worktree), o.base, paths,
-                                f"akloop candidate {hid} (lane {o.worker.name}, base {o.base[:12]})")
-            rec = candidate_record(base=o.base, patch=patch, hypothesis=self.h, paths=paths, lane=o.worker.name,
-                                   inbox=o.inbox)
+            knob = o.knob(self.h)   # the planner's serving-knob route: no patch, base == patch == champion
+            patch = o.base if knob else o._snapshot(Path(o.worker.worktree), o.base, paths,
+                                                    f"akloop candidate {hid} (lane {o.worker.name}, base {o.base[:12]})")
+            rec = candidate_record(base=o.base, patch=patch, hypothesis=self.h, paths=[] if knob else paths, lane=o.worker.name,
+                                   inbox=o.inbox, **(knob or {}))
             if rec.get("suppressed_by"):   # a measured negative covers this key: refuse BEFORE the chain scaffold, publish nothing
                 exc = SuppressedByNegative(f"candidate {rec['id']} suppressed by measured negative {rec['suppressed_by']} "
                                            f"(journal key {rec.get('journal_key')}); declare `reopens` with new evidence to override")

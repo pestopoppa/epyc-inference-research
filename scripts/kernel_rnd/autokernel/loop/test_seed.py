@@ -321,3 +321,14 @@ class FamilyDiminishingReturnsRequireAnAbstractionEscape(unittest.TestCase):
             {**self.rows(1)[0], "mechanism_id": "akm-old-keep", "status": "kept"}]
         text = actors.render_context({"prior_experiments": rows})
         self.assertIn("Family-level diminishing returns", text)
+
+
+class SidecarInstall(unittest.TestCase):
+    def test_install_writes_the_journal_keys_sidecar_with_the_keyed_negatives(self):
+        from autokernel.loop import journal_keys
+        with tempfile.TemporaryDirectory() as tmp:
+            seed.install(Path(tmp))
+            side = json.loads((Path(tmp) / journal_keys.SIDECAR).read_text())
+        keyed = {r["mechanism_id"] for r in json.loads((seed.SEEDS / "negatives.json").read_text())["records"] if journal_keys.key_of(r)}
+        self.assertTrue(keyed)
+        self.assertEqual(set(side), keyed)

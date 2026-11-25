@@ -70,11 +70,10 @@ def install(store_root: Path, *, seeds: Path = SEEDS) -> dict:
     # planner portfolio (`serving_knobs.portfolio_rows`), and rendered to .md because the inbox
     # reader only reads *.md. A malformed seed raises here rather than reaching the planner.
     for source in sorted((seeds / "hypotheses").glob("*" + serving_knobs.SEED_SUFFIX)):
-        seed_body = serving_knobs.load_seed(source)
+        rendered = serving_knobs.render_seed_markdown(serving_knobs.load_seed(source))   # validated BEFORE anything is copied
         shutil.copyfile(source, inbox / source.name)
-        rendered = inbox / (source.name[:-len(serving_knobs.SEED_SUFFIX)] + ".serving-knob.md")
-        rendered.write_text(serving_knobs.render_seed_markdown(seed_body), encoding="utf-8")
-        installed.append(rendered.name)
+        installed.append(source.name[:-len(serving_knobs.SEED_SUFFIX)] + ".serving-knob.md")
+        (inbox / installed[-1]).write_text(rendered, encoding="utf-8")
     epoch = archive.epoch_for(anchor_commit=body["epoch_anchor_commit"],
                               build_recipe=body["epoch_build_recipe"])
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

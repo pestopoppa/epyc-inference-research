@@ -297,3 +297,14 @@ def test_emit_refuses_a_non_knob_choice_and_an_invalid_delta(base, recipe):
     bad = {"kind": "serving-knob", "choice": "k", "serving_knob": delta(batch=512).to_dict()}
     with pytest.raises(sk.KnobError, match="not a delta"):
         sk.emit_candidate(bad, base, argv_of(recipe), base_recipe_hash="0" * 64)
+
+
+def test_candidate_from_choice_passes_champion_sha_through_to_emit_candidate(base, recipe):
+    knob = {"kind": "serving-knob", "choice": "k", "serving_knob": delta(batch=1024, ubatch=1024).to_dict()}
+    sha = "cd" * 20
+    cand = typed_planner.candidate_from_choice(knob, base=base, recipe_argv=argv_of(recipe), base_recipe_hash=recipe.recipe_hash,
+                                               champion_sha=sha)
+    assert cand["base_sha"] == cand["patch_sha"] == sha
+    with pytest.raises(typed_planner.TypedPlannerRefused, match="champion_sha"):
+        typed_planner.candidate_from_choice(knob, base=base, recipe_argv=argv_of(recipe), base_recipe_hash=recipe.recipe_hash,
+                                            champion_sha="HEAD")

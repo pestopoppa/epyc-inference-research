@@ -60,10 +60,8 @@ def build_options(portfolio: Iterable[Mapping[str, Any]],
                     raise TypedPlannerRefused(f"serving-knob row {mid!r} lacks its serving_knob delta")
                 opt.update(kind=SERVING_KNOB, serving_knob=dict(row["serving_knob"]))
             options.append(opt)
-    options += [{"option": EXPLORE, "kind": "control", "premise_superseded": False,
-                 "summary": "none of these rows: explore source for a new mechanism"},
-                {"option": EXHAUSTED, "kind": "control", "premise_superseded": False,
-                 "summary": "every row in force is spent: abstain, naming the rows"}]
+    options += [{"option": o, "kind": "control", "premise_superseded": False, "summary": t} for o, t in (
+        (EXPLORE, "none of these rows: explore source for a new mechanism"), (EXHAUSTED, "every row in force is spent: abstain, naming the rows"))]
     if len(options) > MAX_OPTIONS:
         raise TypedPlannerRefused(f"{len(options)} options exceed the {MAX_OPTIONS} Choice cap; "
                                   "de-duplicate the ledger by mechanism family")
@@ -75,9 +73,7 @@ def explore_required(prior_choices: Sequence[str], reserve: float = EXPLORE_RESE
     below `reserve`. `exhausted` counts as a call (it spends the reserve's denominator)."""
     if not 0 < reserve < 1:
         raise TypedPlannerRefused("explore reserve must be in (0, 1)")
-    n = len(prior_choices) + 1
-    explored = sum(1 for c in prior_choices if c == EXPLORE)
-    return explored / n < reserve
+    return sum(1 for c in prior_choices if c == EXPLORE) / (len(prior_choices) + 1) < reserve
 
 
 def render_choice_prompt(options: Sequence[Mapping[str, Any]], *, must_explore: bool) -> str:
@@ -90,9 +86,7 @@ def render_choice_prompt(options: Sequence[Mapping[str, Any]], *, must_explore: 
              "selectable if the current evidence revives it."]
     if must_explore:
         lines.append(f'The reserved exploration share is due: this call MUST choose "{EXPLORE}".')
-    for opt in options:
-        flag = " [premise_superseded]" if opt.get("premise_superseded") else ""
-        lines.append(f"- {opt['option']}{flag}: {opt.get('summary', '')}")
+    lines += [f"- {o['option']}{' [premise_superseded]' if o.get('premise_superseded') else ''}: {o.get('summary', '')}" for o in options]
     return "\n".join(lines)
 
 
@@ -124,16 +118,15 @@ def parse_choice(reply: str | Mapping[str, Any], options: Sequence[Mapping[str, 
         missing = [k for k in fields if not str(body.get(k) or "").strip()]
         if missing:
             raise TypedPlannerRefused(f"chosen option lacks {missing}")
-    opt = by_id[choice]
-    out = {"schema": SCHEMA, "choice": choice, "kind": opt["kind"],
-           "premise_superseded": bool(opt.get("premise_superseded")), "text": text}
+    out = {"schema": SCHEMA, "choice": choice, "kind": by_id[choice]["kind"],
+           "premise_superseded": bool(by_id[choice].get("premise_superseded")), "text": text}
     if knob:
-        out["serving_knob"] = dict(opt["serving_knob"])
+        out["serving_knob"] = dict(by_id[choice]["serving_knob"])
     return out
 
 
 def candidate_from_choice(choice: Mapping[str, Any], *, base: Any = None, recipe_argv: Sequence[str] = (),
-                          base_recipe_hash: str | None = None) -> dict | None:
+                          base_recipe_hash: str | None = None, champion_sha: str | None = None) -> dict | None:
     """Where a validated planner choice becomes a candidate. A `serving-knob` choice is routed to
     `serving_knobs.emit_candidate` (the delta rendered over `recipe_argv` and the registry `base`); it needs `base`
     and `base_recipe_hash`, and a missing one is refused, never defaulted. Any other kind (row / control) has no
@@ -144,7 +137,7 @@ def candidate_from_choice(choice: Mapping[str, Any], *, base: Any = None, recipe
         raise TypedPlannerRefused("a serving-knob choice needs the registry base and the base recipe hash")
     from . import serving_knobs
     try:
-        return serving_knobs.emit_candidate(choice, base, recipe_argv, base_recipe_hash=base_recipe_hash)
+        return serving_knobs.emit_candidate(choice, base, recipe_argv, base_recipe_hash=base_recipe_hash, champion_sha=champion_sha)
     except serving_knobs.KnobError as exc:
         raise TypedPlannerRefused(f"serving-knob choice {choice.get('choice')!r}: {exc}") from exc
 

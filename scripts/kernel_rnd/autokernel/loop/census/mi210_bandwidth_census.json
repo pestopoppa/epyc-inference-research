@@ -495,7 +495,7 @@
    "bytes_basis": "q8sk_mul_mat grid 46592, 32 launches = 16 attn layers x k,v",
    "bytes_per_call": 5570560,
    "calls_per_round": 32,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 275.8,
    "history": [
     [
@@ -527,7 +527,7 @@
    "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
    "bytes_per_call": 5570560,
    "calls_per_round": 32,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 781.3,
    "history": [
     [
@@ -558,7 +558,7 @@
    "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
    "bytes_per_call": 5570560,
    "calls_per_round": 32,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 221.4,
    "history": [
     [
@@ -590,7 +590,7 @@
    "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
    "bytes_per_call": 5570560,
    "calls_per_round": 32,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 480.2,
    "history": [
     [
@@ -621,7 +621,7 @@
    "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
    "bytes_per_call": 5570560,
    "calls_per_round": 32,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 380.2,
    "history": [
     [
@@ -652,7 +652,7 @@
    "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
    "bytes_per_call": 5570560,
    "calls_per_round": 32,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 262.3,
    "history": [
     [
@@ -791,7 +791,7 @@
    "bytes_basis": "q8mf6_mul_mat 369 launches = 128 gate/up + 64 down + 48 qkv + 48 gate + 64 out + 16 q + lm_head, Q8_0 34B/32w",
    "bytes_per_call": 27020001280,
    "calls_per_round": 1,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 1070.8,
    "history": [
     [
@@ -1251,7 +1251,7 @@
    "bytes_basis": "f16 K+V 11446 x 1024 x 2 B x 2 per attn layer; gv_merge 0.64 ms/verify excluded",
    "bytes_per_call": 46891008,
    "calls_per_round": 16,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 287.5,
    "history": [
     [
@@ -1283,7 +1283,7 @@
    "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
    "bytes_per_call": 1350860800,
    "calls_per_round": 1,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 1273.3,
    "history": [
     [
@@ -1314,7 +1314,7 @@
    "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
    "bytes_per_call": 1350860800,
    "calls_per_round": 1,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 961.2,
    "history": [
     [
@@ -1346,7 +1346,7 @@
    "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
    "bytes_per_call": 1350860800,
    "calls_per_round": 1,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 1247.7,
    "history": [
     [
@@ -1377,7 +1377,7 @@
    "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
    "bytes_per_call": 1350860800,
    "calls_per_round": 1,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 1211.1,
    "history": [
     [
@@ -1408,7 +1408,7 @@
    "bytes_basis": "tbo MUL_MAT q8_0 V5I MF_INPLACE=2, mean of 2 passes",
    "bytes_per_call": 1350860800,
    "calls_per_round": 1,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 1067.4,
    "history": [
     [
@@ -1547,7 +1547,7 @@
    "bytes_basis": "trace grid->rows (rows = grid_x/16 for mmvq<8,4>, calibrated on lm_head 248320 rows), k=2048 assumed",
    "bytes_per_call": 69632,
    "calls_per_round": 58.4,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 8.1,
    "history": [
     [
@@ -1579,7 +1579,7 @@
    "bytes_basis": "trace grid->rows (rows = grid_x/16 for mmvq<8,4>, calibrated on lm_head 248320 rows), k=2048 assumed",
    "bytes_per_call": 8912896,
    "calls_per_round": 29.2,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 385.7,
    "history": [
     [
@@ -1611,7 +1611,7 @@
    "bytes_basis": "trace grid->rows (rows = grid_x/16 for mmvq<8,4>, calibrated on lm_head 248320 rows), k=2048 assumed",
    "bytes_per_call": 1114112,
    "calls_per_round": 97.4,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 114.3,
    "history": [
     [
@@ -1643,7 +1643,7 @@
    "bytes_basis": "trace grid->rows (rows = grid_x/16 for mmvq<8,4>, calibrated on lm_head 248320 rows), k=2048 assumed",
    "bytes_per_call": 17825792,
    "calls_per_round": 38.9,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 610.3,
    "history": [
     [
@@ -1675,7 +1675,7 @@
    "bytes_basis": "seed constant 2.04e9 B dense Q8_0 per forward (C14 census) / job.py dense verify ms",
    "bytes_per_call": 2040000000,
    "calls_per_round": 1,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 423.5,
    "history": [
     [
@@ -1707,7 +1707,7 @@
    "bytes_basis": "seed constant 2.04e9 B dense Q8_0 per forward (C14 census) / job.py dense verify ms",
    "bytes_per_call": 2040000000,
    "calls_per_round": 1,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 404.9,
    "history": [
     [
@@ -1739,7 +1739,7 @@
    "bytes_basis": "output [2048,248320] Q8_0",
    "bytes_per_call": 540344320,
    "calls_per_round": 1.0,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 897.8,
    "history": [
     [
@@ -1771,7 +1771,7 @@
    "bytes_basis": "U(4)=30.5 unique experts x 2048x512 Q8_0 slice (uniform routing)",
    "bytes_per_call": 34014960,
    "calls_per_round": 39.0,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 840.5,
    "history": [
     [
@@ -1803,7 +1803,7 @@
    "bytes_basis": "U(4)=30.5 unique experts x 512x2048 Q8_0 slice (uniform routing)",
    "bytes_per_call": 34014960,
    "calls_per_round": 77.9,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 908.3,
    "history": [
     [
@@ -1835,7 +1835,7 @@
    "bytes_basis": "F32 [2048,256] router weight",
    "bytes_per_call": 2097152,
    "calls_per_round": 39.0,
-   "device": "gpu",
+   "device": "mi210",
    "gbps": 18.4,
    "history": [
     [

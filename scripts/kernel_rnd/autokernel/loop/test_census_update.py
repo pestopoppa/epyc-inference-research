@@ -629,7 +629,7 @@ class Surfaces(unittest.TestCase):
 
     def test_gpu_rows_carry_parity_share_and_ceilings_single(self):
         c = self.committed()
-        g = [r for r in c["records"].values() if r.get("device", "gpu") == "gpu"]
+        g = [r for r in c["records"].values() if cu.dev_of(r) == "gpu"]
         self.assertTrue(all(r.get("share_of_round") is not None for r in g))
         self.assertTrue(all(o["roofline_gbps"] in (1500.0, 129.0) for o in c["parity"]["ops"]))
 
@@ -783,3 +783,35 @@ class ResultWarrant(Base):
         self.assertTrue(recs and all(r["result_sha256"] == cu.sha256(p) for r in recs))
         with self.assertRaises(ValueError):
             cu.apply(json.load(open(self.census)), [], "fx", "", "2026-11-22")  # a null/empty sha is refused, never stored
+
+
+class DeviceContract(unittest.TestCase):
+    """N8: the Vidya adapter's census devices are {mi210, cpu}; a record written as "gpu" never leaves a write path."""
+
+    def _census(self, **recs):
+        c = cu.empty_census()
+        base = {"model": "m", "kernel_class": "k", "shape": "s", "n": 1, "bytes_per_call": 1000, "us_per_call": 1.0, "calls_per_round": 1}
+        c["records"] = {k: dict(base, kernel_class=k, **v) for k, v in recs.items()}
+        return c
+
+    def test_rerank_normalises_gpu_to_mi210_and_keeps_cpu_and_unset(self):
+        c = self._census(a={"device": "gpu"}, b={"device": "mi210"}, c={}, d={"device": "cpu", "config": "quarter-24t"})
+        cu.rerank(c)
+        self.assertEqual([c["records"][k].get("device") for k in "abcd"], ["mi210", "mi210", None, "cpu"])
+
+    def test_gpu_bucket_ranks_and_ridge_treat_mi210_like_the_old_gpu(self):
+        c = self._census(a={"device": "mi210"}, b={"device": "gpu"}, c={})
+        cu.rerank(c)
+        self.assertEqual(sorted(c["records"][k]["rank"] for k in "abc"), [1, 2, 3])   # one GPU rank list, not three
+        self.assertEqual(cu.unit_for(2e9, 1e6, cu.dev_of({"device": "mi210"})), cu.unit_for(2e9, 1e6, "gpu"))
+        self.assertEqual(cu.validate_unit({"unit": "GB/s", "flops_per_call": 1.0, "bytes_per_call": 1e6, "device": "mi210"}), [])
+
+    def test_applied_observation_with_gpu_is_stored_as_mi210(self):
+        c = cu.empty_census()
+        o = {"device": "gpu", "model": "m", "kernel_class": "k", "shape": "s", "n": 1, "bytes_per_call": 10 ** 6, "us_per_call": 10.0, "calls_per_round": 1}
+        cu.apply(c, [o], "row", "a" * 64, "2026-11-24T00:00:00Z")
+        self.assertEqual({r["device"] for r in c["records"].values()}, {"mi210"})
+
+    def test_committed_census_has_no_gpu_device(self):
+        c = json.load(open(cu.CENSUS))
+        self.assertEqual({r.get("device") for sec in ("records", "time_only") for r in c[sec].values()} - {None}, {"mi210", "cpu"})

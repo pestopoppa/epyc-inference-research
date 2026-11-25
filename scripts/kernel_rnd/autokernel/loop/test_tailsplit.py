@@ -235,3 +235,67 @@ def test_candidate_with_its_own_shape_class_keeps_it(tmp_path):
     own = {"op_family": "MUL_MAT", "dims": {"k": [1]}}
     assert _rec(tmp_path, "BWS-LM", shape_class=own)["shape_class"] == own
     assert "shape_class" not in _rec(tmp_path, "unrelated-idea")
+
+
+# --- AK-SURFACE-SERVING-1: planner choice -> serving-knob candidate, end to end ---
+def _knob_tail(tmp_path, snapshot=None, recipe=True):
+    import copy
+    from autokernel.loop import seed, serving
+    from autokernel.loop.test_serving_knobs import MODEL, REGISTRY
+    reg = copy.deepcopy(REGISTRY)
+    reg["server_mode"]["architect_critic"] = reg["server_mode"].pop("srv")
+    seed.install(tmp_path)   # the shipped *.serving-knob.json lands in <store>/inbox beside its planner-visible .md
+    rcp = serving.Recipe(name="r", model=MODEL, np=4, batch=2048, ubatch=2048, kv_unified=False, temperature=1.0,
+                         spec_decode={"type": "draft-dflash", "drafter": "/m/dflash.gguf", "ngld": 99, "draft_n_max": 8})
+    worker = type("W", (), {"worktree": ".", "name": "lane0", "build_dir": "/k/gpu"})()
+    handed, champion = [], "c" * 40
+    return (tailsplit.EmittingTail(worker=worker, base=champion, inbox=tmp_path / "inbox", registry=reg,
+                                   recipe=rcp if recipe else None, handoff=lambda r: handed.append(dict(r)) or dict(r),
+                                   snapshot=snapshot or (lambda *a: pytest.fail("a knob screen has no patch to snapshot"))),
+            handed, champion, rcp)
+
+
+def test_inbox_serving_knob_seed_becomes_a_serving_knob_candidate_record(tmp_path):
+    tail, handed, champion, rcp = _knob_tail(tmp_path)
+    assert list((tmp_path / "inbox").glob("*.serving-knob.md")) and list((tmp_path / "inbox").glob("*.serving-knob.json"))
+    h = loop.Hypothesis("serving-knob:architect-critic-serving-20261124:batch-ubatch-1024", "bigger batches",
+                        "no aggregate tok/s gain", "serving", "batch")
+    with pytest.raises(tailsplit.HandedOff) as hand:
+        with tail(h, []):
+            pass
+    rec = hand.value.record
+    assert handed == [rec] or handed[0]["id"] == rec["id"]
+    assert rec["schema"] == tailsplit.CANDIDATE_SCHEMA and rec["kind"] == "serving-knob" and rec["paths"] == []
+    assert rec["base_sha"] == rec["patch_sha"] == champion          # a knob screen has no patch: both are the champion
+    assert {f for f, _, _ in map(tuple, rec["argv_delta"])} == {"-b", "-ub"} and rec["base_recipe_hash"] == rcp.recipe_hash
+    assert rec["server"] == "architect_critic" and rec["screening_only"] and rec["delta"]["knobs"] == {"batch": 1024, "ubatch": 1024}
+    assert rec["arm_map"] == {"control": "control", "batch-ubatch-1024": "batch-ubatch-1024"}
+    assert rec["steady_results"].startswith("@screening-row:") and rec["floor_result"].startswith("@screening-row:")
+    assert set(rec["burst_results"]) == {"control", "batch-ubatch-1024"}   # named placeholders the screening row fills
+
+
+def test_serving_knob_route_refuses_what_it_cannot_render_and_leaves_other_hypotheses_alone(tmp_path):
+    tail, _, _, _ = _knob_tail(tmp_path)
+    mk = lambda mid: loop.Hypothesis(mid, "s", "f", "serving", "x")   # noqa: E731
+    with pytest.raises(loop.TailRefused, match="not in"):
+        tail.knob(mk("serving-knob:no-such-seed:a"))
+    with pytest.raises(loop.TailRefused, match="not an offered option"):
+        tail.knob(mk("serving-knob:architect-critic-serving-20261124:no-such-arm"))
+    assert tail.knob(mk("akm-some-kernel-idea")) is None
+    tail2, _, _, _ = _knob_tail(tmp_path / "again", recipe=False)
+    with pytest.raises(loop.TailRefused, match="serving recipe"):
+        tail2.knob(mk("serving-knob:architect-critic-serving-20261124:batch-ubatch-1024"))
+
+
+def test_negatives_are_always_consulted_sidecar_overlaid_on_the_seeded_table(tmp_path):
+    key = {"op_family": "lm-head-gemv", "shape_class": {"m": 248320}}
+    h = {"mechanism_id": "x", "statement": "s", "journal_key": key}
+    kw = dict(base="b", patch="p" * 9, hypothesis=h, paths=[], lane="l")
+    seeded = [m for m, k in tailsplit.journal_keys.negatives().items() if tailsplit.journal_keys.overlaps(key, k)]
+    # no inbox, no negatives argument: the seeded negatives are still asked (no conditional skip)
+    assert tailsplit.candidate_record(**kw).get("suppressed_by") == (sorted(seeded)[0] if seeded else None)
+    assert tailsplit.candidate_record(**kw, negatives={}).get("suppressed_by") is None   # an explicit empty table is honoured
+    tailsplit.journal_keys.key_entry(tmp_path, "akm-sidecar-null", {"op_family": "lm-head-gemv", "shape_class": {"m": [1, 999999]}})
+    (tmp_path / "inbox").mkdir()
+    assert tailsplit.candidate_record(**kw, inbox=tmp_path / "inbox").get("suppressed_by") in {"akm-sidecar-null", *seeded}
+    assert tailsplit.candidate_record(**kw, inbox=tmp_path / "inbox", negatives={}).get("suppressed_by") is None
