@@ -1350,6 +1350,29 @@ Dead ends from this day are seeded in `seeds/negatives.json` (`akm-c22-*`, `akm-
   greedy (+0.4 %, MTP DROP).
 - ROWEXACT is "faster, not lossless" (operator): do not propose lossless-at-cost variants.
 
+## Learnings 2026-11-25 (autokernel, second window) — distilled, not a log
+
+Dead ends: `akm-c22-q8-gemv-q8wt-q8lean-kneebatch-det2` in `seeds/negatives.json` (unkeyed on purpose). Rules and levers:
+
+- **V5I is issue-bound, not bandwidth-bound** (`ak-c22-q8wt-op-diag-gpu-20261125`, verdict corrected after review): VALU
+  29/KB vs 9 for the stream kernel, issue_busy 0.46, wait_inst 0.51, mem_stalled 0.34, fetch/bytes 1.006, only marginally
+  over-subscribed. So **q8wt (16 KB/CU cap) loses**: op 0.77-0.86x, e2e -4.5 % (0.955 [0.943,0.968]); **q8lean (no LDS)
+  loses 31 %** (futility watcher); **knee-batch ops are flat**; **DET1 / DET2 cost 6 % / 3 %** (the WG-count cut alone is
+  3 %). Throttling in-flight bytes and trimming LDS are both dead. The remaining lever is the **conversion-heavy core**
+  (~40 VALU per wave per unit, `cvt_f32_i32`): a redesign, filed as a box.
+- **Real served 27B idle is 3.2 ms/step, not 15**; about 2-2.5 ms is removable via devhandoff
+  (`/mnt/raid0/llm/tmp/27b-step-idle-reconcile-20261125.md`). The devhandoff gate FAILED correctness at g1 (no A/A
+  identity arm); g2 adds it.
+- **Q38FN CPU weight GEMVs run at 20-31 % of the read ceiling** (`/mnt/raid0/llm/tmp/q38fn-cpu-gemv-diagnosis-20261125.md`):
+  lm_head is rerun per MTP draft; **IQ4_NL is excluded from iqk by CPU_REPACK**; gemv2's KLD 0.043 (IQ4NL and IQ3REUSE
+  alike) is one shared cause, a **bf16 activation-scale bug** plus an **IQ3REUSE bug**
+  (`/mnt/raid0/llm/tmp/q38fn-gemv2-kld-cause-20261125.md`). Fix: IQ4_NL -> Q8_2_X4_H mapping and an IQ3REUSE kernel fix.
+- **Q38FN non-GEMV**: the `cache_s_l` snapshot copy is ~8 ms/step and top-k is 11.6 ms at d32k
+  (`/mnt/raid0/llm/tmp/q38fn-cpu-nongemv-diagnosis-20261125.md`).
+- **Operator rules**: faster at about equal quality beats bit-exact (KLD within the A/A floor is the bar); **every row
+  carries a futility look** (interim watcher `/mnt/raid0/llm/tmp/ak-interim-futility-watch.py`).
+- **Skinny-balance counts 0 % toward served Q38FN speed** (greedy-only KEEP, MTP DROP). Lossless, so folding is harmless.
+
 ## Settled — do not re-open without new evidence
 
 - **Loop-champion per-commit attribution is inflated.** The 36 commit subjects on

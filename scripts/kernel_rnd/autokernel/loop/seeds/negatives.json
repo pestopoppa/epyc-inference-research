@@ -16,7 +16,8 @@
   "akm-gate-maxdev-band-small-effects, akm-df2-drafter-precision-arms, akm-dtree-t12-27b. Reasons: graph/build/toolchain,",
   "drafting scheme, serving knob, premise or methodology findings, a mixed result that must not block a shipped dispatch,",
   "or no census family for the surface. Unkeyed entries are reported, never suppressed.",
-  "2026-11-25 (autokernel wrap-up) added 11 more UNKEYED (akm-q38fn-cpu-conv-state-fwd removed same day: inconclusive, not null; the knob is a measured KEEP on A3B CPU, ak-cpu-conv-state-fwd-20261124-r5 +0.59%): akm-c22-q8-wg-count-throttle, akm-c22-q8-w8-designs-1-4, akm-c22-q8ip-det1-serving, akm-cpu-a3b-barrier-elide, akm-q38fn-cpu-moe-upgate-slab, akm-c22-vattn-rf5-rf6, akm-c22-misc-1125-nulls, akm-c22-kv-head-contig-repack, akm-27b-tail-fuse2-g2-g6, akm-q38fn-rowexact-lossless, akm-mmq-pr32921-served. Reasons: knob/harness/serving-policy findings, design-level nulls with no single served shape, a paused (not refuted) lever, or a source-answered upstream PR; keying them would risk suppressing the open q8wt/knee-batch/DET2/RF7 levers that share their families. Key them when a box owner reviews shapes."
+  "2026-11-25 (autokernel wrap-up) added 11 more UNKEYED (akm-q38fn-cpu-conv-state-fwd removed same day: inconclusive, not null; the knob is a measured KEEP on A3B CPU, ak-cpu-conv-state-fwd-20261124-r5 +0.59%): akm-c22-q8-wg-count-throttle, akm-c22-q8-w8-designs-1-4, akm-c22-q8ip-det1-serving, akm-cpu-a3b-barrier-elide, akm-q38fn-cpu-moe-upgate-slab, akm-c22-vattn-rf5-rf6, akm-c22-misc-1125-nulls, akm-c22-kv-head-contig-repack, akm-27b-tail-fuse2-g2-g6, akm-q38fn-rowexact-lossless, akm-mmq-pr32921-served. Reasons: knob/harness/serving-policy findings, design-level nulls with no single served shape, a paused (not refuted) lever, or a source-answered upstream PR; keying them would risk suppressing the open q8wt/knee-batch/DET2/RF7 levers that share their families. Key them when a box owner reviews shapes.",
+  "2026-11-25 (autokernel wrap-up 4) added 1 more UNKEYED, akm-c22-q8-gemv-q8wt-q8lean-kneebatch-det2 (q8wt, q8lean, knee-batch and DET2 dead ends as ONE record; keyed it would suppress the open conversion-core redesign of the same dense-q8-gemv family). Unkeyed total 24 = the cap."
  ],
  "epoch_anchor_commit": "v7-candidate-20260711",
  "epoch_build_recipe": {
@@ -567,7 +568,8 @@
    "falsifier": "Any gate KEEP.",
    "target_surface": "served 27B GPU (various)",
    "target_symbol": "actquant, stoch-accept, qmatch, q4_0 KV",
-   "reason": "MEASURED NULL (each its own row, all did not pay). Source: epyc-root progress/2026-11/2026-11-25-autokernel.md"
+   "reason": "MEASURED NULL (each its own row, all did not pay). Source: epyc-root progress/2026-11/2026-11-25-autokernel.md",
+   "sampling": "unknown"
   },
   {
    "status": "measured_null",
@@ -604,6 +606,15 @@
    "target_surface": "ggml/src/ggml-cuda (mmq.cu)",
    "target_symbol": "PR #32921",
    "reason": "ANSWERED FROM SOURCE: never fires at served shapes (AK-MMQ-SK2-CENSUS). Source: epyc-root commit d8be2ecfe."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c22-q8-gemv-q8wt-q8lean-kneebatch-det2",
+   "statement": "A served V5I Q8 GEMV variant can reach the HBM stream knee by capping bytes in flight (q8wt, 16 KB/CU), dropping LDS (q8lean), batching ops at the knee (knee-batch), or cutting the float-atomic WG count for determinism (DET2).",
+   "falsifier": "Served e2e ms/round fails to improve by >= 1 % over real V5I with the variant on (paired, fresh server per visit).",
+   "target_surface": "ggml/src/ggml-cuda (mmq-q8-mf.cu V5I gemv_q8mf)",
+   "target_symbol": "q8wt, q8lean, knee-batch, Q8IP_DET2",
+   "reason": "2026-11-25, 27B DFlash2 served, MI210. q8wt (16 KB/CU cap, 4 single-wave WGs/CU): op 0.77-0.86x of V5I, e2e 0.955 [0.943,0.968], -4.5 %, KLD fine (ak-c22-q8wt-gate-gpu-20261125-r4). q8lean (no LDS): -31 %, stopped by the futility watcher (r2). knee-batch ops: flat (r4 futile, withdrawn). DET1/DET2 deterministic reductions cost 6 % / 3 % (q8ipdet2 DET2/BASE 0.970 [0.960,0.981]; the WG-count cut 416->320 costs ~3.0 %), correctness-only value. Diagnosis (ak-c22-q8wt-op-diag-gpu-20261125): V5I is NOT over-subscribed; it is instruction-issue/dependency bound (VALU 29/KB vs stream 9, issue_busy 0.46, wait_inst 0.51, mem_stalled 0.34, fetch/bytes 1.006), so capping in-flight bytes cannot help. Open lever that remains: the conversion-heavy core (~40 VALU per wave per unit, cvt_f32_i32), a redesign, not a throttle. Left UNKEYED so it cannot suppress that redesign. Source: /mnt/raid0/llm/tmp/q8-gemv-85pct-strategy-20261125.md."
   }
  ]
 }
