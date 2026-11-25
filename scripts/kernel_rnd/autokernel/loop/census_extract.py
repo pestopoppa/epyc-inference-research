@@ -399,8 +399,7 @@ def extract_verify_roofline(res: dict, rep: dict | None = None) -> list[dict]:
             geom = f"{short}{f'[{tag}]' if tag else ''}:g{int(k.get('grid') or 0)}x{int(k.get('wg') or 0)}"
             shape = base if cls in ("vk_lm_head", *VK_SINGLE.values()) else f"{base}:{geom}"
             if (cls, shape) in seen:                      # a second instance of a single-instance class, or a template-tag collision
-                shape = f"{base}:{geom}"
-                shape += f"#{zlib.crc32(str(k.get('name')).encode()):08x}" * ((cls, shape) in seen)
+                shape = f"{base}:{geom}" + f"#{zlib.crc32(str(k.get('name')).encode()):08x}" * ((cls, f"{base}:{geom}") in seen)
             seen.add((cls, shape))
             o = {"model": model, "kernel_class": cls, "shape": shape, "n": int(w), "arm": "C21",
                  "bytes_per_call": int(round(b / calls)), "us_per_call": round(ms * 1e3 / calls, 3),
@@ -422,17 +421,18 @@ def extract_verify_roofline(res: dict, rep: dict | None = None) -> list[dict]:
 
 def _plaus(o: dict, k: dict | None, peak: float) -> dict:
     """No-LLM bytes plausibility fields for one verify-roofline row: `bytes_flags` (over the HBM peak; or bytes/launch off the row's own
-    analytic Q8_0 footprint -- 34 B/32 w of its `weight_shape`, else the one known shape with this launch count; x2 only when the
-    row is `fused_gate_up` -- by more than 2x) and `footprint` (bytes, or "unknown": peak check only). Never a filter."""
+    analytic Q8_0 footprint -- 34 B/32 w of its `weight_shape`, else the one known shape with its grid-derived row count (launch
+    count only for 48-launch 5120-row ssm_out); x2 when `fused_gate_up` or 64 launches of 17408 rows -- by more than 2x) and `footprint` (bytes, or "unknown": peak check only). Never a filter."""
     b, g, fl, fp = o["bytes_per_call"], o["bytes_per_call"] / (o["us_per_call"] * 1e3), [], None
     if k is not None and o["kernel_class"] in ("vk_dense_mmvq", "vk_dense_q8wv", "vk_lm_head"):
-        cand = [s for s, (_, n) in {**Q8_SHAPE_CLASS, **TRACE_Q8_CLASS}.items() if n == o["calls_per_round"]]
-        s = k.get("weight_shape") or (cand[0] if len(cand) == 1 else None)
-        fp = s and int.__mul__(*map(int, s.split("x"))) * 34 / 32 * (2 if k.get("fused_gate_up") else 1)
-    if g > peak:
-        fl.append(f"over_peak {g:.0f}>{peak:.0f} GB/s")
-    if fp and not 0.5 <= b / fp <= 2:
-        fl.append(f"off_footprint >2x ({b / fp:.2f}x of {fp:.0f} B)")
+        n, ws, m = o["calls_per_round"], str(k.get("weight_shape")), k.get("short") == "mul_mat_vec_q" and re.search(r"ELi(\d+)E", str(k.get("name")))
+        rows = m and _num(k.get("grid")) and k["grid"] * int(m[1]) / 128   # weight rows = grid x ncols_y / 128
+        # 5120 rows: only the 48-launch ssm_out is unambiguous
+        cand = [s for s, (_, c) in {**Q8_SHAPE_CLASS, **TRACE_Q8_CLASS}.items() if (int(s.split("x")[0]) == rows and (rows != 5120 or (s, n) == ("5120x6144", 48)) if rows else c == n)]
+        s = ws if re.fullmatch(r"\d+x\d+", ws) else cand[0] if len(cand) == 1 else None
+        fp = s and int.__mul__(*map(int, s.split("x"))) * 34 / 32 * (2 if k.get("fused_gate_up") or (s, n) == ("17408x5120", 64) else 1)
+    fl = [f"over_peak {g:.0f}>{peak:.0f} GB/s" for _ in "1" if g > peak]
+    fl += [f"off_footprint >2x ({b / fp:.2f}x of {fp:.0f} B)" for _ in "1" if fp and not 0.5 <= b / fp <= 2]
     return {"footprint": int(fp) if fp else "unknown", "bytes_flags": fl}
 
 
