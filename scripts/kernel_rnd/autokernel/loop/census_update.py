@@ -280,6 +280,8 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str, basis:
                      f"[{r['status']}, {r['recoverable_ms_per_round']:.2f} ms/round recoverable at "
                      f"{tgt(c, r):.0f} GB/s]")
     lines += [f"- `{row}` ({sha[:12]}): {n}" for n in link_seeds(c)]
+    lines += [f"- `{row}` ({sha[:12]}): BYTES-IMPLAUSIBLE {o['kernel_class']} {o['shape']} n={o['n']}: {'; '.join(o['bytes_flags'])}"
+              for o in obs if o.get("bytes_flags")]  # VKRC-BYTES-PLAUSIBLE: flagged rows print beside the ranking, never filtered
     return lines + ([f"- `{row}` ({sha[:12]}): {tmoved} time-only records (bytes unknown) stored under census time_only"] if tmoved else [])
 
 

@@ -327,12 +327,9 @@ def extract_vattn_ipb(res: dict) -> list[dict]:
     e.g. ak-rka-ipb-census-gpu-20261124-r2): 27B verify FA over q8_0 KV (GQA). Bytes are the row's own kv_bytes; one
     observation per (kv, nq). The RESULT is per-kernel-call and states no layer count; calls_per_round is the verify-step count
     GV_FATTN_CALLS_PER_STEP, measured by the roofline census row (not guessed here)."""
-    shapes = res.get("shapes")
-    if not isinstance(shapes, list) or res.get("complete") is not True or "ipb" not in str(res.get("row") or ""):
-        return []
     # rka-ipb rows profile the 27B verify path (AutoKernel 2026-11-24); the row id carries no model tag
-    model = _model_of(res) or ("27b-q8_0" if "rka" in str(res.get("row") or "") else None)
-    if model is None:
+    shapes, model = res.get("shapes"), _model_of(res) or ("27b-q8_0" if "rka" in str(res.get("row") or "") else None)
+    if not isinstance(shapes, list) or res.get("complete") is not True or "ipb" not in str(res.get("row") or "") or model is None:
         return []
     out = []
     for sh in shapes:
@@ -376,13 +373,10 @@ def extract_verify_roofline(res: dict, rep: dict | None = None) -> list[dict]:
     totals over them, so bytes_per_call = bytes / calls, us_per_call = time_ms * 1e3 / calls, calls_per_round = calls (never
     a constant). Bytes are the row's own rocprof FETCH_SIZE + WRITE_SIZE (HBM side). The launch-bound tail and the activation
     quantizers are pooled per (ctx, width) -- one observation, mean per-launch bytes/us, calls = their summed launches."""
-    shapes, row = res.get("shapes"), str(res.get("row") or "")
-    if not isinstance(shapes, list) or res.get("complete") is not True or "verify-kernel-roofline" not in row:
+    shapes, row, model = res.get("shapes"), str(res.get("row") or ""), _model_of(res)
+    if not isinstance(shapes, list) or res.get("complete") is not True or "verify-kernel-roofline" not in row or model is None:
         return []
-    model = _model_of(res)
-    if model is None:
-        return []
-    out = []
+    out, peak = [], float(res.get("peak_gbps") or 1638.0)
     for sh in shapes:
         ctx, w, ks = sh.get("ctx"), sh.get("w"), sh.get("kernels")
         if not (_num(ctx) and _num(w) and isinstance(ks, list)) or not _n_ok(model, int(w), rep):
@@ -392,16 +386,12 @@ def extract_verify_roofline(res: dict, rep: dict | None = None) -> list[dict]:
             calls, ms, b, short = k.get("calls"), k.get("time_ms"), k.get("bytes"), str(k.get("short") or "")
             if not (_num(calls) and calls > 0 and _num(ms) and ms > 0 and _num(b) and b >= 0):
                 continue
-            if short in VK_DENSE:
-                cls = "vk_lm_head" if calls == 1 else VK_DENSE[short]   # the single full-vocab GEMV per step
-            else:
-                cls = VK_SINGLE.get(short) or VK_PER_GEOMETRY.get(short) or ("vk_actquant" if short in VK_ACTQUANT else "vk_launch_tail")
+            cls = (("vk_lm_head" if calls == 1 else VK_DENSE[short]) if short in VK_DENSE   # calls == 1: the single full-vocab GEMV per step
+                   else VK_SINGLE.get(short) or VK_PER_GEOMETRY.get(short) or ("vk_actquant" if short in VK_ACTQUANT else "vk_launch_tail"))
             if cls in VK_AGGREGATED:
                 p = pooled.setdefault(cls, {"calls": 0.0, "ms": 0.0, "b": 0.0, "kernels": 0})
-                p["calls"] += calls
-                p["ms"] += ms
-                p["b"] += b
-                p["kernels"] += 1
+                for key, v in (("calls", calls), ("ms", ms), ("b", b), ("kernels", 1)):
+                    p[key] += v
                 continue
             if not b > 0:
                 continue
@@ -410,35 +400,46 @@ def extract_verify_roofline(res: dict, rep: dict | None = None) -> list[dict]:
             shape = base if cls in ("vk_lm_head", *VK_SINGLE.values()) else f"{base}:{geom}"
             if (cls, shape) in seen:                      # a second instance of a single-instance class, or a template-tag collision
                 shape = f"{base}:{geom}"
-                if (cls, shape) in seen:
-                    shape += f"#{zlib.crc32(str(k.get('name')).encode()):08x}"
+                shape += f"#{zlib.crc32(str(k.get('name')).encode()):08x}" * ((cls, shape) in seen)
             seen.add((cls, shape))
-            out.append({"model": model, "kernel_class": cls, "shape": shape, "n": int(w), "arm": "C21",
-                        "bytes_per_call": int(round(b / calls)), "us_per_call": round(ms * 1e3 / calls, 3),
-                        "calls_per_round": int(round(calls)),
-                        "bytes_basis": "row bytes (rocprof FETCH_SIZE+WRITE_SIZE, HBM side) / row calls per verify step",
-                        "calls_basis": "row `calls` = launches per verify step at this ctx x width",
-                        "kernel": short, "valu_util": k.get("valu_util"), "waves_per_cu": k.get("waves_per_cu")})
+            o = {"model": model, "kernel_class": cls, "shape": shape, "n": int(w), "arm": "C21",
+                 "bytes_per_call": int(round(b / calls)), "us_per_call": round(ms * 1e3 / calls, 3),
+                 "calls_per_round": int(round(calls)),
+                 "bytes_basis": "row bytes (rocprof FETCH_SIZE+WRITE_SIZE, HBM side) / row calls per verify step",
+                 "calls_basis": "row `calls` = launches per verify step at this ctx x width",
+                 "kernel": short, "valu_util": k.get("valu_util"), "waves_per_cu": k.get("waves_per_cu")}
+            out.append(o | _plaus(o, k, peak))
         for cls, p in sorted(pooled.items()):
             if p["b"] > 0:
-                out.append({"model": model, "kernel_class": cls, "shape": base, "n": int(w), "arm": "C21",
-                            "bytes_per_call": int(round(p["b"] / p["calls"])), "us_per_call": round(p["ms"] * 1e3 / p["calls"], 3),
-                            "calls_per_round": int(round(p["calls"])),
-                            "bytes_basis": "row bytes (rocprof FETCH_SIZE+WRITE_SIZE, HBM side), pooled over the class's launches",
-                            "calls_basis": f"summed row `calls` of {p['kernels']} kernel entries per verify step"})
+                o = {"model": model, "kernel_class": cls, "shape": base, "n": int(w), "arm": "C21",
+                     "bytes_per_call": int(round(p["b"] / p["calls"])), "us_per_call": round(p["ms"] * 1e3 / p["calls"], 3),
+                     "calls_per_round": int(round(p["calls"])),
+                     "bytes_basis": "row bytes (rocprof FETCH_SIZE+WRITE_SIZE, HBM side), pooled over the class's launches",
+                     "calls_basis": f"summed row `calls` of {p['kernels']} kernel entries per verify step"}
+                out.append(o | _plaus(o, None, peak))
     return out
 
 
+def _plaus(o: dict, k: dict | None, peak: float) -> dict:
+    """No-LLM bytes plausibility fields for one verify-roofline row: `bytes_flags` (over the HBM peak; or bytes/launch off the row's own
+    analytic Q8_0 footprint -- 34 B/32 w of its `weight_shape`, else the one known shape with this launch count; x2 only when the
+    row is `fused_gate_up` -- by more than 2x) and `footprint` (bytes, or "unknown": peak check only). Never a filter."""
+    b, g, fl, fp = o["bytes_per_call"], o["bytes_per_call"] / (o["us_per_call"] * 1e3), [], None
+    if k is not None and o["kernel_class"] in ("vk_dense_mmvq", "vk_dense_q8wv", "vk_lm_head"):
+        cand = [s for s, (_, n) in {**Q8_SHAPE_CLASS, **TRACE_Q8_CLASS}.items() if n == o["calls_per_round"]]
+        s = k.get("weight_shape") or (cand[0] if len(cand) == 1 else None)
+        fp = s and int.__mul__(*map(int, s.split("x"))) * 34 / 32 * (2 if k.get("fused_gate_up") else 1)
+    if g > peak:
+        fl.append(f"over_peak {g:.0f}>{peak:.0f} GB/s")
+    if fp and not 0.5 <= b / fp <= 2:
+        fl.append(f"off_footprint >2x ({b / fp:.2f}x of {fp:.0f} B)")
+    return {"footprint": int(fp) if fp else "unknown", "bytes_flags": fl}
+
+
 def flag_implausible_bytes(res: dict) -> list[dict]:
-    """No-LLM verify-roofline bytes check: flag a row whose GB/s exceeds the census HBM peak, or whose dense-weight bytes/launch is off
-    every analytic Q8_0 footprint (34 B/32 w, x2 for a fused gate+up launch) of its launch count by more than 2x. No footprint: peak only."""
-    fp, peak = {}, float(res.get("peak_gbps") or 1638.0)
-    for s, (_, n) in {**Q8_SHAPE_CLASS, **TRACE_Q8_CLASS}.items():
-        fp.setdefault(n, []).extend(m * int.__mul__(*map(int, s.split("x"))) * 34 / 32 for m in (1, 2))
-    rows = [(o, o["bytes_per_call"], o["bytes_per_call"] / (o["us_per_call"] * 1e3)) for o in extract_verify_roofline(res)]
-    return [{k: o[k] for k in ("kernel_class", "shape", "n", "bytes_per_call", "us_per_call")} | {"flag": f"over_peak {g:.0f}>{peak:.0f} GB/s" if g > peak else "off_footprint >2x"}
-            for o, b, g in rows if g > peak or (o["kernel_class"] in ("vk_dense_mmvq", "vk_dense_q8wv", "vk_lm_head")
-            and o["calls_per_round"] in fp and not any(0.5 <= b / f <= 2 for f in fp[o["calls_per_round"]]))]
+    """The verify-roofline rows whose `bytes_flags` are non-empty (every row, flagged or not, carries the fields from the extractor)."""
+    return [{k: o[k] for k in ("kernel_class", "shape", "n", "bytes_per_call", "us_per_call")} | {"flag": "; ".join(o["bytes_flags"])}
+            for o in extract_verify_roofline(res) if o["bytes_flags"]]
 
 
 def extract_served_profile(res: dict) -> list[dict]:
