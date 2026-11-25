@@ -963,21 +963,53 @@ def _hex32(v: float) -> str:
 #:                        overflowed; no served GGUF carries such a scale (harvested d / e are far below).
 #:                        A non-finite element in the same 256-element MUL_MAT row as such an element is in
 #:                        this class too (its inf partial poisons the row's other outputs via 0 * inf)
+#: iqk_q6k_q8_0_requant (2026-11-24, ak-q6k-cpu-mulmat-20261124/FINDINGS.md; CPU leg "mul_mat:CPU", Q6_K only):
+#:                        iqk requantises Q6_K weights to Q8_0_R8 when the activation has >= 64 columns (the probe's
+#:                        B = onehot * I has 256), under ONE fp16 scale per 32-element block. A 32-block spans two Q6_K
+#:                        sub-blocks (sc) so the low-sc half loses precision: upstream design, not a decode defect. With
+#:                        M = max |sc*(q-32)| over the element's 32-block, iqk stores s16 = fp16(s), s = d*M/127
+#:                        (iqk_gemm_kquants.cpp iqk_convert_q6_k_q8_0_r8: all_s = d*max, then one fp16 per 32-block)
+#:                        and the code c = rint(v*127/M), |c| <= 127. With ref = d*v = s*(v*127/M):
+#:                          got - ref = (s16 - s)*c + s*(c - v*127/M)
+#:                        so |got - ref| <= 127*|s16 - s| + 0.5*|s|. |s16 - s| is half an fp16 ulp of s: <= |s|*2^-11
+#:                        for a normal s, but a FIXED 2^-25 once s is fp16-subnormal (|s| < 2^-14, i.e. tiny Q6_K d --
+#:                        the harvested served d go down to ~3e-6, where s16 carries only a few significant bits).
+#:                        Bound per element (requant_bound): onehot * (0.5*s + 127*max(s*2^-11, 2^-25) + s*2^-10), the
+#:                        last term covering the f32 GEMM tail (offset-127 product minus 127*bsum, fmadd accumulate).
+#:                        The first bound (2026-11-24 f5816dfaa: s*(0.5 + 2^-10*32)) gave the fp16 term 32 half-ulps
+#:                        instead of up to 127 and treated it as relative, so it failed fp16-subnormal s by up to 7.57x
+#:                        (ak-q6k-qdec-confirm-cpu-20261124: 106175 elements, all reproduced bit-exactly by a numpy
+#:                        model of the iqk conversion -- the conversion is correct, the bound was not). The class is
+#:                        offered only to the wide default-path leg: the <= 32-column leg, GGML_IQK_DEQUANT=0 and
+#:                        GGML_IQK=0 legs are judged WITHOUT it (the tight model, zero tolerance beyond the other classes).
 FP16_SCALE_REL = 2.0 ** -10
+FP16_HALF_ULP_REL = 2.0 ** -11        # half an fp16 ulp, relative, normal range
+FP16_HALF_ULP_SUBNORMAL = 2.0 ** -25  # half an fp16 ulp, absolute, subnormal range (ulp 2^-24)
+REQUANT_GEMM_REL = 2.0 ** -10
+
+
+def requant_bound(dm):
+    """Per element bound on |got/onehot - ref| for iqk's Q6_K -> Q8_0_R8 requant; dm = |d|*M (q6k_block32_scale)."""
+    s = np.abs(np.asarray(dm, dtype=np.float64)) / 127.0
+    return 0.5 * s + 127.0 * np.maximum(s * FP16_HALF_ULP_REL, FP16_HALF_ULP_SUBNORMAL) + s * REQUANT_GEMM_REL
+REQUANT_LEG = "mul_mat:CPU"
 FP16_MAX = 65504.0
 FP16_MIN_NORMAL = 2.0 ** -14
 IDENTITY_CLASSES = ("fp16_scale_rounding", "ftz_subnormal_scale", "ftz_output_subnormal", "int8_min_code",
-                    "onehot_overflow", "fp16_ftz_operand")
+                    "onehot_overflow", "fp16_ftz_operand", "iqk_q6k_q8_0_requant")
 OUT_OF_DOMAIN_CLASSES = ("fp16_intermediate_overflow",)
 
 
 QDEC_ROW = 256   # test-akx-qdec: elements per MUL_MAT row (QK=32 types carry 8 blocks per row)
 
 
-def classify_identity(ref, got, magnitude, onehot, *, d=None, dmin=None, e=None, q8=None, gpu=False, row=None):
+def classify_identity(ref, got, magnitude, onehot, *, d=None, dmin=None, e=None, q8=None, gpu=False, row=None,
+                      requant_scale=None):
     """Return (bad_mask, class_counts) for the MUL_MAT-identity leg. bad = mismatches in NO benign or
     out-of-domain class. class_counts also carries max_abs_err / max_rel_err (|got - onehot*ref|, absolute
-    and relative to onehot*magnitude) over the finite mismatches and over the unexplained ones."""
+    and relative to onehot*magnitude) over the finite mismatches and over the unexplained ones.
+    requant_scale (CPU Q6_K wide leg only, else None): per element |d|*M, M = max |sc*(q-32)| over its 32-block;
+    enables the iqk_q6k_q8_0_requant class (see above) and the max_requant_err_over_bound figure."""
     ref = np.asarray(ref, dtype=np.float32); got = np.asarray(got, dtype=np.float32)
     fin = np.isfinite(ref)
     exp = ref.astype(np.float64) * onehot
@@ -1012,7 +1044,13 @@ def classify_identity(ref, got, magnitude, onehot, *, d=None, dmin=None, e=None,
                 (np.abs(ref.astype(np.float64)) < FP16_MIN_NORMAL)
         else:
             ood = ftz16 = zeros
-        bad = mis & ~(overflow | ftz | ftz_out | i8 | rnd | ood | ftz16)
+        if requant_scale is not None and not gpu:
+            rq_bound = onehot * requant_bound(requant_scale)
+            rq = mis & ~overflow & ~ftz & ~ftz_out & ~i8 & ~rnd & np.isfinite(g) & (err <= rq_bound)
+            rq_ratio = err / np.where(rq_bound > 0, rq_bound, np.nan)
+        else:
+            rq = zeros; rq_ratio = np.full(ref.shape, np.nan)
+        bad = mis & ~(overflow | ftz | ftz_out | i8 | rnd | ood | ftz16 | rq)
         rel = err / np.where(mag > 0, mag, np.nan)
 
     def mx(a, m):
@@ -1022,12 +1060,24 @@ def classify_identity(ref, got, magnitude, onehot, *, d=None, dmin=None, e=None,
                  "ftz_output_subnormal": int(ftz_out.sum()), "int8_min_code": int(i8.sum()),
                  "onehot_overflow": int(overflow.sum()), "fp16_ftz_operand": int(ftz16.sum()),
                  "fp16_intermediate_overflow": int(ood.sum()),
+                 "iqk_q6k_q8_0_requant": int(rq.sum()),
                  "identity_mismatch_total": int(mis.sum()), "unexplained": int(bad.sum()),
                  "max_abs_err": mx(err, mis), "max_rel_err": mx(rel, mis),
-                 "max_abs_err_unexplained": mx(err, bad), "max_rel_err_unexplained": mx(rel, bad)}
+                 "max_abs_err_unexplained": mx(err, bad), "max_rel_err_unexplained": mx(rel, bad),
+                 "max_abs_err_requant": mx(err, rq), "max_requant_err_over_bound": mx(rq_ratio, mis)}
 
 
-def _judge_chunk(qt: QType, blocks: np.ndarray, got: np.ndarray, mode: str, onehot: float, gpu: bool = False):
+def q6k_block32_scale(qt: QType, f, e) -> np.ndarray:
+    """Per element |d| * M with M = max |sc*(q-32)| over the element's 32-element block (natural element order; the unit
+    iqk_convert_q6_k_q8_0_r8 requantises under one fp16 scale). Shape (n_blocks * 256,)."""
+    n = len(f["q"])
+    v = np.abs(e["sc"].astype(np.uint8).view(np.int8).astype(np.int64) * (e["q"] - 32)).reshape(n, 8, 32)
+    m = np.repeat(v.max(axis=2), 32, axis=1)
+    return (np.abs(f16(f["d"])).astype(np.float64) * m).ravel()
+
+
+def _judge_chunk(qt: QType, blocks: np.ndarray, got: np.ndarray, mode: str, onehot: float, gpu: bool = False,
+                 requant: bool = False):
     f = qt.unpack(blocks); e = qt.elements(f)
     with np.errstate(over="ignore", invalid="ignore"):
         ref = qt.value(f, e).astype(np.float32).ravel()
@@ -1044,8 +1094,10 @@ def _judge_chunk(qt: QType, blocks: np.ndarray, got: np.ndarray, mode: str, oneh
         n = len(blocks)
         bc = lambda k: np.broadcast_to(f[k], (n, qt.qk)).ravel() if k in f else None
         q8 = np.asarray(f["q"]).reshape(n, qt.qk).ravel() if qt.name == "Q8_0" else None   # raw byte; 128 == -128
+        rqs = q6k_block32_scale(qt, f, e) if requant and qt.name == "Q6_K" else None
         bad, classes = classify_identity(ref, got, qt.magnitude(f, e).ravel(), onehot,
-                                         d=bc("d"), dmin=bc("dmin"), e=bc("e"), q8=q8, gpu=gpu, row=QDEC_ROW)
+                                         d=bc("d"), dmin=bc("dmin"), e=bc("e"), q8=q8, gpu=gpu, row=QDEC_ROW,
+                                         requant_scale=rqs)
         classes["nonfinite_reference_skipped"] = int((~fin).sum())
     else:
         raise ValueError(f"unknown judge mode {mode}")
@@ -1066,15 +1118,18 @@ def judge(qt: QType, blocks, native: np.ndarray, leg: str, mode: str = "exact",
     res = {"schema": SCHEMA + ".verdict", "marker": MARKER, "c12": C12, "type": qt.name, "leg": leg,
            "mode": mode, "n_blocks": int(len(blocks)), "n_elements": int(n_el),
            "blocks_sha256": hashlib.sha256(blocks.tobytes()).hexdigest()}
+    # the requant class belongs to the wide default-path CPU leg only (REQUANT_LEG); every other leg label (n32,
+    # DEQUANT=0, IQK=0, ...) is judged under the tight model
+    requant = mode == "identity" and leg == REQUANT_LEG and qt.name == "Q6_K"
     if mode == "identity":
-        res.update(ulp_bound=IDENTITY_ULPS, onehot=onehot)
+        res.update(ulp_bound=IDENTITY_ULPS, onehot=onehot, requant_class=requant)
     if got.size != n_el:
         return {**res, "verdict": "invalid", "reason": f"native has {got.size} floats, expected {n_el}"}
     gpu = mode == "identity" and not leg.endswith(":CPU")
     total, classes, first, max_err = 0, {}, [], {}
     for c0 in range(0, len(blocks), chunk_blocks):
         cb = blocks[c0:c0 + chunk_blocks]
-        f, e, ref, bad, cls = _judge_chunk(qt, cb, got[c0 * qt.qk:(c0 + len(cb)) * qt.qk], mode, onehot, gpu)
+        f, e, ref, bad, cls = _judge_chunk(qt, cb, got[c0 * qt.qk:(c0 + len(cb)) * qt.qk], mode, onehot, gpu, requant)
         for k, v in cls.items():
             if k.startswith("max_"):
                 max_err[k[4:]] = max(max_err.get(k[4:], 0.0), v)

@@ -197,5 +197,115 @@ class IdentityClassesFromRealReceipts(unittest.TestCase):
         self.assertEqual(bad.tolist(), [False, True, True]); self.assertEqual(cls["unexplained"], 2)
 
 
+def _q6k_mixed_block(sc_hi=127, sc_lo=1, d_bits=0x3C00, seed=0):
+    """One Q6_K block whose every 32-block spans two sub-blocks (sc_hi, sc_lo); q random in 0..63."""
+    qt = qc.qtype("Q6_K")
+    rng = np.random.default_rng(seed)
+    f = {"d": np.array([[d_bits]], dtype=np.int64), "q": rng.integers(0, 64, (1, 256)),
+         "sc": np.array([[sc_hi, sc_lo] * 8], dtype=np.int64)}
+    return qt, f, qt.pack(f)
+
+
+def _sim_q8_0_requant(qt, f):
+    """Mimic iqk_convert_q6_k_q8_0_r8 on one block: per 32-block, all_s = d*M/127 stored as ONE fp16 (so a tiny d
+    lands in the fp16 subnormal range), codes rint(v * (1/(M/127))) in float32."""
+    e = qt.elements(f)
+    v = (e["sc"].astype(np.uint8).view(np.int8).astype(np.int64) * (e["q"] - 32)).reshape(8, 32).astype(np.float32)
+    mx = (np.abs(v).max(axis=1, keepdims=True) / np.float32(127)).astype(np.float32)
+    d = np.float32(np.array([f["d"][0, 0]], dtype=np.uint16).view(np.float16)[0])
+    s16 = (d * mx).astype(np.float16).astype(np.float64)
+    inv = np.where(mx > 1e-9, np.float32(1) / np.where(mx > 0, mx, 1), 0).astype(np.float32)
+    code = np.rint((v * inv).astype(np.float32))
+    return (code * s16).ravel()
+
+
+class Q6KRequantClass(unittest.TestCase):
+    """AK-Q6K-QDEC-ARTEFACT: iqk requantises Q6_K to Q8_0_R8 (one fp16 scale per 32-block) at >= 64 activation columns."""
+
+    def _judge(self, leg, got_delta):
+        qt, f, blk = _q6k_mixed_block()
+        ref = qt.decode(blk).ravel().astype(np.float64)
+        got = (ref * 127.0 + got_delta).astype(np.float32)
+        return qc.judge(qt, blk.tobytes(), got, leg, "identity"), qt, f, ref
+
+    def test_bound_value_for_worst_case_block(self):
+        qt, f, blk = _q6k_mixed_block(sc_hi=127, sc_lo=1)
+        f["q"][:, :] = 0                       # |sc*(q-32)| = 127*32 = 4064 in the sc_hi half
+        scale = qc.q6k_block32_scale(qt, f, qt.elements(f))
+        self.assertTrue(np.all(scale == 4064.0))
+        # s = 4064/127 = 32: 0.5*32 (half int8 step) + 127*32*2^-11 (fp16 half-ulp x max code) + 32*2^-10 (GEMM tail)
+        self.assertAlmostEqual(127.0 * float(qc.requant_bound(4064.0)), 127.0 * (16 + 1.984375 + 0.03125), places=6)
+        # fp16-subnormal s (tiny d): the fp16 term is a fixed 127 * 2^-25, not relative
+        tiny = 3.2782554626464844e-06 * 300.0             # d ~ 3.3e-6 (harvested), M = 300: s ~ 7.7e-9 < 2^-14
+        self.assertAlmostEqual(float(qc.requant_bound(tiny)), 0.5 * tiny / 127 + 127 * 2.0 ** -25 + tiny / 127 * 2.0 ** -10, places=15)
+
+    def test_simulated_requant_is_inside_the_bound(self):
+        worst = 0.0
+        for seed in range(200):
+            hi = int(np.random.default_rng(seed).integers(40, 128)); lo = int(np.random.default_rng(seed + 1).integers(1, 20))
+            qt, f, blk = _q6k_mixed_block(sc_hi=hi, sc_lo=lo, seed=seed)
+            ref = qt.decode(blk).ravel().astype(np.float64)
+            got = _sim_q8_0_requant(qt, f) * 127.0
+            bound = 127.0 * qc.requant_bound(qc.q6k_block32_scale(qt, f, qt.elements(f)))
+            err = np.abs(got - ref * 127.0)
+            self.assertTrue(np.all(err <= bound), (seed, float((err - bound).max())))
+            worst = max(worst, float((err / bound).max()))
+        self.assertGreater(worst, 0.3)         # the model is not vacuous: the simulated loss really uses the budget
+
+    def test_simulated_requant_with_fp16_subnormal_scale_is_inside_the_bound(self):
+        # ak-q6k-qdec-confirm-cpu-20261124: d ~ 3e-6 puts d*M/127 below 2^-14; the old relative bound failed these 7.57x
+        worst = 0.0
+        for seed, d_bits in enumerate((0x0037, 0x003A, 0x0100, 0x8025, 0x03FF, 0x0400)):
+            hi = int(np.random.default_rng(seed).integers(40, 128)); lo = int(np.random.default_rng(seed + 7).integers(1, 20))
+            qt, f, blk = _q6k_mixed_block(sc_hi=hi, sc_lo=lo, d_bits=d_bits, seed=seed)
+            ref = qt.decode(blk).ravel().astype(np.float64)
+            got = _sim_q8_0_requant(qt, f) * 127.0
+            bound = 127.0 * qc.requant_bound(qc.q6k_block32_scale(qt, f, qt.elements(f)))
+            err = np.abs(got - ref * 127.0)
+            self.assertTrue(np.all(err <= bound), (seed, hex(d_bits), float((err - bound).max())))
+            worst = max(worst, float((err / bound).max()))
+        self.assertGreater(worst, 0.3)
+
+    def test_mixed_sc_block_at_the_bound_passes_and_beyond_stays_unexplained(self):
+        qt, f, blk = _q6k_mixed_block()
+        scale = qc.q6k_block32_scale(qt, f, qt.elements(f))
+        bound = 127.0 * qc.requant_bound(scale)
+        res, *_ = self._judge("mul_mat:CPU", bound * 0.999)   # every element just inside its own bound
+        self.assertEqual(res["verdict"], "pass"); self.assertEqual(res["mismatches"], 0)
+        self.assertGreater(res["classes"]["iqk_q6k_q8_0_requant"], 0)
+        self.assertLessEqual(res["max_err"]["requant_err_over_bound"], 1.0)
+        delta2 = bound * 0.999; delta2[37] = bound[37] * 1.01   # one element beyond its bound
+        res2, *_ = self._judge("mul_mat:CPU", delta2)
+        self.assertEqual(res2["verdict"], "fail"); self.assertEqual(res2["mismatches"], 1)
+        self.assertEqual(res2["first"][0]["element"], 37)
+
+    def test_class_is_offered_to_the_wide_cpu_leg_only(self):
+        qt, f, blk = _q6k_mixed_block()
+        scale = qc.q6k_block32_scale(qt, f, qt.elements(f))
+        delta = 127.0 * qc.requant_bound(scale) * 0.5
+        for leg in ("mul_mat_n32:CPU", "mul_mat_dq0:CPU", "mul_mat_iqk0:CPU", "mul_mat_tight:CPU"):
+            res, *_ = self._judge(leg, delta)
+            self.assertEqual(res["verdict"], "fail", leg); self.assertFalse(res["requant_class"])
+            self.assertEqual(res["classes"]["iqk_q6k_q8_0_requant"], 0)
+        res, *_ = self._judge("mul_mat:ROCm0", delta)            # GPU leg: never
+        self.assertEqual(res["verdict"], "fail")
+        for leg in ("mul_mat:CPU", "mul_mat_n32:CPU", "mul_mat_dq0:CPU"):   # an exact result passes under every leg
+            res, *_ = self._judge(leg, np.zeros(256))
+            self.assertEqual(res["verdict"], "pass", leg)
+
+    def test_other_types_never_get_the_class(self):
+        qt = qc.qtype("Q8_0")
+        b = qt.empty(8); b[:, 0:2] = np.array([0x3C00], dtype=np.uint16).view(np.uint8)
+        ref = qt.decode(b).ravel()
+        res = qc.judge(qt, b.tobytes(), ref * 127.0 + 5.0, "mul_mat:CPU", "identity")
+        self.assertFalse(res["requant_class"])
+
+    def test_gross_error_stays_unexplained_on_the_wide_leg(self):
+        qt, f, blk = _q6k_mixed_block()
+        ref = qt.decode(blk).ravel().astype(np.float64)
+        res, *_ = self._judge("mul_mat:CPU", -2.0 * ref * 127.0 + np.where(ref >= 0, 1e6, -1e6))
+        self.assertEqual(res["verdict"], "fail")
+
+
 if __name__ == "__main__":
     unittest.main()
