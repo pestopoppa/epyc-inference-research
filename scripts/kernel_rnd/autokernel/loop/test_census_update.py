@@ -606,7 +606,8 @@ class Surfaces(unittest.TestCase):
 
     def test_placeholders_and_null_refs(self):
         by = {(x["path"], x["op"]): x for x in self.committed()["surfaces"]}
-        tail = by[("27b-df2-mi210", "launch-bound tail (eltwise/norm/copy/rope/conv)")]
+        # launch-bound tail became measured (ours_pct 4.2) once the r2 records were reconciled in; q8ip_permute is the still-unmeasured placeholder surface
+        tail = by[("27b-df2-mi210", "draft q8ip_permute")]
         self.assertFalse(tail["ours_measured"])
         self.assertIsNone(tail["ours_pct"])
         self.assertEqual(tail["ours_pct_placeholder"], 35)
@@ -614,7 +615,7 @@ class Surfaces(unittest.TestCase):
         self.assertEqual(tail["status"], "needs_measurement")
         aq = by[("27b-df2-mi210", "actquant (q8mf_pre_i8 + q8sk_quantize)")]
         self.assertEqual(aq["measured_ms"], 2.1)
-        self.assertIsNone(aq["ours_pct"])
+        self.assertEqual(aq["ours_pct"], 2.4)  # measured once the r2 served-profile records were reconciled in (was None)
         v = by[("27b-df2-mi210", "verify dense Q8 GEMV/GEMM (q8mf6, V5I)")]
         self.assertIsNone(v["ref_pct"])
         self.assertIsNone(v["gap_pp"])  # null ref -> null gap, never 0
@@ -654,7 +655,7 @@ class Surfaces(unittest.TestCase):
 class SurfaceWiring(Base):
     """Planner block, per-surface seeds, keep updates (operator 2026-11-24, AutoKernel seed format)."""
 
-    TAIL = "27b-df2-mi210/launch-bound tail (eltwise/norm/copy/rope/conv)"
+    TAIL = "27b-df2-mi210/draft q8ip_permute"
 
     def committed_live(self):
         shutil.copy(cu.CENSUS, self.census)
