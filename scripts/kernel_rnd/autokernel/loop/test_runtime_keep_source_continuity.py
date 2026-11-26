@@ -14,6 +14,7 @@ def test_runtime_keep_then_source_reuses_actual_recipe_and_fresh_source_floor(mo
     floors, keeps = [], []
     original_calibrate = serving.calibrate_floor
     protected = []
+    receipts = []
 
     def calibration(recipe, *args, **kwargs):
         floors.append((recipe.recipe_hash, recipe.threads))
@@ -22,6 +23,7 @@ def test_runtime_keep_then_source_reuses_actual_recipe_and_fresh_source_floor(mo
     class FixtureAdmission:
         def __init__(self, **kwargs):
             self.original = kwargs["original"]
+            self.store = kwargs["store"]
             self.state = {"selected": None}
             self.default = kwargs["store"].write("fixture-default", self.original.to_dict())
 
@@ -39,9 +41,16 @@ def test_runtime_keep_then_source_reuses_actual_recipe_and_fresh_source_floor(mo
             keeps.append(self.pair)
             return self.pair.candidate
 
-        def selection_reference(self, *args, **kwargs):
-            return {"locator": "fixture-runtime-selection", "sha256": "b" * 64,
-                    "verified": True}
+        def selection_reference(self, current, *, current_source_commit, origin=None):
+            if not keeps:
+                return None
+            ref = self.store.write("fixture-runtime-selection", {
+                "schema": "epyc.autokernel.direct_runtime_selection.v1",
+                "current_recipe": current.to_dict(),
+                "current_source_commit": current_source_commit,
+            }).to_dict()
+            receipts.append(ref)
+            return ref
 
         def retained_build(self, reference):
             return Path(keeps[0].anchor.build_dir) if keeps else None
@@ -72,9 +81,7 @@ def test_runtime_keep_then_source_reuses_actual_recipe_and_fresh_source_floor(mo
         assert floors[1][0] == keeps[0].candidate.template.recipe_hash
         assert measured
         continuation = result["continuation"]
-        assert continuation["runtime_recipe_reference"] == {
-            "locator": "fixture-runtime-selection", "sha256": "b" * 64,
-            "verified": True}
+        assert continuation["runtime_recipe_reference"] == receipts[-1]
         # The source keep above installed a fresh build.  Its terminal carries
         # the current operational recipe, and the actual serial owner restores
         # that target-local reference on the next batch without its old floor.
