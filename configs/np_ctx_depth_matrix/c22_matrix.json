@@ -1,0 +1,277 @@
+{
+ "grid": {
+  "depths": [
+   "1k",
+   "8k",
+   "32k",
+   "64k",
+   "100k"
+  ],
+  "nps": [
+   1,
+   2,
+   4,
+   8
+  ],
+  "n_predict": 64,
+  "margin": 256
+ },
+ "documents": {
+  "min_chars": 480000,
+  "sources": [
+   "/mnt/raid0/llm/epyc-inference-research/docs/*.md",
+   "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/*.py",
+   "/workspace/agents/shared/*.md"
+  ]
+ },
+ "servers": [
+  {
+   "id": "27b_gpu",
+   "device": "gpu",
+   "argv_file": "/mnt/raid0/llm/worktrees/research-c22-matrix-20261126/configs/np_ctx_depth_matrix/argv_27b_gpu.json",
+   "n_ctx_train": 262144,
+   "kv_bytes_per_token": 34816.0,
+   "non_kv_gib": 38.03,
+   "capacity_gib": 63.5,
+   "kv_mode_by_np": {
+    "1": {
+     "mode": "split",
+     "evidence": "np1: split==unified (np_context_kvu_study_20260924 27B np1 46-47 tok/s either mode)"
+    },
+    "default": {
+     "mode": "split",
+     "evidence": "np_context_kvu_study_20260924 27B: split wall aggregate >= unified at np4 (32k 100.8 vs 85.0; 8k 102.0 vs 94.0); registry argv passes --kv-unified (differs from production, recorded per cell)"
+    }
+   },
+   "arms": {
+    "INCUMBENT": {
+     "store": "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82"
+    },
+    "INCUMBENT2": {
+     "store": "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82"
+    },
+    "C21": {
+     "store": "/mnt/raid0/llm/kernels/builds/gpu-20261124-98ff8a42a-c21",
+     "env": {
+      "GGML_HIP_Q8IP_NOPACK_GETROWS": "1"
+     }
+    },
+    "C22": {
+     "store": "/mnt/raid0/llm/kernels/builds/gpu-20261126-ce6fcbbde-c22-composite",
+     "env": {
+      "GGML_HIP_I8PC": "1",
+      "GGML_CUDA_AK_ADD_RMS_NORM": "1",
+      "GGML_CUDA_AK_TF2_G3": "1",
+      "GGML_CUDA_AK_CPY_BATCH": "1",
+      "LLAMA_DFLASH_DEV_INJECT": "1",
+      "LLAMA_DFLASH_DEV_SELECT": "1",
+      "GGML_HIP_Q8IP_NOPACK_GETROWS": "1"
+     }
+    }
+   },
+   "env": {
+    "HIP_VISIBLE_DEVICES": "0",
+    "ROCM_PATH": "/opt/rocm",
+    "GGML_HIP_Q8_MF": "6",
+    "GGML_HIP_Q8_MF_MIN": "1",
+    "GGML_HIP_Q8_MF_INPLACE": "1",
+    "GGML_HIP_Q8_MF_SLC": "1",
+    "GGML_HIP_Q8_WVSK_MAX": "16"
+   },
+   "prefill_tok_s_prior": 600,
+   "decode_tok_s_prior": 68,
+   "load_s_prior": 60,
+   "step_cap_s": 1800,
+   "decode_s_target": 75
+  },
+  {
+   "id": "a3b_gpu",
+   "device": "gpu",
+   "argv_file": "/mnt/raid0/llm/worktrees/research-c22-matrix-20261126/configs/np_ctx_depth_matrix/argv_a3b_gpu.json",
+   "n_ctx_train": 262144,
+   "kv_bytes_per_token": 20480.0,
+   "non_kv_gib": 37.0,
+   "capacity_gib": 63.5,
+   "kv_mode_by_np": {
+    "8": {
+     "mode": "unified",
+     "evidence": "np_context_kvu_study_20260924 A3B GPU: unified aggregate > split at np8 (8k 178.9 vs 170.9; 32k 181.0 vs 163.3)"
+    },
+    "default": {
+     "mode": "split",
+     "evidence": "same study: split >= unified within noise at np1-4"
+    }
+   },
+   "arms": {
+    "INCUMBENT": {
+     "store": "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82"
+    },
+    "INCUMBENT2": {
+     "store": "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82"
+    },
+    "C21": {
+     "store": "/mnt/raid0/llm/kernels/builds/gpu-20261124-98ff8a42a-c21"
+    },
+    "C22": {
+     "store": "/mnt/raid0/llm/kernels/builds/gpu-20261126-ce6fcbbde-c22-composite"
+    }
+   },
+   "env": {
+    "HIP_VISIBLE_DEVICES": "0",
+    "ROCM_PATH": "/opt/rocm"
+   },
+   "prefill_tok_s_prior": 1500,
+   "decode_tok_s_prior": 95,
+   "load_s_prior": 40,
+   "step_cap_s": 1800,
+   "decode_s_target": 75,
+   "repeat_cells": [
+    {
+     "np": 4,
+     "depth": "1k",
+     "blocks": 10,
+     "look": 5,
+     "n_predict": 4096,
+     "why": "S5-r2 FUTILITY_HARNESS_AA (A/A 1.028; C21 x0.958, C22 x0.966 vs v10): ~90 s decode per visit (4096 tok/stream at ~47 tok/s/request) averages MTP acceptance noise; 10 ABBA blocks for a <2% A/A"
+    }
+   ]
+  },
+  {
+   "id": "a3b_cpu",
+   "device": "cpu",
+   "argv_file": "/mnt/raid0/llm/worktrees/research-c22-matrix-20261126/configs/np_ctx_depth_matrix/argv_a3b_cpu.json",
+   "n_ctx_train": 262144,
+   "kv_bytes_per_token": 10880.0,
+   "non_kv_gib": 38.0,
+   "capacity_gib": 900,
+   "kv_mode_by_np": {
+    "default": {
+     "mode": "unified",
+     "evidence": "KVU-12 CPU study PLAN.md:172: unified decode sum 20.2 vs split 17.3 (one wave, quarter host, no verdict); production frontdoor runs split (llama-server default with -np), recorded"
+    }
+   },
+   "arms": {
+    "INCUMBENT": {
+     "store": "/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82"
+    },
+    "INCUMBENT2": {
+     "store": "/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82"
+    },
+    "C21": {
+     "store": "/mnt/raid0/llm/kernels/builds/cpu-20261124-98ff8a42a-c21"
+    },
+    "C22": {
+     "store": "/mnt/raid0/llm/kernels/builds/cpu-20261126-ce6fcbbde-c22-composite"
+    }
+   },
+   "env": {
+    "OMP_PROC_BIND": "spread",
+    "OMP_PLACES": "cores",
+    "OMP_WAIT_POLICY": "active",
+    "OMP_DYNAMIC": "false",
+    "KMP_BLOCKTIME": "10",
+    "GGML_IQK": "1"
+   },
+   "prefill_tok_s_prior": 280,
+   "decode_tok_s_prior": 25,
+   "load_s_prior": 120,
+   "step_cap_s": 3600,
+   "decode_s_target": 75
+  },
+  {
+   "id": "q38fn_cpu",
+   "device": "cpu",
+   "argv_file": "/mnt/raid0/llm/worktrees/research-c22-matrix-20261126/configs/np_ctx_depth_matrix/argv_q38fn_cpu.json",
+   "n_ctx_train": 262144,
+   "kv_bytes_per_token": 24576.0,
+   "non_kv_gib": 94.0,
+   "capacity_gib": 900,
+   "kv_mode_by_np": {
+    "default": {
+     "mode": "split",
+     "evidence": "no KV-mode study for this model; production registry argv (llama-server default with -np = split)"
+    }
+   },
+   "arms": {
+    "INCUMBENT": {
+     "store": "/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82"
+    },
+    "INCUMBENT2": {
+     "store": "/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82"
+    },
+    "C21": {
+     "store": "/mnt/raid0/llm/kernels/builds/cpu-20261124-98ff8a42a-c21"
+    },
+    "C22": {
+     "store": "/mnt/raid0/llm/kernels/builds/cpu-20261126-ce6fcbbde-c22-composite",
+     "env": {
+      "GGML_IQK_IQ4_NL": "1",
+      "GGML_IQK_IQ3S_REUSE": "1",
+      "LLAMA_GDN_SNAP_INPLACE": "1",
+      "GGML_CPU_TOPK_SELECT": "1",
+      "GGML_IQK_SKINNY_BALANCE": "1",
+      "LLAMA_MTP_DRAFT_WINDOW": "4096",
+      "LLAMA_MTP_DRAFT_SINK": "64",
+      "LLAMA_MTP_DRAFT_WINDOW_MIN_POS": "40000",
+      "LLAMA_MTP_DRAFT_VOCAB": "/mnt/raid0/llm/kernels/builds/cpu-20261126-ce6fcbbde-c22-composite/draft_vocab_32k.txt"
+     }
+    }
+   },
+   "env": {
+    "OMP_PROC_BIND": "spread",
+    "OMP_PLACES": "cores",
+    "OMP_WAIT_POLICY": "active",
+    "OMP_DYNAMIC": "false",
+    "KMP_BLOCKTIME": "10",
+    "GGML_IQK": "1"
+   },
+   "prefill_tok_s_prior": 200,
+   "decode_tok_s_prior": 18,
+   "load_s_prior": 240,
+   "step_cap_s": 3600,
+   "decode_s_target": 75
+  },
+  {
+   "id": "vl30b_cpu",
+   "device": "cpu",
+   "argv_file": "/mnt/raid0/llm/worktrees/research-c22-matrix-20261126/configs/np_ctx_depth_matrix/argv_vl30b_cpu.json",
+   "n_ctx_train": 262144,
+   "kv_bytes_per_token": 52224.0,
+   "non_kv_gib": 18.0,
+   "capacity_gib": 900,
+   "kv_mode_by_np": {
+    "default": {
+     "mode": "split",
+     "evidence": "no KV-mode study for this model; production registry argv (llama-server default with -np = split)"
+    }
+   },
+   "arms": {
+    "INCUMBENT": {
+     "store": "/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82"
+    },
+    "INCUMBENT2": {
+     "store": "/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82"
+    },
+    "C21": {
+     "store": "/mnt/raid0/llm/kernels/builds/cpu-20261124-98ff8a42a-c21"
+    },
+    "C22": {
+     "store": "/mnt/raid0/llm/kernels/builds/cpu-20261126-ce6fcbbde-c22-composite"
+    }
+   },
+   "env": {
+    "OMP_PROC_BIND": "spread",
+    "OMP_PLACES": "cores",
+    "OMP_WAIT_POLICY": "active",
+    "OMP_DYNAMIC": "false",
+    "KMP_BLOCKTIME": "10",
+    "GGML_IQK": "1"
+   },
+   "prefill_tok_s_prior": 300,
+   "decode_tok_s_prior": 30,
+   "load_s_prior": 90,
+   "step_cap_s": 3600,
+   "decode_s_target": 75
+  }
+ ]
+}

@@ -1,0 +1,1367 @@
+{
+ "schema": "epyc.np_ctx_depth_matrix_plan.v1",
+ "grid": {
+  "depths": [
+   "1k",
+   "8k",
+   "32k",
+   "64k",
+   "100k"
+  ],
+  "nps": [
+   1,
+   2,
+   4,
+   8
+  ],
+  "n_predict": 64,
+  "margin": 256
+ },
+ "servers": [
+  {
+   "server": "27b_gpu",
+   "launches": [
+    {
+     "server": "27b_gpu",
+     "np": 1,
+     "c": 107776,
+     "kv_mode": "split",
+     "kv_evidence": "np1: split==unified (np_context_kvu_study_20260924 27B np1 46-47 tok/s either mode)",
+     "n_ctx_seq": 107776,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 107520,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 3.49,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "27b_gpu",
+     "np": 2,
+     "c": 215552,
+     "kv_mode": "split",
+     "kv_evidence": "np_context_kvu_study_20260924 27B: split wall aggregate >= unified at np4 (32k 100.8 vs 85.0; 8k 102.0 vs 94.0); registry argv passes --kv-unified (differs from production, recorded per cell)",
+     "n_ctx_seq": 107776,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 107520,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 6.99,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "27b_gpu",
+     "np": 4,
+     "c": 431104,
+     "kv_mode": "split",
+     "kv_evidence": "np_context_kvu_study_20260924 27B: split wall aggregate >= unified at np4 (32k 100.8 vs 85.0; 8k 102.0 vs 94.0); registry argv passes --kv-unified (differs from production, recorded per cell)",
+     "n_ctx_seq": 107776,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 107520,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 13.98,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "27b_gpu",
+     "np": 8,
+     "c": 567296,
+     "kv_mode": "split",
+     "kv_evidence": "np_context_kvu_study_20260924 27B: split wall aggregate >= unified at np4 (32k 100.8 vs 85.0; 8k 102.0 vs 94.0); registry argv passes --kv-unified (differs from production, recorded per cell)",
+     "n_ctx_seq": 70912,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 70656,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 18.39,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k"
+     ]
+    }
+   ],
+   "cells": [
+    {
+     "server": "27b_gpu",
+     "np": 1,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.21,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 1,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.44,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 1,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.24,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 1,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 2.3,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 1,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 3.49,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 2,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.42,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 2,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.88,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 2,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 2.47,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 2,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 4.6,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 2,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 6.99,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 4,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.83,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 4,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.76,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 4,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 4.95,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 4,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 9.2,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 4,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 13.98,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 8,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.66,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 8,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 3.52,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 8,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 9.89,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 8,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 18.39,
+     "kv_budget_gib": 25.47
+    },
+    {
+     "server": "27b_gpu",
+     "np": 8,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "SKIPPED_CAPACITY",
+     "kv_gib_at_depth": 27.96,
+     "kv_budget_gib": 25.47
+    }
+   ],
+   "n_predict": 5120,
+   "estimate_h": 4.42
+  },
+  {
+   "server": "a3b_gpu",
+   "launches": [
+    {
+     "server": "a3b_gpu",
+     "np": 1,
+     "c": 109824,
+     "kv_mode": "split",
+     "kv_evidence": "same study: split >= unified within noise at np1-4",
+     "n_ctx_seq": 109824,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 109568,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 2.09,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 2,
+     "c": 219648,
+     "kv_mode": "split",
+     "kv_evidence": "same study: split >= unified within noise at np1-4",
+     "n_ctx_seq": 109824,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 109568,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 4.19,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 4,
+     "c": 439296,
+     "kv_mode": "split",
+     "kv_evidence": "same study: split >= unified within noise at np1-4",
+     "n_ctx_seq": 109824,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 109568,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 8.38,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 8,
+     "c": 878592,
+     "kv_mode": "unified",
+     "kv_evidence": "np_context_kvu_study_20260924 A3B GPU: unified aggregate > split at np8 (8k 178.9 vs 170.9; 32k 181.0 vs 163.3)",
+     "n_ctx_seq": 878592,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": true,
+     "max_position": 109568,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 16.76,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    }
+   ],
+   "cells": [
+    {
+     "server": "a3b_gpu",
+     "np": 1,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.16,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 1,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.3,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 1,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.77,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 1,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.39,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 1,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 2.09,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 2,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.32,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 2,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.6,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 2,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.53,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 2,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 2.78,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 2,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 4.19,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 4,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.64,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 4,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.19,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 4,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 3.07,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 4,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 5.57,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 4,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 8.38,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 8,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.29,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 8,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 2.38,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 8,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 6.13,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 8,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 11.13,
+     "kv_budget_gib": 26.5
+    },
+    {
+     "server": "a3b_gpu",
+     "np": 8,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 16.76,
+     "kv_budget_gib": 26.5
+    }
+   ],
+   "n_predict": 7168,
+   "estimate_h": 6.43
+  },
+  {
+   "server": "a3b_cpu",
+   "launches": [
+    {
+     "server": "a3b_cpu",
+     "np": 1,
+     "c": 104704,
+     "kv_mode": "unified",
+     "kv_evidence": "KVU-12 CPU study PLAN.md:172: unified decode sum 20.2 vs split 17.3 (one wave, quarter host, no verdict); production frontdoor runs split (llama-server default with -np), recorded",
+     "n_ctx_seq": 104704,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 104320,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 1.06,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 2,
+     "c": 209408,
+     "kv_mode": "unified",
+     "kv_evidence": "KVU-12 CPU study PLAN.md:172: unified decode sum 20.2 vs split 17.3 (one wave, quarter host, no verdict); production frontdoor runs split (llama-server default with -np), recorded",
+     "n_ctx_seq": 209408,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 104320,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 2.12,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 4,
+     "c": 418816,
+     "kv_mode": "unified",
+     "kv_evidence": "KVU-12 CPU study PLAN.md:172: unified decode sum 20.2 vs split 17.3 (one wave, quarter host, no verdict); production frontdoor runs split (llama-server default with -np), recorded",
+     "n_ctx_seq": 418816,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": true,
+     "max_position": 104320,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 4.24,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 8,
+     "c": 837632,
+     "kv_mode": "unified",
+     "kv_evidence": "KVU-12 CPU study PLAN.md:172: unified decode sum 20.2 vs split 17.3 (one wave, quarter host, no verdict); production frontdoor runs split (llama-server default with -np), recorded",
+     "n_ctx_seq": 837632,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": true,
+     "max_position": 104320,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 8.49,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    }
+   ],
+   "cells": [
+    {
+     "server": "a3b_cpu",
+     "np": 1,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.03,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 1,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.11,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 1,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.35,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 1,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.69,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 1,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.06,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 2,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.06,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 2,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.21,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 2,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.71,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 2,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.37,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 2,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 2.12,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 4,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.13,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 4,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.42,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 4,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.42,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 4,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 2.74,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 4,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 4.24,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 8,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.26,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 8,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.84,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 8,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 2.83,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 8,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 5.49,
+     "kv_budget_gib": 862.0
+    },
+    {
+     "server": "a3b_cpu",
+     "np": 8,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 8.48,
+     "kv_budget_gib": 862.0
+    }
+   ],
+   "n_predict": 1920,
+   "estimate_h": 7.0
+  },
+  {
+   "server": "q38fn_cpu",
+   "launches": [
+    {
+     "server": "q38fn_cpu",
+     "np": 1,
+     "c": 104192,
+     "kv_mode": "split",
+     "kv_evidence": "no KV-mode study for this model; production registry argv (llama-server default with -np = split)",
+     "n_ctx_seq": 104192,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 103808,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 2.38,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 2,
+     "c": 208384,
+     "kv_mode": "split",
+     "kv_evidence": "no KV-mode study for this model; production registry argv (llama-server default with -np = split)",
+     "n_ctx_seq": 104192,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 103808,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 4.77,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 4,
+     "c": 416768,
+     "kv_mode": "split",
+     "kv_evidence": "no KV-mode study for this model; production registry argv (llama-server default with -np = split)",
+     "n_ctx_seq": 104192,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 103808,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 9.54,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 8,
+     "c": 833536,
+     "kv_mode": "split",
+     "kv_evidence": "no KV-mode study for this model; production registry argv (llama-server default with -np = split)",
+     "n_ctx_seq": 104192,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 103808,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 19.08,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    }
+   ],
+   "cells": [
+    {
+     "server": "q38fn_cpu",
+     "np": 1,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.06,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 1,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.23,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 1,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.79,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 1,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.54,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 1,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 2.38,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 2,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.12,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 2,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.45,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 2,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.58,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 2,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 3.08,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 2,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 4.76,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 4,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.25,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 4,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.9,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 4,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 3.15,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 4,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 6.15,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 4,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 9.53,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 8,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.49,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 8,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.8,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 8,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 6.3,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 8,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 12.3,
+     "kv_budget_gib": 806.0
+    },
+    {
+     "server": "q38fn_cpu",
+     "np": 8,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 19.05,
+     "kv_budget_gib": 806.0
+    }
+   ],
+   "n_predict": 1408,
+   "estimate_h": 8.69
+  },
+  {
+   "server": "vl30b_cpu",
+   "launches": [
+    {
+     "server": "vl30b_cpu",
+     "np": 1,
+     "c": 104960,
+     "kv_mode": "split",
+     "kv_evidence": "no KV-mode study for this model; production registry argv (llama-server default with -np = split)",
+     "n_ctx_seq": 104960,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 104704,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 5.1,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 2,
+     "c": 209920,
+     "kv_mode": "split",
+     "kv_evidence": "no KV-mode study for this model; production registry argv (llama-server default with -np = split)",
+     "n_ctx_seq": 104960,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 104704,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 10.21,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 4,
+     "c": 419840,
+     "kv_mode": "split",
+     "kv_evidence": "no KV-mode study for this model; production registry argv (llama-server default with -np = split)",
+     "n_ctx_seq": 104960,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 104704,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 20.42,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 8,
+     "c": 839680,
+     "kv_mode": "split",
+     "kv_evidence": "no KV-mode study for this model; production registry argv (llama-server default with -np = split)",
+     "n_ctx_seq": 104960,
+     "n_ctx_train": 262144,
+     "n_ctx_seq_over_train": false,
+     "max_position": 104704,
+     "rope": "native (no YaRN/rope flags): every per-stream position <= n_ctx_train",
+     "kv_gib": 40.84,
+     "depths": [
+      "1k",
+      "8k",
+      "32k",
+      "64k",
+      "100k"
+     ]
+    }
+   ],
+   "cells": [
+    {
+     "server": "vl30b_cpu",
+     "np": 1,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.17,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 1,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.52,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 1,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.72,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 1,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 3.31,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 1,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 5.1,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 2,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.35,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 2,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.05,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 2,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 3.44,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 2,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 6.62,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 2,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 10.21,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 4,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 0.7,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 4,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 2.09,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 4,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 6.87,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 4,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 13.25,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 4,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 20.42,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 8,
+     "depth": "1k",
+     "depth_tokens": 1024,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 1.39,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 8,
+     "depth": "8k",
+     "depth_tokens": 8192,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 4.18,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 8,
+     "depth": "32k",
+     "depth_tokens": 32768,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 13.75,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 8,
+     "depth": "64k",
+     "depth_tokens": 65536,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 26.5,
+     "kv_budget_gib": 882.0
+    },
+    {
+     "server": "vl30b_cpu",
+     "np": 8,
+     "depth": "100k",
+     "depth_tokens": 102400,
+     "status": "PLANNED",
+     "kv_gib_at_depth": 40.84,
+     "kv_budget_gib": 882.0
+    }
+   ],
+   "n_predict": 2304,
+   "estimate_h": 6.7
+  }
+ ],
+ "estimate_h_total": 33.24
+}
