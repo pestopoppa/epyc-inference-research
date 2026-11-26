@@ -1373,6 +1373,30 @@ Dead ends: `akm-c22-q8-gemv-q8wt-q8lean-kneebatch-det2` in `seeds/negatives.json
   carries a futility look** (interim watcher `/mnt/raid0/llm/tmp/ak-interim-futility-watch.py`).
 - **Skinny-balance counts 0 % toward served Q38FN speed** (greedy-only KEEP, MTP DROP). Lossless, so folding is harmless.
 
+## Learnings 2026-11-26 (autokernel, C22 close) — distilled, not a log
+
+Dead ends: `akm-c22-misc-1126-nulls` in `seeds/negatives.json` (unkeyed on purpose). Rules and levers:
+
+- **C22 composite is READY TO SIGN, not promoted** (branch `llama.cpp-experimental-c22-composite-20261125` @ `b1e1864cb`,
+  stores `cpu`/`gpu-20261126-ce6fcbbde-c22-composite`): G-27B r5 KEEP x1.121 (I8PC_ONLY x1.128, the served env, since the
+  operator ruled q8wp out of serving); G-Q38FN KEEP x1.109; A3B composite stopped futile at x0.992 [0.924, 1.066] (no gain,
+  knobs stay off for A3B); DRAFTVOCAB served_quality r3 KEEP (82 vs 83, noise arm 82); draft window confirm r2 KEEP by
+  operator ruling (7 clean blocks x1.204-1.219).
+- **np1 ms/round gains do not transfer to the np4 production receipt.** S1-r2 (27B np4, ~8.4k-token prompts, sequential
+  requests) decode tok/s v10 45.9, C21 69.1, C22 68.8: C22 = C21 there. Price a lever on the production shape before
+  crediting it to production.
+- **Pando (`ak-dtree-pando-gate-gpu-20261125-r4`) is lossy**: PANDO16/PANDO10 output differs from C21T16 on prompts 5-7.
+- **Fast CPU top-k (GGML_CPU_TOPK_SELECT=2) is lossy on Q38FN**: KLD 0.039 vs bound 0.003 with an A/A floor of 0.000; only
+  the exact mode 1 ships.
+- **ub1024 and ub2048 both lose on max stall at deep context** (27B served, >= 250k cells): ub2048 27.2 s vs ub512 15.3 s,
+  ub1024 20.7 s vs 16.3 s, although p95 ITL halves. Serving stays at -b/-ub 512.
+- **RF7 split-K verify attention r1 failed test-backend-ops** (FAIL_CORRECTNESS_TBO, no timing); the PREC=2 rerun never
+  passed its smoke. Not closed as a null.
+- **Long-context 27B nondeterminism, second source**: cleared by SKINNY=0 (`ak-27b-longctx-nondet-bisect-gpu-20261125`),
+  so the skinny split-K f32 atomic flush is the cause. Identity units at long context keep SKINNY=0 + INPLACE=0.
+- **Harness lessons**: size smoke budgets to the real prompt length; the witness must be in the unit, not the server log
+  of another unit; a quiet row is contaminated if the keeper places other smokes beside it (draftwin block 8).
+
 ## Settled — do not re-open without new evidence
 
 - **Loop-champion per-commit attribution is inflated.** The 36 commit subjects on

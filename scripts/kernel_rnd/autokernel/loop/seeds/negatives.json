@@ -17,7 +17,8 @@
   "drafting scheme, serving knob, premise or methodology findings, a mixed result that must not block a shipped dispatch,",
   "or no census family for the surface. Unkeyed entries are reported, never suppressed.",
   "2026-11-25 (autokernel wrap-up) added 11 more UNKEYED (akm-q38fn-cpu-conv-state-fwd removed same day: inconclusive, not null; the knob is a measured KEEP on A3B CPU, ak-cpu-conv-state-fwd-20261124-r5 +0.59%): akm-c22-q8-wg-count-throttle, akm-c22-q8-w8-designs-1-4, akm-c22-q8ip-det1-serving, akm-cpu-a3b-barrier-elide, akm-q38fn-cpu-moe-upgate-slab, akm-c22-vattn-rf5-rf6, akm-c22-misc-1125-nulls, akm-c22-kv-head-contig-repack, akm-27b-tail-fuse2-g2-g6, akm-q38fn-rowexact-lossless, akm-mmq-pr32921-served. Reasons: knob/harness/serving-policy findings, design-level nulls with no single served shape, a paused (not refuted) lever, or a source-answered upstream PR; keying them would risk suppressing the open q8wt/knee-batch/DET2/RF7 levers that share their families. Key them when a box owner reviews shapes.",
-  "2026-11-25 (autokernel wrap-up 4) added 1 more UNKEYED, akm-c22-q8-gemv-q8wt-q8lean-kneebatch-det2 (q8wt, q8lean, knee-batch and DET2 dead ends as ONE record; keyed it would suppress the open conversion-core redesign of the same dense-q8-gemv family). Unkeyed total 24 = the cap."
+  "2026-11-25 (autokernel wrap-up 4) added 1 more UNKEYED, akm-c22-q8-gemv-q8wt-q8lean-kneebatch-det2 (q8wt, q8lean, knee-batch and DET2 dead ends as ONE record; keyed it would suppress the open conversion-core redesign of the same dense-q8-gemv family). Unkeyed total 24 = the cap.",
+  "2026-11-26 (autokernel wrap-up) added 1 more UNKEYED, akm-c22-misc-1126-nulls (Pando lossy, fast CPU top-k lossy, ub1024/ub2048 stall, A3B composite no gain: a drafting scheme, a lossy select mode, a serving knob and a composite-level null with no single op family). Unkeyed total 25."
  ],
  "epoch_anchor_commit": "v7-candidate-20260711",
  "epoch_build_recipe": {
@@ -615,6 +616,16 @@
    "target_surface": "ggml/src/ggml-cuda (mmq-q8-mf.cu V5I gemv_q8mf)",
    "target_symbol": "q8wt, q8lean, knee-batch, Q8IP_DET2",
    "reason": "2026-11-25, 27B DFlash2 served, MI210. q8wt (16 KB/CU cap, 4 single-wave WGs/CU): op 0.77-0.86x of V5I, e2e 0.955 [0.943,0.968], -4.5 %, KLD fine (ak-c22-q8wt-gate-gpu-20261125-r4). q8lean (no LDS): -31 %, stopped by the futility watcher (r2). knee-batch ops: flat (r4 futile, withdrawn). DET1/DET2 deterministic reductions cost 6 % / 3 % (q8ipdet2 DET2/BASE 0.970 [0.960,0.981]; the WG-count cut 416->320 costs ~3.0 %), correctness-only value. Diagnosis (ak-c22-q8wt-op-diag-gpu-20261125): V5I is NOT over-subscribed; it is instruction-issue/dependency bound (VALU 29/KB vs stream 9, issue_busy 0.46, wait_inst 0.51, mem_stalled 0.34, fetch/bytes 1.006), so capping in-flight bytes cannot help. Open lever that remains: the conversion-heavy core (~40 VALU per wave per unit, cvt_f32_i32), a redesign, not a throttle. Left UNKEYED so it cannot suppress that redesign. Source: /mnt/raid0/llm/tmp/q8-gemv-85pct-strategy-20261125.md."
+  },
+  {
+   "status": "measured_null",
+   "mechanism_id": "akm-c22-misc-1126-nulls",
+   "statement": "Pando tree drafting is lossless on the 27B GPU; fast CPU top-k select keeps Q38FN quality; served 27B ub1024/ub2048 do not worsen deep-context max stall; the C22 CPU knobs speed up A3B.",
+   "falsifier": "Any of the four rows filing KEEP / SCREENED_OK.",
+   "target_surface": "various (27B GPU served, Q38FN CPU, A3B CPU)",
+   "target_symbol": "Pando, GGML_CPU_TOPK_SELECT=2, -b/-ub 1024/2048, C22 A3B composite",
+   "reason": "MEASURED NULL 2026-11-25/26: ak-dtree-pando-gate-gpu-20261125-r4 FAIL_CORRECTNESS (output differs on prompts 5-7); ak-q38fn-nongemv-lossy-d1k-cpu-20261125 FAIL_CORRECTNESS (KLD 0.0389 vs 0.003, A/A 0.000); ak-27b-served-ub-deepctx-gpu-20261125-r2 SCREENED_RISK (max stall 27.2 vs 15.3 s) and ak-27b-served-ub1024-deepctx-gpu-20261125 SCREENED_RISK (20.7 vs 16.3 s); ak-c22-composite-gate-a3b-cpu-20261126 stopped futile x0.992 [0.924, 1.066]. Source: epyc-root progress/2026-11/2026-11-26-autokernel.md",
+   "sampling": "unknown"
   }
  ]
 }

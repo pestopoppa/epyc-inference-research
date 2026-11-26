@@ -218,7 +218,7 @@ class UnconditionalSuppression(unittest.TestCase):
     def test_i8gemm_prefill_null_is_keyed_and_the_unkeyed_set_is_the_documented_one(self):
         d = json.loads((seed.SEEDS / "negatives.json").read_text(encoding="utf-8"))
         unkeyed = sorted(r["mechanism_id"] for r in d["records"] if not r.get("op_family"))
-        self.assertEqual(len(unkeyed), 24)  # 12 reviewed 2026-11-24 + 11 added 2026-11-25 (conv-state-fwd removed: not refuted) + 1 q8wt/q8lean/knee-batch/DET2 record, each named in _comment
+        self.assertEqual(len(unkeyed), 25)  # 12 reviewed 2026-11-24 + 11 added 2026-11-25 (conv-state-fwd removed: not refuted) + 1 q8wt/q8lean/knee-batch/DET2 record + 1 misc-1126 record, each named in _comment
         self.assertTrue(all(m in " ".join(d["_comment"]) for m in unkeyed))   # each is named, with its reason, in the file
         gemm = {"op_family": "dense-q8-gemv", "device": "gpu", "shape_class": {"m": 5120, "n": 2048, "k": 6144}}
         self.assertEqual(jk.suppress(gemm), "akm-i8gemm-perchannel-prefill")
