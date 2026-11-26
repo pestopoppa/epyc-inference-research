@@ -207,4 +207,7 @@ def union_signature_applied(live: dict, committed: Mapping[str, Any]) -> bool:
             cur, sig = (live.get(sec) or {}).get(k), (v or {}).get("signature")
             if sig and isinstance(cur, dict) and str((cur.get("signature") or {}).get("measured_at") or "") < str(sig.get("measured_at") or ""):
                 cur["signature"], changed = json.loads(json.dumps(sig)), True
+                # the live timing may have moved since the committed signature was taken: never claim it matches
+                cur["signature"]["stale_vs_timing"] = bool(sig.get("stale_vs_timing")) or (
+                    sig.get("timing_sha256") != cur.get("result_sha256"))
     return changed

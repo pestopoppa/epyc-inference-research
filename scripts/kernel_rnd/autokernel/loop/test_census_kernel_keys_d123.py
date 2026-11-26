@@ -47,3 +47,16 @@ def test_merge_static_from_unions_signature_ledger_end_to_end(tmp_path, monkeypa
     assert sum(bool(r.get("signature")) for r in got["time_only"].values()) == 2
     again = cu.run(None, None, str(lp), None, None, None, merge_static_from=str(cp))
     assert "signature_applied" not in (again["merge_static"] or [])
+
+
+def test_copied_signature_is_stale_when_live_timing_moved():
+    """Fable probe B: live refreshed the kernel's timing; a committed signature copied onto it must say stale."""
+    sig = {"class": "issue_bound", "measured_at": "2026-11-25T22:21:03Z", "timing_sha256": "old", "stale_vs_timing": False}
+    committed = {"time_only": {"k": {"result_sha256": "old", "signature": sig}}, "signature_applied": [{"sha256": "s"}]}
+    live = {"time_only": {"k": {"result_sha256": "new", "measured_at": "2026-11-26T09:00:00Z"}}}
+    assert bp.union_signature_applied(live, committed)
+    assert live["time_only"]["k"]["signature"]["stale_vs_timing"] is True
+    live2 = {"time_only": {"k": {"result_sha256": "old"}}}
+    bp.union_signature_applied(live2, committed)
+    assert live2["time_only"]["k"]["signature"]["stale_vs_timing"] is False
+    assert sig["stale_vs_timing"] is False   # the committed copy is never mutated
