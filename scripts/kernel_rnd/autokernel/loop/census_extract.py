@@ -290,7 +290,26 @@ def extract_trace_time(res: dict) -> list[dict]:
 
 def extract_time_only(res: dict) -> list[dict]:
     """All time-only extractors (GDN cells, DTREE rowcost/host-gap, trace by-class). Pure op/table RESULTs yield nothing."""
-    return extract_gdn(res) + extract_dtree(res) + extract_trace_time(res)
+    return extract_gdn(res) + extract_dtree(res) + extract_trace_time(res) + extract_trace_kernels(res)
+
+
+def extract_trace_kernels(res: dict) -> list[dict]:
+    """AK-BNSIG-CENSUS-KERNEL-KEYS: one TIME-ONLY record per 27B target-verify kernel in a rocprof trace RESULT
+    (`summary.trace[*].by_class.verify.top[]`, e.g. ak-c18-27b-df2-v5i-trace-gpu-20261122) carrying its identity: `kernel`
+    (demangled name, argument list dropped) and `grid` (grid_wg x*y*z work-items = rocprof Grid_Size), so a bottleneck
+    signature attaches per kernel (bnsig_planner.kernel_record). Draft-phase kernels are the drafter's, not the 27B's.
+    us = mean per launch, calls = launches per segment, share_of_round = ms_per_seg / verify gpu_ms_per_seg. No byte basis."""
+    out, s = [], res.get("summary") or {}
+    for t in (s.get("trace") or {}).values() if _model_of(res) == "27b-q8_0" and isinstance(s, dict) else []:
+        v = ((t or {}).get("by_class") or {}).get("verify") or {}
+        for k in v.get("top") or [] if _num(v.get("gpu_ms_per_seg")) and v["gpu_ms_per_seg"] > 0 else []:
+            g, nm = str(k.get("grid_wg")).split("x"), re.sub(r"^void ", "", str(k.get("name")))
+            kern = nm[:next((i for i, ch in enumerate(nm) if ch == "(" and nm[:i].count("<") == nm[:i].count(">")), len(nm))]
+            if len(g) == 4 and _num(k.get("mean_us")) and k["mean_us"] > 0:
+                grid = int(g[0]) * int(g[1]) * int(g[2])
+                out.append(_t("27b-q8_0", f"trace_kernel:{kern}", f"verify:g{grid}x{g[3]}", 0, k["mean_us"], "trace kernel time per launch",
+                              round(k["count_per_seg"]), kernel=kern, grid=grid, arm=t.get("arm"), share_of_round=round(k["ms_per_seg"] / v["gpu_ms_per_seg"], 4)))
+    return out
 
 
 def extract_ubench(res: dict) -> list[dict]:

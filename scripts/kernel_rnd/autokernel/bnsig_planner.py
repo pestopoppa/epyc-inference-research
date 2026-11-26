@@ -173,3 +173,14 @@ def add_arguments(parser) -> None:
 
 __all__ = ["CONTEXT_KEY", "DEFAULT_MODE", "MODES", "add_arguments", "assess", "context_entry", "demoted",
            "hotspots", "lever_map", "planner_view", "render", "seed_lines"]
+
+
+def kernel_record(c: dict, name: str, grid) -> str | None:
+    """AK-BNSIG-CENSUS-KERNEL-KEYS: the census record id (records or time_only) whose `kernel` has the base name of the
+    signature's (mangled, template-suffixed) `name`, whose leading int/bool template literals (`Li1024E`, `Lb1E`) prefix the
+    record's demangled ones, and whose `grid` equals `grid`; None unless exactly one matches."""
+    base, lits = re.match(r"[A-Za-z_]\w*?(?=I[LX]|$)", name)[0], [int(x) for x in re.findall(r"L[ib](\d+)E", name)]
+    tl = lambda kern: [int({"true": 1, "false": 0}.get(a, a)) for a in re.findall(r"[<,]\s*(\d+|true|false)(?=\s*[,>])", kern)]  # noqa: E731
+    hits = [k for sec in ("records", "time_only") for k, r in (c.get(sec) or {}).items() if grid is not None and r.get("grid") == grid
+            and re.split(r"[<(]", str(r.get("kernel") or ""))[0] == base and tl(str(r["kernel"]))[:len(lits)] == lits]
+    return hits[0] if len(hits) == 1 else None

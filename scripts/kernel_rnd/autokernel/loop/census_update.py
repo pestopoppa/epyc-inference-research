@@ -231,8 +231,9 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str, basis:
     if not sha:
         raise ValueError("apply: result_sha256 is empty; a record without its RESULT's sha has no warrant")
     basis = basis or ("at" if measured_at else "missing")
-    if any(a["sha256"] == sha for a in c["applied"]):
-        return []
+    if any(a["sha256"] == sha for a in c["applied"]):  # applied: only backfill kernel-keyed records it never had (KERNEL-KEYS)
+        return [f"- `{row}` ({sha[:12]}): {rid(o)} kernel-keyed backfill" for o in obs if "grid" in o and rid(o) not in c.setdefault("time_only", {})
+                and apply_time_only(c, o, row, sha, measured_at, basis)]
     rerank(c)
     before = {k: (r["gbps"], r["rank"]) for k, r in c["records"].items()}
     moved, tmoved = [], 0
@@ -291,21 +292,24 @@ def apply(c: dict, obs: list[dict], row: str, sha: str, measured_at: str, basis:
     return lines + ([f"- `{row}` ({sha[:12]}): {tmoved} time-only records (bytes unknown) stored under census time_only"] if tmoved else [])
 
 
-def apply_signature(c: dict, sigs: dict, row: str, sha: str, at: str, build: str | None = None) -> list[str]:
+def apply_signature(c: dict, sigs: dict, row: str, sha: str, at: str, build: str | None = None, grids: dict | None = None) -> list[str]:
     """AK-BNSIG: attach bottleneck signatures ({record id: bottleneck_signature doc}) to existing records, each with its
     OWN warrant (row, RESULT sha256, build): a signature may come from a different row than the record's timing.
     Idempotent on sha via c['signature_applied'] (separate from c['applied'], so the same RESULT can still carry
-    timings). Records that do not exist are reported, never created. rerank never touches the field."""
+    timings). Records that do not exist are reported, never created. rerank never touches the field.
+    `grids` ({kernel: grid}) keys `sigs` by KERNEL instead: each resolves via bnsig_planner.kernel_record to the one record
+    (bandwidth or time-only) with that kernel and grid; idempotent per (sha, record), so a sha already applied by id still attaches."""
     if not sha:
         raise ValueError("apply_signature: result_sha256 is empty; a signature without its RESULT's sha has no warrant")
     led = c.setdefault("signature_applied", [])
-    if any(a["sha256"] == sha for a in led):
+    if grids is None and any(a["sha256"] == sha for a in led):
         return []
     lines = []
-    for k in sorted(sigs):
-        d, r = sigs[k], c["records"].get(k)
-        if r is None:
-            lines.append(f"- `{row}` ({sha[:12]}): signature for unknown record {k} skipped")
+    for n in sorted(sigs):
+        d, k = sigs[n], n if grids is None else bnsig_planner.kernel_record(c, n, grids.get(n))
+        r = c["records"].get(k) or (c.get("time_only") or {}).get(k)
+        if r is None or (r.get("signature") or {}).get("result_sha256") == sha:
+            lines += [f"- `{row}` ({sha[:12]}): signature for unknown record {n} skipped"] * (r is None)
             continue
         r["signature"] = {"class": d.get("class"), "classes": list(d.get("classes") or []), "marginal": list(d.get("marginal") or []),
                           "band_position": d.get("band_position") or {}, "rule": d.get("rule"), "axes": d.get("axes") or {},
@@ -315,7 +319,7 @@ def apply_signature(c: dict, sigs: dict, row: str, sha: str, at: str, build: str
                           "source_row": row, "result_sha256": sha, "build": build, "measured_at": at,
                           "timing_sha256": r.get("result_sha256"), "stale_vs_timing": False}
         lines.append(f"- `{row}` ({sha[:12]}): {k} signature {d.get('class')} ({d.get('rule')})")
-    led.append({"row": row, "sha256": sha})
+    led += [{"row": row, "sha256": sha}] * (not any(a["sha256"] == sha for a in led))
     derive_surfaces(c)
     return lines
 
