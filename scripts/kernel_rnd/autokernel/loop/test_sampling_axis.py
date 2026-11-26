@@ -16,7 +16,8 @@ C10 = "akm-c10-dflash2-hybrid-tree-verify-port"
 C9_DSPINE = "akm-c9-dspine-b16-drafter"
 GREEDY_PROVEN = {"akm-dtree-t12-27b", "akm-c10-dflash2-hybrid-tree-verify-port"}
 SPEC_RECORDS = GREEDY_PROVEN | {"akm-hist-graph-shape-key", "akm-c9-dspine-b16-drafter",
-                                "akm-df2-drafter-precision-arms", "akm-c22-misc-1125-nulls"}
+                                "akm-df2-drafter-precision-arms", "akm-c22-misc-1125-nulls",
+                                "akm-c22-misc-1126-nulls"}
 REGISTRY = {"roles": {"a": {"generation_defaults": {"temperature": 0.1}},
                       "b": {"generation_defaults": {"temperature": 0.3}},
                       "c": {"generation_defaults": {"temperature": 0.0}},
@@ -91,7 +92,7 @@ class ShippedNegatives(unittest.TestCase):
             self.assertEqual(rec["proposal_sha256"], want, original["mechanism_id"])
 
     def test_every_status_and_reason_is_unchanged_in_content(self):
-        self.assertEqual(len(NEGATIVES), 41)
+        self.assertEqual(len(NEGATIVES), 42)
         self.assertTrue(all(r["status"] == "measured_null" for r in NEGATIVES))
 
 
@@ -238,7 +239,7 @@ class ThroughTheStore(RegistryEnv):
         self.assertIn("do_not_repeat_scope: greedy", text)
         noted = [x for x in text.splitlines() if "do_not_repeat_scope" in x]
         spec_ids = ("akm-dtree-t12-27b", "akm-c9-dspine-b16-drafter", "akm-hist-graph-shape-key",
-                    "akm-df2-drafter-precision-arms", "akm-c22-misc-1125-nulls")
+                    "akm-df2-drafter-precision-arms", "akm-c22-misc-1125-nulls", "akm-c22-misc-1126-nulls")
         self.assertTrue(all(any(m in x for m in spec_ids) for x in noted), noted)
         self.assertFalse([x for x in text.splitlines() if C10 in x and "do_not_repeat_scope" in x],
                          "the served-T re-tested c10 stays closed")
