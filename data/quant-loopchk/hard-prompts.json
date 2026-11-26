@@ -1,0 +1,17 @@
+[
+  {
+    "id": "t3_q1_analysis",
+    "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.\n",
+    "expected": "1. Yes - uniform convergence on compacts implies differentiability\n2. f(x) = Im(e^{x*e^i}) = e^{x*cos(1)} * sin(x*sin(1))\n3. Limit is 0 because |f(x)| <= e^{x*cos(1)} and cos(1) < 1\n"
+  },
+  {
+    "id": "t3_q2_combinatorics",
+    "prompt": "Prove the following identity:\n\nsum_{k=0}^{n} (-1)^k * C(n,k) * C(2n-k, n) = 1\n\nwhere C(a,b) denotes \"a choose b\", and the identity holds for every n >= 0.\n\nYour proof should:\n1. Demonstrate why this identity \"makes sense\" combinatorially\n2. Not just verify it algebraically for specific values\n3. Use a bijective or sign-reversing involution argument if possible\n",
+    "expected": "Inclusion-exclusion over n distinguished elements; sign-reversing involution with a single fixed point"
+  },
+  {
+    "id": "t3_q3_probability_theory",
+    "prompt": "Let X_1, X_2, X_3, ... be iid uniform random variables on [0,1].\nDefine S_n = X_1 + X_2 + ... + X_n.\nLet N = min{n >= 1 : S_n > 1}.\n\nFind E[N] (the expected value of N).\n\nProvide TWO different proofs:\n(a) A direct calculation approach\n(b) An elegant argument that avoids heavy computation\n\nHint for (b): Consider the n-simplex and its relation to order statistics.\n",
+    "expected": "E[N] = e (Euler's number). Direct: sum P(N>n) = sum 1/n!. Elegant: uniform points partition [0,1]^n by permutations."
+  }
+]
