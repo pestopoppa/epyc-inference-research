@@ -222,7 +222,8 @@ def apply_time_only(c: dict, o: dict, row: str, sha: str, at: str, basis: str = 
     if old and abs(o["us_per_call"] - old["us_per_call"]) <= c["noise_frac"] * abs(old["us_per_call"]):
         return False
     hist = list((old or {}).get("history") or ([[old["source_row"], old["us_per_call"]]] if old else []))
-    c["time_only"][k] = dict(o, source_row=row, result_sha256=sha, measured_at=at, measured_at_basis=basis, history=(hist + [[row, o["us_per_call"]]])[-8:])
+    c["time_only"][k] = dict(o, source_row=row, result_sha256=sha, measured_at=at, measured_at_basis=basis, history=(hist + [[row, o["us_per_call"]]])[-8:],
+                           **bnsig_planner.carry_signature(old, sha))
     return True
 
 

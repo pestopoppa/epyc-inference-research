@@ -54,11 +54,12 @@ def _hotspot(rid: str, rec: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def hotspots(census: Mapping[str, Any], rids: Any = None) -> list[dict[str, Any]]:
-    """Signed records (optionally only `rids`), by rank (unranked last)."""
-    recs = census.get("records") or {}
+    """Signed records (optionally only `rids`), by rank; then signed time-only (kernel-keyed, bytes null) records by
+    share_of_round, largest first; then the rest."""
+    recs = {**(census.get("time_only") or {}), **(census.get("records") or {})}
     keys = [k for k in (recs if rids is None else rids) if (recs.get(k) or {}).get("signature")]
-    out = [_hotspot(k, recs[k]) for k in keys]
-    return sorted(out, key=lambda h: (h["rank"] is None, h["rank"] or 0, h["record"]))
+    out = [_hotspot(k, recs[k]) | ({"share_of_round": recs[k].get("share_of_round")} if recs[k].get("rank") is None else {}) for k in keys]
+    return sorted(out, key=lambda h: (h["rank"] is None, h["rank"] or -(h.get("share_of_round") or 0), h["record"]))
 
 
 def _fmt_pos(pos: Mapping[str, Any]) -> str:
@@ -184,3 +185,26 @@ def kernel_record(c: dict, name: str, grid) -> str | None:
     hits = [k for sec in ("records", "time_only") for k, r in (c.get(sec) or {}).items() if grid is not None and r.get("grid") == grid
             and re.split(r"[<(]", str(r.get("kernel") or ""))[0] == base and tl(str(r["kernel"]))[:len(lits)] == lits]
     return hits[0] if len(hits) == 1 else None
+
+
+def carry_signature(old: Mapping[str, Any] | None, sha: str) -> dict[str, Any]:
+    """D2: a time-only refresh keeps the record's signature, flagged `stale_vs_timing` once the timing warrant moved
+    (mirrors census_update.apply's records path)."""
+    sig = (old or {}).get("signature")
+    return {"signature": dict(sig, stale_vs_timing=sig.get("timing_sha256") != sha)} if sig else {}
+
+
+def union_signature_applied(live: dict, committed: Mapping[str, Any]) -> bool:
+    """D3: census_reconcile unions `signature_applied` by sha (live order kept, committed-only shas appended), and carries a
+    committed record's signature onto the same live record when live has none or an older one. True when live changed."""
+    led, changed = live.setdefault("signature_applied", []), False
+    for a in committed.get("signature_applied") or []:
+        if a.get("sha256") not in {x.get("sha256") for x in led}:
+            led.append(json.loads(json.dumps(a)))
+            changed = True
+    for sec in ("records", "time_only"):
+        for k, v in (committed.get(sec) or {}).items():
+            cur, sig = (live.get(sec) or {}).get(k), (v or {}).get("signature")
+            if sig and isinstance(cur, dict) and str((cur.get("signature") or {}).get("measured_at") or "") < str(sig.get("measured_at") or ""):
+                cur["signature"], changed = json.loads(json.dumps(sig)), True
+    return changed

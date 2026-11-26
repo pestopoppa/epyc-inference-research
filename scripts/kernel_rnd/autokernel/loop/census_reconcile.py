@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 
+from .. import bnsig_planner  # signature_applied union lives outside loop/ (code budget)
+
 
 def CLONE(v):
     return json.loads(json.dumps(v))
@@ -43,6 +45,7 @@ def reconcile(live: dict, committed: dict) -> list[str]:
             if k not in tgt or (isinstance(v, dict) and isinstance(tgt[k], dict) and _newer(v, tgt[k])):
                 tgt[k] = CLONE(v)
                 changed.add(sec)
+    changed |= {"signature_applied"} if bnsig_planner.union_signature_applied(live, committed) else set()
     recs = live.get("records", {})
     for r in [r for r in recs.values() if r.get("split_from")]:  # lumped record superseded by a classifier split
         for key, old in list(recs.items()):
